@@ -122,12 +122,13 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
     const validated = Math.min(qty, item.availableStock);
     updateQuantity(item.id, validated);
   }, [item.id, item.availableStock, updateQuantity]);
-((taka: number) => {
+
+  const handleAmountPreset = useCallback((taka: number) => {
     if (!item.unitPrice || item.unitPrice === 0) return;
     const newQty = new Decimal(taka).div(new Decimal(item.unitPrice)).toDecimalPlaces(3).toNumber();
     const validated = Math.min(newQty, item.availableStock);
     updateQuantity(item.id, validated);
-  }, [item.id, item.quantity, item.unitPrice, item.availableStock, updateQuantity]);
+  }, [item.id, item.unitPrice, item.availableStock, updateQuantity]);
 
   return (
     <div
