@@ -11,7 +11,7 @@ import {
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Trash2, Plus, Receipt, IndianRupee, Truck, BarChart3, UserPlus } from 'lucide-react';
+import { Trash2, Plus, Receipt, IndianRupee, Truck, BarChart3, UserPlus, CalendarDays } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -51,9 +51,12 @@ export function Expenses({ onReport }: ExpensesProps) {
   const [showAddSupplier, setShowAddSupplier] = useState(false);
   const [newSupplierName, setNewSupplierName] = useState('');
   const [addingSupplier, setAddingSupplier] = useState(false);
+  const [useCustomDate, setUseCustomDate] = useState(false);
+  const [customDate, setCustomDate] = useState('');
   const { toast } = useToast();
 
   const today = format(new Date(), 'yyyy-MM-dd');
+  const selectedDate = useCustomDate && customDate ? customDate : today;
 
   const fetchExpenses = useCallback(async () => {
     try {
@@ -103,7 +106,7 @@ export function Expenses({ onReport }: ExpensesProps) {
           amount: convertBengaliToEnglishNumerals(amount),
           category,
           notes,
-          date: today,
+          date: selectedDate,
           supplierId: category === 'Supplies' && supplierId && supplierId !== 'none' ? supplierId : null,
         }),
       });
@@ -247,7 +250,31 @@ export function Expenses({ onReport }: ExpensesProps) {
               <label className="text-sm font-medium">নোট</label>
               <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="ঐচ্ছিক বিবরণ..." />
             </div>
-            <Button className="w-full" onClick={handleAddExpense} disabled={isLoading || !amount}>
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium">তারিখ</label>
+                <Button
+                  type="button"
+                  variant={useCustomDate ? 'default' : 'outline'}
+                  size="sm"
+                  className="h-6 text-xs gap-1 px-2"
+                  onClick={() => { setUseCustomDate(v => !v); setCustomDate(''); }}
+                >
+                  <CalendarDays className="w-3 h-3" /> কাস্টম
+                </Button>
+              </div>
+              {useCustomDate ? (
+                <Input
+                  type="date"
+                  value={customDate}
+                  onChange={e => setCustomDate(e.target.value)}
+                  max={today}
+                />
+              ) : (
+                <p className="text-sm text-muted-foreground">{format(new Date(), 'dd MMM yyyy')} (আজ)</p>
+              )}
+            </div>
+            <Button className="w-full" onClick={handleAddExpense} disabled={isLoading || !amount || (useCustomDate && !customDate)}>
               <Plus className="w-4 h-4 mr-2" /> যোগ করুন
             </Button>
           </CardContent>

@@ -102,10 +102,10 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
     if (e.key === 'Enter') {
       commitInputValue();
       (e.target as HTMLInputElement).blur();
-    } else if (e.key === 'ArrowUp' || e.key === 'ArrowRight') {
+    } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       handleIncrement();
-    } else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') {
+    } else if (e.key === 'ArrowDown') {
       e.preventDefault();
       handleDecrement();
     }
@@ -113,6 +113,21 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
 
   const isOverStock = item.quantity > item.availableStock;
   const isAtStockLimit = item.quantity >= item.availableStock;
+
+  const isWeighted = ['kg', 'liter', 'gram', 'ml'].includes(item.unit);
+  const AMOUNT_PRESETS = [10, 20, 50, 100];
+  const PIECE_PRESETS = [5, 10, 20, 50];
+
+  const handlePiecePreset = useCallback((qty: number) => {
+    const validated = Math.min(qty, item.availableStock);
+    updateQuantity(item.id, validated);
+  }, [item.id, item.availableStock, updateQuantity]);
+((taka: number) => {
+    if (!item.unitPrice || item.unitPrice === 0) return;
+    const newQty = new Decimal(taka).div(new Decimal(item.unitPrice)).toDecimalPlaces(3).toNumber();
+    const validated = Math.min(newQty, item.availableStock);
+    updateQuantity(item.id, validated);
+  }, [item.id, item.quantity, item.unitPrice, item.availableStock, updateQuantity]);
 
   return (
     <div
@@ -186,6 +201,7 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
               onBlur={commitInputValue}
               className="w-10 h-7 text-center px-1 touch-manipulation text-xs"
               aria-label="Quantity"
+              onWheel={(e) => e.currentTarget.blur()}
               max={item.availableStock}
               min={0}
             />
@@ -201,6 +217,35 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
               <Plus className="w-3 h-3" />
             </Button>
           </div>
+
+          {/* Amount Presets for weighted items */}
+          {isWeighted && !isOverStock && (
+            <div className="flex items-center gap-0.5">
+              {AMOUNT_PRESETS.map((taka) => (
+                <button
+                  key={taka}
+                  onClick={() => handleAmountPreset(taka)}
+                  className="h-6 px-1.5 rounded text-[10px] font-medium bg-primary/10 hover:bg-primary/20 text-primary transition-colors touch-manipulation"
+                >
+                  ₹{taka}
+                </button>
+              ))}
+            </div>
+          )}
+          {/* Piece Presets */}
+          {!isWeighted && !isOverStock && (
+            <div className="flex items-center gap-0.5">
+              {PIECE_PRESETS.map((qty) => (
+                <button
+                  key={qty}
+                  onClick={() => handlePiecePreset(qty)}
+                  className="h-6 px-1.5 rounded text-[10px] font-medium bg-primary/10 hover:bg-primary/20 text-primary transition-colors touch-manipulation"
+                >
+                  {qty}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Stock Warning */}
           {isOverStock && (
