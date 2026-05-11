@@ -293,7 +293,6 @@ function POSDashboard() {
           // Fallback to IndexedDB
           const cachedProducts = await ProductsDB.getAll();
           if (cachedProducts.length > 0) {
-            console.log(`✅ Using ${cachedProducts.length} cached products from offline storage`);
             setProducts(cachedProducts);
           } else {
             console.warn('No cached products available');
