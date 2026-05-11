@@ -83,7 +83,14 @@ const DEFAULT_CATEGORIES = [
 const generateBarcode = (): string => {
   // Generate a 13-digit EAN-like barcode
   const prefix = '890'; // India prefix
-  const random = Math.floor(Math.random() * 1000000000).toString().padStart(9, '0');
+
+  // Use crypto API for secure random number generation
+  const array = new Uint32Array(1);
+  crypto.getRandomValues(array);
+
+  // Modulo 10^9 to get a 9-digit number
+  const random = (array[0] % 1000000000).toString().padStart(9, '0');
+
   const base = prefix + random;
   
   // Calculate check digit (Luhn algorithm for EAN)
