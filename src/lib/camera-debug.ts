@@ -15,7 +15,6 @@ export async function testCameraAccess(): Promise<void> {
   console.log("✅ getUserMedia is supported");
 
   // Test 2: List available devices
-  console.log("\n2. Listing available devices...");
   try {
     const devices = await navigator.mediaDevices.enumerateDevices();
     const videoDevices = devices.filter(
