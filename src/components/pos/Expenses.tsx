@@ -35,12 +35,24 @@ const formatPrice = (n: number) =>
 
 type Supplier = { id: string; name: string };
 
+interface Expense {
+  id: string;
+  amount: number;
+  category: string;
+  notes?: string | null;
+  date: string | Date;
+  supplierId?: string | null;
+  supplierName?: string | null;
+  isActive?: boolean;
+  createdAt?: string | Date;
+}
+
 interface ExpensesProps {
   onReport?: () => void;
 }
 
 export function Expenses({ onReport }: ExpensesProps) {
-  const [expenses, setExpenses] = useState<any[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState<string>('Supplies');
@@ -298,7 +310,7 @@ export function Expenses({ onReport }: ExpensesProps) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {todayExpenses.length > 0 ? todayExpenses.map((exp: any) => (
+                {todayExpenses.length > 0 ? todayExpenses.map((exp: Expense) => (
                   <TableRow key={exp.id}>
                     <TableCell>
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${CATEGORY_COLORS[exp.category] ?? CATEGORY_COLORS.Other}`}>
