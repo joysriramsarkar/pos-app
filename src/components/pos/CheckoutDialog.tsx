@@ -247,8 +247,9 @@ export function CheckoutDialog({
     }
 
     const insufficientStockItems: Array<{ name: string; qty: number; available: number }> = [];
+    const productMap = new Map(products.map((p) => [p.id, p]));
     for (const cartItem of items) {
-      const product = products.find((p) => p.id === cartItem.productId);
+      const product = productMap.get(cartItem.productId);
       if (!product) {
         setInputError(`Product "${cartItem.productName}" no longer exists.`);
         return;
