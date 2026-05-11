@@ -104,7 +104,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
               createdAt: new Date(sale.createdAt ?? Date.now()),
             }));
             setTransactions(recentTransactions);
-            setFullTransactions(sales.map((sale: any) => ({ 
+            setFullTransactions((sales as Sale[]).map((sale: Sale) => ({
               ...sale, 
               createdAt: new Date(sale.createdAt ?? Date.now()) 
             } as Transaction)));
@@ -155,7 +155,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           let cashTotal = 0;
           let dueTotal = 0;
 
-          todaySales.forEach((s: any) => {
+          (todaySales as Sale[]).forEach((s: Sale) => {
             const amtPaid = Number(s?.amountPaid || 0) || 0;
             const totalAmt = Number(s?.totalAmount || 0) || 0;
             const method = s?.paymentMethod;
