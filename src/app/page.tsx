@@ -343,7 +343,6 @@ function POSDashboard() {
           throw fetchErr;
         }
       } catch (error) {
-        console.log('🔴 Offline: API connectivity check failed', error instanceof Error ? error.message : String(error));
         setOnline(false);
       }
     };
