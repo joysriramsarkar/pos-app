@@ -4,7 +4,7 @@
  */
 
 export async function testCameraAccess(): Promise<void> {
-  console.log("====== CAMERA DEBUG TEST ======");
+
 
   // Test 1: Check if getUserMedia is supported
   console.log("\n1. Testing getUserMedia support...");
