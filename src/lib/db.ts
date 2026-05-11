@@ -55,9 +55,6 @@ function createPrismaClient(): PrismaClient {
 
   // Auto-disconnect on process termination (fixes PgBouncer prepared statement conflicts on Vercel)
   process.once('SIGTERM', async () => {
-    if (shouldLogLifecycle) {
-      console.log('[PrismaClient] SIGTERM received, disconnecting...')
-    }
     await client.$disconnect()
     process.exit(0)
   })
