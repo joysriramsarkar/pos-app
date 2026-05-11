@@ -10,8 +10,6 @@ export async function GET(request: Request) {
     // Try to query the database
     const result = await db.$queryRaw`SELECT 1 as connection_test`;
 
-    console.log("✅ [HEALTH CHECK] Database connection successful!");
-
     return Response.json(
       {
         status: "ok",
