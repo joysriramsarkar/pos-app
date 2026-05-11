@@ -52,12 +52,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ success: true, message: "No settings to update" });
     }
 
-    const keys: string[] = [];
-    const values: string[] = [];
-    for (const [key, value] of entries) {
-      keys.push(key);
-      values.push(typeof value === "string" ? value : String(value));
-    }
+    const keys = entries.map(([key]) => key);
 
     // Fetch old values for audit diff
     const oldSettings = await db.setting.findMany({
@@ -66,19 +61,34 @@ export async function PUT(request: NextRequest) {
     });
     const oldMap = new Map(oldSettings.map((s) => [s.key, s.value]));
 
-    await db.$transaction(async (tx) => {
-      const existingKeys = new Set(oldMap.keys());
-      const toCreate: { key: string; value: string }[] = [];
-      const toUpdate: { key: string; value: string }[] = [];
+    const toCreate: { key: string; value: string }[] = [];
+    const toUpdate: { key: string; value: string }[] = [];
+    const changedDetails: Record<string, { from: string; to: string }> = {};
 
-      for (let i = 0; i < keys.length; i++) {
-        if (existingKeys.has(keys[i])) {
-          toUpdate.push({ key: keys[i], value: values[i] });
-        } else {
-          toCreate.push({ key: keys[i], value: values[i] });
-        }
+    for (const [key, rawValue] of entries) {
+      const newVal = typeof rawValue === "string" ? rawValue : String(rawValue);
+      const oldVal = oldMap.get(key);
+
+      if (oldVal !== undefined) {
+        toUpdate.push({ key, value: newVal });
+      } else {
+        toCreate.push({ key, value: newVal });
       }
 
+      const prevValStr = oldVal ?? '';
+      if (newVal !== prevValStr) {
+        if (key === LOGO_KEY) {
+          changedDetails[key] = {
+            from: prevValStr ? '[logo set]' : '[none]',
+            to: newVal ? '[logo set]' : '[removed]',
+          };
+        } else {
+          changedDetails[key] = { from: prevValStr, to: newVal };
+        }
+      }
+    }
+
+    await db.$transaction(async (tx) => {
       if (toUpdate.length > 0) {
         await Promise.all(
           toUpdate.map(({ key, value }) =>
@@ -90,24 +100,6 @@ export async function PUT(request: NextRequest) {
         await tx.setting.createMany({ data: toCreate });
       }
     });
-
-    // Build audit details — exclude logo binary, just note if it changed
-    const changedDetails: Record<string, { from: string; to: string }> = {};
-    for (let i = 0; i < keys.length; i++) {
-      const key = keys[i];
-      const newVal = values[i];
-      const oldVal = oldMap.get(key) ?? '';
-      if (newVal === oldVal) continue;
-
-      if (key === LOGO_KEY) {
-        changedDetails[key] = {
-          from: oldVal ? '[logo set]' : '[none]',
-          to: newVal ? '[logo set]' : '[removed]',
-        };
-      } else {
-        changedDetails[key] = { from: oldVal, to: newVal };
-      }
-    }
 
     if (Object.keys(changedDetails).length > 0) {
       const user = await getAuthenticatedUser(request);
