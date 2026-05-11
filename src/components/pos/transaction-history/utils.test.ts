@@ -39,6 +39,18 @@ describe('transaction-history utils', () => {
       expect(getPaymentStatusColor('Due')).toContain('bg-red-100');
     });
 
+    test('handles case insensitivity', () => {
+      expect(getPaymentStatusColor('paid')).toContain('bg-green-100');
+      expect(getPaymentStatusColor('PAID')).toContain('bg-green-100');
+      expect(getPaymentStatusColor('PaRtIaL')).toContain('bg-yellow-100');
+    });
+
+    test('handles undefined, null, and empty string', () => {
+      expect(getPaymentStatusColor(undefined)).toContain('bg-gray-100');
+      expect(getPaymentStatusColor(null)).toContain('bg-gray-100');
+      expect(getPaymentStatusColor('')).toContain('bg-gray-100');
+    });
+
     test('returns default color for unknown status', () => {
       expect(getPaymentStatusColor('Unknown')).toContain('bg-gray-100');
     });
@@ -55,6 +67,18 @@ describe('transaction-history utils', () => {
 
     test('returns correct color for Refunded', () => {
       expect(getStatusColor('Refunded')).toContain('bg-orange-100');
+    });
+
+    test('handles case insensitivity', () => {
+      expect(getStatusColor('completed')).toContain('bg-blue-100');
+      expect(getStatusColor('COMPLETED')).toContain('bg-blue-100');
+      expect(getStatusColor('cAnCeLlEd')).toContain('bg-red-100');
+    });
+
+    test('handles undefined, null, and empty string', () => {
+      expect(getStatusColor(undefined)).toContain('bg-gray-100');
+      expect(getStatusColor(null)).toContain('bg-gray-100');
+      expect(getStatusColor('')).toContain('bg-gray-100');
     });
 
     test('returns default color for unknown status', () => {
