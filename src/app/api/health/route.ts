@@ -5,7 +5,6 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   try {
     console.log("🔍 [HEALTH CHECK] Starting database connection check...");
-    console.log("📝 [HEALTH CHECK] NODE_ENV:", process.env.NODE_ENV);
 
     // Try to query the database
     const result = await db.$queryRaw`SELECT 1 as connection_test`;
