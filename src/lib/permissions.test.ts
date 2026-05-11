@@ -60,4 +60,33 @@ describe('roleHasPermission', () => {
   it('should return false if VIEWER has users.view', () => {
     expect(roleHasPermission('VIEWER', 'users.view')).toBe(false);
   });
+
+  it('should return false for unknown roles', () => {
+    // @ts-expect-error Testing invalid runtime input
+    expect(roleHasPermission('UNKNOWN_ROLE', 'users.view')).toBe(false);
+  });
+
+  it('should return false for unknown permissions', () => {
+    expect(roleHasPermission('ADMIN', 'unknown.permission')).toBe(false);
+  });
+
+  it('should return false if role is null', () => {
+    // @ts-expect-error Testing invalid runtime input
+    expect(roleHasPermission(null, 'users.view')).toBe(false);
+  });
+
+  it('should return false if role is undefined', () => {
+    // @ts-expect-error Testing invalid runtime input
+    expect(roleHasPermission(undefined, 'users.view')).toBe(false);
+  });
+
+  it('should return false if permission is null', () => {
+    // @ts-expect-error Testing invalid runtime input
+    expect(roleHasPermission('ADMIN', null)).toBe(false);
+  });
+
+  it('should return false if permission is undefined', () => {
+    // @ts-expect-error Testing invalid runtime input
+    expect(roleHasPermission('ADMIN', undefined)).toBe(false);
+  });
 });
