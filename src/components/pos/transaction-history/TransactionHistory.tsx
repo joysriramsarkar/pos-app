@@ -46,7 +46,7 @@ export function TransactionHistory() {
         const data = await response.json();
         if (data.success) {
           setTransactions(
-            data.data.map((sale: any) => ({
+            data.data.map((sale: Omit<Transaction, 'createdAt'> & { createdAt: string | Date }) => ({
               ...sale,
               createdAt: new Date(sale.createdAt),
             }))
