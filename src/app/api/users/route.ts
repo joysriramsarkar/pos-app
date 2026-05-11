@@ -44,8 +44,8 @@ export async function GET(request: NextRequest) {
     });
 
     return NextResponse.json({ success: true, data: users });
-  } catch (error) {
-    console.error("[USERS_GET]", error);
+  } catch (error: unknown) {
+    console.error("[USERS_GET]", error instanceof Error ? error.message : "Unknown error");
     return NextResponse.json(
       { success: false, error: "Internal server error" },
       { status: 500 }
@@ -123,8 +123,8 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json({ success: true, data: newUser }, { status: 201 });
-  } catch (error) {
-    console.error("[USERS_POST]", error);
+  } catch (error: unknown) {
+    console.error("[USERS_POST]", error instanceof Error ? error.message : "Unknown error");
     return NextResponse.json(
       { success: false, error: "Internal server error" },
       { status: 500 }
