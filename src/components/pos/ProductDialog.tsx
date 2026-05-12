@@ -286,7 +286,7 @@ export function ProductDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent onInteractOutside={(e) => e.preventDefault()} className="sm:max-w-[425px] w-[95vw] max-h-[90dvh] overflow-y-auto p-4 md:p-6">
+      <DialogContent onInteractOutside={(e) => e.preventDefault()} className="sm:max-w-106.25 w-[95vw] max-h-[90dvh] overflow-y-auto p-4 md:p-6">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Package className="w-5 h-5" />
@@ -337,7 +337,7 @@ export function ProductDialog({
               <Input
                 id="product-form-barcode"
                 value={barcode}
-                onChange={(e) => setBarcode(convertBengaliToEnglishNumerals(e.target.value))}
+                onChange={(e) => setBarcode(convertBengaliToEnglishNumerals(e.target.value.replace(/\s+/g, '')))}
                 placeholder="Scan or enter barcode"
                 className="flex-1 font-mono"
               />

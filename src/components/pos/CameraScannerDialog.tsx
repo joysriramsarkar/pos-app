@@ -75,7 +75,7 @@ export function CameraScannerDialog({
           const barcode = event.barcodes?.[0];
           if (!barcode?.rawValue) return;
 
-          const normalized = convertBengaliToEnglishNumerals(barcode.rawValue.trim());
+          const normalized = convertBengaliToEnglishNumerals(barcode.rawValue.replace(/\s+/g, ''));
 
           const now = Date.now();
           if (normalized === lastScannedRef.current && now - lastScannedTimeRef.current < 1500) return;

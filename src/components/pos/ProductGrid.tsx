@@ -121,7 +121,8 @@ export function ProductGrid({
 
   const handleCameraBarcode = useCallback(
     (barcode: string) => {
-      const normalizedBarcode = convertBengaliToEnglishNumerals(barcode);
+      const cleanedBarcode = barcode.replace(/\s+/g, '');
+      const normalizedBarcode = convertBengaliToEnglishNumerals(cleanedBarcode);
       const matchedProduct = barcodeMap.get(normalizedBarcode);
 
       if (matchedProduct) {
@@ -131,7 +132,7 @@ export function ProductGrid({
         toast({ title: 'Scanned', description: matchedProduct.name });
         if (navigator?.vibrate) navigator.vibrate(50);
       } else {
-        setCameraScanError(`আইটেম পাওয়া যায়নি: ${barcode}`);
+        setCameraScanError(`আইটেম পাওয়া যায়নি: ${cleanedBarcode}`);
         if (externalProducts) setLocalSearchQuery(barcode);
         else setSearchQuery(barcode);
       }
@@ -187,7 +188,7 @@ export function ProductGrid({
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
-                    const scannedValue = e.currentTarget.value.trim();
+                    const scannedValue = e.currentTarget.value.trim().replace(/\s+/g, '');
                     const normalizedScanValue = convertBengaliToEnglishNumerals(scannedValue);
                     const matchedProduct = barcodeMap.get(normalizedScanValue);
                     if (matchedProduct) {
@@ -386,7 +387,7 @@ function CompactProductCard({ product, onSelect }: CompactProductCardProps) {
         'flex flex-col items-center justify-center p-2.5 rounded-xl border border-border/50 bg-card text-center shadow-xs',
         'lg:hover:bg-primary/5 lg:hover:border-primary/20 lg:hover:shadow-md lg:hover:-translate-y-0.5 transition-all duration-200',
         'focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1',
-        'touch-manipulation min-h-[90px]',
+        'touch-manipulation min-h-22.5',
         isOutOfStock && 'opacity-50 grayscale cursor-not-allowed lg:hover:bg-card lg:hover:border-border/50 lg:hover:shadow-xs lg:hover:translate-y-0'
       )}
       aria-label={`${product.name}, ${formatPrice(product.sellingPrice)}`}

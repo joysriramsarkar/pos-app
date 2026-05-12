@@ -13,8 +13,8 @@ const StockManagement = dynamic(() => import('@/components/pos/StockManagement')
 const PartiesManagement = dynamic(() => import('@/components/pos/PartiesManagement').then(m => ({ default: m.PartiesManagement })), { ssr: false });
 const UsersManagement = dynamic(() => import('@/components/pos/UsersManagement').then(m => ({ default: m.UsersManagement })), { ssr: false });
 const TransactionHistory = dynamic(() => import('@/components/pos/TransactionHistory').then(m => ({ default: m.TransactionHistory })), { ssr: false });
-const Reports = dynamic(() => import('@/components/pos').then(m => ({ default: m.Reports })), { ssr: false });
-const AuditLogs = dynamic(() => import('@/components/pos').then(m => ({ default: m.AuditLogs })), { ssr: false });
+const Reports = dynamic(() => import('@/components/pos/Reports'), { ssr: false });
+const AuditLogs = dynamic(() => import('@/components/pos/AuditLogs').then(m => ({ default: m.AuditLogs })), { ssr: false });
 const Expenses = dynamic(() => import('@/components/pos/Expenses').then(m => ({ default: m.Expenses })), { ssr: false });
 const ExpensesReport = dynamic(() => import('@/components/pos/ExpensesReport').then(m => ({ default: m.ExpensesReport })), { ssr: false });
 const ProductStatistics = dynamic(() => import('@/components/pos/ProductStatistics').then(m => ({ default: m.ProductStatistics })), { ssr: false });
@@ -197,38 +197,30 @@ function POSDashboard() {
   // Mobile product search - server-side with offline fallback
   const [mobileSearchResults, setMobileSearchResults] = useState<ProductType[]>([]);
   const [isMobileSearching, setIsMobileSearching] = useState(false);
-  const mobileSearchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleMobileSearchChange = useCallback((query: string) => {
     setMobileSearchQuery(query);
-    if (mobileSearchTimerRef.current) clearTimeout(mobileSearchTimerRef.current);
+    
     if (!query.trim()) {
       setMobileSearchResults([]);
       return;
     }
-    mobileSearchTimerRef.current = setTimeout(async () => {
-      setIsMobileSearching(true);
-      try {
-        const res = await fetch(`/api/products?search=${encodeURIComponent(query)}`);
-        if (res.ok) {
-          const { data } = await res.json();
-          setMobileSearchResults(data);
-        }
-      } catch {
-        // offline fallback: search local cache
-        const lowerQuery = query.toLowerCase();
-        const normalizedQuery = convertBengaliToEnglishNumerals(query);
-        setMobileSearchResults(products.filter(p =>
-          p.isActive && (
-            p.name.toLowerCase().includes(lowerQuery) ||
-            p.nameBn?.includes(query) ||
-            convertBengaliToEnglishNumerals(p.barcode || '').includes(normalizedQuery)
-          )
-        ));
-      } finally {
-        setIsMobileSearching(false);
-      }
-    }, 300);
+    
+    const cleaned = query.replace(/rs\.?|₹/gi, '').trim();
+    const lowerQuery = cleaned.toLowerCase();
+    const normalizedQuery = convertBengaliToEnglishNumerals(cleaned).replace(/\s+/g, '');
+    
+    const results = products.filter(p => {
+      if (!p.isActive) return false;
+      return (
+        p.name.toLowerCase().includes(lowerQuery) ||
+        p.nameBn?.includes(cleaned) ||
+        (p.barcode && p.barcode.includes(normalizedQuery)) ||
+        convertBengaliToEnglishNumerals(p.barcode || '').includes(normalizedQuery)
+      );
+    });
+    
+    setMobileSearchResults(results);
   }, [products]);
 
   // Hydration tracking to prevent mismatches with store-dependent renders
@@ -349,8 +341,8 @@ function POSDashboard() {
     // Check on mount
     checkConnectivity();
 
-    // Check periodically (every 30 seconds — reduced from 10s to avoid background load)
-    const interval = setInterval(checkConnectivity, 30000);
+    // Check periodically (every 5 minutes — reduced to avoid background load)
+    const interval = setInterval(checkConnectivity, 300000);
 
     // Listen to navigator online/offline events
     const handleOnline = () => checkConnectivity();
@@ -373,15 +365,16 @@ function POSDashboard() {
 
   const handleBarcodeDetected = useCallback(
     (barcode: string) => {
+      const cleanedBarcode = barcode.replace(/\s+/g, '');
       const now = Date.now();
 
       // Debounce logic: prevent the same barcode from being scanned multiple times within 1000ms
-      if (lastScannedRef.current.barcode === barcode && now - lastScannedRef.current.time < 1000) {
+      if (lastScannedRef.current.barcode === cleanedBarcode && now - lastScannedRef.current.time < 1000) {
         return;
       }
 
-      lastScannedRef.current = { barcode, time: now };
-      const product = getProductByBarcode(barcode);
+      lastScannedRef.current = { barcode: cleanedBarcode, time: now };
+      const product = getProductByBarcode(cleanedBarcode);
       if (product) {
         setLiveScanError(null);
         addItem(product, 1);
@@ -395,9 +388,9 @@ function POSDashboard() {
         }
         if (currentPage !== 'billing') setCurrentPage('billing');
       } else {
-        setLiveScanError(`আইটেম পাওয়া যায়নি: ${barcode}`);
+        setLiveScanError(`আইটেম পাওয়া যায়নি: ${cleanedBarcode}`);
         if (!isMobileScannerOpen) {
-          toast({ title: 'Product Not Found', description: `Barcode ${barcode} not found.`, variant: 'destructive' });
+          toast({ title: 'Product Not Found', description: `Barcode ${cleanedBarcode} not found.`, variant: 'destructive' });
         }
       }
     },
@@ -480,6 +473,19 @@ function POSDashboard() {
       }
     }
 
+    if (paymentData.addChangeAsPrepayment && paymentData.customerId && paymentData.change > 0) {
+      SyncQueueDB.add({
+        id: uuidv4(),
+        entityType: 'Prepayment',
+        entityId: uuidv4(),
+        action: 'create',
+        payload: JSON.stringify({ customerId: paymentData.customerId, amount: paymentData.change }),
+        synced: false,
+        retryCount: 0,
+        createdAt: new Date(),
+      }).catch(console.error);
+    }
+
     setCurrentSale(sale);
     setCompletedCheckoutSale(sale);
     clearCart();
@@ -488,108 +494,21 @@ function POSDashboard() {
   const handleCheckoutComplete = useCallback(async (paymentData: PaymentData) => {
     const tabId = activeTabId;
     setTabProcessing(tabId, true);
-    
-    const salePayload = {
-      items: cartItems.map(item => ({
-        productId: item.productId,
-        productName: item.productName,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        totalPrice: item.totalPrice,
-      })),
-      customerId: paymentData.customerId,
-      paymentMethod: paymentData.paymentMethod,
-      amountPaid: paymentData.amountPaid,
-      amountReceived: paymentData.amountReceived ?? (paymentData.cashAmount ?? 0) + (paymentData.upiAmount ?? 0),
-      cashAmount: paymentData.cashAmount,
-      upiAmount: paymentData.upiAmount,
-      discount: paymentData.discount,
-      tax: paymentData.tax,
-      usePrepaid: paymentData.usePrepaid,
-      prepaidAmountUsed: paymentData.prepaidAmountUsed,
-      changeAsPrepayment: (paymentData.addChangeAsPrepayment && paymentData.change > 0) ? paymentData.change : 0,
-    };
 
     try {
+      // ১. সব অবস্থাতেই প্রথমে লোকাল ডাটাবেস (IndexedDB) ও UI সাথে সাথে আপডেট করুন (Zero Latency)
+      await processOfflineSale(paymentData);
+      
+      // ২. ইউজারকে সাথে সাথে সাকসেস স্ক্রিন দেখিয়ে দিন, যাতে সে পরবর্তী বিলিং শুরু করতে পারে
+      toast({ title: 'সফল', description: 'বিলিং সম্পন্ন হয়েছে।' });
+
+      // ৩. ব্যাকগ্রাউন্ডে ডাটাবেস সিঙ্ক ট্রিগার করুন (নেটওয়ার্ক থাকলে সিঙ্ক হবে, না থাকলে কিউতে জমা থাকবে)
       if (isOnline) {
-        try {
-          const response = await fetch('/api/sales', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(salePayload),
-          });
-
-          if (!response.ok) {
-            let errorMessage = 'Failed to create sale';
-            try {
-              const errorData = await response.json();
-              errorMessage = errorData.error || errorMessage;
-            } catch {
-              errorMessage = `Server error: ${response.statusText}`;
-            }
-
-            if (response.status === 401) {
-              throw new Error('আপনি লগইন করা নেই। পুনরায় লগইন করুন।');
-            }
-
-            if (response.status === 403) {
-              throw new Error('আপনার এই কাজ করার অনুমতি নেই।');
-            }
-            
-            const shouldFallbackToOffline = 
-              response.status >= 500 || 
-              errorMessage.includes('P1001') || 
-              errorMessage.includes('connection') || 
-              errorMessage.includes('Can\'t reach') || 
-              errorMessage.includes('Transaction') || 
-              errorMessage.includes('timed out') || 
-              errorMessage.includes('pool') || 
-              errorMessage.includes('ECONN');
-            
-            if (shouldFallbackToOffline) {
-              console.warn('⚠️ Database unavailable, falling back to offline');
-              throw new Error('DATABASE_UNAVAILABLE');
-            }
-            
-            throw new Error(errorMessage);
-          }
-
-          const responseData = await response.json();
-          const completedSale = responseData.data;
-
-          setCompletedCheckoutSale(completedSale);
-          setCurrentSale(completedSale);
-
-          // Update stock locally from the completed sale items instead of refetching all products
-          if (completedSale?.items) {
-            completedSale.items.forEach((item: any) => {
-              updateProductStock(item.productId, -item.quantity);
-            });
-          }
-
-          clearCart();
-
-          if (paymentData.addChangeAsPrepayment && paymentData.customerId && paymentData.change > 0) {
-            await fetch('/api/prepayment', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ customerId: paymentData.customerId, amount: paymentData.change }),
-            }).catch(console.error);
-          }
-        } catch (fetchError) {
-          if (fetchError instanceof Error && fetchError.message === 'DATABASE_UNAVAILABLE') {
-            await processOfflineSale(paymentData);
-            toast({ title: 'Database offline', description: 'Sale saved locally.' });
-            return;
-          }
-          throw fetchError;
-        }
-      } else {
-        await processOfflineSale(paymentData);
-        toast({ title: 'Offline sale saved', description: 'Will sync when online.' });
+        fetch('/api/sync?action=process_queue', { method: 'POST' }).catch(() => {
+          // ফেইল করলে সমস্যা নেই, ব্যাকগ্রাউন্ড ওয়ার্কারে পরে সিঙ্ক হবে
+        });
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Checkout failed';
       console.error('Checkout failed:', error);
       
       setCompletedCheckoutSale(null);
@@ -597,13 +516,13 @@ function POSDashboard() {
       
       toast({
         title: 'চেকআউট ব্যর্থ হয়েছে',
-        description: errorMessage,
+        description: error instanceof Error ? error.message : 'ত্রুটি হয়েছে',
         variant: 'destructive',
       });
     } finally {
       setTabProcessing(tabId, false);
     }
-  }, [isOnline, processOfflineSale, clearCart, setCurrentSale, setCompletedCheckoutSale, setCheckoutOpen, toast, cartItems, updateProductStock, activeTabId, setTabProcessing]);
+  }, [isOnline, processOfflineSale, activeTabId, setTabProcessing, toast, setCompletedCheckoutSale, setCheckoutOpen]);
 
   const handleOpenCheckout = useCallback(() => {
     setCheckoutOpen(true);

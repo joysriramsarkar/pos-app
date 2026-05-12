@@ -146,7 +146,7 @@ export interface PurchaseItem {
 
 export interface SyncQueueItem {
   id: string;
-  entityType: 'Sale' | 'Customer' | 'Product';
+  entityType: 'Sale' | 'Customer' | 'Product' | 'Prepayment';
   entityId: string;
   action: 'create' | 'update' | 'delete';
   payload: string;
