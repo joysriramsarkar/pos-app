@@ -124,6 +124,61 @@ async function getStore(storeName: string, mode: IDBTransactionMode = 'readonly'
   return transaction.objectStore(storeName);
 }
 
+/**
+ * BATCH TRANSACTION: Execute multiple operations in a single transaction
+ * Prevents "database connection is closing" errors from rapid sequential operations
+ */
+async function batchTransaction<T>(
+  operations: Array<{
+    storeName: string;
+    mode: 'readwrite' | 'readonly';
+    operation: (store: IDBObjectStore) => IDBRequest<any>;
+  }>,
+): Promise<any[]> {
+  const db = await initDatabase();
+  
+  // Collect all store names and determine if any need write access
+  const storeNames = Array.from(new Set(operations.map(op => op.storeName)));
+  const needsWrite = operations.some(op => op.mode === 'readwrite');
+  const transactionMode: IDBTransactionMode = needsWrite ? 'readwrite' : 'readonly';
+  
+  // Create single transaction for all stores
+  const transaction = db.transaction(storeNames, transactionMode);
+  const results: any[] = [];
+  
+  return new Promise((resolve, reject) => {
+    transaction.onerror = () => {
+      console.error('Batch transaction error:', transaction.error);
+      reject(transaction.error);
+    };
+    
+    transaction.onabort = () => {
+      console.error('Batch transaction aborted');
+      reject(new Error('Batch transaction was aborted'));
+    };
+    
+    // Execute all operations
+    for (const op of operations) {
+      const store = transaction.objectStore(op.storeName);
+      const request = op.operation(store);
+      
+      request.onsuccess = () => {
+        results.push(request.result);
+      };
+      
+      request.onerror = () => {
+        console.error(`Operation on ${op.storeName} failed:`, request.error);
+        transaction.abort();
+      };
+    }
+    
+    // Resolve when transaction completes
+    transaction.oncomplete = () => {
+      resolve(results);
+    };
+  });
+}
+
 async function getAllFromStore<T>(storeName: string): Promise<T[]> {
   const store = await getStore(storeName);
   return new Promise((resolve, reject) => {
@@ -491,6 +546,106 @@ export const SyncQueueDB = {
     return clearStore(STORES.SYNC_QUEUE);
   },
 };
+
+// ============================================================================
+// BATCH OPERATIONS (Prevent "connection is closing" errors)
+// ============================================================================
+
+/**
+ * Save sale with its sync queue entry in a single atomic transaction
+ * This prevents the "database connection is closing" error that occurs
+ * when multiple rapid sequential transactions happen
+ */
+export async function saveSaleWithSyncQueue(
+  sale: Sale,
+  syncQueueItem: SyncQueueItem,
+): Promise<void> {
+  const db = await initDatabase();
+  const transaction = db.transaction([STORES.SALES, STORES.SYNC_QUEUE], 'readwrite');
+  
+  return new Promise((resolve, reject) => {
+    transaction.onerror = () => {
+      console.error('Save sale transaction error:', transaction.error);
+      reject(transaction.error);
+    };
+    
+    transaction.onabort = () => {
+      console.error('Save sale transaction aborted');
+      reject(new Error('Save sale transaction was aborted'));
+    };
+    
+    const salesStore = transaction.objectStore(STORES.SALES);
+    const syncStore = transaction.objectStore(STORES.SYNC_QUEUE);
+    
+    const saleRequest = salesStore.put(sale);
+    const syncRequest = syncStore.put(syncQueueItem);
+    
+    saleRequest.onerror = () => {
+      console.error('Failed to save sale:', saleRequest.error);
+      transaction.abort();
+    };
+    
+    syncRequest.onerror = () => {
+      console.error('Failed to save sync queue item:', syncRequest.error);
+      transaction.abort();
+    };
+    
+    transaction.oncomplete = () => {
+      resolve();
+    };
+  });
+}
+
+/**
+ * Update multiple products and save customer due in a single transaction
+ */
+export async function updateProductsAndCustomerDue(
+  productUpdates: Array<{ productId: string; product: Product }>,
+  customerUpdate?: { customerId: string; customer: Customer },
+): Promise<void> {
+  const db = await initDatabase();
+  const storeNames = [STORES.PRODUCTS];
+  if (customerUpdate) storeNames.push(STORES.CUSTOMERS);
+  
+  const transaction = db.transaction(storeNames, 'readwrite');
+  
+  return new Promise((resolve, reject) => {
+    transaction.onerror = () => {
+      console.error('Batch update transaction error:', transaction.error);
+      reject(transaction.error);
+    };
+    
+    transaction.onabort = () => {
+      console.error('Batch update transaction aborted');
+      reject(new Error('Batch update transaction was aborted'));
+    };
+    
+    const productStore = transaction.objectStore(STORES.PRODUCTS);
+    
+    // Update all products
+    for (const { product } of productUpdates) {
+      const req = productStore.put(product);
+      req.onerror = () => {
+        console.error(`Failed to update product ${product.id}:`, req.error);
+        transaction.abort();
+      };
+    }
+    
+    // Update customer if provided
+    if (customerUpdate) {
+      const customerStore = transaction.objectStore(STORES.CUSTOMERS);
+      const req = customerStore.put(customerUpdate.customer);
+      req.onerror = () => {
+        console.error(`Failed to update customer ${customerUpdate.customerId}:`, req.error);
+        transaction.abort();
+      };
+    }
+    
+    transaction.oncomplete = () => {
+      resolve();
+    };
+  });
+}
 
 // ============================================================================
 // NETWORK STATUS & AUTO-SYNC

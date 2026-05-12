@@ -6,7 +6,7 @@
     "dev": "next dev -p 3000",
     "clean": "npx rimraf .next",
     "build": "prisma generate --config prisma.config.ts && next build",
-    "start": "cross-env NODE_ENV=production PORT=3000 node .next/standalone/server.js",
+    "start": "next start -p 3000",
     "db:push": "prisma db push --config prisma.config.ts",
     "db:generate": "prisma generate --config prisma.config.ts",
     "db:seed": "prisma db seed --config prisma.config.ts",

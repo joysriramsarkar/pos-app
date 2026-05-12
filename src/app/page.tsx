@@ -53,7 +53,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useCartStore, useProductsStore, useSyncStore, useUIStore, useCustomersStore } from '@/stores/pos-store';
 import { useSettingsStore } from '@/stores/settings-store';
 import { useSimpleBarcodeScanner } from '@/hooks/use-barcode-scanner';
-import { ProductsDB, SalesDB, SyncQueueDB, CustomersDB } from '@/lib/offline/indexeddb';
+import { ProductsDB, SalesDB, SyncQueueDB, CustomersDB, saveSaleWithSyncQueue, updateProductsAndCustomerDue } from '@/lib/offline/indexeddb';
 import { STORE_CONFIG } from '@/types/pos';
 import type { Product, Sale } from '@/types/pos';
 import { cn } from '@/lib/utils';
@@ -448,17 +448,43 @@ function POSDashboard() {
       })),
     } as Sale;
 
-    await SalesDB.save(sale);
-    await SyncQueueDB.add({
+    // ২. ক্লাউড এপিআই-এর জন্য একদম সঠিক কাঠামোর পেলোড তৈরি (The Critical Fix)
+    const backendSyncPayload = {
+      items: cartItems.map(item => ({
+        productId: item.productId,
+        productName: item.productName,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        totalPrice: item.totalPrice,
+      })),
+      customerId: paymentData.customerId,
+      paymentMethod: paymentData.paymentMethod,
+      amountPaid: paymentData.amountPaid,
+      amountReceived: paymentData.amountReceived ?? (paymentData.cashAmount ?? 0) + (paymentData.upiAmount ?? 0),
+      cashAmount: paymentData.cashAmount,
+      upiAmount: paymentData.upiAmount,
+      discount: paymentData.discount,
+      tax: paymentData.tax,
+      usePrepaid: paymentData.usePrepaid,
+      prepaidAmountUsed: paymentData.prepaidAmountUsed,
+      changeAsPrepayment: (paymentData.addChangeAsPrepayment && paymentData.change > 0) ? paymentData.change : 0,
+      offlineSaleId: sale.id, // ট্র্যাকিংয়ের জন্য
+    };
+
+    // Create sync queue item FIRST
+    const syncQueueItem: SyncQueueItem = {
       id: uuidv4(),
       entityType: 'Sale',
       entityId: sale.id,
       action: 'create',
-      payload: JSON.stringify(sale),
+      payload: JSON.stringify(backendSyncPayload),
       synced: false,
       retryCount: 0,
       createdAt: new Date(),
-    });
+    };
+
+    // Batch save sale and sync queue in a single atomic transaction
+    await saveSaleWithSyncQueue(sale, syncQueueItem);
 
     cartItems.forEach((item) => {
       updateProductStock(item.productId, -item.quantity);

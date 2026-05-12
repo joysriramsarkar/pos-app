@@ -9,7 +9,6 @@ const allowedOrigins = (rawOrigins ?? "http://localhost:3000")
   .map((o) => o.trim());
 
 const nextConfig: NextConfig = {
-  output: "standalone",
   reactStrictMode: true,
   allowedDevOrigins: ["192.168.1.11"],
   async headers() {
