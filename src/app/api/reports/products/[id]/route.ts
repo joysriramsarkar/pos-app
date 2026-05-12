@@ -63,8 +63,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     for (const item of saleItems) {
       const date = item.createdAt;
       const qty = item.quantity;
-      const revenue = item.totalPrice;
-      const profit = revenue - product.buyingPrice * qty;
+      const revenue = Number(item.totalPrice);
+      const profit = revenue - Number(product.buyingPrice) * qty;
 
       // Daily trend
       const dateKey = format(date, 'yyyy-MM-dd');
@@ -120,7 +120,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       .sort((a, b) => b.revenue - a.revenue)
       .slice(0, 10);
 
-    const totalProfit = totalRevenue - product.buyingPrice * totalQty;
+    const totalProfit = totalRevenue - Number(product.buyingPrice) * totalQty;
     const profitMargin = totalRevenue > 0 ? ((totalProfit / totalRevenue) * 100).toFixed(1) : '0';
     const totalOrders = saleItems.length;
     const avgOrderQty = totalOrders > 0 ? (totalQty / totalOrders) : 0;

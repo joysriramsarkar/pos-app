@@ -102,6 +102,67 @@ async function main() {
 
     console.log("✅ Permissions seeded successfully");
 
+    // Seed standard product categories
+    const standardCategories = [
+      {
+        name: "Groceries",
+        nameBn: "মুদি ও চাল-ডাল",
+        description: "Rice, lentils, oil, flour, spices, and other basic grocery items",
+      },
+      {
+        name: "Packaged Snacks",
+        nameBn: "প্যাকেটজাত খাবার",
+        description: "Biscuits, chips, cookies, noodles, and packaged snack foods",
+      },
+      {
+        name: "Beverages",
+        nameBn: "পানীয়",
+        description: "Cold drinks, juices, water, tea leaves, coffee, and other beverages",
+      },
+      {
+        name: "Dairy & Frozen",
+        nameBn: "দুগ্ধজাত ও হিমায়িত",
+        description: "Milk, cheese, butter, ghee, ice cream, and frozen products",
+      },
+      {
+        name: "Personal Care",
+        nameBn: "ব্যক্তিগত যত্ন",
+        description: "Soap, shampoo, toothpaste, oil, and personal hygiene products",
+      },
+      {
+        name: "Household & Cleaning",
+        nameBn: "গৃহস্থালি ও পরিষ্কার",
+        description: "Detergent, disinfectant, dishwash, tissues, and cleaning supplies",
+      },
+      {
+        name: "Confectionery",
+        nameBn: "মিষ্টান্ন ও চকোলেট",
+        description: "Chocolate, candies, lozenges, chewing gum, and confectionery items",
+      },
+      {
+        name: "General",
+        nameBn: "সাধারণ",
+        description: "Miscellaneous items that do not fit into other categories",
+      },
+    ];
+
+    for (const category of standardCategories) {
+      await p.category.upsert({
+        where: { name: category.name },
+        update: {
+          nameBn: category.nameBn,
+          description: category.description,
+        },
+        create: {
+          name: category.name,
+          nameBn: category.nameBn,
+          description: category.description,
+        },
+      });
+    }
+
+    console.log("✅ Standard product categories seeded successfully");
+
     // Define role permissions
     const rolePermissions = {
       ADMIN: [

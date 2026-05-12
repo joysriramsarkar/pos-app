@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
 
         // Handle division by zero edge case (though newStock should be > 0 since quantity > 0)
         if (newStock > 0) {
-          const wac = ((oldStock * product.buyingPrice) + (quantity * purchasePrice)) / newStock;
+          const wac = ((oldStock * Number(product.buyingPrice)) + (quantity * purchasePrice)) / newStock;
           updateData.buyingPrice = toMoneyNumber(wac);
         } else {
           updateData.buyingPrice = toMoneyNumber(purchasePrice);

@@ -1132,11 +1132,11 @@ function ExpensesTabContent({ expenses, dateParams, onNavigate, isLoading }: {
     });
   }, [expenses, dateParams]);
 
-  const total = filtered.reduce((s, e) => s + (e.amount ?? 0), 0);
+  const total = filtered.reduce((s, e) => s + Number(e.amount ?? 0), 0);
 
   const categoryTotals = useMemo(() => {
     const map: Record<string, number> = {};
-    filtered.forEach(e => { map[e.category] = (map[e.category] ?? 0) + (e.amount ?? 0); });
+    filtered.forEach(e => { map[e.category] = (map[e.category] ?? 0) + Number(e.amount ?? 0); });
     return Object.entries(map).sort((a, b) => b[1] - a[1]);
   }, [filtered]);
 
@@ -1158,7 +1158,7 @@ function ExpensesTabContent({ expenses, dateParams, onNavigate, isLoading }: {
         : daysDiff <= 60
         ? format(new Date(e.date), 'dd MMM')
         : format(new Date(e.date), 'MMM yy');
-      map[k] = (map[k] ?? 0) + (e.amount ?? 0);
+      map[k] = (map[k] ?? 0) + Number(e.amount ?? 0);
     });
     return Object.entries(map).map(([label, amount]) => ({ label, amount }));
   }, [filtered, daysDiff]);
@@ -1174,7 +1174,7 @@ function ExpensesTabContent({ expenses, dateParams, onNavigate, isLoading }: {
         e.category,
         e.supplierName || '',
         e.notes || '',
-        e.amount,
+        Number(e.amount) || 0,
       ]),
       ['', '', '', 'Total', total],
     ];

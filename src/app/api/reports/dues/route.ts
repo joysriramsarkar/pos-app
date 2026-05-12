@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
     });
 
     const totalOutstandingDue = customersWithDues.reduce(
-      (sum, customer) => sum + customer.totalDue,
+      (sum, customer) => sum + Number(customer.totalDue),
       0,
     );
 

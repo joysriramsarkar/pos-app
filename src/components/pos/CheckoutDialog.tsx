@@ -29,6 +29,7 @@ import {
 import type { PaymentMethod, Sale, Customer } from '@/types/pos';
 import { useCartStore, useUIStore, useProductsStore, useCustomersStore } from '@/stores/pos-store';
 import { cn } from '@/lib/utils';
+import { toMoneyNumber } from '@/lib/money';
 
 interface CheckoutDialogProps {
   open?: boolean;
@@ -72,10 +73,12 @@ export function CheckoutDialog({
 }: CheckoutDialogProps) {
   const [inputError, setInputError] = useState<string | null>(null);
   const [usePrepaid, setUsePrepaid] = useState(false);
+  const [isLocalProcessing, setIsLocalProcessing] = useState(false);
 
   const prevOpenRef = useRef(false);
 
-  const showSuccess = !!completedSale && !isProcessing;
+  const isCurrentlyProcessing = isProcessing || isLocalProcessing;
+  const showSuccess = !!completedSale && !isCurrentlyProcessing;
   const lastSale = completedSale;
 
   useEffect(() => {
@@ -110,8 +113,8 @@ export function CheckoutDialog({
   const total = getTotal();
 
   const prepaidAmountToUse = useMemo(() => {
-    if (usePrepaid && customer && customer.prepaidBalance > 0) {
-      return Math.min(total, customer.prepaidBalance);
+    if (usePrepaid && customer && toMoneyNumber(customer.prepaidBalance) > 0) {
+      return Math.min(total, toMoneyNumber(customer.prepaidBalance));
     }
     return 0;
   }, [usePrepaid, customer, total]);
@@ -179,6 +182,7 @@ export function CheckoutDialog({
       setInputError(null);
       setUsePrepaid(false);
       setAddAsPrePayment(false);
+      setIsLocalProcessing(false);
       updateAmountFields();
     }
     prevOpenRef.current = isOpen;
@@ -240,7 +244,7 @@ export function CheckoutDialog({
     setInputError(null);
   }, [remainingTotal, paymentMethod]);
 
-  const handleComplete = useCallback(() => {
+  const handleComplete = useCallback(async () => {
     if (paymentMethod !== 'Due' && parsedAmount < remainingTotal && !customerId) {
       setInputError(`Insufficient amount. Need ${formatPrice(remainingTotal - parsedAmount)} more or select a customer for partial payment.`);
       return;
@@ -310,7 +314,12 @@ export function CheckoutDialog({
       addChangeAsPrepayment: addAsPrePayment && change > 0 && !!customerId,
     };
     
-    onComplete(paymentData);
+    setIsLocalProcessing(true);
+    try {
+      await onComplete(paymentData);
+    } finally {
+      setIsLocalProcessing(false);
+    }
   }, [
     paymentMethod,
     parsedAmount,
@@ -357,9 +366,9 @@ export function CheckoutDialog({
     : change;
 
   return (
-    <Dialog open={isOpen} onOpenChange={isProcessing ? () => {} : handleOpenChange}>
-      <DialogContent className="sm:max-w-[425px] flex flex-col max-h-[90dvh] md:max-h-[85vh] p-0 overflow-hidden" onInteractOutside={isProcessing ? (e) => e.preventDefault() : undefined}>
-        {isProcessing && (
+    <Dialog open={isOpen} onOpenChange={isCurrentlyProcessing ? () => {} : handleOpenChange}>
+      <DialogContent className="sm:max-w-106.25 flex flex-col max-h-[90dvh] md:max-h-[85vh] p-0 overflow-hidden" onInteractOutside={isCurrentlyProcessing ? (e) => e.preventDefault() : undefined}>
+        {isCurrentlyProcessing && (
           <div className="flex flex-col items-center py-16 gap-4">
             <span className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
             <p className="text-muted-foreground font-medium">Processing sale...</p>
@@ -388,7 +397,7 @@ export function CheckoutDialog({
             </div>
           </div>
         )}
-        {!isProcessing && !showSuccess && (<>
+        {!isCurrentlyProcessing && !showSuccess && (<>
         <DialogHeader className="px-6 pt-6 pb-4 flex-none border-b">
           <DialogTitle className="flex items-center gap-2">
             <Calculator className="w-5 h-5" />
@@ -422,7 +431,7 @@ export function CheckoutDialog({
             <div className="flex justify-between font-semibold text-lg"><span>Total</span><span className="text-primary">{formatPrice(total)}</span></div>
           </div>
 
-          {customer && customer.prepaidBalance > 0 && (
+          {customer && toMoneyNumber(customer.prepaidBalance) > 0 && (
             <div className="p-3 bg-green-50 border border-green-200 rounded-lg space-y-2">
               <div className="flex items-center justify-between">
                 <div>
@@ -574,4 +583,3 @@ export function CheckoutDialog({
 }
 
 export default CheckoutDialog;
-

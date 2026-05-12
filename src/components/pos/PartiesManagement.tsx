@@ -47,6 +47,8 @@ import {
 import type { Customer, Supplier, LedgerEntry } from '@/types/pos';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { toMoneyNumber } from '@/lib/money';
+import Decimal from 'decimal.js';
 
 
 
@@ -234,8 +236,8 @@ export function PartiesManagement() {
     );
   }, [suppliers, searchQuery]);
 
-  const totalDue = customers.reduce((sum, c) => sum + c.totalDue, 0);
-  const customersWithDue = customers.filter(c => c.totalDue > 0).length;
+  const totalDue = customers.reduce((sum, c) => sum + toMoneyNumber(c.totalDue), 0);
+  const customersWithDue = customers.filter(c => toMoneyNumber(c.totalDue) > 0).length;
 
   const handleViewLedger = async (customer: Customer) => {
     setSelectedCustomer(customer);
@@ -382,8 +384,8 @@ export function PartiesManagement() {
       phone: selectedCustomer.phone,
       address: selectedCustomer.address,
       notes: selectedCustomer.notes,
-      totalDue: Math.max(0, selectedCustomer.totalDue - paidAmount),
-      totalPaid: selectedCustomer.totalPaid + paidAmount,
+      totalDue: Math.max(0, toMoneyNumber(new Decimal(selectedCustomer.totalDue).minus(paidAmount))),
+      totalPaid: toMoneyNumber(new Decimal(selectedCustomer.totalPaid).plus(paidAmount)),
     };
 
     try {
@@ -629,14 +631,14 @@ export function PartiesManagement() {
                       )}
                     </TableCell>
                     <TableCell className="text-right">
-                      {customer.prepaidBalance > 0 ? (
+                      {toMoneyNumber(customer.prepaidBalance) > 0 ? (
                         <Badge variant="secondary" className="text-green-600">{formatPrice(customer.prepaidBalance)}</Badge>
                       ) : (
                         <span className="text-muted-foreground">-</span>
                       )}
                     </TableCell>
                     <TableCell className="text-right">
-                      {customer.totalDue > 0 ? (
+                      {toMoneyNumber(customer.totalDue) > 0 ? (
                         <Badge variant="destructive">{formatPrice(customer.totalDue)}</Badge>
                       ) : (
                         <span className="text-muted-foreground">-</span>
@@ -671,7 +673,7 @@ export function PartiesManagement() {
                           <PlusCircle className="w-4 h-4 md:mr-1" />
                           <span className="hidden md:inline">Prepayment</span>
                         </Button>
-                        {customer.prepaidBalance > 0 && (
+                        {toMoneyNumber(customer.prepaidBalance) > 0 && (
                           <Button
                             variant="ghost"
                             size="sm"
@@ -682,7 +684,7 @@ export function PartiesManagement() {
                             <span className="hidden md:inline">Withdraw</span>
                           </Button>
                         )}
-                        {customer.totalDue > 0 && (
+                        {toMoneyNumber(customer.totalDue) > 0 && (
                           <Button
                             variant="ghost"
                             size="sm"

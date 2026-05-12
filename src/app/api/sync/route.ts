@@ -415,7 +415,7 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
 
       if (customer) {
         if (prepaidToUse > 0) {
-          if (customer.prepaidBalance < prepaidToUse) {
+          if (toMoneyNumber(customer.prepaidBalance) < toMoneyNumber(prepaidToUse)) {
             throw new Error(
               `Insufficient prepaid balance. Available: ${customer.prepaidBalance}, Tried to use: ${prepaidToUse}`,
             );

@@ -125,7 +125,7 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
 
   const handleAmountPreset = useCallback((taka: number) => {
     if (!item.unitPrice || item.unitPrice === 0) return;
-    const newQty = new Decimal(taka).div(new Decimal(item.unitPrice)).toDecimalPlaces(3).toNumber();
+    const newQty = new Decimal(taka).div(new Decimal(item.unitPrice)).toNumber();
     const validated = Math.min(newQty, item.availableStock);
     updateQuantity(item.id, validated);
   }, [item.id, item.unitPrice, item.availableStock, updateQuantity]);

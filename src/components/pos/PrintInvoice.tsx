@@ -3,6 +3,8 @@
 import * as React from "react";
 import type { Sale, SaleItem, PrintFormat } from "@/types/pos";
 import { STORE_CONFIG } from "@/types/pos";
+import Decimal from 'decimal.js';
+import { toMoneyNumber } from '@/lib/money';
 
 // ============================================================================
 // TYPES
@@ -217,10 +219,10 @@ function ThermalInvoice({
           <span className="text-gray-500">Status</span>
           <span className="font-semibold">{sale.paymentStatus}</span>
         </div>
-        {(sale.amountPaid ?? 0) < (sale.totalAmount ?? 0) && (
+        {toMoneyNumber(sale.amountPaid ?? 0) < toMoneyNumber(sale.totalAmount ?? 0) && (
           <div className="flex justify-between min-w-0">
             <span className="text-gray-500">Due</span>
-            <span className="font-bold">{formatCurrency((sale.totalAmount ?? 0) - (sale.amountPaid ?? 0))}</span>
+            <span className="font-bold">{formatCurrency(toMoneyNumber(new Decimal(sale.totalAmount ?? 0).minus(sale.amountPaid ?? 0)))}</span>
           </div>
         )}
       </div>

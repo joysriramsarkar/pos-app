@@ -104,7 +104,7 @@ export function Expenses({ onReport }: ExpensesProps) {
     return expenses.filter(e => format(new Date(e.date), 'yyyy-MM-dd') === today);
   }, [expenses, today]);
 
-  const todayTotal = useMemo(() => todayExpenses.reduce((s, e) => s + (e.amount ?? 0), 0), [todayExpenses]);
+  const todayTotal = useMemo(() => todayExpenses.reduce((s, e) => s + Number(e.amount ?? 0), 0), [todayExpenses]);
 
   const handleAddExpense = async () => {
     if (!amount || !category) return;
@@ -325,7 +325,7 @@ export function Expenses({ onReport }: ExpensesProps) {
                       )}
                       {exp.notes || '—'}
                     </TableCell>
-                    <TableCell className="text-right font-semibold text-sm">{formatPrice(exp.amount ?? 0)}</TableCell>
+                    <TableCell className="text-right font-semibold text-sm">{formatPrice(Number(exp.amount ?? 0))}</TableCell>
                     <TableCell>
                       <Button variant="ghost" size="icon" onClick={() => setDeleteId(exp.id)}
                         className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10">

@@ -481,7 +481,7 @@ export const useCustomersStore = create<CustomersState & CustomersActions>((set,
     set((state) => ({
       customers: state.customers.map((c) =>
         c.id === id
-          ? { ...c, totalDue: c.totalDue + amount }
+          ? { ...c, totalDue: toMoneyNumber(new Decimal(c.totalDue).plus(amount)) }
           : c
       ),
     }));
@@ -491,7 +491,7 @@ export const useCustomersStore = create<CustomersState & CustomersActions>((set,
     set((state) => ({
       customers: state.customers.map((c) =>
         c.id === id
-          ? { ...c, prepaidBalance: Math.max(0, c.prepaidBalance + amount) }
+          ? { ...c, prepaidBalance: Math.max(0, toMoneyNumber(new Decimal(c.prepaidBalance).plus(amount))) }
           : c
       ),
     }));

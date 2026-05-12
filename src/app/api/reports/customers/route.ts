@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
         orderBy: { createdAt: "asc" },
       });
 
-      const totalSpent = orders.reduce((s, o) => s + o.totalAmount, 0);
+      const totalSpent = orders.reduce((s, o) => s + Number(o.totalAmount), 0);
       const aov = orders.length > 0 ? totalSpent / orders.length : 0;
 
       // Product frequency
@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
             revenue: 0,
           };
           existing.qty += item.quantity;
-          existing.revenue += item.totalPrice;
+          existing.revenue += Number(item.totalPrice);
           productMap.set(item.productId, existing);
         });
       });
@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
       orders.forEach((o) => {
         o.items.forEach((item) => {
           const cat = item.product?.category || "General";
-          catMap.set(cat, (catMap.get(cat) || 0) + item.totalPrice);
+          catMap.set(cat, (catMap.get(cat) || 0) + Number(item.totalPrice));
         });
       });
       const categoryBreakdown = Array.from(catMap.entries()).map(([name, value]) => ({ name, value }));
@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
       const monthMap = new Map<string, number>();
       orders.forEach((o) => {
         const key = `${o.createdAt.getFullYear()}-${String(o.createdAt.getMonth() + 1).padStart(2, "0")}`;
-        monthMap.set(key, (monthMap.get(key) || 0) + o.totalAmount);
+        monthMap.set(key, (monthMap.get(key) || 0) + Number(o.totalAmount));
       });
       const monthlyTrend = Array.from(monthMap.entries())
         .sort(([a], [b]) => a.localeCompare(b))
@@ -117,10 +117,10 @@ export async function GET(request: NextRequest) {
         id: c.customerId!,
         name: info?.name || "Unknown",
         phone: info?.phone,
-        totalDue: info?.totalDue || 0,
-        totalSpent: c._sum.totalAmount || 0,
+        totalDue: Number(info?.totalDue || 0),
+        totalSpent: Number(c._sum.totalAmount || 0),
         orderCount: c._count.id,
-        aov: c._count.id > 0 ? (c._sum.totalAmount || 0) / c._count.id : 0,
+        aov: c._count.id > 0 ? Number(c._sum.totalAmount || 0) / c._count.id : 0,
       };
     });
 

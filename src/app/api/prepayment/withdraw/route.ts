@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import Decimal from 'decimal.js';
 import { db } from '@/lib/db';
 import { requirePermission } from '@/lib/api-middleware';
 import { toMoneyNumber } from '@/lib/money';
@@ -27,9 +28,9 @@ export async function POST(req: NextRequest) {
     const updated = await db.$transaction(async (tx) => {
       const customer = await tx.customer.findUnique({ where: { id: customerId } });
       if (!customer) throw new Error('Customer not found');
-      if (customer.prepaidBalance < amount) throw new Error('Insufficient prepaid balance');
+      if (toMoneyNumber(customer.prepaidBalance) < amount) throw new Error('Insufficient prepaid balance');
 
-      const newBalance = toMoneyNumber(customer.prepaidBalance - amount);
+      const newBalance = toMoneyNumber(new Decimal(customer.prepaidBalance).minus(amount));
 
       const result = await tx.customer.update({
         where: { id: customerId },

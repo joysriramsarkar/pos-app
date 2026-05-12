@@ -84,20 +84,45 @@ export function StockManagement({ onAddProduct, onEditProduct, onAddStock, onDel
   // When a new product is added to the store while searching, inject it into results
   const prevStoreCountRef = useRef(storeProducts.length);
   useEffect(() => {
-    const prev = prevStoreCountRef.current;
-    prevStoreCountRef.current = storeProducts.length;
-    if (searchResults !== null && storeProducts.length > prev) {
-      // New product(s) added — re-run search against updated store
-      const lowerQuery = searchQuery.toLowerCase();
-      const normalizedQuery = convertBengaliToEnglishNumerals(searchQuery);
-      setSearchResults(storeProducts.filter(p =>
-        p.isActive && (
-          p.name.toLowerCase().includes(lowerQuery) ||
-          p.nameBn?.includes(searchQuery) ||
-          p.barcode?.includes(searchQuery) ||
-          convertBengaliToEnglishNumerals(p.barcode || '').includes(normalizedQuery)
-        )
-      ));
+    if (searchResults !== null) {
+      setSearchResults(prevResults => {
+        if (!prevResults) return null;
+        let hasChanges = false;
+        
+        const syncedResults = prevResults.map(item => {
+          const storeItem = storeProducts.find(p => p.id === item.id);
+          if (storeItem && storeItem !== item) {
+            hasChanges = true;
+            return storeItem;
+          }
+          return item;
+        });
+
+        const prev = prevStoreCountRef.current;
+        if (storeProducts.length > prev) {
+          const lowerQuery = searchQuery.toLowerCase();
+          const normalizedQuery = convertBengaliToEnglishNumerals(searchQuery);
+          const newlyAdded = storeProducts.filter(p => 
+            !syncedResults.some(r => r.id === p.id) &&
+            p.isActive && (
+              p.name.toLowerCase().includes(lowerQuery) ||
+              p.nameBn?.includes(searchQuery) ||
+              p.barcode?.includes(searchQuery) ||
+              convertBengaliToEnglishNumerals(p.barcode || '').includes(normalizedQuery)
+            )
+          );
+          
+          if (newlyAdded.length > 0) {
+            hasChanges = true;
+            syncedResults.unshift(...newlyAdded);
+          }
+        }
+        
+        prevStoreCountRef.current = storeProducts.length;
+        return hasChanges ? syncedResults : prevResults;
+      });
+    } else {
+      prevStoreCountRef.current = storeProducts.length;
     }
   }, [storeProducts, searchResults, searchQuery]);
 
@@ -219,9 +244,17 @@ export function StockManagement({ onAddProduct, onEditProduct, onAddStock, onDel
     return { label: 'In Stock', variant: 'default' as const };
   };
 
-  const negativeStockCount = storeProducts.filter(p => p.currentStock < 0).length;
-  const lowStockCount = storeProducts.filter(p => p.currentStock <= p.minStockLevel && p.currentStock > 0).length;
-  const outOfStockCount = storeProducts.filter(p => p.currentStock === 0).length;
+  // Memoize expensive calculations to prevent lag on every keystroke
+  const { negativeStockCount, lowStockCount, outOfStockCount } = useMemo(() => {
+    let negative = 0, low = 0, out = 0;
+    for (let i = 0; i < storeProducts.length; i++) {
+      const p = storeProducts[i];
+      if (p.currentStock < 0) negative++;
+      else if (p.currentStock === 0) out++;
+      else if (p.currentStock <= p.minStockLevel && p.currentStock > 0) low++;
+    }
+    return { negativeStockCount: negative, lowStockCount: low, outOfStockCount: out };
+  }, [storeProducts]);
 
   return (
     <>
@@ -344,7 +377,7 @@ export function StockManagement({ onAddProduct, onEditProduct, onAddStock, onDel
             </TableRow>
           </TableHeader>
           <TableBody>
-            {isSearching ? (
+            {isSearching && filteredProducts.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
                   Searching...

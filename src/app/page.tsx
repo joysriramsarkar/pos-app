@@ -58,6 +58,8 @@ import { STORE_CONFIG } from '@/types/pos';
 import type { Product, Sale } from '@/types/pos';
 import { cn } from '@/lib/utils';
 import { convertBengaliToEnglishNumerals } from '@/lib/utils';
+import { toMoneyNumber } from '@/lib/money';
+import Decimal from 'decimal.js';
 import { v4 as uuidv4 } from 'uuid';
 import { useToast } from '@/hooks/use-toast';
 import { generateInvoiceNumber } from '@/lib/invoice';
@@ -164,9 +166,9 @@ function POSDashboard() {
   const currentSale = useUIStore((state) => state.currentSale);
   const setCurrentSale = useUIStore((state) => state.setCurrentSale);
   const setTabProcessing = useUIStore((state) => state.setTabProcessing);
-  const isTabProcessing = useUIStore((state) => state.isTabProcessing);
+  const processingTabIds = useUIStore((state) => state.processingTabIds);
   const activeTabId = useCartStore((state) => state.activeTabId);
-  const isProcessingPayment = isTabProcessing(activeTabId);
+  const isProcessingPayment = processingTabIds.has(activeTabId);
 
 
   // Filter nav items based on user role
@@ -419,8 +421,8 @@ function POSDashboard() {
 
   const processOfflineSale = useCallback(async (paymentData: PaymentData) => {
     let paymentStatus = 'Paid';
-    if (paymentData.amountPaid === 0) paymentStatus = 'Due';
-    else if (paymentData.amountPaid > 0 && paymentData.amountPaid < paymentData.total) paymentStatus = 'Partial';
+    if (toMoneyNumber(paymentData.amountPaid) === 0) paymentStatus = 'Due';
+    else if (toMoneyNumber(paymentData.amountPaid) > 0 && toMoneyNumber(paymentData.amountPaid) < toMoneyNumber(paymentData.total)) paymentStatus = 'Partial';
 
     const sale: Sale = {
       id: uuidv4(),

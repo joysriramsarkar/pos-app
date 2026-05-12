@@ -98,14 +98,14 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        const itemRefund = quantity * saleItem.unitPrice;
+        const itemRefund = quantity * Number(saleItem.unitPrice);
         refundAmount = addMoney(refundAmount, itemRefund);
         returnItemsData.push({
           saleItemId,
           productId: saleItem.productId,
           productName: saleItem.productName,
           quantity,
-          unitPrice: saleItem.unitPrice,
+          unitPrice: Number(saleItem.unitPrice),
           totalPrice: itemRefund,
         });
       }

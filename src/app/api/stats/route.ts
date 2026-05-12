@@ -52,9 +52,9 @@ export async function GET(request: NextRequest) {
       }),
     ]);
 
-    const todaySales = salesToday._sum.totalAmount || 0;
+    const todaySales = Number(salesToday._sum.totalAmount || 0);
     const todayOrders = salesToday._count.id || 0;
-    const yesterdaySales = salesYesterday._sum.totalAmount || 0;
+    const yesterdaySales = Number(salesYesterday._sum.totalAmount || 0);
     const yesterdayOrders = salesYesterday._count.id || 0;
 
     let salesComparison = 'N/A';

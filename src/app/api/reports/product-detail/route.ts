@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
       const existing = dailySalesMap.get(day) ?? { qty: 0, revenue: 0 };
       dailySalesMap.set(day, {
         qty: existing.qty + (item.quantity ?? 0),
-        revenue: existing.revenue + (item.totalPrice ?? 0),
+        revenue: existing.revenue + Number(item.totalPrice ?? 0),
       });
     }
     // সব দিন দেখানোর জন্য — বিক্রি না থাকলেও 0 দিয়ে পূর্ণ করা
@@ -84,8 +84,8 @@ export async function GET(request: NextRequest) {
     }));
 
     const totalQtySold = saleItems.reduce((s, i) => s + (i.quantity ?? 0), 0);
-    const totalRevenue = saleItems.reduce((s, i) => s + (i.totalPrice ?? 0), 0);
-    const totalProfit = totalRevenue - product.buyingPrice * totalQtySold;
+    const totalRevenue = saleItems.reduce((s, i) => s + Number(i.totalPrice ?? 0), 0);
+    const totalProfit = totalRevenue - Number(product.buyingPrice) * totalQtySold;
     const totalStockAdded = stockHistory
       .filter(h => h.quantity > 0)
       .reduce((s, h) => s + h.quantity, 0);

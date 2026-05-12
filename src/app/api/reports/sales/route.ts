@@ -68,13 +68,13 @@ export async function GET(request: NextRequest) {
       where: { id: { in: productIds } },
       select: { id: true, buyingPrice: true },
     });
-    const costMap = new Map(products.map((p) => [p.id, p.buyingPrice]));
+    const costMap = new Map(products.map((p) => [p.id, Number(p.buyingPrice)]));
     const totalCost = costAgg.reduce(
       (sum, i) => sum + (costMap.get(i.productId) || 0) * i.quantity,
       0
     );
 
-    const totalRevenue = salesAgg._sum.totalPrice || 0;
+    const totalRevenue = Number(salesAgg._sum.totalPrice || 0);
     const totalProfit = totalRevenue - totalCost;
 
     // Previous period for growth
@@ -87,11 +87,11 @@ export async function GET(request: NextRequest) {
       },
       _sum: { totalPrice: true },
     });
-    const previousPeriodRevenue = prevAgg._sum.totalPrice || 0;
+    const previousPeriodRevenue = Number(prevAgg._sum.totalPrice || 0);
 
     const paymentBreakdown: Record<string, number> = {};
     paymentAgg.forEach((p) => {
-      paymentBreakdown[p.paymentMethod] = p._sum.totalAmount || 0;
+      paymentBreakdown[p.paymentMethod] = Number(p._sum.totalAmount || 0);
     });
 
     // Chart data — use DB groupBy for daily, minimal fetch for hourly
@@ -116,8 +116,8 @@ export async function GET(request: NextRequest) {
           (s, i) => s + (costMap.get(i.productId) || 0) * i.quantity,
           0
         );
-        chartData[hour].revenue += sale.totalAmount;
-        chartData[hour].profit += sale.totalAmount - cost;
+        chartData[hour].revenue += Number(sale.totalAmount);
+        chartData[hour].profit += Number(sale.totalAmount) - cost;
         chartData[hour].count += 1;
       });
     } else {
@@ -150,8 +150,8 @@ export async function GET(request: NextRequest) {
             (s, i) => s + (costMap.get(i.productId) || 0) * i.quantity,
             0
           );
-          day.revenue += sale.totalAmount;
-          day.profit += sale.totalAmount - cost;
+          day.revenue += Number(sale.totalAmount);
+          day.profit += Number(sale.totalAmount) - cost;
           day.count += 1;
         }
       });

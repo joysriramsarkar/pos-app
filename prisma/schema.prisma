@@ -19,8 +19,8 @@ model Product {
   name          String
   nameBn        String?  @map("name_bn") // Bengali name
   category      String   @default("General")
-  buyingPrice   Float    @default(0) @map("buying_price")
-  sellingPrice  Float    @default(0) @map("selling_price")
+  buyingPrice   Decimal  @default(0) @map("buying_price")
+  sellingPrice  Decimal  @default(0) @map("selling_price")
   unit          String   @default("piece") // piece, kg, gram, liter, packet
   currentStock  Float    @default(0) @map("current_stock")
   minStockLevel Float    @default(5) @map("min_stock_level")
@@ -76,9 +76,9 @@ model Customer {
   name           String
   phone          String?  @unique
   address        String?
-  totalDue       Float    @default(0) @map("total_due") // Running total of outstanding balance (owes store)
-  totalPaid      Float    @default(0) @map("total_paid") // Total amount paid historically
-  prepaidBalance Float    @default(0) @map("prepaid_balance") // Prepaid/credit balance (store owes customer)
+  totalDue       Decimal  @default(0) @map("total_due") // Running total of outstanding balance (owes store)
+  totalPaid      Decimal  @default(0) @map("total_paid") // Total amount paid historically
+  prepaidBalance Decimal  @default(0) @map("prepaid_balance") // Prepaid/credit balance (store owes customer)
   notes          String?
   isActive       Boolean  @default(true) @map("is_active")
   createdAt      DateTime @default(now()) @map("created_at")
@@ -96,8 +96,8 @@ model LedgerEntry {
   id           String   @id @default(cuid())
   customerId   String   @map("customer_id")
   entryType    String // "credit" (customer owes more), "debit" (customer paid)
-  amount       Float
-  balanceAfter Float    @map("balance_after") // Balance after this transaction
+  amount       Decimal
+  balanceAfter Decimal  @map("balance_after") // Balance after this transaction
   description  String?
   referenceId  String?  @map("reference_id") // Sale ID or Payment ID
   createdAt    DateTime @default(now()) @map("created_at")
@@ -119,16 +119,16 @@ model Sale {
   invoiceNumber String   @unique @map("invoice_number")
   customerId    String?  @map("customer_id")
   userId        String?  @map("user_id") // Track which user created this sale
-  subtotal      Float    @default(0)
-  discount      Float    @default(0)
-  tax           Float    @default(0)
-  totalAmount   Float    @default(0) @map("total_amount")
-  amountPaid    Float    @default(0) @map("amount_paid")
+  subtotal      Decimal  @default(0)
+  discount      Decimal  @default(0)
+  tax           Decimal  @default(0)
+  totalAmount   Decimal  @default(0) @map("total_amount")
+  amountPaid    Decimal  @default(0) @map("amount_paid")
   paymentMethod String   @default("Cash") @map("payment_method") // Cash, UPI, Due
   paymentStatus String   @default("Paid") @map("payment_status") // Paid, Partial, Due
   status        String   @default("Completed") // Completed, Cancelled, Refunded, PartialReturn
-  cashAmount    Float?   @map("cash_amount")
-  upiAmount     Float?   @map("upi_amount")
+  cashAmount    Decimal? @map("cash_amount")
+  upiAmount     Decimal? @map("upi_amount")
   notes         String?
   offlineSynced Boolean  @default(true) @map("offline_synced") // For offline-first
   createdAt     DateTime @default(now()) @map("created_at")
@@ -153,8 +153,8 @@ model SaleItem {
   productId   String   @map("product_id")
   productName String   @map("product_name") // Snapshot at time of sale
   quantity    Float
-  unitPrice   Float    @map("unit_price") // Price at time of sale
-  totalPrice  Float    @map("total_price")
+  unitPrice   Decimal  @map("unit_price") // Price at time of sale
+  totalPrice  Decimal  @map("total_price")
   createdAt   DateTime @default(now()) @map("created_at")
 
   sale        Sale             @relation(fields: [saleId], references: [id], onDelete: Cascade)
@@ -174,7 +174,7 @@ model SaleReturn {
   id           String   @id @default(cuid())
   saleId       String   @map("sale_id")
   userId       String?  @map("user_id")
-  refundAmount Float    @map("refund_amount")
+  refundAmount Decimal  @map("refund_amount")
   refundMethod String   @default("Cash") @map("refund_method") // Cash, Prepaid
   reason       String?
   createdAt    DateTime @default(now()) @map("created_at")
@@ -195,8 +195,8 @@ model SaleReturnItem {
   productId    String   @map("product_id")
   productName  String   @map("product_name")
   quantity     Float
-  unitPrice    Float    @map("unit_price")
-  totalPrice   Float    @map("total_price")
+  unitPrice    Decimal  @map("unit_price")
+  totalPrice   Decimal  @map("total_price")
   createdAt    DateTime @default(now()) @map("created_at")
 
   saleReturn SaleReturn @relation(fields: [saleReturnId], references: [id], onDelete: Cascade)
@@ -233,7 +233,7 @@ model Purchase {
   id            String   @id @default(cuid())
   supplierId    String?  @map("supplier_id")
   invoiceNumber String?  @map("invoice_number")
-  totalAmount   Float    @default(0) @map("total_amount")
+  totalAmount   Decimal  @default(0) @map("total_amount")
   paymentStatus String   @default("Pending") @map("payment_status") // Paid, Pending, Partial
   notes         String?
   createdAt     DateTime @default(now()) @map("created_at")
@@ -253,8 +253,8 @@ model PurchaseItem {
   productId   String   @map("product_id")
   productName String   @map("product_name")
   quantity    Float
-  buyingPrice Float    @map("buying_price")
-  totalPrice  Float    @map("total_price")
+  buyingPrice Decimal  @map("buying_price")
+  totalPrice  Decimal  @map("total_price")
   createdAt   DateTime @default(now()) @map("created_at")
 
   purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
@@ -373,7 +373,7 @@ model RolePermission {
 
 model Expense {
   id           String    @id @default(cuid())
-  amount       Float
+  amount       Decimal
   category     String
   notes        String?
   date         DateTime  @default(now())

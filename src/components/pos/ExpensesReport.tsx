@@ -59,7 +59,7 @@ export function ExpensesReport({ onBack }: ExpensesReportProps) {
     expenses.filter(e => filterCategory === 'All' || e.category === filterCategory),
     [expenses, filterCategory]);
 
-  const total = useMemo(() => filtered.reduce((s, e) => s + (e.amount ?? 0), 0), [filtered]);
+  const total = useMemo(() => filtered.reduce((s, e) => s + Number(e.amount ?? 0), 0), [filtered]);
 
   const dailyData = useMemo(() => {
     const map: Record<string, { amount: number; ts: number }> = {};
@@ -67,7 +67,7 @@ export function ExpensesReport({ onBack }: ExpensesReportProps) {
       const d = new Date(e.date);
       const k = format(d, 'dd MMM');
       if (!map[k]) map[k] = { amount: 0, ts: d.getTime() };
-      map[k].amount += e.amount ?? 0;
+      map[k].amount += Number(e.amount ?? 0);
     });
     return Object.entries(map).sort((a, b) => a[1].ts - b[1].ts).map(([date, { amount }]) => ({ date, amount }));
   }, [filtered]);
@@ -78,7 +78,7 @@ export function ExpensesReport({ onBack }: ExpensesReportProps) {
       const d = new Date(e.date);
       const k = `W${getWeek(d)} '${String(getYear(d)).slice(2)}`;
       if (!map[k]) map[k] = { amount: 0, ts: startOfWeek(d).getTime() };
-      map[k].amount += e.amount ?? 0;
+      map[k].amount += Number(e.amount ?? 0);
     });
     return Object.entries(map).sort((a, b) => a[1].ts - b[1].ts).map(([week, { amount }]) => ({ week, amount }));
   }, [filtered]);
@@ -89,14 +89,14 @@ export function ExpensesReport({ onBack }: ExpensesReportProps) {
       const d = new Date(e.date);
       const k = format(d, 'MMM yyyy');
       if (!map[k]) map[k] = { amount: 0, ts: startOfMonth(d).getTime() };
-      map[k].amount += e.amount ?? 0;
+      map[k].amount += Number(e.amount ?? 0);
     });
     return Object.entries(map).sort((a, b) => a[1].ts - b[1].ts).map(([month, { amount }]) => ({ month, amount }));
   }, [filtered]);
 
   const categoryTotals = useMemo(() => {
     const map: Record<string, number> = {};
-    filtered.forEach(e => { map[e.category] = (map[e.category] ?? 0) + (e.amount ?? 0); });
+    filtered.forEach(e => { map[e.category] = (map[e.category] ?? 0) + Number(e.amount ?? 0); });
     return Object.entries(map).sort((a, b) => b[1] - a[1]);
   }, [filtered]);
 
@@ -107,7 +107,7 @@ export function ExpensesReport({ onBack }: ExpensesReportProps) {
     filtered.filter(e => e.supplierName).forEach(e => {
       const k = e.supplierId || e.supplierName;
       if (!map[k]) map[k] = { name: e.supplierName, total: 0 };
-      map[k].total += e.amount ?? 0;
+      map[k].total += Number(e.amount ?? 0);
     });
     return Object.values(map).sort((a, b) => b.total - a.total);
   }, [filtered]);
@@ -308,7 +308,7 @@ export function ExpensesReport({ onBack }: ExpensesReportProps) {
                     <TableCell>
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.Other}`}>{e.category}</span>
                     </TableCell>
-                    <TableCell className="text-right font-semibold text-sm text-red-600">{fp(e.amount)}</TableCell>
+                    <TableCell className="text-right font-semibold text-sm text-red-600">{fp(Number(e.amount))}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

@@ -40,9 +40,9 @@ export async function GET(request: NextRequest) {
     saleItemsWithSale.forEach((item) => {
       const cat = item.product?.category || "General";
       const existing = catMap.get(cat) || { revenue: 0, qty: 0, profit: 0, orders: new Set() };
-      existing.revenue += item.totalPrice;
+      existing.revenue += Number(item.totalPrice);
       existing.qty += item.quantity;
-      existing.profit += item.totalPrice - (item.product?.buyingPrice || 0) * item.quantity;
+      existing.profit += Number(item.totalPrice) - Number(item.product?.buyingPrice || 0) * item.quantity;
       existing.orders.add(item.saleId);
       catMap.set(cat, existing);
     });

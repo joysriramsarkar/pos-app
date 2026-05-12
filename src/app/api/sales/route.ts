@@ -309,12 +309,12 @@ export async function POST(request: NextRequest) {
           if (!customer) throw new Error(`Customer ${customerId} not found`);
 
           if (prepaidToUse > 0) {
-            if (customer.prepaidBalance < prepaidToUse) {
+            if (Number(customer.prepaidBalance) < prepaidToUse) {
               throw new Error(`Insufficient prepaid balance. Available: ${customer.prepaidBalance}, Tried to use: ${prepaidToUse}`);
             }
             await tx.customer.update({
               where: { id: customerId },
-              data: { prepaidBalance: subtractMoney(customer.prepaidBalance, prepaidToUse), updatedAt: new Date() },
+              data: { prepaidBalance: subtractMoney(Number(customer.prepaidBalance), prepaidToUse), updatedAt: new Date() },
             });
             await tx.ledgerEntry.create({
               data: {

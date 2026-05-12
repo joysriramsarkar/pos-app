@@ -4,6 +4,8 @@
 // ============================================================================
 
 import type { Product, Cart, Sale, SyncQueueItem, Customer, Supplier } from '@/types/pos';
+import { Decimal } from 'decimal.js';
+import { toMoneyNumber } from '@/lib/money';
 
 export const DB_NAME = 'lakhan-bhandar-pos';
 export const DB_VERSION = 3; // bumped to include action_queue upgrade for existing DB state
@@ -284,7 +286,7 @@ export const CustomersDB = {
   async updateDue(customerId: string, amountChange: number): Promise<void> {
     const customer = await this.getById(customerId);
     if (customer) {
-      customer.totalDue += amountChange;
+        customer.totalDue = toMoneyNumber(new Decimal(customer.totalDue).plus(amountChange));
       await putToStore(STORES.CUSTOMERS, customer);
     }
   },

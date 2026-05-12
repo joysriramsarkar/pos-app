@@ -2,6 +2,7 @@
 
 import { useCallback, useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import { toMoneyNumber } from '@/lib/money';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
@@ -340,7 +341,7 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
                           <span className="text-xs text-muted-foreground">{customer.phone}</span>
                         )}
                       </div>
-                      {customer.totalDue > 0 && (
+                      {toMoneyNumber(customer.totalDue) > 0 && (
                         <Badge variant="destructive" className="ml-auto text-xs">
                           Due: {formatPrice(customer.totalDue)}
                         </Badge>
