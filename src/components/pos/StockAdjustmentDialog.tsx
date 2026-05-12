@@ -23,6 +23,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useProductsStore } from '@/stores/pos-store';
 import type { Product } from '@/types/pos';
 import { MinusCircle } from 'lucide-react';
+import { convertBengaliToEnglishNumerals } from '@/lib/utils';
 
 interface StockAdjustmentDialogProps {
   product: Product | null;
@@ -130,7 +131,7 @@ export function StockAdjustmentDialog({ product, open, onOpenChange }: StockAdju
               max={product.currentStock}
               placeholder={`সর্বোচ্চ ${product.currentStock}`}
               value={quantity}
-              onChange={(e) => setQuantity(e.target.value)}
+              onChange={(e) => setQuantity(convertBengaliToEnglishNumerals(e.target.value))}
             />
           </div>
 

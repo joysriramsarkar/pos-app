@@ -28,7 +28,7 @@ import {
 } from 'lucide-react';
 import type { PaymentMethod, Sale, Customer } from '@/types/pos';
 import { useCartStore, useUIStore, useProductsStore, useCustomersStore } from '@/stores/pos-store';
-import { cn } from '@/lib/utils';
+import { cn, convertBengaliToEnglishNumerals } from '@/lib/utils';
 import { toMoneyNumber } from '@/lib/money';
 
 interface CheckoutDialogProps {
@@ -201,7 +201,7 @@ export function CheckoutDialog({
   }, [handleOpenChange]);
 
   const handleAmountChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
+    const value = convertBengaliToEnglishNumerals(e.target.value);
     if (value === '' || /^\d*\.?\d{0,2}$/.test(value)) {
       setAmountReceived(value);
       setInputError(null);
@@ -209,7 +209,7 @@ export function CheckoutDialog({
   }, []);
 
   const handleCashChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
+    const value = convertBengaliToEnglishNumerals(e.target.value);
     if (value === '' || /^\d*\.?\d{0,2}$/.test(value)) {
       setCashReceived(value);
       setInputError(null);
@@ -217,7 +217,7 @@ export function CheckoutDialog({
   }, []);
 
   const handleUpiChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
+    const value = convertBengaliToEnglishNumerals(e.target.value);
     if (value === '' || /^\d*\.?\d{0,2}$/.test(value)) {
       setUpiReceived(value);
       setInputError(null);

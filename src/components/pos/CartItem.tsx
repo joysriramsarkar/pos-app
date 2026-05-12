@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Minus, Plus, Trash2, GripVertical } from 'lucide-react';
 import type { CartItem as CartItemType } from '@/types/pos';
 import { useCartStore } from '@/stores/pos-store';
-import { cn } from '@/lib/utils';
+import { cn, convertBengaliToEnglishNumerals } from '@/lib/utils';
 import Decimal from 'decimal.js';
 
 interface CartItemProps {
@@ -86,7 +86,7 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
   }, [item.quantity]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setInputValue(e.target.value);
+    setInputValue(convertBengaliToEnglishNumerals(e.target.value));
   };
 
   const commitInputValue = () => {

@@ -36,7 +36,7 @@ import {
 import { Capacitor } from '@capacitor/core';
 import type { PaymentMethod, Customer } from '@/types/pos';
 import { useCartStore, useUIStore } from '@/stores/pos-store';
-import { cn } from '@/lib/utils';
+import { cn, convertBengaliToEnglishNumerals } from '@/lib/utils';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 
 interface CartPanelProps {
@@ -117,7 +117,7 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
 
   const handleDiscountChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      const value = parseFloat(e.target.value);
+      const value = parseFloat(convertBengaliToEnglishNumerals(e.target.value));
       setDiscount(isNaN(value) ? 0 : Math.max(0, value));
     },
     [setDiscount]
@@ -234,9 +234,9 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={cn(
-                    "flex items-center px-3 py-1.5 min-w-[80px] max-w-[120px] text-xs font-medium cursor-pointer border-t border-x rounded-t-lg mr-1 transition-colors select-none",
+                    "flex items-center px-3 py-1.5 min-w-20 max-w-30 text-xs font-medium cursor-pointer border-t border-x rounded-t-lg mr-1 transition-colors select-none",
                     activeTabId === tab.id
-                      ? "bg-background border-b-transparent text-primary relative z-10 -mb-[1px]"
+                      ? "bg-background border-b-transparent text-primary relative z-10 -mb-px"
                       : "bg-muted/50 text-muted-foreground hover:bg-muted"
                   )}
                 >

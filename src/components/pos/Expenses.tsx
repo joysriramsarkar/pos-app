@@ -18,6 +18,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { convertBengaliToEnglishNumerals } from '@/lib/utils';
 
 const CATEGORIES = ['Rent', 'Utilities', 'Salaries', 'Supplies', 'Maintenance', 'Other'] as const;
 
@@ -110,7 +111,6 @@ export function Expenses({ onReport }: ExpensesProps) {
     if (!amount || !category) return;
     setIsLoading(true);
     try {
-      const { convertBengaliToEnglishNumerals } = await import('@/lib/utils');
       const res = await fetch('/api/expenses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -222,7 +222,7 @@ export function Expenses({ onReport }: ExpensesProps) {
               <Input
                 type="text"
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                onChange={(e) => setAmount(convertBengaliToEnglishNumerals(e.target.value))}
                 placeholder="0.00"
                 onKeyDown={(e) => e.key === 'Enter' && handleAddExpense()}
               />

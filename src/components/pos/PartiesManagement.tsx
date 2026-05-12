@@ -45,7 +45,7 @@ import {
   ArrowUpFromLine,
 } from 'lucide-react';
 import type { Customer, Supplier, LedgerEntry } from '@/types/pos';
-import { cn } from '@/lib/utils';
+import { cn, convertBengaliToEnglishNumerals } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { toMoneyNumber } from '@/lib/money';
 import Decimal from 'decimal.js';
@@ -869,7 +869,7 @@ export function PartiesManagement() {
                   id="payment-dialog-amount"
                   type="number"
                   value={paymentAmount}
-                  onChange={(e) => setPaymentAmount(e.target.value)}
+                  onChange={(e) => setPaymentAmount(convertBengaliToEnglishNumerals(e.target.value))}
                   placeholder="0"
                   className="pl-9"
                   max={selectedCustomer?.totalDue}
@@ -940,7 +940,7 @@ export function PartiesManagement() {
                   id="prepayment-dialog-amount"
                   type="number"
                   value={prepaymentAmount}
-                  onChange={(e) => setPrepaymentAmount(e.target.value)}
+                  onChange={(e) => setPrepaymentAmount(convertBengaliToEnglishNumerals(e.target.value))}
                   placeholder="0"
                   className="pl-9"
                 />
@@ -1000,7 +1000,7 @@ export function PartiesManagement() {
                   id="withdraw-amount"
                   type="number"
                   value={withdrawAmount}
-                  onChange={(e) => setWithdrawAmount(e.target.value)}
+                  onChange={(e) => setWithdrawAmount(convertBengaliToEnglishNumerals(e.target.value))}
                   placeholder="0"
                   className="pl-9"
                   max={selectedCustomer?.prepaidBalance}

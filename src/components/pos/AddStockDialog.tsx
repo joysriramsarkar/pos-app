@@ -23,7 +23,7 @@ import { Badge } from '@/components/ui/badge';
 import { Package, Calendar, User, IndianRupee } from 'lucide-react';
 import type { Product, Supplier } from '@/types/pos';
 import { useProductsStore } from '@/stores/pos-store';
-import { cn } from '@/lib/utils';
+import { cn, convertBengaliToEnglishNumerals } from '@/lib/utils';
 
 interface AddStockDialogProps {
   open: boolean;
@@ -141,7 +141,7 @@ export function AddStockDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px] w-[95vw] max-h-[90dvh] overflow-y-auto p-4 md:p-6">
+      <DialogContent className="sm:max-w-106.25 w-[95vw] max-h-[90dvh] overflow-y-auto p-4 md:p-6">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Package className="w-5 h-5" />
@@ -193,7 +193,7 @@ export function AddStockDialog({
                 id="add-stock-quantity"
                 type="number"
                 value={quantity}
-                onChange={(e) => setQuantity(e.target.value)}
+                onChange={(e) => setQuantity(convertBengaliToEnglishNumerals(e.target.value))}
                 placeholder="0"
                 min="0"
                 step={['kg', 'liter'].includes(selectedProduct?.unit || '') ? '0.1' : '1'}
@@ -214,7 +214,7 @@ export function AddStockDialog({
                 id="add-stock-price"
                 type="number"
                 value={purchasePrice}
-                onChange={(e) => setPurchasePrice(e.target.value)}
+                onChange={(e) => setPurchasePrice(convertBengaliToEnglishNumerals(e.target.value))}
                 placeholder="0"
                 min="0"
                 step="0.01"

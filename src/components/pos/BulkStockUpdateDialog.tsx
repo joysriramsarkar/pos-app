@@ -98,14 +98,18 @@ export function BulkStockUpdateDialog({ open, onOpenChange }: BulkStockUpdateDia
 
         const data = results.data as any[];
         const stockUpdateData: StockUpdateData[] = data
-          .filter(row => row.quantity_to_add && !isNaN(parseInt(row.quantity_to_add, 10)) && parseInt(row.quantity_to_add, 10) !== 0)
+          .filter(row => {
+            if (!row.quantity_to_add) return false;
+            const parsedQty = parseInt(convertBengaliToEnglishNumerals(row.quantity_to_add), 10);
+            return !isNaN(parsedQty) && parsedQty !== 0;
+          })
           .map(row => {
             const normalizedRowBarcode = convertBengaliToEnglishNumerals(row.barcode);
             const product = barcodeMap.get(normalizedRowBarcode);
             return {
                 barcode: row.barcode,
                 name: product?.name || 'Unknown Product',
-                quantity: parseInt(row.quantity_to_add, 10)
+                quantity: parseInt(convertBengaliToEnglishNumerals(row.quantity_to_add), 10)
             }
         });
 
@@ -182,6 +186,8 @@ export function BulkStockUpdateDialog({ open, onOpenChange }: BulkStockUpdateDia
             body: JSON.stringify({
               productId: product.id,
               quantity: item.quantity,
+              purchasePrice: product.buyingPrice || 0,
+              date: new Date().toISOString(),
               notes: 'Bulk update from CSV',
             }),
           });

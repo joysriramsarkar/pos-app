@@ -449,7 +449,7 @@ export function ProductDialog({
                 id="product-form-buyingPrice"
                 type="number"
                 value={buyingPrice}
-                onChange={(e) => setBuyingPrice(e.target.value)}
+                onChange={(e) => setBuyingPrice(convertBengaliToEnglishNumerals(e.target.value))}
                 placeholder="0"
                 min="0"
                 step="0.01"
@@ -462,7 +462,7 @@ export function ProductDialog({
                 id="product-form-sellingPrice"
                 type="number"
                 value={sellingPrice}
-                onChange={(e) => setSellingPrice(e.target.value)}
+                onChange={(e) => setSellingPrice(convertBengaliToEnglishNumerals(e.target.value))}
                 placeholder="0"
                 min="0"
                 step="0.01"
@@ -493,7 +493,7 @@ export function ProductDialog({
                 id="product-form-currentStock"
                 type="number"
                 value={currentStock}
-                onChange={(e) => setCurrentStock(e.target.value)}
+                onChange={(e) => setCurrentStock(convertBengaliToEnglishNumerals(e.target.value))}
                 placeholder="0"
                 min="0"
                 step={['kg', 'liter'].includes(unit) ? '0.1' : '1'}
@@ -505,7 +505,7 @@ export function ProductDialog({
                 id="product-form-minStockLevel"
                 type="number"
                 value={minStockLevel}
-                onChange={(e) => setMinStockLevel(e.target.value)}
+                onChange={(e) => setMinStockLevel(convertBengaliToEnglishNumerals(e.target.value))}
                 placeholder="5"
                 min="0"
                 step={['kg', 'liter'].includes(unit) ? '0.1' : '1'}
