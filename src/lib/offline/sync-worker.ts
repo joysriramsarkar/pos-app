@@ -27,6 +27,7 @@ export class OfflineSyncWorker {
    * Safe to call multiple times (only runs once at a time)
    */
   async startSync(): Promise<void> {
+    console.log('[SyncWorker] startSync requested. isRunning:', this.isRunning);
     if (this.isRunning) {
       return;
     }
@@ -42,6 +43,7 @@ export class OfflineSyncWorker {
 
       // Get pending sync items from SyncQueueDB
       const pendingItems = await SyncQueueDB.getUnsynced();
+      console.log('[SyncWorker] Pending items found:', pendingItems.length);
 
       if (pendingItems.length === 0) {
         this.notifyUI({ synced: 0, failed: 0, total: 0 });

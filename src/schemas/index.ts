@@ -30,6 +30,7 @@ export const SaleItemInputSchema = z.object({
 export const SaleInputSchema = z.object({
   id: z.string().optional(),
   invoiceNumber: z.string().optional(),
+  userId: z.string().nullable().optional(),
   items: z.array(SaleItemInputSchema).min(1, 'Items must be a non-empty array'),
   customerId: z.string().nullable().optional(),
   paymentMethod: z.string().optional().default('Cash'),

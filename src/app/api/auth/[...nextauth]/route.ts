@@ -13,11 +13,11 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" }
       },
       async authorize(credentials) {
+        console.log("[NextAuth] authorize called with username:", credentials?.username);
         if (!credentials?.username || !credentials?.password) {
+          console.log("[NextAuth] missing credentials");
           return null;
         }
-
-
 
         const user = await db.user.findUnique({
           where: {
@@ -26,14 +26,17 @@ export const authOptions: NextAuthOptions = {
         });
 
         if (!user) {
+          console.log("[NextAuth] user not found in DB");
           return null;
         }
 
         if (!user.isActive) {
+          console.log("[NextAuth] user is not active");
           return null;
         }
 
         if (user.lockedUntil && user.lockedUntil > new Date()) {
+          console.log("[NextAuth] account is locked");
           throw new Error("Account locked due to too many failed login attempts. Please try again later.");
         }
 
@@ -43,6 +46,7 @@ export const authOptions: NextAuthOptions = {
         );
 
         if (!isPasswordValid) {
+          console.log("[NextAuth] invalid password");
           const newFailedAttempts = user.failedLoginAttempts + 1;
           const updates: any = { failedLoginAttempts: newFailedAttempts };
           if (newFailedAttempts >= 5) {
@@ -55,6 +59,7 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
+        console.log("[NextAuth] login successful for user:", user.username);
         if (user.failedLoginAttempts > 0 || user.lockedUntil) {
           await db.user.update({
             where: { id: user.id },
@@ -102,6 +107,7 @@ export const authOptions: NextAuthOptions = {
     signIn: "/login",
   },
   secret: process.env.NEXTAUTH_SECRET,
+  debug: true,
 };
 
 if (!authOptions.secret && process.env.NEXT_PHASE !== 'phase-production-build') {

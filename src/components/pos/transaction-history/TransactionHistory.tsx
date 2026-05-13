@@ -55,12 +55,26 @@ export function TransactionHistory() {
 
         const data = await response.json();
         if (data.success) {
-          setTransactions(
-            data.data.map((sale: Omit<Transaction, 'createdAt'> & { createdAt: string | Date }) => ({
-              ...sale,
-              createdAt: new Date(sale.createdAt),
-            }))
-          );
+          const apiTransactions = data.data.map((sale: Omit<Transaction, 'createdAt'> & { createdAt: string | Date }) => ({
+            ...sale,
+            createdAt: new Date(sale.createdAt),
+          }));
+          
+          // Merge local store sales that might not be synced yet if we are on the first page
+          let mergedTransactions = [...apiTransactions];
+          if (currentPage === 1 && !searchQuery && filterStatus === 'all' && filterPaymentMethod === 'all') {
+            const currentSales = useSalesStore.getState().sales;
+            const apiIds = new Set(apiTransactions.map((t: Transaction) => t.id));
+            
+            // Only prepend local sales that are not in the API response
+            const localUnsynced = currentSales
+              .filter(ls => !apiIds.has(ls.id))
+              .map(ls => ({ ...ls, createdAt: new Date(ls.createdAt || Date.now()) } as unknown as Transaction));
+              
+            mergedTransactions = [...localUnsynced, ...apiTransactions];
+          }
+
+          setTransactions(mergedTransactions);
           setPagination(data.pagination);
         }
       } catch (error) {

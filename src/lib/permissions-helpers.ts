@@ -15,7 +15,7 @@ export const rolePermissions: Record<UserRole, string[]> = {
     "settings.view", "settings.edit",
     "customers.view", "customers.create", "customers.edit", "customers.delete",
     "suppliers.view", "suppliers.create", "suppliers.edit", "suppliers.delete",
-    "expenses.view", "expenses.create", "expenses.delete",
+    "expenses.view", "expenses.create", "expenses.edit", "expenses.delete",
   ],
   MANAGER: [
     "products.view", "products.create", "products.edit",
@@ -24,7 +24,7 @@ export const rolePermissions: Record<UserRole, string[]> = {
     "reports.view", "reports.export",
     "customers.view", "customers.create", "customers.edit", "customers.delete",
     "suppliers.view", "suppliers.create", "suppliers.edit", "suppliers.delete",
-    "expenses.view", "expenses.create", "expenses.delete",
+    "expenses.view", "expenses.create", "expenses.edit", "expenses.delete",
   ],
   CASHIER: [
     "products.view",

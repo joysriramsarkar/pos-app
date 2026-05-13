@@ -116,24 +116,25 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         if (salesResult.status === 'fulfilled' && salesResult.value.ok) {
           try {
             const response = await salesResult.value.json();
-            const sales = response.data ?? [];
-            const recentTransactions = (sales as Sale[]).map((sale) => ({
-              id: sale.id ?? '',
-              invoiceNumber: sale.invoiceNumber ?? 'N/A',
-              customerName: sale.customer?.name,
-              totalAmount: Number(sale.totalAmount) || 0,
-              paymentMethod: sale.paymentMethod ?? 'Unknown',
-              createdAt: new Date(sale.createdAt ?? Date.now()),
-            }));
-            setTransactions(recentTransactions);
-            setFullTransactions((sales as Sale[]).map((sale: Sale) => ({
-              ...sale, 
-              createdAt: new Date(sale.createdAt ?? Date.now()) 
-            } as Transaction)));
+            const apiSales = response.data ?? [];
+            
+            // Merge API sales with local store to preserve unsynced sales
+            const currentSales = useSalesStore.getState().sales;
+            const apiIds = new Set(apiSales.map((s: Sale) => s.id));
+            const mergedSales = [...apiSales];
+            
+            currentSales.forEach(ls => {
+              if (!apiIds.has(ls.id)) {
+                mergedSales.push(ls);
+              }
+            });
+            
+            mergedSales.sort((a, b) => new Date(b.createdAt || Date.now()).getTime() - new Date(a.createdAt || Date.now()).getTime());
+            
+            // Update store, which will trigger the other useEffect to update transactions
+            useSalesStore.setState({ sales: mergedSales.slice(0, 50) });
           } catch (parseErr) {
             console.error('Failed to parse sales response:', parseErr);
-            setTransactions([]);
-            setFullTransactions([]);
           }
         }
 
@@ -222,6 +223,16 @@ export function Dashboard({ onNavigate }: DashboardProps) {
       }
     };
     fetchDashboardData();
+
+    // Listen for sync completion to refresh stats
+    const handleSyncComplete = () => {
+      fetchDashboardData();
+    };
+    window.addEventListener('offlineSyncComplete', handleSyncComplete);
+
+    return () => {
+      window.removeEventListener('offlineSyncComplete', handleSyncComplete);
+    };
   }, []);
 
   const formatPrice = (price: number) => {

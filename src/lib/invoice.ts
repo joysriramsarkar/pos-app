@@ -9,10 +9,8 @@ import { v4 as uuidv4 } from 'uuid';
 export function generateInvoiceNumber(): string {
   const date = new Date();
   const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '');
-  // Use timestamp-based random for temporary client-side numbers
-  const timestamp = Date.now().toString().slice(-4);
-  const random = Math.floor(Math.random() * 100).toString().padStart(2, '0');
-  return `INV-${dateStr}-TEMP-${timestamp}${random}`;
+  const uuidFragment = uuidv4().split('-')[0].toUpperCase().substring(0, 8);
+  return `INV-${dateStr}-${uuidFragment}`;
 }
 
 /**

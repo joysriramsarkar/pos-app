@@ -30,40 +30,33 @@ describe('Invoice Number Generators', () => {
       }
       global.Date = MockDate as any;
 
-      // Mock Math.random
-      global.Math = Object.create(global.Math);
-      global.Math.random = () => 0.42; // Math.floor(0.42 * 100) = 42
-
-      // Date: 2023-10-25
-      // Date Str: 20231025
-      // Timestamp slice: 1698235200000 -> slice(-4) -> "0000"
-      // Random slice: Math.floor(0.42 * 100) -> 42 -> "42"
-      // Result: INV-20231025-TEMP-000042
-
+      // Note: generateInvoiceNumber now uses UUID fragments instead of timestamp+random
+      // So we just validate the format here (date + 8-char UUID fragment)
       const invoiceNum = generateInvoiceNumber();
-      expect(invoiceNum).toBe('INV-20231025-TEMP-000042');
+      
+      // Format: INV-YYYYMMDD-XXXXXXXX (8 hex characters from UUID)
+      const regex = /^INV-\d{8}-[A-F0-9]{8}$/i;
+      expect(regex.test(invoiceNum)).toBe(true);
+      expect(invoiceNum.startsWith('INV-20231025-')).toBe(true);
     });
 
     it('should match the expected regular expression format', () => {
       const invoiceNum = generateInvoiceNumber();
 
-      // Format: INV-YYYYMMDD-TEMP-XXXXXX (4 timestamp + 2 random digits = 6 digits)
-      const regex = /^INV-\d{8}-TEMP-\d{6}$/;
+      // Format: INV-YYYYMMDD-XXXXXXXX (8 hex characters from UUID)
+      const regex = /^INV-\d{8}-[A-F0-9]{8}$/i;
       expect(regex.test(invoiceNum)).toBe(true);
-      expect(invoiceNum.length).toBe(24);
+      expect(invoiceNum.length).toBe(21);
     });
 
     it('should generate different numbers on subsequent calls', () => {
       const num1 = generateInvoiceNumber();
       const num2 = generateInvoiceNumber();
 
-      // Since it uses Math.random() and Date.now(), it's highly likely they differ.
-      // We can't guarantee 100% differ due to small random space, but it's very probable.
-      // If we run this synchronously fast, timestamp is same, but random is 1/100 chance collision.
-      // To ensure no flakiness, we just test the regex again.
-      const regex = /^INV-\d{8}-TEMP-\d{6}$/;
+      const regex = /^INV-\d{8}-[A-F0-9]{8}$/i;
       expect(regex.test(num1)).toBe(true);
       expect(regex.test(num2)).toBe(true);
+      expect(num1).not.toBe(num2);
     });
   });
 

@@ -35,6 +35,13 @@ export function AuditLogs() {
 
   useEffect(() => {
     fetchLogs(page);
+
+    const handleSyncComplete = () => fetchLogs(page);
+    window.addEventListener('offlineSyncComplete', handleSyncComplete);
+
+    return () => {
+      window.removeEventListener('offlineSyncComplete', handleSyncComplete);
+    };
   }, [page]);
 
   return (

@@ -11,14 +11,16 @@ import {
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Trash2, Plus, Receipt, IndianRupee, Truck, BarChart3, UserPlus, CalendarDays } from 'lucide-react';
+import { Trash2, Plus, Receipt, IndianRupee, Truck, BarChart3, UserPlus, CalendarDays, Pencil, Check, ChevronsUpDown } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { convertBengaliToEnglishNumerals } from '@/lib/utils';
+import { convertBengaliToEnglishNumerals, cn } from '@/lib/utils';
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 
 const CATEGORIES = ['Rent', 'Utilities', 'Salaries', 'Supplies', 'Maintenance', 'Other'] as const;
 
@@ -59,17 +61,43 @@ export function Expenses({ onReport }: ExpensesProps) {
   const [category, setCategory] = useState<string>('Supplies');
   const [notes, setNotes] = useState('');
   const [supplierId, setSupplierId] = useState<string>('');
+  const [supplierOpen, setSupplierOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [editExpense, setEditExpense] = useState<Expense | null>(null);
+  const [editAmount, setEditAmount] = useState('');
+  const [editCategory, setEditCategory] = useState<string>('Supplies');
+  const [editNotes, setEditNotes] = useState('');
+  const [editSupplierId, setEditSupplierId] = useState<string>('');
+  const [editDate, setEditDate] = useState('');
+  const [editSupplierOpen, setEditSupplierOpen] = useState(false);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [showAddSupplier, setShowAddSupplier] = useState(false);
   const [newSupplierName, setNewSupplierName] = useState('');
   const [addingSupplier, setAddingSupplier] = useState(false);
+  const [supplierSearch, setSupplierSearch] = useState('');
   const [useCustomDate, setUseCustomDate] = useState(false);
   const [customDate, setCustomDate] = useState('');
   const { toast } = useToast();
 
   const today = format(new Date(), 'yyyy-MM-dd');
   const selectedDate = useCustomDate && customDate ? customDate : today;
+
+  const todayExpenses = useMemo(
+    () => expenses.filter(e => format(new Date(e.date), 'yyyy-MM-dd') === today),
+    [expenses, today]
+  );
+
+  const todayTotal = useMemo(
+    () => todayExpenses.reduce((sum, item) => sum + Number(item.amount ?? 0), 0),
+    [todayExpenses]
+  );
+
+  const displayDateLabel = useMemo(
+    () => (useCustomDate && customDate ? format(new Date(customDate), 'dd MMMM yyyy') : format(new Date(), 'dd MMMM yyyy')),
+    [useCustomDate, customDate]
+  );
 
   const fetchExpenses = useCallback(async () => {
     try {
@@ -83,9 +111,12 @@ export function Expenses({ onReport }: ExpensesProps) {
     }
   }, []);
 
-  const fetchSuppliers = useCallback(async () => {
+  const fetchSuppliers = useCallback(async (query = '') => {
     try {
-      const res = await fetch('/api/suppliers');
+      const params = new URLSearchParams();
+      params.set('pageSize', '100');
+      if (query.trim()) params.set('search', query.trim());
+      const res = await fetch(`/api/suppliers?${params.toString()}`);
       if (res.ok) {
         const { data } = await res.json();
         setSuppliers(data);
@@ -97,15 +128,19 @@ export function Expenses({ onReport }: ExpensesProps) {
 
   useEffect(() => {
     fetchExpenses();
-    fetchSuppliers();
-  }, [fetchExpenses, fetchSuppliers]);
+  }, [fetchExpenses]);
 
-  // Today's expenses only
-  const todayExpenses = useMemo(() => {
-    return expenses.filter(e => format(new Date(e.date), 'yyyy-MM-dd') === today);
-  }, [expenses, today]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => fetchSuppliers(supplierSearch), 200);
+    return () => window.clearTimeout(timer);
+  }, [fetchSuppliers, supplierSearch]);
 
-  const todayTotal = useMemo(() => todayExpenses.reduce((s, e) => s + Number(e.amount ?? 0), 0), [todayExpenses]);
+  // Selected date expenses
+  const filteredExpenses = useMemo(() => {
+    return expenses.filter(e => format(new Date(e.date), 'yyyy-MM-dd') === selectedDate);
+  }, [expenses, selectedDate]);
+
+  const filteredTotal = useMemo(() => filteredExpenses.reduce((s, e) => s + Number(e.amount ?? 0), 0), [filteredExpenses]);
 
   const handleAddExpense = async () => {
     if (!amount || !category) return;
@@ -164,6 +199,47 @@ export function Expenses({ onReport }: ExpensesProps) {
     }
   };
 
+  const handleOpenEditDialog = (expense: Expense) => {
+    setEditExpense(expense);
+    setEditAmount(String(expense.amount ?? ''));
+    setEditCategory(expense.category || 'Supplies');
+    setEditNotes(expense.notes ?? '');
+    setEditSupplierId(expense.supplierId ?? '');
+    setEditDate(format(new Date(expense.date), 'yyyy-MM-dd'));
+    setShowEditDialog(true);
+  };
+
+  const handleUpdateExpense = async () => {
+    if (!editExpense || !editAmount || !editCategory || !editDate) return;
+    setIsSavingEdit(true);
+    try {
+      const res = await fetch('/api/expenses', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editExpense.id,
+          amount: convertBengaliToEnglishNumerals(editAmount),
+          category: editCategory,
+          notes: editNotes,
+          date: editDate,
+          supplierId: editCategory === 'Supplies' && editSupplierId && editSupplierId !== 'none' ? editSupplierId : null,
+        }),
+      });
+      if (res.ok) {
+        toast({ title: 'খরচ আপডেট হয়েছে' });
+        fetchExpenses();
+        setShowEditDialog(false);
+        setEditExpense(null);
+      } else {
+        toast({ title: 'Error', description: 'Failed to update expense.', variant: 'destructive' });
+      }
+    } catch {
+      toast({ title: 'Error', description: 'Failed to update expense.', variant: 'destructive' });
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
   const handleDeleteExpense = async () => {
     if (!deleteId) return;
     try {
@@ -187,7 +263,7 @@ export function Expenses({ onReport }: ExpensesProps) {
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Receipt className="w-6 h-6" /> Expenses
           </h1>
-          <p className="text-muted-foreground text-sm">{format(new Date(), 'dd MMMM yyyy')} — আজকের খরচ</p>
+          <p className="text-muted-foreground text-sm">{displayDateLabel} — খরচ</p>
         </div>
         <Button variant="outline" onClick={onReport} className="gap-2 border-blue-200 text-blue-600 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-400">
           <BarChart3 className="w-4 h-4" /> রিপোর্ট
@@ -247,15 +323,70 @@ export function Expenses({ onReport }: ExpensesProps) {
                     <UserPlus className="w-3 h-3" /> নতুন
                   </Button>
                 </div>
-                <Select value={supplierId} onValueChange={setSupplierId}>
-                  <SelectTrigger><SelectValue placeholder="সাপ্লায়ার নির্বাচন করুন" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">— কোনো সাপ্লায়ার নেই —</SelectItem>
-                    {suppliers.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Popover open={supplierOpen} onOpenChange={setSupplierOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={supplierOpen}
+                      className="w-full justify-between font-normal px-3"
+                    >
+                      <span className="truncate">
+                        {supplierId && supplierId !== 'none'
+                          ? suppliers.find((s) => s.id === supplierId)?.name
+                          : "সাপ্লায়ার নির্বাচন করুন"}
+                      </span>
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
+                    <Command>
+                      <CommandInput
+                        value={supplierSearch}
+                        onValueChange={setSupplierSearch}
+                        placeholder="সাপ্লায়ার খুঁজুন..."
+                      />
+                      <CommandList>
+                        <CommandEmpty>কোনো সাপ্লায়ার পাওয়া যায়নি।</CommandEmpty>
+                        <CommandGroup>
+                          <CommandItem
+                            value="none"
+                            onSelect={() => {
+                              setSupplierId('none');
+                              setSupplierOpen(false);
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                supplierId === 'none' || !supplierId ? "opacity-100" : "opacity-0"
+                              )}
+                            />
+                            — কোনো সাপ্লায়ার নেই —
+                          </CommandItem>
+                          {suppliers.map((supplier) => (
+                            <CommandItem
+                              key={supplier.id}
+                              value={supplier.name}
+                              onSelect={() => {
+                                setSupplierId(supplier.id);
+                                setSupplierOpen(false);
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  supplierId === supplier.id ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              {supplier.name}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
             )}
             <div className="space-y-1.5">
@@ -296,7 +427,7 @@ export function Expenses({ onReport }: ExpensesProps) {
         <Card className="col-span-1 md:col-span-2 rounded-2xl shadow-sm">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
-              <Receipt className="w-4 h-4 text-red-500" /> আজকের খরচের তালিকা
+              <Receipt className="w-4 h-4 text-red-500" /> {useCustomDate && customDate ? 'খরচের তালিকা' : 'আজকের খরচের তালিকা'}
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
@@ -306,11 +437,11 @@ export function Expenses({ onReport }: ExpensesProps) {
                   <TableHead>ক্যাটাগরি</TableHead>
                   <TableHead>নোট / সাপ্লায়ার</TableHead>
                   <TableHead className="text-right">পরিমাণ</TableHead>
-                  <TableHead className="w-10"></TableHead>
+                  <TableHead className="w-10 text-right">কর্ম</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {todayExpenses.length > 0 ? todayExpenses.map((exp: Expense) => (
+                {filteredExpenses.length > 0 ? filteredExpenses.map((exp: Expense) => (
                   <TableRow key={exp.id}>
                     <TableCell>
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${CATEGORY_COLORS[exp.category] ?? CATEGORY_COLORS.Other}`}>
@@ -327,30 +458,165 @@ export function Expenses({ onReport }: ExpensesProps) {
                     </TableCell>
                     <TableCell className="text-right font-semibold text-sm">{formatPrice(Number(exp.amount ?? 0))}</TableCell>
                     <TableCell>
-                      <Button variant="ghost" size="icon" onClick={() => setDeleteId(exp.id)}
-                        className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10">
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                      <div className="flex justify-end items-center gap-1">
+                        <Button variant="ghost" size="icon" onClick={() => handleOpenEditDialog(exp)}
+                          className="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-primary/10">
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => setDeleteId(exp.id)}
+                          className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10">
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 )) : (
                   <TableRow>
                     <TableCell colSpan={4} className="text-center text-muted-foreground py-12">
                       <Receipt className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                      <p className="text-sm">আজকে কোনো খরচ নেই।</p>
+                      <p className="text-sm">{useCustomDate && customDate ? 'এই তারিখে কোনো খরচ নেই।' : 'আজকে কোনো খরচ নেই।'}</p>
                     </TableCell>
                   </TableRow>
                 )}
               </TableBody>
             </Table>
-            {todayExpenses.length > 0 && (
+            {filteredExpenses.length > 0 && (
               <div className="flex justify-end px-4 py-3 border-t">
-                <span className="text-sm font-semibold">মোট: {formatPrice(todayTotal)}</span>
+                <span className="text-sm font-semibold">মোট: {formatPrice(filteredTotal)}</span>
               </div>
             )}
           </CardContent>
         </Card>
       </div>
+
+      {/* Edit Expense Dialog */}
+      <Dialog open={showEditDialog} onOpenChange={(open) => { if (!open) setShowEditDialog(false); }}>
+        <DialogContent className="sm:max-w-lg w-[95vw]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="w-4 h-4" /> খরচ সম্পাদনা করুন
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-3">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">পরিমাণ (₹)</label>
+              <Input
+                type="text"
+                value={editAmount}
+                onChange={(e) => setEditAmount(convertBengaliToEnglishNumerals(e.target.value))}
+                placeholder="0.00"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">ক্যাটাগরি</label>
+              <Select value={editCategory} onValueChange={(v) => { setEditCategory(v); if (v !== 'Supplies') setEditSupplierId(''); }}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            {editCategory === 'Supplies' && (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium flex items-center gap-1.5">
+                    <Truck className="w-3.5 h-3.5" /> সাপ্লায়ার
+                  </label>
+                  <Button type="button" variant="ghost" size="sm" className="h-6 text-xs gap-1 text-blue-600 hover:text-blue-700 px-1"
+                    onClick={() => setShowAddSupplier(true)}>
+                    <UserPlus className="w-3 h-3" /> নতুন
+                  </Button>
+                </div>
+                <Popover open={editSupplierOpen} onOpenChange={setEditSupplierOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={editSupplierOpen}
+                      className="w-full justify-between font-normal px-3"
+                    >
+                      <span className="truncate">
+                        {editSupplierId && editSupplierId !== 'none'
+                          ? suppliers.find((s) => s.id === editSupplierId)?.name
+                          : "সাপ্লায়ার নির্বাচন করুন"}
+                      </span>
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
+                    <Command>
+                      <CommandInput
+                        value={supplierSearch}
+                        onValueChange={setSupplierSearch}
+                        placeholder="সাপ্লায়ার খুঁজুন..."
+                      />
+                      <CommandList>
+                        <CommandEmpty>কোনো সাপ্লায়ার পাওয়া যায়নি।</CommandEmpty>
+                        <CommandGroup>
+                          <CommandItem
+                            value="none"
+                            onSelect={() => {
+                              setEditSupplierId('none');
+                              setEditSupplierOpen(false);
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                editSupplierId === 'none' || !editSupplierId ? "opacity-100" : "opacity-0"
+                              )}
+                            />
+                            — কোনো সাপ্লায়ার নেই —
+                          </CommandItem>
+                          {suppliers.map((supplier) => (
+                            <CommandItem
+                              key={supplier.id}
+                              value={supplier.name}
+                              onSelect={() => {
+                                setEditSupplierId(supplier.id);
+                                setEditSupplierOpen(false);
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  editSupplierId === supplier.id ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              {supplier.name}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
+            )}
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">নোট</label>
+              <Input value={editNotes} onChange={(e) => setEditNotes(e.target.value)} placeholder="ঐচ্ছিক বিবরণ..." />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">তারিখ</label>
+              <Input
+                type="date"
+                value={editDate}
+                onChange={e => setEditDate(e.target.value)}
+                max={today}
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => { setShowEditDialog(false); setEditExpense(null); }}>
+              বাতিল
+            </Button>
+            <Button onClick={handleUpdateExpense} disabled={isSavingEdit || !editAmount || !editCategory || !editDate}>
+              <Plus className="w-4 h-4 mr-1" /> সংরক্ষণ
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Add Supplier Dialog */}
       <Dialog open={showAddSupplier} onOpenChange={setShowAddSupplier}>

@@ -30,6 +30,7 @@ import { Separator } from '@/components/ui/separator';
 import { Input } from '@/components/ui/input';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useOfflineContext } from '@/lib/offline/offline-context';
+import { getSyncWorker } from '@/lib/offline/sync-worker';
 import {
   Wifi,
   WifiOff,
@@ -422,6 +423,11 @@ function POSDashboard() {
       invoiceNumber: generateInvoiceNumber(),
       customerId: paymentData.customerId,
       userId: (session?.user as { id?: string })?.id,
+      user: session?.user ? { 
+        id: (session.user as any).id, 
+        name: session.user.name || '', 
+        username: (session.user as any).username || '' 
+      } : undefined,
       subtotal: cartItems.reduce((s, it) => s + it.totalPrice, 0),
       discount: paymentData.discount,
       tax: paymentData.tax,
@@ -450,6 +456,11 @@ function POSDashboard() {
 
     // ২. ক্লাউড এপিআই-এর জন্য একদম সঠিক কাঠামোর পেলোড তৈরি (The Critical Fix)
     const backendSyncPayload = {
+      id: sale.id,
+      invoiceNumber: sale.invoiceNumber,
+      userId: sale.userId,
+      subtotal: cartItems.reduce((s, it) => s + it.totalPrice, 0),
+      totalAmount: paymentData.total,
       items: cartItems.map(item => ({
         productId: item.productId,
         productName: item.productName,
@@ -550,9 +561,7 @@ function POSDashboard() {
 
       // ৩. ব্যাকগ্রাউন্ডে ডাটাবেস সিঙ্ক ট্রিগার করুন (নেটওয়ার্ক থাকলে সিঙ্ক হবে, না থাকলে কিউতে জমা থাকবে)
       if (isOnline) {
-        fetch('/api/sync?action=process_queue', { method: 'POST' }).catch(() => {
-          // ফেইল করলে সমস্যা নেই, ব্যাকগ্রাউন্ড ওয়ার্কারে পরে সিঙ্ক হবে
-        });
+        getSyncWorker().then(worker => worker.startSync()).catch(console.error);
       }
     } catch (error) {
       console.error('Checkout failed:', error);

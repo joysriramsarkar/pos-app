@@ -15,7 +15,9 @@ import {
   aggregateSaleItemQuantities,
   findSaleItemTotalMismatch,
 } from '@/lib/sale-calculations';
+import { logAudit } from '@/lib/audit';
 
+const getIp = (req: NextRequest) => req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || undefined;
 
 const ProductSyncPayloadSchema = z.union([
   ProductInputSchema,
@@ -229,6 +231,22 @@ export async function POST(request: NextRequest) {
       return { cached: false, data: operationResult };
     });
 
+    // Log audit for successful offline sale sync
+    if (actionType === "sale:create" && result.data && !result.cached) {
+      await logAudit({
+        userId: (result.data as any).userId || undefined,
+        action: 'CREATE_SALE',
+        entityType: 'Sale',
+        entityId: (result.data as any).id,
+        details: { 
+          invoiceNumber: (result.data as any).invoiceNumber, 
+          totalAmount: (result.data as any).totalAmount,
+          syncMethod: 'offline-sync'
+        },
+        ipAddress: getIp(request),
+      });
+    }
+
     return NextResponse.json({
       success: true,
       data: result.data,
@@ -328,7 +346,7 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
     const externalPaidAmount = subtractMoney(amountPaid, prepaidToUse);
 
     if (amountPaid > totalAmount) {
-      throw new Error("Amount paid cannot exceed sale total");
+      throw new Error(`Amount paid (${amountPaid}) cannot exceed sale total (${totalAmount})`);
     }
 
     if (prepaidToUse > amountPaid) {
@@ -348,6 +366,7 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
       data: {
         id: saleData.id,
         invoiceNumber: saleData.invoiceNumber as string,
+        userId: saleData.userId || null,
         customerId: saleData.customerId || null,
         subtotal: saleData.subtotal || 0,
         discount: saleData.discount || 0,

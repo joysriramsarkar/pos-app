@@ -94,6 +94,41 @@ export async function POST(request: NextRequest) {
   }
 }
 
+export async function PUT(request: NextRequest) {
+  const authError = await requirePermission(request, "expenses.edit");
+  if (authError) return authError;
+
+  try {
+    const body = await request.json();
+    const { id, ...rest } = body;
+
+    if (!id) {
+      return NextResponse.json({ success: false, error: "Expense ID is required" }, { status: 400 });
+    }
+
+    const parsed = ExpenseInputSchema.safeParse(rest);
+    if (!parsed.success) {
+      return NextResponse.json({ success: false, error: parsed.error.issues[0].message }, { status: 400 });
+    }
+
+    const expense = await prisma.expense.update({
+      where: { id },
+      data: {
+        ...parsed.data,
+        supplierId: parsed.data.category === 'Supplies' ? parsed.data.supplierId ?? null : null,
+        supplierName: parsed.data.category === 'Supplies' ? parsed.data.supplierName ?? null : null,
+      },
+    });
+
+    const user = await getAuthenticatedUser(request);
+    await logAudit({ userId: user?.id, action: 'UPDATE_EXPENSE', entityType: 'Expense', entityId: expense.id, details: { amount: expense.amount, category: expense.category, notes: expense.notes ?? undefined }, ipAddress: getIp(request) });
+
+    return NextResponse.json({ success: true, data: expense });
+  } catch (error: unknown) {
+    return NextResponse.json({ success: false, error: "Failed to update expense" }, { status: 500 });
+  }
+}
+
 export async function DELETE(request: NextRequest) {
   const authError = await requirePermission(request, "expenses.delete");
   if (authError) return authError;
