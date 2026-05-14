@@ -88,6 +88,7 @@ async function main() {
       // Expenses
       { code: "expenses.view", description: "View expenses", category: "expenses" },
       { code: "expenses.create", description: "Create expense", category: "expenses" },
+      { code: "expenses.edit", description: "Edit expense", category: "expenses" },
       { code: "expenses.delete", description: "Delete expense", category: "expenses" },
     ];
 
@@ -174,7 +175,7 @@ async function main() {
         "settings.view", "settings.edit",
         "customers.view", "customers.create", "customers.edit", "customers.delete",
         "suppliers.view", "suppliers.create", "suppliers.edit", "suppliers.delete",
-        "expenses.view", "expenses.create", "expenses.delete",
+        "expenses.view", "expenses.create", "expenses.edit", "expenses.delete",
       ],
       MANAGER: [
         "products.view", "products.create", "products.edit",
@@ -183,7 +184,7 @@ async function main() {
         "reports.view", "reports.export",
         "customers.view", "customers.create", "customers.edit", "customers.delete",
         "suppliers.view", "suppliers.create", "suppliers.edit", "suppliers.delete",
-        "expenses.view", "expenses.create", "expenses.delete",
+        "expenses.view", "expenses.create", "expenses.edit", "expenses.delete",
       ],
       CASHIER: [
         "products.view",

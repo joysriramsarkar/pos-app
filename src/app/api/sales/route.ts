@@ -308,20 +308,24 @@ export async function POST(request: NextRequest) {
           const customer = await tx.customer.findUnique({ where: { id: customerId } });
           if (!customer) throw new Error(`Customer ${customerId} not found`);
 
+          const currentTotalDue = Number(customer.totalDue) || 0;
+          const currentPrepaidBalance = Number(customer.prepaidBalance) || 0;
+
           if (prepaidToUse > 0) {
-            if (Number(customer.prepaidBalance) < prepaidToUse) {
-              throw new Error(`Insufficient prepaid balance. Available: ${customer.prepaidBalance}, Tried to use: ${prepaidToUse}`);
+            if (currentPrepaidBalance < prepaidToUse) {
+              throw new Error(`Insufficient prepaid balance. Available: ${currentPrepaidBalance}, Tried to use: ${prepaidToUse}`);
             }
+            const newPrepaidBalance = subtractMoney(currentPrepaidBalance, prepaidToUse);
             await tx.customer.update({
               where: { id: customerId },
-              data: { prepaidBalance: subtractMoney(Number(customer.prepaidBalance), prepaidToUse), updatedAt: new Date() },
+              data: { prepaidBalance: newPrepaidBalance, updatedAt: new Date() },
             });
             await tx.ledgerEntry.create({
               data: {
                 customerId,
                 entryType: "prepayment-used",
                 amount: prepaidToUse,
-                balanceAfter: customer.totalDue,
+                balanceAfter: currentTotalDue,
                 description: `Prepaid used for sale: ${newSale.invoiceNumber}`,
                 referenceId: newSale.id,
               },
@@ -331,13 +335,15 @@ export async function POST(request: NextRequest) {
           const dueAmount = subtractMoney(totalAmount, amountPaidValue);
           if (dueAmount > 0) {
             const creditAmount = subtractMoney(totalAmount, prepaidToUse);
-            const creditBalanceAfter = addMoney(customer.totalDue, creditAmount);
-            const newTotalDue = subtractMoney(creditBalanceAfter, externalPaidAmount);
+            const creditBalanceAfter = addMoney(currentTotalDue, creditAmount);
+            const newTotalDueAfterCredit = creditBalanceAfter;
+            const balanceAfterPayment = subtractMoney(newTotalDueAfterCredit, externalPaidAmount);
 
             await tx.customer.update({
               where: { id: customerId },
-              data: { totalDue: { increment: dueAmount }, updatedAt: new Date() },
+              data: { totalDue: balanceAfterPayment, updatedAt: new Date() },
             });
+            
             await tx.ledgerEntry.create({
               data: {
                 customerId,
@@ -354,25 +360,43 @@ export async function POST(request: NextRequest) {
                   customerId,
                   entryType: "debit",
                   amount: externalPaidAmount,
-                  balanceAfter: newTotalDue,
+                  balanceAfter: balanceAfterPayment,
                   description: `Partial payment for: ${newSale.invoiceNumber}`,
                   referenceId: newSale.id,
                 },
               });
             }
-          }
-
-          if (changeAsPrepayment > 0) {
+          } else if (externalPaidAmount > 0 && currentTotalDue > 0) {
+            // Full payment or overpayment with existing due
+            const newTotalDue = Math.max(0, subtractMoney(currentTotalDue, externalPaidAmount));
             await tx.customer.update({
               where: { id: customerId },
-              data: { prepaidBalance: { increment: changeAsPrepayment }, updatedAt: new Date() },
+              data: { totalDue: newTotalDue, updatedAt: new Date() },
             });
             await tx.ledgerEntry.create({
               data: {
                 customerId,
                 entryType: "debit",
+                amount: externalPaidAmount,
+                balanceAfter: newTotalDue,
+                description: `Payment for sale: ${newSale.invoiceNumber}`,
+                referenceId: newSale.id,
+              },
+            });
+          }
+
+          if (changeAsPrepayment > 0) {
+            const newPrepaidBalance = addMoney(currentPrepaidBalance, changeAsPrepayment);
+            await tx.customer.update({
+              where: { id: customerId },
+              data: { prepaidBalance: newPrepaidBalance, updatedAt: new Date() },
+            });
+            await tx.ledgerEntry.create({
+              data: {
+                customerId,
+                entryType: "prepayment-added",
                 amount: changeAsPrepayment,
-                balanceAfter: customer.totalDue,
+                balanceAfter: currentTotalDue,
                 description: `Change added as prepaid: ${newSale.invoiceNumber}`,
                 referenceId: newSale.id,
               },
@@ -564,7 +588,8 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({ success: true, data: sale, message: `Sale ${status.toLowerCase()} successfully` });
   } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Failed to update sale";
     console.error("Error updating sale:", error);
-    return NextResponse.json({ success: false, error: "Failed to update sale" }, { status: 500 });
+    return NextResponse.json({ success: false, error: errorMessage }, { status: 500 });
   }
 }

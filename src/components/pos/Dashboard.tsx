@@ -56,8 +56,12 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   const t = useTranslations('Dashboard');
   const handleLogout = useLogout();
   const { data: session } = useSession();
-  const userName = (session?.user as { name?: string; username?: string })?.name
-    || (session?.user as { username?: string })?.username
+  const rawName = (session?.user as { name?: string })?.name;
+  const rawUsername = (session?.user as { username?: string })?.username;
+  const rawEmail = (session?.user as { email?: string })?.email;
+  const userName = rawName?.trim()
+    || rawUsername?.trim()
+    || rawEmail?.split('@')[0]
     || 'User';
   const [stats, setStats] = useState<DashboardStats>({
     todaySales: 0,

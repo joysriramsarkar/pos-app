@@ -55,9 +55,19 @@ export function TransactionHistory() {
 
         const data = await response.json();
         if (data.success) {
-          const apiTransactions = data.data.map((sale: Omit<Transaction, 'createdAt'> & { createdAt: string | Date }) => ({
+          const apiTransactions = data.data.map((sale: any) => ({
             ...sale,
             createdAt: new Date(sale.createdAt),
+            totalAmount: Number(sale.totalAmount ?? 0),
+            amountPaid: Number(sale.amountPaid ?? 0),
+            discount: Number(sale.discount ?? 0),
+            tax: Number(sale.tax ?? 0),
+            items: (sale.items || []).map((item: any) => ({
+              ...item,
+              quantity: Number(item.quantity ?? 0),
+              unitPrice: Number(item.unitPrice ?? 0),
+              totalPrice: Number(item.totalPrice ?? 0),
+            })),
           }));
           
           // Merge local store sales that might not be synced yet if we are on the first page

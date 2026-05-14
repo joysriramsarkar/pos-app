@@ -6,6 +6,24 @@ import { ExpenseInputSchema } from "@/schemas";
 
 const getIp = (req: NextRequest) => req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || undefined;
 
+const parseExpenseDate = (date?: string) => {
+  if (!date) return undefined;
+
+  const convertBengaliToEnglishNumerals = (input: string) => {
+    const map: Record<string, string> = { '০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4', '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9' };
+    return input.replace(/[০-৯]/g, (m) => map[m] || m);
+  };
+
+  const normalized = convertBengaliToEnglishNumerals(date);
+  const ddmm = normalized.match(/^(\d{2})[\/\-](\d{2})[\/\-](\d{4})$/);
+  if (ddmm) {
+    return new Date(`${ddmm[3]}-${ddmm[2]}-${ddmm[1]}T00:00:00.000Z`);
+  }
+
+  const parsed = new Date(normalized);
+  return !isNaN(parsed.getTime()) ? parsed : undefined;
+};
+
 export async function GET(request: NextRequest) {
   const authError = await requirePermission(request, "expenses.view");
   if (authError) return authError;
@@ -63,23 +81,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { amount, category, notes, date, supplierId, supplierName } = parsed.data;
-
-    const convertBengaliToEnglishNumerals = (input: string) => {
-      const map: Record<string, string> = { "০":"0","১":"1","২":"2","৩":"3","৪":"4","৫":"5","৬":"6","৭":"7","৮":"8","৯":"9" };
-      return input.replace(/[০-৯]/g, (m) => map[m] || m);
-    };
-
-    let parsedDate = new Date();
-    if (date) {
-      const normalized = convertBengaliToEnglishNumerals(date);
-      const ddmm = normalized.match(/^(\d{2})[\/\-](\d{2})[\/\-](\d{4})$/);
-      if (ddmm) {
-        parsedDate = new Date(`${ddmm[3]}-${ddmm[2]}-${ddmm[1]}`);
-      } else {
-        const d = new Date(normalized);
-        if (!isNaN(d.getTime())) parsedDate = d;
-      }
-    }
+    const parsedDate = parseExpenseDate(date) ?? new Date();
 
     const expense = await prisma.expense.create({
       data: { amount, category, notes, date: parsedDate, supplierId: supplierId ?? null, supplierName: supplierName ?? null },
@@ -111,13 +113,22 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ success: false, error: parsed.error.issues[0].message }, { status: 400 });
     }
 
+    const updateData: Record<string, unknown> = {
+      amount: parsed.data.amount,
+      category: parsed.data.category,
+      notes: parsed.data.notes ?? null,
+      supplierId: parsed.data.category === 'Supplies' ? parsed.data.supplierId ?? null : null,
+      supplierName: parsed.data.category === 'Supplies' ? parsed.data.supplierName ?? null : null,
+    };
+
+    const parsedDate = parseExpenseDate(parsed.data.date);
+    if (parsedDate) {
+      updateData.date = parsedDate;
+    }
+
     const expense = await prisma.expense.update({
       where: { id },
-      data: {
-        ...parsed.data,
-        supplierId: parsed.data.category === 'Supplies' ? parsed.data.supplierId ?? null : null,
-        supplierName: parsed.data.category === 'Supplies' ? parsed.data.supplierName ?? null : null,
-      },
+      data: updateData,
     });
 
     const user = await getAuthenticatedUser(request);
@@ -125,7 +136,9 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({ success: true, data: expense });
   } catch (error: unknown) {
-    return NextResponse.json({ success: false, error: "Failed to update expense" }, { status: 500 });
+    const errorMessage = error instanceof Error ? error.message : "Failed to update expense";
+    console.error("Error updating expense:", error);
+    return NextResponse.json({ success: false, error: errorMessage }, { status: 500 });
   }
 }
 

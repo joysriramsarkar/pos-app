@@ -106,8 +106,11 @@ function POSDashboard() {
   // isProcessingPayment is now per-tab via UIStore
 
   // Auth
-  const { data: session } = useSession();
-  const userRole = (session?.user as { id?: string; role?: string; username?: string })?.role;
+  const { data: session, status: authStatus } = useSession();
+  const rawRole = (session?.user as { role?: string })?.role;
+  const userRole = typeof rawRole === 'string'
+    ? rawRole.toUpperCase() as 'ADMIN' | 'MANAGER' | 'CASHIER' | 'VIEWER'
+    : undefined;
 
   // Offline context - USE THIS INSTEAD OF SYNC STORE for isOnline
   const { isOnline: isOnlineContext, networkStatus } = useOfflineContext();
@@ -174,6 +177,10 @@ function POSDashboard() {
 
   // Filter nav items based on user role
   const filteredNavItems = useMemo(() => {
+    if (authStatus === 'loading') {
+      return navItems;
+    }
+
     if (userRole === 'ADMIN') {
       return navItems;
     } else if (userRole === 'MANAGER') {
@@ -186,14 +193,14 @@ function POSDashboard() {
         item.id === 'transactions'
       );
     } else {
-      // VIEWER
+      // VIEWER or unknown
       return navItems.filter(item =>
         item.id === 'dashboard' ||
         item.id === 'reports' ||
         item.id === 'transactions'
       );
     }
-  }, [userRole]);
+  }, [userRole, authStatus]);
 
   // Mobile product search - server-side with offline fallback
   const [mobileSearchResults, setMobileSearchResults] = useState<ProductType[]>([]);

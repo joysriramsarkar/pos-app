@@ -299,6 +299,8 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
     const productMap = new Map<string, any>(
       products.map((p: any) => [p.id, p]),
     );
+
+    // STRICT validation: Reject sales with insufficient stock
     for (const item of stockDeductions) {
       const product = productMap.get(item.productId);
 
@@ -308,10 +310,9 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
         );
       }
 
-      // Warn on conflict but allow sync — sale data is preserved, stock floors at 0
       if (product.currentStock < item.quantity) {
-        console.warn(
-          `Stock conflict: Product "${product.name}" has ${product.currentStock} units but sale requires ${item.quantity}. Stock will be set to 0 (not negative).`,
+        throw new Error(
+          `Insufficient stock for product "${product.name}" during sync. Available: ${product.currentStock}, Required: ${item.quantity}`,
         );
       }
     }
@@ -433,17 +434,21 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
       });
 
       if (customer) {
+        const currentTotalDue = Number(customer.totalDue) || 0;
+        const currentPrepaidBalance = Number(customer.prepaidBalance) || 0;
+
         if (prepaidToUse > 0) {
-          if (toMoneyNumber(customer.prepaidBalance) < toMoneyNumber(prepaidToUse)) {
+          if (currentPrepaidBalance < toMoneyNumber(prepaidToUse)) {
             throw new Error(
-              `Insufficient prepaid balance. Available: ${customer.prepaidBalance}, Tried to use: ${prepaidToUse}`,
+              `Insufficient prepaid balance. Available: ${currentPrepaidBalance}, Tried to use: ${prepaidToUse}`,
             );
           }
 
+          const newPrepaidBalance = subtractMoney(currentPrepaidBalance, toMoneyNumber(prepaidToUse));
           await tx.customer.update({
             where: { id: saleData.customerId },
             data: {
-              prepaidBalance: { decrement: prepaidToUse },
+              prepaidBalance: newPrepaidBalance,
               updatedAt: new Date(),
             },
           });
@@ -452,8 +457,8 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
             data: {
               customerId: saleData.customerId,
               entryType: "prepayment-used",
-              amount: prepaidToUse,
-              balanceAfter: customer.totalDue,
+              amount: toMoneyNumber(prepaidToUse),
+              balanceAfter: currentTotalDue,
               description: `Prepaid used for offline sale: ${saleData.invoiceNumber}`,
               referenceId: sale.id,
             },
@@ -461,14 +466,14 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
         }
 
         if (dueAmount > 0) {
-          const creditAmount = subtractMoney(totalAmount, prepaidToUse);
-          const creditBalanceAfter = addMoney(customer.totalDue, creditAmount);
-          const newTotalDue = subtractMoney(creditBalanceAfter, externalPaidAmount);
+          const creditAmount = subtractMoney(totalAmount, toMoneyNumber(prepaidToUse || 0));
+          const creditBalanceAfter = addMoney(currentTotalDue, creditAmount);
+          const balanceAfterPayment = subtractMoney(creditBalanceAfter, externalPaidAmount);
 
           await tx.customer.update({
             where: { id: saleData.customerId },
             data: {
-              totalDue: { increment: dueAmount },
+              totalDue: balanceAfterPayment,
               updatedAt: new Date(),
             },
           });
@@ -490,7 +495,7 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
                 customerId: saleData.customerId,
                 entryType: "debit",
                 amount: externalPaidAmount,
-                balanceAfter: newTotalDue,
+                balanceAfter: balanceAfterPayment,
                 description: `Offline sync payment for: ${saleData.invoiceNumber}`,
                 referenceId: sale.id,
               },
@@ -499,10 +504,11 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
         }
 
         if (changeAsPrepayment > 0) {
+          const newPrepaidBalance = addMoney(currentPrepaidBalance, changeAsPrepayment);
           await tx.customer.update({
             where: { id: saleData.customerId },
             data: {
-              prepaidBalance: { increment: changeAsPrepayment },
+              prepaidBalance: newPrepaidBalance,
               updatedAt: new Date(),
             },
           });
@@ -510,9 +516,9 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
           await tx.ledgerEntry.create({
             data: {
               customerId: saleData.customerId,
-              entryType: "debit",
+              entryType: "prepayment-added",
               amount: changeAsPrepayment,
-              balanceAfter: customer.totalDue,
+              balanceAfter: currentTotalDue,
               description: `Offline sync change added as prepaid: ${saleData.invoiceNumber}`,
               referenceId: sale.id,
             },

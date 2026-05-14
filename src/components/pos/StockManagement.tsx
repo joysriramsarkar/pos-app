@@ -134,8 +134,21 @@ export function StockManagement({ onAddProduct, onEditProduct, onAddStock, onDel
       setSearchResults(null);
       return;
     }
+
+    const lowerQuery = query.toLowerCase();
+    const normalizedQuery = convertBengaliToEnglishNumerals(query);
+    const localMatches = storeProducts.filter(p =>
+      p.isActive && (
+        p.name.toLowerCase().includes(lowerQuery) ||
+        p.nameBn?.includes(query) ||
+        p.barcode?.includes(query) ||
+        convertBengaliToEnglishNumerals(p.barcode || '').includes(normalizedQuery)
+      )
+    );
+    setSearchResults(localMatches);
+    setIsSearching(true);
+
     searchTimerRef.current = setTimeout(async () => {
-      setIsSearching(true);
       try {
         const res = await fetch(`/api/products?search=${encodeURIComponent(query)}`);
         if (res.ok) {
@@ -143,17 +156,7 @@ export function StockManagement({ onAddProduct, onEditProduct, onAddStock, onDel
           setSearchResults(data);
         }
       } catch {
-        // offline fallback: search local store
-        const lowerQuery = query.toLowerCase();
-        const normalizedQuery = convertBengaliToEnglishNumerals(query);
-        setSearchResults(storeProducts.filter(p =>
-          p.isActive && (
-            p.name.toLowerCase().includes(lowerQuery) ||
-            p.nameBn?.includes(query) ||
-            p.barcode?.includes(query) ||
-            convertBengaliToEnglishNumerals(p.barcode || '').includes(normalizedQuery)
-          )
-        ));
+        // keep local results if network fails
       } finally {
         setIsSearching(false);
       }

@@ -56,10 +56,12 @@ export function TransactionDetailsDialog({
 
       // Build plain HTML invoice for PDF (no React renderToString needed)
       const itemRows = transaction.items
-        .map(
-          (i, idx) =>
-            `<tr><td>${idx + 1}</td><td>${i.productName}</td><td style="text-align:center">${i.quantity ?? 0}</td><td style="text-align:right">₹${(i.unitPrice ?? 0).toFixed(2)}</td><td style="text-align:right">₹${(i.totalPrice ?? 0).toFixed(2)}</td></tr>`,
-        )
+        .map((i, idx) => {
+          const quantity = Number(i.quantity ?? 0);
+          const unitPrice = Number(i.unitPrice ?? 0);
+          const totalPrice = Number(i.totalPrice ?? 0);
+          return `<tr><td>${idx + 1}</td><td>${i.productName}</td><td style="text-align:center">${quantity}</td><td style="text-align:right">₹${unitPrice.toFixed(2)}</td><td style="text-align:right">₹${totalPrice.toFixed(2)}</td></tr>`;
+        })
         .join("");
       const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
         body{font-family:Arial,sans-serif;padding:20px;color:#000;background:#fff}
@@ -78,9 +80,9 @@ export function TransactionDetailsDialog({
         ${transaction.customer ? `<div style="background:#f9fafb;padding:10px;border-radius:6px;margin-bottom:12px"><b>Bill To:</b> ${transaction.customer.name}${transaction.customer.phone ? ` | ${transaction.customer.phone}` : ""}</div>` : ""}
         <table><thead><tr><th>#</th><th>Item</th><th style="text-align:center">Qty</th><th style="text-align:right">Unit Price</th><th style="text-align:right">Amount</th></tr></thead><tbody>${itemRows}</tbody></table>
         <div style="display:flex;justify-content:flex-end"><table style="width:260px">
-          <tr><td>Subtotal:</td><td style="text-align:right">₹${((transaction.totalAmount ?? 0) + (transaction.discount ?? 0) - (transaction.tax ?? 0)).toFixed(2)}</td></tr>
-          ${(transaction.discount ?? 0) > 0 ? `<tr><td style="color:green">Discount:</td><td style="text-align:right;color:green">-₹${(transaction.discount ?? 0).toFixed(2)}</td></tr>` : ""}
-          ${(transaction.tax ?? 0) > 0 ? `<tr><td>Tax:</td><td style="text-align:right">₹${(transaction.tax ?? 0).toFixed(2)}</td></tr>` : ""}
+          <tr><td>Subtotal:</td><td style="text-align:right">₹${(Number(transaction.totalAmount ?? 0) + Number(transaction.discount ?? 0) - Number(transaction.tax ?? 0)).toFixed(2)}</td></tr>
+          ${(Number(transaction.discount ?? 0)) > 0 ? `<tr><td style="color:green">Discount:</td><td style="text-align:right;color:green">-₹${Number(transaction.discount ?? 0).toFixed(2)}</td></tr>` : ""}
+          ${(Number(transaction.tax ?? 0)) > 0 ? `<tr><td>Tax:</td><td style="text-align:right">₹${Number(transaction.tax ?? 0).toFixed(2)}</td></tr>` : ""}
           <tr class="total-row"><td>Grand Total:</td><td style="text-align:right">₹${(transaction.totalAmount ?? 0).toFixed(2)}</td></tr>
           <tr><td>Amount Paid:</td><td style="text-align:right">₹${(transaction.amountPaid ?? 0).toFixed(2)}</td></tr>
           ${(transaction.totalAmount ?? 0) - (transaction.amountPaid ?? 0) > 0 ? `<tr><td style="color:red">Due:</td><td style="text-align:right;color:red">₹${((transaction.totalAmount ?? 0) - (transaction.amountPaid ?? 0)).toFixed(2)}</td></tr>` : ""}
@@ -90,10 +92,11 @@ export function TransactionDetailsDialog({
       </body></html>`;
 
       const items = transaction.items
-        .map(
-          (i) =>
-            `• ${i.productName} x${i.quantity ?? 0} = ₹${(i.totalPrice ?? 0).toFixed(2)}`,
-        )
+        .map((i) => {
+          const quantity = Number(i.quantity ?? 0);
+          const totalPrice = Number(i.totalPrice ?? 0);
+          return `• ${i.productName} x${quantity} = ₹${totalPrice.toFixed(2)}`;
+        })
         .join("\n");
       const fallbackText =
         `*Invoice: ${transaction.invoiceNumber}*\n` +
@@ -102,7 +105,7 @@ export function TransactionDetailsDialog({
           ? `Customer: ${transaction.customer.name}\n`
           : "") +
         `\n${items}\n\n` +
-        `*Total: ₹${(transaction.totalAmount ?? 0).toFixed(2)}*\n` +
+        `*Total: ₹${Number(transaction.totalAmount ?? 0).toFixed(2)}*\n` +
         `Payment: ${transaction.paymentMethod} (${transaction.paymentStatus})`;
 
       await shareInvoiceAsPdf(
@@ -201,40 +204,40 @@ export function TransactionDetailsDialog({
               <span className="text-muted-foreground">Subtotal:</span>
               <span>
                 {formatPrice(
-                  (transaction.totalAmount ?? 0) +
-                    (transaction.discount ?? 0) -
-                    (transaction.tax ?? 0),
+                  Number(transaction.totalAmount ?? 0) +
+                    Number(transaction.discount ?? 0) -
+                    Number(transaction.tax ?? 0),
                 )}
               </span>
             </div>
-            {(transaction.discount ?? 0) > 0 && (
+            {(Number(transaction.discount ?? 0)) > 0 && (
               <div className="flex justify-between text-red-600">
                 <span>Discount:</span>
-                <span>-{formatPrice(transaction.discount)}</span>
+                <span>-{formatPrice(Number(transaction.discount ?? 0))}</span>
               </div>
             )}
-            {(transaction.tax ?? 0) > 0 && (
+            {(Number(transaction.tax ?? 0)) > 0 && (
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Tax:</span>
-                <span>{formatPrice(transaction.tax)}</span>
+                <span>{formatPrice(Number(transaction.tax ?? 0))}</span>
               </div>
             )}
             <div className="flex justify-between font-semibold text-base md:text-lg border-t pt-2 mt-2">
               <span>Total Amount:</span>
-              <span>{formatPrice(transaction.totalAmount)}</span>
+              <span>{formatPrice(Number(transaction.totalAmount ?? 0))}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Amount Paid:</span>
               <span className="font-semibold">
-                {formatPrice(transaction.amountPaid)}
+                {formatPrice(Number(transaction.amountPaid ?? 0))}
               </span>
             </div>
-            {(transaction.totalAmount ?? 0) - (transaction.amountPaid ?? 0) > 0 && (
+            {(Number(transaction.totalAmount ?? 0) - Number(transaction.amountPaid ?? 0)) > 0 && (
               <div className="flex justify-between text-red-600 font-semibold">
                 <span>Due:</span>
                 <span>
                   {formatPrice(
-                    (transaction.totalAmount ?? 0) - (transaction.amountPaid ?? 0),
+                    Number(transaction.totalAmount ?? 0) - Number(transaction.amountPaid ?? 0),
                   )}
                 </span>
               </div>

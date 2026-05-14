@@ -138,26 +138,37 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
 
   useEffect(() => {
     const searchCustomers = async () => {
-      if (!customerSearchQuery.trim()) {
+      const query = customerSearchQuery.trim();
+      if (!query) {
         setSearchedCustomers([]);
         return;
       }
+
+      const normalizedPhoneQuery = convertBengaliToEnglishNumerals(query);
+      const localResults = customers.filter((c) =>
+        c.name.toLowerCase().includes(query.toLowerCase()) ||
+        c.phone?.includes(normalizedPhoneQuery)
+      );
+
+      setSearchedCustomers(localResults);
       setIsSearching(true);
+
       try {
-        const res = await fetch(`/api/customers?search=${encodeURIComponent(customerSearchQuery)}`);
+        const res = await fetch(`/api/customers?search=${encodeURIComponent(query)}`);
         if (res.ok) {
           const { data } = await res.json();
           setSearchedCustomers(data);
         }
       } catch {
-        setSearchedCustomers([]);
+        // keep local results if the API call fails
       } finally {
         setIsSearching(false);
       }
     };
+
     const timer = setTimeout(searchCustomers, 300);
     return () => clearTimeout(timer);
-  }, [customerSearchQuery]);
+  }, [customerSearchQuery, customers]);
 
   const { toast } = useToast();
 
