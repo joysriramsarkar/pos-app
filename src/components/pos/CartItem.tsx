@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Minus, Plus, Trash2, GripVertical } from 'lucide-react';
 import type { CartItem as CartItemType } from '@/types/pos';
-import { useCartStore } from '@/stores/pos-store';
+import { useCartStore, useQuantityUsageStore } from '@/stores/pos-store';
 import { cn, convertBengaliToEnglishNumerals } from '@/lib/utils';
 import Decimal from 'decimal.js';
 
@@ -115,20 +115,13 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
   const isAtStockLimit = item.quantity >= item.availableStock;
 
   const isWeighted = ['kg', 'liter', 'gram', 'ml'].includes(item.unit);
-  const AMOUNT_PRESETS = [10, 20, 50, 100];
-  const PIECE_PRESETS = [5, 10, 20, 50];
+  const popularQuantities = useQuantityUsageStore((state) => state.getPopularQuantities(item.productId));
+  const QUANTITY_PRESETS = popularQuantities.length > 0 ? popularQuantities.slice(0, 4) : (isWeighted ? [0.5, 1, 2, 5] : [1, 5, 10, 20]);
 
   const handlePiecePreset = useCallback((qty: number) => {
     const validated = Math.min(qty, item.availableStock);
     updateQuantity(item.id, validated);
   }, [item.id, item.availableStock, updateQuantity]);
-
-  const handleAmountPreset = useCallback((taka: number) => {
-    if (!item.unitPrice || item.unitPrice === 0) return;
-    const newQty = new Decimal(taka).div(new Decimal(item.unitPrice)).toNumber();
-    const validated = Math.min(newQty, item.availableStock);
-    updateQuantity(item.id, validated);
-  }, [item.id, item.unitPrice, item.availableStock, updateQuantity]);
 
   return (
     <div
@@ -219,24 +212,10 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
             </Button>
           </div>
 
-          {/* Amount Presets for weighted items */}
-          {isWeighted && !isOverStock && (
+          {/* Quantity Presets */}
+          {!isOverStock && (
             <div className="flex items-center gap-0.5">
-              {AMOUNT_PRESETS.map((taka) => (
-                <button
-                  key={taka}
-                  onClick={() => handleAmountPreset(taka)}
-                  className="h-6 px-1.5 rounded text-[10px] font-medium bg-primary/10 hover:bg-primary/20 text-primary transition-colors touch-manipulation"
-                >
-                  ₹{taka}
-                </button>
-              ))}
-            </div>
-          )}
-          {/* Piece Presets */}
-          {!isWeighted && !isOverStock && (
-            <div className="flex items-center gap-0.5">
-              {PIECE_PRESETS.map((qty) => (
+              {QUANTITY_PRESETS.map((qty) => (
                 <button
                   key={qty}
                   onClick={() => handlePiecePreset(qty)}

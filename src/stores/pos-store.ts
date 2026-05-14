@@ -605,3 +605,48 @@ export const useSalesStore = create<SalesState & SalesActions>()(
     }
   )
 );
+
+interface QuantityUsageState {
+  usage: Record<string, Record<number, number>>; // productId -> quantity -> count
+}
+
+interface QuantityUsageActions {
+  recordQuantity: (productId: string, quantity: number) => void;
+  getPopularQuantities: (productId: string, limit?: number) => number[];
+  reset: () => void;
+}
+
+export const useQuantityUsageStore = create<QuantityUsageState & QuantityUsageActions>()(
+  persist(
+    (set, get) => ({
+      usage: {},
+
+      recordQuantity: (productId, quantity) => {
+        set((state) => {
+          const productUsage = state.usage[productId] || {};
+          productUsage[quantity] = (productUsage[quantity] || 0) + 1;
+          return {
+            usage: {
+              ...state.usage,
+              [productId]: productUsage,
+            },
+          };
+        });
+      },
+
+      getPopularQuantities: (productId, limit = 4) => {
+        const productUsage = get().usage[productId] || {};
+        return Object.entries(productUsage)
+          .sort(([, a], [, b]) => b - a)
+          .slice(0, limit)
+          .map(([qty]) => parseFloat(qty));
+      },
+
+      reset: () => set({ usage: {} }),
+    }),
+    {
+      name: 'lakhan-bhandar-quantity-usage',
+      storage: createJSONStorage(() => localStorage),
+    }
+  )
+);

@@ -42,8 +42,8 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
+  maximumScale: 5,
+  userScalable: true,
   viewportFit: "cover",  // ← নতুন: নচ সহ ফুল স্ক্রিন
   interactiveWidget: "resizes-content", // Prevent virtual keyboard from overlaying fixed elements
   themeColor: [

@@ -6,7 +6,7 @@ import { useSession } from 'next-auth/react';
 import { useCallback, useEffect, useState, useMemo, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import type { Product as ProductType } from '@/types/pos';
-import { ProductGrid } from '@/components/pos/ProductGrid';
+const ProductGrid = dynamic(() => import('@/components/pos/ProductGrid').then(m => ({ default: m.ProductGrid })), { ssr: false });
 const CartPanel = dynamic(() => import('@/components/pos/CartPanel'), { ssr: false });
 const Dashboard = dynamic(() => import('@/components/pos/Dashboard').then(m => ({ default: m.Dashboard })), { ssr: false });
 const StockManagement = dynamic(() => import('@/components/pos/StockManagement').then(m => ({ default: m.StockManagement })), { ssr: false });
@@ -51,7 +51,7 @@ import {
   Banknote,
 } from 'lucide-react';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { useCartStore, useProductsStore, useSyncStore, useUIStore, useCustomersStore, useSalesStore } from '@/stores/pos-store';
+import { useCartStore, useProductsStore, useSyncStore, useUIStore, useCustomersStore, useSalesStore, useQuantityUsageStore } from '@/stores/pos-store';
 import { useSettingsStore } from '@/stores/settings-store';
 import { useSimpleBarcodeScanner } from '@/hooks/use-barcode-scanner';
 import { ProductsDB, SalesDB, SyncQueueDB, CustomersDB, saveSaleWithSyncQueue, updateProductsAndCustomerDue } from '@/lib/offline/indexeddb';
@@ -242,13 +242,27 @@ function POSDashboard() {
     const loadCustomers = async () => {
       setCustomersLoading(true);
       try {
+        // First load from IndexedDB for instant search
+        const cachedCustomers = await CustomersDB.getAll();
+        if (cachedCustomers.length > 0) {
+          setCustomers(cachedCustomers);
+          setCustomersLoading(false);
+        }
+
+        // Then fetch from API to update
         const res = await fetch('/api/customers');
         if (res.ok) {
           const { data } = await res.json();
           setCustomers(data);
+          // Update IndexedDB with fresh data
+          await CustomersDB.upsertMany(data);
         }
       } catch {
-        // silently fail
+        // If API fails, keep cached data
+        if (customers.length === 0) {
+          const cachedCustomers = await CustomersDB.getAll();
+          setCustomers(cachedCustomers);
+        }
       } finally {
         setCustomersLoading(false);
       }
@@ -544,6 +558,11 @@ function POSDashboard() {
     setCurrentSale(sale);
     setCompletedCheckoutSale(sale);
     clearCart();
+    
+    // Record quantities for dynamic shortcuts
+    cartItems.forEach((item) => {
+      useQuantityUsageStore.getState().recordQuantity(item.productId, item.quantity);
+    });
     
     // ✅ Add sale to Zustand store so Dashboard & TransactionHistory update
     useSalesStore.setState({ sales: [sale, ...useSalesStore.getState().sales] });
@@ -943,12 +962,13 @@ function POSDashboard() {
                         size="sm"
                         className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 md:h-8 md:w-8 p-0"
                         onClick={() => { setMobileSearchQuery(''); setMobileSearchResults([]); }}
+                        aria-label="Clear Search"
                       >
                         <X className="w-3 h-3 md:w-4 md:h-4" />
                       </Button>
                     )}
                   </div>
-                  <Button size="sm" className="shrink-0 h-8 w-8 p-0" onClick={handleOpenMobileScanner}>
+                  <Button size="sm" className="shrink-0 h-8 w-8 p-0" onClick={handleOpenMobileScanner} aria-label="Scan Barcode">
                     <ScanLine className="h-4 w-4 md:mr-2" />
                     <span className="hidden md:inline">Scan</span>
                   </Button>

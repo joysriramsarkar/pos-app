@@ -73,6 +73,8 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   const [transactions, setTransactions] = useState<RecentTransaction[]>([]);
   const [breakdown, setBreakdown] = useState<{ upi: number; cash: number; due: number }>({ upi: 0, cash: 0, due: 0 });
   const [todayExpenses, setTodayExpenses] = useState<number>(0);
+  const [expensesLoading, setExpensesLoading] = useState<boolean>(true);
+  const [statsLoading, setStatsLoading] = useState<boolean>(true);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [fullTransactions, setFullTransactions] = useState<Transaction[]>([]);
@@ -110,6 +112,39 @@ export function Dashboard({ onNavigate }: DashboardProps) {
 
   useEffect(() => {
     const fetchDashboardData = async () => {
+      // Load from cache first
+      const cachedStats = localStorage.getItem('dashboard-stats');
+      const cachedExpenses = localStorage.getItem('dashboard-expenses');
+      const cacheTime = localStorage.getItem('dashboard-cache-time');
+      const now = Date.now();
+      const cacheExpiry = 5 * 60 * 1000; // 5 minutes
+
+      if (cachedStats && cacheTime && (now - parseInt(cacheTime)) < cacheExpiry) {
+        try {
+          const stats = JSON.parse(cachedStats);
+          setStats(prevStats => ({
+            ...prevStats,
+            todaySales: Number(stats.todaySales) || 0,
+            todayOrders: Number(stats.todayOrders) || 0,
+            duePayments: Number(stats.duePayments) || 0,
+            salesComparison: stats.salesComparison || 'N/A',
+            ordersComparison: stats.ordersComparison || 'N/A',
+          }));
+          setStatsLoading(false);
+        } catch (e) {
+          console.error('Failed to parse cached stats:', e);
+        }
+      }
+
+      if (cachedExpenses && cacheTime && (now - parseInt(cacheTime)) < cacheExpiry) {
+        try {
+          setTodayExpenses(Number(JSON.parse(cachedExpenses)));
+          setExpensesLoading(false);
+        } catch (e) {
+          console.error('Failed to parse cached expenses:', e);
+        }
+      }
+
       try {
         const [salesResult, statsResult] = await Promise.allSettled([
           fetch('/api/sales?limit=5'),
@@ -155,6 +190,10 @@ export function Dashboard({ onNavigate }: DashboardProps) {
               salesComparison: apiStats.salesComparison || 'N/A',
               ordersComparison: apiStats.ordersComparison || 'N/A',
             }));
+            setStatsLoading(false);
+            // Cache stats
+            localStorage.setItem('dashboard-stats', JSON.stringify(apiStats));
+            localStorage.setItem('dashboard-cache-time', now.toString());
           } catch (parseErr) {
             console.error('Failed to parse stats response:', parseErr);
           }
@@ -221,6 +260,9 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           const expData = await expRes.json();
           const total = (expData.data ?? []).reduce((sum: number, item: { amount: unknown }) => sum + Number(item.amount), 0);
           setTodayExpenses(total);
+          setExpensesLoading(false);
+          // Cache expenses
+          localStorage.setItem('dashboard-expenses', JSON.stringify(total));
         }
       } catch (err) {
         console.error('Failed to fetch today expenses:', err);
