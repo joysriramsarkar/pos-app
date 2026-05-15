@@ -30,6 +30,7 @@ import type { PaymentMethod, Sale, Customer } from '@/types/pos';
 import { useCartStore, useUIStore, useProductsStore, useCustomersStore } from '@/stores/pos-store';
 import { cn, convertBengaliToEnglishNumerals } from '@/lib/utils';
 import { toMoneyNumber } from '@/lib/money';
+import { DebtRepaymentDialog } from './DebtRepaymentDialog';
 
 interface CheckoutDialogProps {
   open?: boolean;
@@ -57,6 +58,7 @@ export interface PaymentData {
   usePrepaid: boolean;
   prepaidAmountUsed: number;
   addChangeAsPrepayment?: boolean;
+  debtRepaymentAmount?: number;
 }
 
 const QUICK_AMOUNTS = [50, 100, 200, 500, 1000, 2000];

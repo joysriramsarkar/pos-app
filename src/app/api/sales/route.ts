@@ -206,9 +206,11 @@ export async function POST(request: NextRequest) {
       if (amountPaidValue === 0) paymentStatus = "Due";
       else if (amountPaidValue < totalAmount) paymentStatus = "Partial";
     } else {
+      // Walk-in customers must pay full amount
       if (amountPaidValue < totalAmount) {
         return NextResponse.json({ success: false, error: "Walk-in customers must pay the full amount" }, { status: 400 });
       }
+      // Walk-in customers are always "Paid" if they pay full amount
     }
 
     const invoiceNumber = await generateServerInvoiceNumber();
@@ -259,20 +261,6 @@ export async function POST(request: NextRequest) {
         (newSale as any).items = (newSale as any).items.map((item: any) => ({ ...item, unit: item.product?.unit ?? '' }));
 
         const stockDeductions = aggregateSaleItemQuantities(validatedItems);
-        const productIds = stockDeductions.map((item) => item.productId);
-        const productsInDb = await tx.product.findMany({
-          where: { id: { in: productIds } },
-          select: { id: true, name: true, currentStock: true },
-        });
-
-        const productMap = new Map(productsInDb.map((p) => [p.id, p]));
-        for (const item of stockDeductions) {
-          const product = productMap.get(item.productId);
-          if (!product) throw new Error(`Product ${item.productId} not found`);
-          if (product.currentStock < item.quantity) {
-            throw new Error(`Insufficient stock for product ${product.name}. Available: ${product.currentStock}, Requested: ${item.quantity}`);
-          }
-        }
 
         if (stockDeductions.length > 0) {
           const itemProductIds = stockDeductions.map((item) => item.productId);
@@ -290,7 +278,7 @@ export async function POST(request: NextRequest) {
         `;
 
           if (updateResult !== stockDeductions.length) {
-            throw new Error(`Atomic stock update failed. Another transaction may have depleted stock.`);
+            throw new Error(`Insufficient stock for one or more products. Another transaction may have depleted stock.`);
           }
         }
 

@@ -57,7 +57,7 @@ export function StockManagement({ onAddProduct, onEditProduct, onAddStock, onDel
 
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
-  const [stockFilter, setStockFilter] = useState<'all' | 'low' | 'out'>('all');
+  const [stockFilter, setStockFilter] = useState<'all' | 'low' | 'out' | 'inactive'>('all');
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
   const [isBulkUpdateOpen, setIsBulkUpdateOpen] = useState(false);
@@ -81,7 +81,12 @@ export function StockManagement({ onAddProduct, onEditProduct, onAddStock, onDel
   // Use search results when actively searching, otherwise use store products
   const products: Product[] = searchResults !== null ? searchResults : storeProducts;
 
-  // When a new product is added to the store while searching, inject it into results
+  // Reset category filter when viewing inactive products
+  useEffect(() => {
+    if (stockFilter === 'inactive' && categoryFilter !== 'all') {
+      setCategoryFilter('all');
+    }
+  }, [stockFilter, categoryFilter]);
   const prevStoreCountRef = useRef(storeProducts.length);
   useEffect(() => {
     if (searchResults !== null) {
@@ -191,16 +196,21 @@ export function StockManagement({ onAddProduct, onEditProduct, onAddStock, onDel
 
   // Filter and sort (client-side on already-loaded data)
   const filteredProducts = useMemo(() => {
-    let result = products.filter(p => p.isActive);
+    let result = products;
 
-    if (categoryFilter !== 'all') {
-      result = result.filter(p => p.category === categoryFilter);
-    }
+    if (stockFilter === 'inactive') {
+      result = result.filter(p => !p.isActive);
+    } else {
+      result = result.filter(p => p.isActive);
+      if (categoryFilter !== 'all') {
+        result = result.filter(p => p.category === categoryFilter);
+      }
 
-    if (stockFilter === 'low') {
-      result = result.filter(p => p.currentStock <= p.minStockLevel && p.currentStock > 0);
-    } else if (stockFilter === 'out') {
-      result = result.filter(p => p.currentStock === 0);
+      if (stockFilter === 'low') {
+        result = result.filter(p => p.currentStock <= p.minStockLevel && p.currentStock > 0);
+      } else if (stockFilter === 'out') {
+        result = result.filter(p => p.currentStock === 0);
+      }
     }
 
     result.sort((a, b) => {
@@ -218,10 +228,10 @@ export function StockManagement({ onAddProduct, onEditProduct, onAddStock, onDel
   }, [products, categoryFilter, stockFilter, sortField, sortOrder]);
 
   const totalStockValue = useMemo(() => {
-    return products
+    return storeProducts
       .filter(p => p.isActive && p.currentStock > 0)
       .reduce((sum, p) => sum + (p.currentStock * p.buyingPrice), 0);
-  }, [products]);
+  }, [storeProducts]);
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -241,6 +251,7 @@ export function StockManagement({ onAddProduct, onEditProduct, onAddStock, onDel
   };
 
   const getStockStatus = (product: Product) => {
+    if (!product.isActive) return { label: 'Inactive', variant: 'secondary' as const };
     if (product.currentStock < 0) return { label: 'Negative Stock', variant: 'destructive' as const };
     if (product.currentStock === 0) return { label: 'Out of Stock', variant: 'destructive' as const };
     if (product.currentStock <= product.minStockLevel) return { label: 'Low Stock', variant: 'secondary' as const };
@@ -271,7 +282,7 @@ export function StockManagement({ onAddProduct, onEditProduct, onAddStock, onDel
               Inventory Management
             </h1>
             <p className="text-sm text-muted-foreground">
-              {storeProducts.length} items • Total Value: {formatPrice(totalStockValue)} • {negativeStockCount > 0 && <span className="text-red-600 font-semibold">{negativeStockCount} negative stock • </span>}{lowStockCount} low stock • {outOfStockCount} out of stock
+              {storeProducts.length} items{stockFilter !== 'inactive' && ` • Total Value: ${formatPrice(totalStockValue)}`} • {negativeStockCount > 0 && <span className="text-red-600 font-semibold">{negativeStockCount} negative stock • </span>}{lowStockCount} low stock • {outOfStockCount} out of stock
             </p>
           </div>
           <div className='flex gap-2 flex-wrap'>
@@ -318,7 +329,7 @@ export function StockManagement({ onAddProduct, onEditProduct, onAddStock, onDel
           </div>
 
           {/* Category Filter */}
-          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+          <Select value={categoryFilter} onValueChange={setCategoryFilter} disabled={stockFilter === 'inactive'}>
             <SelectTrigger className="w-35">
               <Filter className="w-4 h-4 mr-2" />
               <SelectValue placeholder="Category" />
@@ -332,7 +343,7 @@ export function StockManagement({ onAddProduct, onEditProduct, onAddStock, onDel
           </Select>
 
           {/* Stock Filter */}
-          <Select value={stockFilter} onValueChange={(v: 'all' | 'low' | 'out') => setStockFilter(v)}>
+          <Select value={stockFilter} onValueChange={(v: 'all' | 'low' | 'out' | 'inactive') => setStockFilter(v)}>
             <SelectTrigger className="w-32.5">
               <SelectValue placeholder="Stock Status" />
             </SelectTrigger>
@@ -340,6 +351,7 @@ export function StockManagement({ onAddProduct, onEditProduct, onAddStock, onDel
               <SelectItem value="all">All Items</SelectItem>
               <SelectItem value="low">Low Stock</SelectItem>
               <SelectItem value="out">Out of Stock</SelectItem>
+              <SelectItem value="inactive">Inactive</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -433,24 +445,28 @@ export function StockManagement({ onAddProduct, onEditProduct, onAddStock, onDel
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8"
-                          onClick={() => onAddStock?.(product)}
-                        >
-                          <Plus className="w-4 h-4 mr-1" />
-                          <span className="hidden sm:inline">Stock</span>
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 text-amber-600 hover:text-amber-700 hover:bg-amber-50"
-                          title="স্টক কমান (Adjustment)"
-                          onClick={() => setAdjustmentProduct(product)}
-                        >
-                          <MinusCircle className="w-4 h-4" />
-                        </Button>
+                        {product.isActive && (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8"
+                              onClick={() => onAddStock?.(product)}
+                            >
+                              <Plus className="w-4 h-4 mr-1" />
+                              <span className="hidden sm:inline">Stock</span>
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 text-amber-600 hover:text-amber-700 hover:bg-amber-50"
+                              title="স্টক কমান (Adjustment)"
+                              onClick={() => setAdjustmentProduct(product)}
+                            >
+                              <MinusCircle className="w-4 h-4" />
+                            </Button>
+                          </>
+                        )}
                         <Button
                           variant="ghost"
                           size="sm"
@@ -459,7 +475,7 @@ export function StockManagement({ onAddProduct, onEditProduct, onAddStock, onDel
                         >
                           <Edit className="w-4 h-4" />
                         </Button>
-                        {canDelete && (
+                        {canDelete && product.isActive && (
                           <Button
                             variant="ghost"
                             size="sm"

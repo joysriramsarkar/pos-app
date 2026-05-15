@@ -134,6 +134,18 @@ export const useCartStore = create<CartState & CartActions>()(
       })),
 
       addItem: (product: Product, quantity: number = 1) => {
+        // Validate quantity before adding to cart
+        if (quantity <= 0) {
+          console.warn('Cannot add item with quantity <= 0');
+          return;
+        }
+        
+        // Check if product has enough stock
+        if (product.currentStock < quantity) {
+          console.warn(`Insufficient stock for ${product.name}. Available: ${product.currentStock}, Requested: ${quantity}`);
+          return;
+        }
+        
         const tab = get().getActiveTab();
         const currentItems = tab.items;
         const existingItemIndex = currentItems.findIndex(
@@ -144,6 +156,12 @@ export const useCartStore = create<CartState & CartActions>()(
           const updatedItems = [...currentItems];
           const existingItem = updatedItems[existingItemIndex];
           const newQuantity = new Decimal(existingItem.quantity).plus(new Decimal(quantity)).toNumber();
+
+          // Re-check stock when adding more of existing item
+          if (newQuantity > product.currentStock) {
+            console.warn(`Total quantity exceeds available stock for ${product.name}. Available: ${product.currentStock}, Total: ${newQuantity}`);
+            return;
+          }
 
           updatedItems[existingItemIndex] = {
             ...existingItem,

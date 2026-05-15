@@ -90,6 +90,48 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
   const [expensesData, setExpensesData] = useState<any[]>([]);
   const [expensesLoading, setExpensesLoading] = useState(false);
 
+  const REPORTS_CACHE_TTL = 30 * 60 * 1000;
+
+  const getReportCache = (key: string) => {
+    const cached = localStorage.getItem(`reports-cache-${key}`);
+    if (!cached) return null;
+    try {
+      const parsed = JSON.parse(cached);
+      if (!parsed?.timestamp || parsed?.data === undefined) return null;
+      if (Date.now() - parsed.timestamp > REPORTS_CACHE_TTL) return null;
+      return parsed.data;
+    } catch (err) {
+      console.error('Invalid report cache:', err);
+      return null;
+    }
+  };
+
+  const setReportCache = (key: string, data: any) => {
+    localStorage.setItem(`reports-cache-${key}`, JSON.stringify({ data, timestamp: Date.now() }));
+  };
+
+  const buildReportCacheKey = (tab: string, params: string) => `${tab}:${params}`;
+
+  const restoreReportCache = (tab: string, cachedData: any) => {
+    if (!cachedData) return;
+    if (tab === 'sales' || tab === 'payment') {
+      setSummaryData(cachedData.summary);
+      setSalesData(cachedData.chartData);
+    } else if (tab === 'stock') {
+      setStockData(cachedData.lowStockItems ?? []);
+    } else if (tab === 'dues') {
+      setDueData(cachedData.customersWithDues ?? []);
+    } else if (tab === 'products') {
+      setTopProducts(cachedData.topProducts ?? []);
+    } else if (tab === 'categories') {
+      setCategoryData(cachedData.categories ?? []);
+    } else if (tab === 'customers') {
+      setTopCustomers(cachedData.topCustomers ?? []);
+    } else if (tab === 'expenses') {
+      setExpensesData(cachedData ?? []);
+    }
+  };
+
   // Date filter state
   const [preset, setPreset] = useState<DatePreset>('30');
   const [customFrom, setCustomFrom] = useState(format(subDays(new Date(), 29), 'yyyy-MM-dd'));
@@ -107,9 +149,11 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
     return `from=${customFrom}&to=${customTo}`;
   }, [preset, customFrom, customTo]);
 
-  const fetchTab = useCallback(async (tab: string, params: string) => {
-    setTabLoading(prev => ({ ...prev, [tab]: true }));
-    setTabError(prev => ({ ...prev, [tab]: null }));
+  const fetchTab = useCallback(async (tab: string, params: string, skipLoading = false) => {
+    if (!skipLoading) {
+      setTabLoading(prev => ({ ...prev, [tab]: true }));
+      setTabError(prev => ({ ...prev, [tab]: null }));
+    }
     try {
       if (tab === 'sales') {
         const res = await fetch(`/api/reports/sales?${params}`);
@@ -117,67 +161,109 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
         const j = await res.json();
         setSummaryData(j.summary);
         setSalesData(j.chartData);
+        setReportCache(buildReportCacheKey(tab, params), j);
       } else if (tab === 'payment') {
         const res = await fetch(`/api/reports/sales?${params}`);
         if (!res.ok) throw new Error('Failed to load Payment data');
         const j = await res.json();
         setSummaryData(j.summary);
         setSalesData(j.chartData);
+        setReportCache(buildReportCacheKey(tab, params), j);
       } else if (tab === 'stock') {
         const res = await fetch('/api/reports/stock');
         if (!res.ok) throw new Error('Failed to load Stock data');
         const j = await res.json();
         setStockData(j.lowStockItems);
+        setReportCache(buildReportCacheKey(tab, params), j);
       } else if (tab === 'dues') {
         const res = await fetch('/api/reports/dues');
         if (!res.ok) throw new Error('Failed to load Dues data');
         const j = await res.json();
         setDueData(j.customersWithDues);
+        setReportCache(buildReportCacheKey(tab, params), j);
       } else if (tab === 'products') {
         const res = await fetch(`/api/reports/products?${params}`);
         if (!res.ok) throw new Error('Failed to load Products data');
         const j = await res.json();
         setTopProducts(j.topProducts);
+        setReportCache(buildReportCacheKey(tab, params), j);
       } else if (tab === 'categories') {
         const res = await fetch(`/api/reports/categories?${params}`);
         if (!res.ok) throw new Error('Failed to load Categories data');
         const j = await res.json();
         setCategoryData(j.categories);
+        setReportCache(buildReportCacheKey(tab, params), j);
       } else if (tab === 'customers') {
         const res = await fetch(`/api/reports/customers?${params}`);
         if (!res.ok) throw new Error('Failed to load Customers data');
         const j = await res.json();
         setTopCustomers(j.topCustomers);
+        setReportCache(buildReportCacheKey(tab, params), j);
       }
     } catch (err) {
       setTabError(prev => ({ ...prev, [tab]: err instanceof Error ? err.message : `Failed to load ${tab} data` }));
     } finally {
-      setTabLoading(prev => ({ ...prev, [tab]: false }));
+      if (!skipLoading) {
+        setTabLoading(prev => ({ ...prev, [tab]: false }));
+      }
+    }
+  }, []);
+
+  const fetchExpensesReport = useCallback(async (cacheKey: string, skipLoading = false) => {
+    if (!skipLoading) {
+      setExpensesLoading(true);
+    }
+    try {
+      const res = await fetch('/api/expenses');
+      if (!res.ok) throw new Error('Failed to load Expenses data');
+      const json = await res.json();
+      setExpensesData(json.data ?? []);
+      setReportCache(cacheKey, json.data ?? []);
+    } catch (err) {
+      console.error('Failed to load expenses report data:', err);
+    } finally {
+      if (!skipLoading) {
+        setExpensesLoading(false);
+      }
     }
   }, []);
 
   // date filter বদলালে বা tab বদলালে সবসময় re-fetch
   useEffect(() => {
-    fetchTab('sales', dateParams);
-  }, [dateParams]);
+    const cacheKey = buildReportCacheKey('sales', dateParams);
+    const cached = getReportCache(cacheKey);
+    if (cached) {
+      restoreReportCache('sales', cached);
+    }
+    fetchTab('sales', dateParams, Boolean(cached));
+  }, [dateParams, fetchTab]);
 
   useEffect(() => {
     if (activeTab === 'sales') return;
+
+    const cacheKey = activeTab === 'expenses'
+      ? 'expenses'
+      : (activeTab === 'stock' || activeTab === 'dues')
+        ? activeTab
+        : buildReportCacheKey(activeTab, dateParams);
+
+    const cached = getReportCache(cacheKey);
+    if (cached) {
+      restoreReportCache(activeTab, cached);
+    }
+
     if (activeTab === 'expenses') {
-      setExpensesLoading(true);
-      fetch('/api/expenses')
-        .then(r => r.ok ? r.json() : null)
-        .then(d => { if (d) { setExpensesData(d.data ?? []); } })
-        .catch(console.error)
-        .finally(() => setExpensesLoading(false));
+      fetchExpensesReport(cacheKey, Boolean(cached));
       return;
     }
+
     if (activeTab === 'stock' || activeTab === 'dues') {
-      fetchTab(activeTab, dateParams);
+      fetchTab(activeTab, dateParams, Boolean(cached));
       return;
     }
-    fetchTab(activeTab, dateParams);
-  }, [activeTab, dateParams]);
+
+    fetchTab(activeTab, dateParams, Boolean(cached));
+  }, [activeTab, dateParams, fetchTab, fetchExpensesReport]);
 
   const isLoading = tabLoading['sales'] ?? false;
   const errorMessage = tabError[activeTab] ?? null;

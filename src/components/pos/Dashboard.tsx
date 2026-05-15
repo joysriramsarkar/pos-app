@@ -115,11 +115,12 @@ export function Dashboard({ onNavigate }: DashboardProps) {
       // Load from cache first
       const cachedStats = localStorage.getItem('dashboard-stats');
       const cachedExpenses = localStorage.getItem('dashboard-expenses');
+      const cachedBreakdown = localStorage.getItem('dashboard-breakdown');
       const cacheTime = localStorage.getItem('dashboard-cache-time');
       const now = Date.now();
-      const cacheExpiry = 5 * 60 * 1000; // 5 minutes
+      const cacheExpiry = 30 * 60 * 1000; // 30 minutes
 
-      if (cachedStats && cacheTime && (now - parseInt(cacheTime)) < cacheExpiry) {
+      if (cachedStats && cacheTime && (now - parseInt(cacheTime, 10)) < cacheExpiry) {
         try {
           const stats = JSON.parse(cachedStats);
           setStats(prevStats => ({
@@ -136,12 +137,25 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         }
       }
 
-      if (cachedExpenses && cacheTime && (now - parseInt(cacheTime)) < cacheExpiry) {
+      if (cachedExpenses && cacheTime && (now - parseInt(cacheTime, 10)) < cacheExpiry) {
         try {
           setTodayExpenses(Number(JSON.parse(cachedExpenses)));
           setExpensesLoading(false);
         } catch (e) {
           console.error('Failed to parse cached expenses:', e);
+        }
+      }
+
+      if (cachedBreakdown && cacheTime && (now - parseInt(cacheTime, 10)) < cacheExpiry) {
+        try {
+          const parsed = JSON.parse(cachedBreakdown);
+          setBreakdown({
+            upi: Number(parsed.upi) || 0,
+            cash: Number(parsed.cash) || 0,
+            due: Number(parsed.due) || 0,
+          });
+        } catch (e) {
+          console.error('Failed to parse cached breakdown:', e);
         }
       }
 
@@ -241,6 +255,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           });
 
           setBreakdown({ upi: upiTotal, cash: cashTotal, due: dueTotal });
+          localStorage.setItem('dashboard-breakdown', JSON.stringify({ upi: upiTotal, cash: cashTotal, due: dueTotal }));
         }
       } catch (err) {
         console.error('Failed to compute payment breakdown:', err);

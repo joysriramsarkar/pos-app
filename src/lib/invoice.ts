@@ -15,14 +15,14 @@ export function generateInvoiceNumber(): string {
 
 /**
  * Generates a unique invoice number for server-side use
- * Uses date + UUID fragment to guarantee uniqueness
- * Format: INV-YYYYMMDD-[UUID_FRAGMENT]
+ * Uses date + longer UUID fragment to minimize collision risk
+ * Format: INV-YYYYMMDD-[12_CHAR_UUID_FRAGMENT]
  * Should be called only from server-side routes/actions
  */
 export async function generateServerInvoiceNumber(): Promise<string> {
   const date = new Date();
   const dateStr = date.toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD
-  const uuidFragment = uuidv4().split('-')[0].toUpperCase().substring(0, 8);
+  const uuidFragment = uuidv4().split('-')[0].toUpperCase().substring(0, 12); // Increased from 8 to 12 chars
   
   return `INV-${dateStr}-${uuidFragment}`;
 }

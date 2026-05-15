@@ -99,12 +99,47 @@ export function Expenses({ onReport }: ExpensesProps) {
     [useCustomDate, customDate]
   );
 
+  const EXPENSES_CACHE_TTL = 30 * 60 * 1000;
+
+  const loadCachedExpenses = () => {
+    const cacheTime = localStorage.getItem('expenses-cache-time');
+    const cachedExpenses = localStorage.getItem('expenses-cache');
+    if (cachedExpenses && cacheTime && Date.now() - parseInt(cacheTime, 10) < EXPENSES_CACHE_TTL) {
+      try {
+        setExpenses(JSON.parse(cachedExpenses));
+      } catch (err) {
+        console.error('Invalid cached expenses', err);
+      }
+    }
+
+    const suppliersCacheTime = localStorage.getItem('suppliers-cache-time');
+    const cachedSuppliers = localStorage.getItem('suppliers-cache');
+    if (cachedSuppliers && suppliersCacheTime && Date.now() - parseInt(suppliersCacheTime, 10) < EXPENSES_CACHE_TTL) {
+      try {
+        setSuppliers(JSON.parse(cachedSuppliers));
+      } catch (err) {
+        console.error('Invalid cached suppliers', err);
+      }
+    }
+  };
+
+  const cacheExpenses = (data: Expense[]) => {
+    localStorage.setItem('expenses-cache', JSON.stringify(data));
+    localStorage.setItem('expenses-cache-time', Date.now().toString());
+  };
+
+  const cacheSuppliers = (data: Supplier[]) => {
+    localStorage.setItem('suppliers-cache', JSON.stringify(data));
+    localStorage.setItem('suppliers-cache-time', Date.now().toString());
+  };
+
   const fetchExpenses = useCallback(async () => {
     try {
       const res = await fetch('/api/expenses');
       if (res.ok) {
         const { data } = await res.json();
         setExpenses(data);
+        cacheExpenses(data);
       }
     } catch (e) {
       console.error(e);
@@ -120,6 +155,7 @@ export function Expenses({ onReport }: ExpensesProps) {
       if (res.ok) {
         const { data } = await res.json();
         setSuppliers(data);
+        cacheSuppliers(data);
       }
     } catch (e) {
       console.error(e);
@@ -127,8 +163,10 @@ export function Expenses({ onReport }: ExpensesProps) {
   }, []);
 
   useEffect(() => {
+    loadCachedExpenses();
     fetchExpenses();
-  }, [fetchExpenses]);
+    fetchSuppliers();
+  }, [fetchExpenses, fetchSuppliers]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => fetchSuppliers(supplierSearch), 200);

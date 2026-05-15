@@ -40,6 +40,26 @@ export function ExpensesReport({ onBack }: ExpensesReportProps) {
   const [filterCategory, setFilterCategory] = useState('All');
   const [viewMode, setViewMode] = useState<ViewMode>('daily');
 
+  const EXPENSES_REPORT_CACHE_TTL = 30 * 60 * 1000;
+
+  const getExpensesReportCache = (key: string) => {
+    const cached = localStorage.getItem(`expenses-report-cache-${key}`);
+    if (!cached) return null;
+    try {
+      const parsed = JSON.parse(cached);
+      if (!parsed?.timestamp || parsed?.data === undefined) return null;
+      if (Date.now() - parsed.timestamp > EXPENSES_REPORT_CACHE_TTL) return null;
+      return parsed.data;
+    } catch (err) {
+      console.error('Invalid expenses report cache:', err);
+      return null;
+    }
+  };
+
+  const setExpensesReportCache = (key: string, data: any[]) => {
+    localStorage.setItem(`expenses-report-cache-${key}`, JSON.stringify({ data, timestamp: Date.now() }));
+  };
+
   // দৈনিক মোডে একটা দিন, বাকিতে রেঞ্জ
   const [singleDate, setSingleDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [dateFrom, setDateFrom] = useState(format(subDays(new Date(), 29), 'yyyy-MM-dd'));
@@ -49,10 +69,27 @@ export function ExpensesReport({ onBack }: ExpensesReportProps) {
   const fetchTo = viewMode === 'daily' ? singleDate : dateTo;
 
   useEffect(() => {
-    fetch(`/api/expenses?dateFrom=${fetchFrom}&dateTo=${fetchTo}T23:59:59`)
+    const cacheKey = `${fetchFrom}:${fetchTo}`;
+    const cached = getExpensesReportCache(cacheKey);
+    if (cached) {
+      setExpenses(cached);
+    }
+
+    const controller = new AbortController();
+
+    fetch(`/api/expenses?dateFrom=${fetchFrom}&dateTo=${fetchTo}T23:59:59`, { signal: controller.signal })
       .then(r => r.ok ? r.json() : null)
-      .then(d => d && setExpenses(d.data ?? []))
-      .catch(console.error);
+      .then(d => {
+        if (d) {
+          setExpenses(d.data ?? []);
+          setExpensesReportCache(cacheKey, d.data ?? []);
+        }
+      })
+      .catch((err) => {
+        if (err.name !== 'AbortError') console.error(err);
+      });
+
+    return () => controller.abort();
   }, [fetchFrom, fetchTo]);
 
   const filtered = useMemo(() =>
