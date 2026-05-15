@@ -269,7 +269,7 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
   const errorMessage = tabError[activeTab] ?? null;
 
   const outstandingDues = useMemo(
-    () => dueData?.reduce((acc, c) => acc + c.totalDue, 0).toFixed(2) || '0.00',
+    () => dueData?.reduce((acc, c) => acc + Number(c.totalDue), 0).toFixed(2) || '0.00',
     [dueData]
   );
 
@@ -667,7 +667,7 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
                   <CardDescription>Customers with pending payments — Total: ₹{outstandingDues}</CardDescription>
                 </div>
                 <Button variant="outline" size="sm" className="gap-1" onClick={() => downloadCSV(
-                  [['Customer','Phone','Total Due','Last Purchase'], ...dueData.map(c => [c.name, c.phone||'', c.totalDue.toFixed(2), new Date(c.updatedAt).toLocaleDateString()])],
+                  [['Customer','Phone','Total Due','Last Purchase'], ...dueData.map(c => [c.name, c.phone||'', Number(c.totalDue).toFixed(2), new Date(c.updatedAt).toLocaleDateString()])],
                   'dues'
                 )}><Download className="w-4 h-4" /> CSV</Button>
               </CardHeader>
@@ -693,7 +693,7 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
                             <p className="text-sm">{c.name}</p>
                             <p className="text-xs text-muted-foreground">{c.phone || 'N/A'}</p>
                           </TableCell>
-                          <TableCell className="text-right text-amber-600 font-bold">₹{c.totalDue.toFixed(2)}</TableCell>
+                          <TableCell className="text-right text-amber-600 font-bold">₹{Number(c.totalDue).toFixed(2)}</TableCell>
                           <TableCell className="hidden sm:table-cell text-right text-muted-foreground text-xs">{new Date(c.updatedAt).toLocaleDateString()}</TableCell>
                           <TableCell className="hidden sm:table-cell text-right">
                             <Badge variant="outline">{c._count?.sales || 0}</Badge>
