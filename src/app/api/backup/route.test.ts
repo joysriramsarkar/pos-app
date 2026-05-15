@@ -22,7 +22,10 @@ mock.module('../auth/[...nextauth]/route', () => ({
 // Mock api-middleware to avoid permissions.ts -> db chain
 const mockRequireRole = mock(() => Promise.resolve(null));
 mock.module('@/lib/api-middleware', () => ({
+  requireAuth: mock(() => Promise.resolve({ authorized: true, response: null, session: { user: { id: '1', role: 'ADMIN' } } })),
+  requirePermission: mock(() => Promise.resolve(null)),
   requireRole: mockRequireRole,
+  getAuthenticatedUser: mock(() => Promise.resolve({ id: '1', role: 'ADMIN' })),
 }));
 
 mock.module('bcryptjs', () => ({
