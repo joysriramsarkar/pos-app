@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -7,6 +7,8 @@ import type { CartItem as CartItemType } from '@/types/pos';
 import { useCartStore, useQuantityUsageStore } from '@/stores/pos-store';
 import { cn, convertBengaliToEnglishNumerals } from '@/lib/utils';
 import Decimal from 'decimal.js';
+
+const EMPTY_USAGE: Record<number, number> = {};
 
 interface CartItemProps {
   item: CartItemType;
@@ -115,8 +117,14 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
   const isAtStockLimit = item.quantity >= item.availableStock;
 
   const isWeighted = ['kg', 'liter', 'gram', 'ml'].includes(item.unit);
-  const popularQuantities = useQuantityUsageStore((state) => state.getPopularQuantities(item.productId));
-  const QUANTITY_PRESETS = popularQuantities.length > 0 ? popularQuantities.slice(0, 4) : (isWeighted ? [0.5, 1, 2, 5] : [1, 5, 10, 20]);
+  const productUsage = useQuantityUsageStore((state) => state.usage[item.productId] ?? EMPTY_USAGE);
+  const popularQuantities = useMemo(() => {
+    return Object.entries(productUsage)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 4)
+      .map(([qty]) => parseFloat(qty));
+  }, [productUsage]);
+  const QUANTITY_PRESETS = popularQuantities.length > 0 ? popularQuantities : (isWeighted ? [0.5, 1, 2, 5] : [1, 5, 10, 20]);
 
   const handlePiecePreset = useCallback((qty: number) => {
     const validated = Math.min(qty, item.availableStock);

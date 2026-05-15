@@ -89,7 +89,7 @@ export function CheckoutDialog({
     }
   }, [showSuccess, lastSale, onCheckoutSuccess]);
 
-  const activeTab = useCartStore((state) => state.getActiveTab());
+  const activeTab = useCartStore((state) => state.tabs.find((tab) => tab.id === state.activeTabId) || state.tabs[0]);
   const items = activeTab.items;
   const discount = activeTab.discount;
   const tax = activeTab.tax;

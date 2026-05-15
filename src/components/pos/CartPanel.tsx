@@ -72,8 +72,7 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
   const removeTab = useCartStore((state) => state.removeTab);
   const setActiveTab = useCartStore((state) => state.setActiveTab);
 
-  // Note: These getters and primitive values now react to active tab changes naturally
-  const activeTab = useCartStore((state) => state.getActiveTab());
+  const activeTab = useCartStore((state) => state.tabs.find((tab) => tab.id === state.activeTabId) || state.tabs[0]);
   const items = activeTab.items;
   const discount = activeTab.discount;
   const tax = activeTab.tax;

@@ -240,6 +240,7 @@ function POSDashboard() {
   useEffect(() => {
     if (session?.user?.requiresPasswordChange) return;
     const loadCustomers = async () => {
+      const { setCustomers, setLoading: setCustomersLoading } = useCustomersStore.getState();
       setCustomersLoading(true);
       try {
         // First load from IndexedDB for instant search
@@ -268,12 +269,15 @@ function POSDashboard() {
       }
     };
     loadCustomers();
-  }, [setCustomers, setCustomersLoading, session?.user?.requiresPasswordChange]);
+  }, [customers.length, session?.user?.requiresPasswordChange]);
 
   // Load products on mount
   useEffect(() => {
     if (session?.user?.requiresPasswordChange) return;
     const loadProducts = async () => {
+      const { setProducts, setLoading } = useProductsStore.getState();
+      const setOnline = useSyncStore.getState().setOnline;
+
       setLoading(true);
       try {
         // Fetch from API to get actual DB data
@@ -303,7 +307,7 @@ function POSDashboard() {
       } catch (error) {
         console.error('Failed to load products from API:', error instanceof Error ? error.message : String(error));
         // Mark as offline since API failed
-        setOnline(false);
+        useSyncStore.getState().setOnline(false);
         
         try {
           // Fallback to IndexedDB
@@ -322,11 +326,13 @@ function POSDashboard() {
     };
 
     loadProducts();
-  }, [setProducts, setLoading, setOnline, session?.user?.requiresPasswordChange]);
+  }, [session?.user?.requiresPasswordChange]);
 
   // Monitor online status - check both navigator.onLine AND actual API connectivity
   useEffect(() => {
     const checkConnectivity = async () => {
+      const setOnline = useSyncStore.getState().setOnline;
+
       // First check navigator.onLine
       if (!navigator.onLine) {
         setOnline(false);
@@ -369,7 +375,7 @@ function POSDashboard() {
     // Listen to navigator online/offline events
     const handleOnline = () => checkConnectivity();
     const handleOffline = () => {
-      setOnline(false);
+      useSyncStore.getState().setOnline(false);
     };
 
     window.addEventListener('online', handleOnline);
@@ -380,7 +386,7 @@ function POSDashboard() {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [setOnline]);
+  }, []);
 
   // Barcode scanner handler
   const lastScannedRef = useRef<{ barcode: string; time: number }>({ barcode: '', time: 0 });
