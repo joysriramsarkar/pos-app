@@ -21,7 +21,8 @@ import { Transaction, TransactionItem } from "./types";
 import { useState } from "react";
 import { shareInvoiceAsPdf } from "@/lib/invoicePdf";
 import { useSettingsStore } from "@/stores/settings-store";
-import { useSession } from "next-auth/react";
+import { useIsAdmin } from "@/hooks/use-permissions";
+import { useToast } from '@/hooks/use-toast';
 
 interface TransactionDetailsDialogProps {
   transaction: Transaction | null;
@@ -37,10 +38,11 @@ export function TransactionDetailsDialog({
   onUpdateStatus,
 }: TransactionDetailsDialogProps) {
   const [isSharing, setIsSharing] = useState(false);
+  const [preparedFile, setPreparedFile] = useState<File | null>(null);
+  const [isPreparing, setIsPreparing] = useState(false);
+  const { toast } = useToast();
   const { settings } = useSettingsStore();
-  const { data: session } = useSession();
-  const userRole = (session?.user as { role?: string })?.role;
-  const isAdmin = userRole === "ADMIN";
+  const isAdmin = useIsAdmin();
 
   if (!transaction) return null;
 
@@ -55,7 +57,6 @@ export function TransactionDetailsDialog({
   const handleShare = async () => {
     setIsSharing(true);
     try {
-      // Build a Sale-compatible object from transaction
       const printFormat = "a4" as const;
 
       // Build plain HTML invoice for PDF (no React renderToString needed)
@@ -95,33 +96,61 @@ export function TransactionDetailsDialog({
         <div class="footer"><p>ধন্যবাদ! Thank you for shopping with us!</p></div>
       </body></html>`;
 
-      const items = transaction.items
-        .map((i) => {
-          const quantity = Number(i.quantity ?? 0);
-          const totalPrice = Number(i.totalPrice ?? 0);
-          return `• ${i.productName} x${quantity}${(i as any).unit || (i as any).product?.unit ? ` ${(i as any).unit || (i as any).product?.unit}` : ''} = ₹${totalPrice.toFixed(2)}`;
-        })
-        .join("\n");
-      const fallbackText =
-        `*Invoice: ${transaction.invoiceNumber}*\n` +
-        `Date: ${format(transaction.createdAt, "dd/MM/yyyy HH:mm")}\n` +
-        (transaction.customer
-          ? `Customer: ${transaction.customer.name}\n`
-          : "") +
-        `\n${items}\n\n` +
-        `*Total: ₹${Number(transaction.totalAmount ?? 0).toFixed(2)}*\n` +
-        `Payment: ${transaction.paymentMethod} (${transaction.paymentStatus})`;
+      // If Capacitor native, use existing helper immediately
+      try {
+        const cap = await import('@capacitor/core').then(m => (m as any).Capacitor).catch(() => null);
+        if (cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform()) {
+          await shareInvoiceAsPdf(html, printFormat, transaction.invoiceNumber, storeConfig.name, '');
+          return;
+        }
+      } catch {}
 
-      await shareInvoiceAsPdf(
-        html,
-        printFormat,
-        transaction.invoiceNumber,
-        storeConfig.name,
-        fallbackText,
-      );
+      setIsPreparing(true);
+      const { generateInvoicePdf } = await import('@/lib/invoicePdf');
+      const blob = await generateInvoicePdf(html, printFormat);
+      const file = new File([blob], `Invoice-${transaction.invoiceNumber}.pdf`, { type: 'application/pdf' });
+      setPreparedFile(file);
+      toast({ title: 'Invoice Ready', description: 'Tap the Share button again to complete sharing (required on some browsers).' });
     } catch (err: unknown) {
       if ((err instanceof Error ? err.name : "") !== "AbortError") {
         console.error("Share failed:", err);
+      }
+    } finally {
+      setIsPreparing(false);
+      setIsSharing(false);
+    }
+  };
+
+  const performPreparedShare = async () => {
+    if (!preparedFile) return;
+    setIsSharing(true);
+    try {
+      const shareData: any = { title: `Invoice ${transaction.invoiceNumber}`, text: `Invoice from ${storeConfig.name}`, files: [preparedFile] };
+      try {
+        const canShare = typeof (navigator as any).canShare === 'function' ? (navigator as any).canShare(shareData) : true;
+        if (canShare) {
+          await (navigator as any).share(shareData);
+          setPreparedFile(null);
+          toast({ title: 'Shared', description: 'Invoice shared successfully.' });
+          onOpenChange(false);
+          return;
+        }
+      } catch (err) {
+        console.warn('navigator.share failed at performPreparedShare:', err);
+      }
+
+      // fallback to download
+      try {
+        const url = URL.createObjectURL(preparedFile);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = preparedFile.name;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        setPreparedFile(null);
+        toast({ title: 'Downloaded', description: 'Invoice downloaded as a fallback.' });
+      } catch (err) {
+        toast({ title: 'Share failed', description: 'Unable to share or download the invoice.', variant: 'destructive' });
       }
     } finally {
       setIsSharing(false);
@@ -167,7 +196,7 @@ export function TransactionDetailsDialog({
                   Created By
                 </div>
                 <div className="font-semibold text-base md:text-lg mt-1">
-                  {transaction.user?.name || "Unknown"}
+                  {transaction.user?.name || transaction.user?.username || "Unknown"}
                 </div>
               </CardContent>
             </Card>
@@ -288,12 +317,12 @@ export function TransactionDetailsDialog({
             <div className="flex flex-wrap gap-2">
               <Button
                 variant="outline"
-                onClick={handleShare}
+                onClick={preparedFile ? performPreparedShare : handleShare}
                 disabled={isSharing}
                 className="h-10 gap-2 border-green-500 text-green-600 hover:bg-green-50"
               >
                 <Share2 className="w-4 h-4" />
-                {isSharing ? "Sharing..." : "Share / WhatsApp"}
+                {isPreparing ? 'Preparing...' : preparedFile ? (isSharing ? 'Sharing...' : 'Tap to Share') : (isSharing ? 'Sharing...' : 'Share / WhatsApp')}
               </Button>
               {isAdmin && transaction.status === "Completed" && (
                 <>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { useSettingsStore, AppSettings } from "@/stores/settings-store";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
@@ -17,6 +18,7 @@ import LanguageTab from "./settings/LanguageTab";
 import BillingTab from "./settings/BillingTab";
 
 export default function SettingsManagement() {
+  const t = useTranslations("Settings");
   const { settings, fetchSettings, saveSettings } = useSettingsStore();
   const { toast } = useToast();
   const { data: session } = useSession();
@@ -47,7 +49,7 @@ export default function SettingsManagement() {
 
       const success = await saveSettings(payload as Partial<AppSettings>);
       if (success) {
-        toast({ title: "Success", description: "Settings saved successfully." });
+        toast({ title: t("success"), description: t("success") });
 
         // Special logic for theme saving
         if (sectionKeys.includes("theme_mode")) {
@@ -59,7 +61,7 @@ export default function SettingsManagement() {
           setTimeout(() => window.location.reload(), 500);
         }
       } else {
-        toast({ variant: "destructive", title: "Error", description: "Failed to save settings." });
+        toast({ variant: "destructive", title: t("error"), description: t("error") });
       }
     } finally {
       setIsSaving(false);
@@ -102,13 +104,13 @@ export default function SettingsManagement() {
   };
 
   const tabs = [
-    { value: "profile", label: "স্টোর প্রোফাইল", icon: Store, hasChanges: hasProfileChanges },
-    { value: "printer", label: "প্রিন্টার", icon: Printer, hasChanges: hasPrinterChanges },
-    { value: "billing", label: "বিলিং", icon: Receipt, hasChanges: hasBillingChanges },
-    { value: "theme", label: "থিম", icon: Palette, hasChanges: hasThemeChanges },
-    { value: "language", label: "ভাষা", icon: Globe, hasChanges: hasLanguageChanges },
-    { value: "users", label: "ইউজার", icon: Users, hasChanges: () => false },
-    { value: "backup", label: "ব্যাকআপ", icon: Database, hasChanges: () => false },
+    { value: "profile", label: t("profile"), icon: Store, hasChanges: hasProfileChanges },
+    { value: "printer", label: t("printer"), icon: Printer, hasChanges: hasPrinterChanges },
+    { value: "billing", label: t("billing"), icon: Receipt, hasChanges: hasBillingChanges },
+    { value: "theme", label: t("theme"), icon: Palette, hasChanges: hasThemeChanges },
+    { value: "language", label: t("language"), icon: Globe, hasChanges: hasLanguageChanges },
+    { value: "users", label: t("users"), icon: Users, hasChanges: () => false },
+    { value: "backup", label: t("backup"), icon: Database, hasChanges: () => false },
   ];
 
   return (
@@ -118,8 +120,7 @@ export default function SettingsManagement() {
           <Store className="w-5 h-5 text-primary" />
         </div>
         <div>
-          <h1 className="text-lg font-bold leading-tight">সেটিংস</h1>
-          <p className="text-xs text-muted-foreground">স্টোরের পছন্দ কনফিগার করুন</p>
+          <h1 className="text-lg font-bold leading-tight">{t("title")}</h1>
         </div>
       </div>
 
@@ -148,6 +149,7 @@ export default function SettingsManagement() {
               </TabsContent>
               <TabsContent value="printer" className="m-0 focus-visible:outline-none focus-visible:ring-0">
                 <PrinterTab localSettings={localSettings} handleChange={handleChange} handleSave={handleSave} isSaving={isSaving} hasChanges={hasPrinterChanges} />
+
               </TabsContent>
               <TabsContent value="billing" className="m-0 focus-visible:outline-none focus-visible:ring-0">
                 <BillingTab localSettings={localSettings} handleChange={handleChange} handleSave={handleSave} isSaving={isSaving} hasChanges={hasBillingChanges} />

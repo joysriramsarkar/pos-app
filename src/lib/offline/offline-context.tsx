@@ -134,20 +134,13 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
   return (
     <OfflineContext.Provider value={{ isOnline: networkStatus === 'online', networkStatus, isSyncing, syncStats }}>
       {children}
-      {networkStatus === 'offline' && (
-        <div className="fixed bottom-4 left-4 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg z-50">
-          📴 Offline Mode - Changes saved locally
-          <div className="text-xs mt-1 text-white/90">Pending sync: {pendingSyncCount}</div>
-        </div>
-      )}
-      {isSyncing && (
-        <div className="fixed bottom-4 left-4 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg z-50">
-          🔄 Syncing data...
-          <div className="text-xs mt-1 text-white/90">Pending: {pendingSyncCount}</div>
+      {(networkStatus === 'offline' || isSyncing) && (
+        <div className="fixed top-0 left-1/2 -translate-x-1/2 bg-amber-500 text-white px-2 py-1 text-xs z-50">
+          offline, sync pending: {pendingSyncCount}
         </div>
       )}
       {failedSyncCount > 0 && !isSyncing && networkStatus === 'online' && (
-        <div className="fixed bottom-4 right-4 bg-orange-500 text-white px-4 py-2 rounded-lg shadow-lg z-50">
+        <div className="fixed top-4 right-4 bg-orange-500 text-white px-4 py-2 rounded-lg shadow-lg z-50">
           ⚠️ {failedSyncCount} item{failedSyncCount > 1 ? 's' : ''} failed to sync
           {failedSyncPreview && (
             <div className="text-xs mt-1 text-white/90 max-w-xs truncate" title={failedSyncPreview}>

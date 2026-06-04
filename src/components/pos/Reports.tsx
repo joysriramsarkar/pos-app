@@ -328,18 +328,19 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
       >
         Custom
       </Button>
-      {preset === 'custom' && (
-        <>
-          <div className="flex items-center gap-1">
-            <Label className="text-xs shrink-0">From</Label>
-            <Input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} className="h-9 text-xs w-36" />
-          </div>
-          <div className="flex items-center gap-1">
-            <Label className="text-xs shrink-0">To</Label>
-            <Input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} className="h-9 text-xs w-36" />
-          </div>
-        </>
-      )}
+    </div>
+  );
+
+  const CustomDateInputs = preset === 'custom' && (
+    <div className="w-full flex items-end gap-2 flex-wrap">
+      <div className="flex items-center gap-1 flex-1 min-w-48">
+        <Label className="text-xs shrink-0">From</Label>
+        <Input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} className="h-9 text-xs flex-1 min-w-32" />
+      </div>
+      <div className="flex items-center gap-1 flex-1 min-w-48">
+        <Label className="text-xs shrink-0">To</Label>
+        <Input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} className="h-9 text-xs flex-1 min-w-32" />
+      </div>
     </div>
   );
 
@@ -449,6 +450,7 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
 
           {/* Sales Tab */}
           <TabsContent value="sales">
+            {CustomDateInputs && <div className="mb-3">{CustomDateInputs}</div>}
             <Card className="rounded-xl">
               <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
                 <div>
@@ -520,6 +522,7 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
           {/* Payment Breakdown Tab */}
           <TabsContent value="payment">
             <div className="flex flex-wrap gap-2 mb-3">{DateFilter}</div>
+            {CustomDateInputs}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Card className="rounded-xl">
                 <CardHeader>
@@ -715,6 +718,7 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
 
           {/* Top Products Tab */}
           <TabsContent value="products">
+            {CustomDateInputs && <div className="mb-3">{CustomDateInputs}</div>}
             <Card className="rounded-xl">
               <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
                 <div>
@@ -777,6 +781,7 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
           {/* Categories Tab */}
           <TabsContent value="categories">
             <div className="flex flex-wrap gap-2 mb-3">{DateFilter}</div>
+            {CustomDateInputs}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Card className="rounded-xl">
                 <CardHeader>
@@ -858,11 +863,13 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
           {/* Expenses Tab */}
           <TabsContent value="expenses">
             <div className="flex flex-wrap gap-2 mb-3">{DateFilter}</div>
+            {CustomDateInputs}
             <ExpensesTabContent expenses={expensesData} dateParams={dateParams} onNavigate={onNavigate} isLoading={expensesLoading} />
           </TabsContent>
 
           {/* Customers Tab */}
           <TabsContent value="customers">
+            {CustomDateInputs && <div className="mb-3">{CustomDateInputs}</div>}
             <Card className="rounded-xl">
               <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
                 <div>

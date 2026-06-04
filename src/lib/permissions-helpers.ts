@@ -1,5 +1,6 @@
 import { Session } from "next-auth";
-import { UserRole } from "./permissions";
+
+export type UserRole = "ADMIN" | "MANAGER" | "CASHIER" | "VIEWER";
 
 export function getUserRole(session: Session | null): UserRole | null {
   return (session?.user as { id?: string; role?: UserRole; username?: string })?.role || null;

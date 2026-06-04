@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search');
     const includeInactive = searchParams.get('includeInactive') === 'true';
     const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10));
-    const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get('pageSize') ?? '50', 10)));
+    const pageSize = Math.min(10000, Math.max(1, parseInt(searchParams.get('pageSize') ?? '10000', 10)));
 
     if (id) {
       const supplier = await db.supplier.findUnique({
@@ -41,7 +41,6 @@ export async function GET(request: NextRequest) {
       db.supplier.count({ where }),
       db.supplier.findMany({
         where,
-        include: { _count: { select: { purchases: true } } },
         orderBy: [{ name: 'asc' }],
         skip: (page - 1) * pageSize,
         take: pageSize,

@@ -21,7 +21,9 @@ const nextConfig: NextConfig = {
       "lucide-react",
       "recharts",
     ],
-    inlineCss: true,
+    // inlineCss is disabled because it can break modern CSS parsing for color functions
+    // such as oklch() used by Tailwind / modern UI libs.
+    inlineCss: false,
   },
   transpilePackages: [],
   async headers() {

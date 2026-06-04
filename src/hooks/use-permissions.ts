@@ -1,5 +1,18 @@
 import { useSession } from "next-auth/react";
-import { UserRole, roleHasPermission } from "@/lib/permissions";
+import { UserRole, roleHasPermission } from "@/lib/permissions-helpers";
+import { readStoredSessionUser } from "@/lib/session-utils";
+
+function getSessionRole(sessionData: any): UserRole | null {
+  const role = (sessionData?.user as { role?: string })?.role as UserRole | undefined;
+  if (role) return role;
+
+  const stored = readStoredSessionUser();
+  return stored?.role || null;
+}
+
+function getSessionUser(sessionData: any) {
+  return sessionData?.user || readStoredSessionUser();
+}
 
 /**
  * Hook to check if current user has a specific permission
@@ -8,7 +21,7 @@ import { UserRole, roleHasPermission } from "@/lib/permissions";
  */
 export function usePermission(permissionCode: string): boolean {
   const { data: session } = useSession();
-  const role = (session?.user as { id?: string; role?: string; username?: string })?.role as UserRole;
+  const role = getSessionRole(session);
 
   if (!role) {
     return false;
@@ -23,8 +36,7 @@ export function usePermission(permissionCode: string): boolean {
  * @returns boolean - true if user has all permissions
  */
 export function useAllPermissions(permissionCodes: string[]): boolean {
-  const { data: session } = useSession();
-  const role = (session?.user as { id?: string; role?: string; username?: string })?.role as UserRole;
+  const role = useUserRole();
 
   if (!role) {
     return false;
@@ -39,8 +51,7 @@ export function useAllPermissions(permissionCodes: string[]): boolean {
  * @returns boolean - true if user has any of the permissions
  */
 export function useAnyPermission(permissionCodes: string[]): boolean {
-  const { data: session } = useSession();
-  const role = (session?.user as { id?: string; role?: string; username?: string })?.role as UserRole;
+  const role = useUserRole();
 
   if (!role) {
     return false;
@@ -55,7 +66,7 @@ export function useAnyPermission(permissionCodes: string[]): boolean {
  */
 export function useUserRole(): UserRole | null {
   const { data: session } = useSession();
-  return (session?.user as { id?: string; role?: UserRole; username?: string })?.role || null;
+  return getSessionRole(session);
 }
 
 /**
@@ -139,3 +150,4 @@ export function RoleGuard({
   const role = useUserRole();
   return role && roles.includes(role) ? children : fallback;
 }
+

@@ -31,7 +31,6 @@ export async function GET(request: NextRequest) {
         sale: { status: "Completed" },
       },
       orderBy: { _sum: { quantity: "desc" } },
-      take: 20,
     });
 
     const productDetails = await prisma.product.findMany({

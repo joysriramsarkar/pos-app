@@ -22,6 +22,7 @@ import { printToIframe } from "@/lib/printUtility";
 import { useSettingsStore } from "@/stores/settings-store";
 import { Share2, Printer } from "lucide-react";
 import { shareInvoiceAsPdf } from "@/lib/invoicePdf";
+import { useToast } from '@/hooks/use-toast';
 
 interface PrintDialogProps {
   open: boolean;
@@ -189,6 +190,9 @@ export function PrintDialog({
     "This is a computer generated invoice.",
   );
   const [isSharing, setIsSharing] = React.useState(false);
+  const [preparedFile, setPreparedFile] = React.useState<File | null>(null);
+  const [isPreparing, setIsPreparing] = React.useState(false);
+  const { toast } = useToast();
 
   const storeConfig = {
     name: settings.store_name || "Lakhan Bhandar",
@@ -232,6 +236,7 @@ export function PrintDialog({
   // Share invoice as PDF via Web Share API or WhatsApp fallback
   const handleShare = async () => {
     if (!sale) return;
+    // If running on a native platform, defer to the library which handles native sharing
     setIsSharing(true);
     try {
       const html = buildInvoiceHtml(
@@ -243,50 +248,67 @@ export function PrintDialog({
         storeConfig,
         getPageStyle(selectedFormat),
       );
-      const items = sale.items
-        .map(
-          (i) =>
-            `• ${i.productName} x${i.quantity ?? 0}${(i as any).unit || (i as any).product?.unit ? ` ${(i as any).unit || (i as any).product?.unit}` : ''} = ₹${Number(i.totalPrice ?? 0).toFixed(2)}`,
-        )
-        .join("\n");
-      const fallbackText =
-        `*Invoice: ${sale.invoiceNumber}*\n` +
-        `Date: ${new Date(sale.createdAt).toLocaleDateString("en-IN")}\n\n` +
-        `${items}\n\n` +
-        `*Total: ₹${Number(sale.totalAmount ?? 0).toFixed(2)}*\n` +
-        `Payment: ${sale.paymentMethod} (${sale.paymentStatus})\n\n` +
-        `— ${storeConfig.name}`;
 
-      await shareInvoiceAsPdf(
-        html,
-        selectedFormat,
-        sale.invoiceNumber,
-        storeConfig.name,
-        fallbackText,
-      );
-    } catch (err: unknown) {
-      if ((err instanceof Error ? err.name : "") !== "AbortError") {
-        console.error("Share failed:", err);
-        // Last resort: just download the PDF
-        try {
-          const html = buildInvoiceHtml(
-            sale,
+      // If Capacitor native, use the existing helper (keeps native sharing behavior)
+      try {
+        const cap = await import('@capacitor/core').then(m => (m as any).Capacitor).catch(() => null);
+        if (cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform()) {
+          await shareInvoiceAsPdf(
+            html,
             selectedFormat,
-            showLogo,
-            showGst,
-            footerMessage,
-            storeConfig,
-            getPageStyle(selectedFormat),
+            sale.invoiceNumber,
+            storeConfig.name,
+            ''
           );
-          const { generateInvoicePdf } = await import("@/lib/invoicePdf");
-          const blob = await generateInvoicePdf(html, selectedFormat);
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = `Invoice-${sale.invoiceNumber}.pdf`;
-          a.click();
-          setTimeout(() => URL.revokeObjectURL(url), 1000);
-        } catch {}
+          return;
+        }
+      } catch {}
+
+      // Web: prepare the PDF in background and wait for a second user tap to actually share
+      setIsPreparing(true);
+      const { generateInvoicePdf } = await import('@/lib/invoicePdf');
+      const blob = await generateInvoicePdf(html, selectedFormat);
+      const file = new File([blob], `Invoice-${sale.invoiceNumber}.pdf`, { type: 'application/pdf' });
+      setPreparedFile(file);
+      toast({ title: 'Invoice Ready', description: 'Tap the Share button again to complete sharing (required on some browsers).' });
+    } catch (err) {
+      console.error('Prepare share failed:', err);
+    } finally {
+      setIsPreparing(false);
+      setIsSharing(false);
+    }
+  };
+
+  const performPreparedShare = async () => {
+    if (!preparedFile || !sale) return;
+    setIsSharing(true);
+    try {
+      const shareData: any = { title: `Invoice ${sale.invoiceNumber}`, text: `Invoice from ${storeConfig.name}`, files: [preparedFile] };
+      try {
+        const canShare = typeof (navigator as any).canShare === 'function' ? (navigator as any).canShare(shareData) : true;
+        if (canShare) {
+          await (navigator as any).share(shareData);
+          setPreparedFile(null);
+          toast({ title: 'Shared', description: 'Invoice shared successfully.' });
+          onOpenChange(false);
+          return;
+        }
+      } catch (err) {
+        console.warn('navigator.share failed at performPreparedShare:', err);
+      }
+
+      // fallback to download
+      try {
+        const url = URL.createObjectURL(preparedFile);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = preparedFile.name;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        setPreparedFile(null);
+        toast({ title: 'Downloaded', description: 'Invoice downloaded as a fallback.' });
+      } catch (err) {
+        toast({ title: 'Share failed', description: 'Unable to share or download the invoice.', variant: 'destructive' });
       }
     } finally {
       setIsSharing(false);
@@ -413,12 +435,12 @@ export function PrintDialog({
           </Button>
           <Button
             variant="outline"
-            onClick={handleShare}
+            onClick={preparedFile ? performPreparedShare : handleShare}
             disabled={isSharing}
             className="gap-2 border-green-500 text-green-600 hover:bg-green-50"
           >
             <Share2 className="w-4 h-4" />
-            {isSharing ? "Sharing..." : "Share / WhatsApp"}
+            {isPreparing ? 'Preparing...' : preparedFile ? (isSharing ? 'Sharing...' : 'Tap to Share') : (isSharing ? 'Sharing...' : 'Share / WhatsApp')}
           </Button>
           <Button
             onClick={handlePrint}

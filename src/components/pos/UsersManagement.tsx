@@ -22,6 +22,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useIsAdmin } from "@/hooks/use-permissions";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -57,7 +58,7 @@ interface UsersManagementProps {
 }
 
 export function UsersManagement({ currentUserRole }: UsersManagementProps) {
-  const { data: session } = useSession();
+  const isAdmin = useIsAdmin();
   const router = useRouter();
   const { toast } = useToast();
 
@@ -68,8 +69,6 @@ export function UsersManagement({ currentUserRole }: UsersManagementProps) {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<User | null>(null);
   const [deleting, setDeleting] = useState(false);
-
-  const isAdmin = (session?.user as { id?: string; role?: string; username?: string })?.role === "ADMIN";
 
   // Fetch users
   const fetchUsers = async () => {

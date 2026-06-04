@@ -57,6 +57,11 @@ interface ProductStatisticsProps { onBack: () => void; }
 const fmt = (n: number) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0 }).format(n);
 
+const formatQuantity = (value: number) => {
+  if (Number.isInteger(value)) return String(value);
+  return String(Number(value.toFixed(2)));
+};
+
 const changeTypeLabel: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
   purchase: { label: 'স্টক যুক্ত', color: 'text-green-600', icon: <Plus className="w-3 h-3" /> },
   sale:     { label: 'বিক্রয়',    color: 'text-blue-600',  icon: <ShoppingCart className="w-3 h-3" /> },
@@ -122,7 +127,7 @@ function ProductDetailView({ productId, days, onBack }: { productId: string; day
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
           <div className="p-2.5 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/30">
             <p className="text-[10px] text-blue-600 dark:text-blue-400">বিক্রি হয়েছে</p>
-            <p className="font-bold text-blue-700 dark:text-blue-300">{summary.totalQtySold} {product.unit}</p>
+            <p className="font-bold text-blue-700 dark:text-blue-300">{formatQuantity(summary.totalQtySold)} {product.unit}</p>
           </div>
           <div className="p-2.5 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-800/30">
             <p className="text-[10px] text-green-600 dark:text-green-400">মোট বিক্রয়</p>
@@ -186,7 +191,7 @@ function ProductDetailView({ productId, days, onBack }: { productId: string; day
                       style={{ width: `${d.qty > 0 ? Math.max(4, (d.qty / maxDailyQty) * 100) : 100}%` }}
                     >
                       <span className="text-[10px] text-muted-foreground font-medium whitespace-nowrap">
-                        {d.qty > 0 ? `${d.qty} ${product.unit}` : '—'}
+                        {d.qty > 0 ? `${formatQuantity(d.qty)} ${product.unit}` : '—'}
                       </span>
                     </div>
                   </div>
@@ -257,7 +262,7 @@ function ProductDetailView({ productId, days, onBack }: { productId: string; day
               })}
             </div>
             <p className="text-xs text-muted-foreground mt-3 text-center">
-              {peakHour.qty > 0 ? `সর্বোচ্চ বিক্রয়: ${peakHour.hour}:00–${peakHour.hour + 1}:00 (${peakHour.qty} ${product.unit})` : 'এই সময়ে কোনো বিক্রয় নেই'}
+              {peakHour.qty > 0 ? `সর্বোচ্চ বিক্রয়: ${peakHour.hour}:00–${peakHour.hour + 1}:00 (${formatQuantity(peakHour.qty)} ${product.unit})` : 'এই সময়ে কোনো বিক্রয় নেই'}
             </p>
           </div>
         )}
@@ -304,7 +309,7 @@ export function ProductStatistics({ onBack }: ProductStatisticsProps) {
 
   const totalRevenue = filtered.reduce((s, p) => s + p.revenue, 0);
   const totalProfit = filtered.reduce((s, p) => s + p.profit, 0);
-  const totalQty = filtered.reduce((s, p) => s + p.quantity, 0);
+  const totalDistinctProductsSold = filtered.length;
 
   // Show detail view if a product is selected
   if (selectedProductId) {
@@ -365,8 +370,8 @@ export function ProductStatistics({ onBack }: ProductStatisticsProps) {
             <p className={`font-bold text-sm ${totalProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>{fmt(totalProfit)}</p>
           </div>
           <div className="p-2.5 rounded-lg bg-muted/50 text-center">
-            <p className="text-xs text-muted-foreground">মোট পরিমাণ</p>
-            <p className="font-bold text-sm">{totalQty}</p>
+            <p className="text-xs text-muted-foreground">মোট বিক্রিত আইটেম</p>
+            <p className="font-bold text-sm">{totalDistinctProductsSold}</p>
           </div>
         </div>
 
@@ -434,7 +439,7 @@ export function ProductStatistics({ onBack }: ProductStatisticsProps) {
                     <p className="font-medium">{p.name}</p>
                     {p.nameBn && <p className="text-xs text-muted-foreground">{p.nameBn}</p>}
                   </TableCell>
-                  <TableCell className="text-right">{p.quantity} {p.unit}</TableCell>
+                  <TableCell className="text-right">{formatQuantity(p.quantity)} {p.unit}</TableCell>
                   <TableCell className="text-right font-medium">{fmt(p.revenue)}</TableCell>
                   <TableCell className="text-right">
                     <span className={p.profit >= 0 ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>
@@ -454,7 +459,7 @@ export function ProductStatistics({ onBack }: ProductStatisticsProps) {
       </div>
 
       <div className="shrink-0 border-t bg-muted/30 p-3 text-sm text-muted-foreground text-center">
-        শীর্ষ {filtered.length} প্রোডাক্ট • {days === '1' ? 'আজকের' : `গত ${days} দিনের`} বিক্রয় তথ্য
+        মোট {filtered.length} প্রোডাক্ট • {days === '1' ? 'আজকের' : `গত ${days} দিনের`} বিক্রয় তথ্য
       </div>
     </div>
   );

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { useSession } from 'next-auth/react';
+import { useUserRole } from '@/hooks/use-permissions';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -51,8 +51,7 @@ type SortField = 'name' | 'stock' | 'price' | 'category';
 type SortOrder = 'asc' | 'desc';
 
 export function StockManagement({ onAddProduct, onEditProduct, onAddStock, onDeleteProduct, onStatistics }: StockManagementProps) {
-  const { data: session } = useSession();
-  const userRole = (session?.user as { role?: string })?.role;
+  const userRole = useUserRole();
   const canDelete = userRole === 'ADMIN' || userRole === 'MANAGER';
 
   const [searchQuery, setSearchQuery] = useState('');

@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Download, Clock, User, FileText } from 'lucide-react';
 import { format } from 'date-fns';
+import { useNumberFormat } from '@/hooks/use-number-format';
 import { formatPrice, getStatusColor, getPaymentStatusColor } from './utils';
 import { Transaction } from './types';
 
@@ -25,6 +26,13 @@ export function TransactionTable({
   onViewDetails,
   onExport,
 }: TransactionTableProps) {
+  const { formatPrice: formatPriceBengali } = useNumberFormat();
+
+  // Create a Bengali-aware price formatter
+  const displayPrice = (price: number | null | undefined) => {
+    return formatPriceBengali(price);
+  };
+
   return (
     <ScrollArea className="flex-1 w-full h-full">
       {/* Mobile Card View */}
@@ -46,7 +54,7 @@ export function TransactionTable({
               </div>
               <div className="flex flex-col items-end shrink-0">
                 <span className="font-bold text-sm">
-                  {formatPrice(transaction.totalAmount)}
+                  {displayPrice(transaction.totalAmount)}
                 </span>
                 <span className="text-[10px] text-muted-foreground flex items-center gap-1 mt-0.5">
                   <Clock className="w-3 h-3" />
@@ -80,6 +88,7 @@ export function TransactionTable({
           </div>
         ))}
       </div>
+
 
       {/* Desktop Table View */}
       <div className="hidden md:block min-w-max">
@@ -132,10 +141,10 @@ export function TransactionTable({
                   )}
                 </TableCell>
                 <TableCell className="text-right font-semibold text-sm py-2">
-                  {formatPrice(transaction.totalAmount)}
+                  {displayPrice(transaction.totalAmount)}
                 </TableCell>
                 <TableCell className="text-right text-sm py-2">
-                  {formatPrice(transaction.amountPaid)}
+                  {displayPrice(transaction.amountPaid)}
                 </TableCell>
                 <TableCell className="py-2">
                   <Badge variant="outline" className="text-xs font-medium bg-background">

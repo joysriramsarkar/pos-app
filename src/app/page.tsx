@@ -4,7 +4,7 @@ import dynamic from 'next/dynamic';
 import { useSession } from 'next-auth/react';
 
 import { useCallback, useEffect, useState, useMemo, useRef } from 'react';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 import type { Product as ProductType } from '@/types/pos';
 const ProductGrid = dynamic(() => import('@/components/pos/ProductGrid').then(m => ({ default: m.ProductGrid })), { ssr: false });
 const CartPanel = dynamic(() => import('@/components/pos/CartPanel'), { ssr: false });
@@ -31,6 +31,8 @@ import { Input } from '@/components/ui/input';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useOfflineContext } from '@/lib/offline/offline-context';
 import { getSyncWorker } from '@/lib/offline/sync-worker';
+import { useUserRole } from '@/hooks/use-permissions';
+import { readStoredSessionUser } from '@/lib/session-utils';
 import {
   Wifi,
   WifiOff,
@@ -65,6 +67,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { useToast } from '@/hooks/use-toast';
 import { generateInvoiceNumber } from '@/lib/invoice';
 import { Capacitor } from '@capacitor/core';
+import { App as CapacitorApp } from '@capacitor/app';
 import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning';
 
 
@@ -91,26 +94,18 @@ const mobileBottomNavItems: { id: PageType | 'menu'; label: string; icon: React.
   { id: 'menu', label: 'Menu', icon: <Menu className="w-6 h-6 md:w-5 md:h-5" /> },
 ];
 
-const formatPrice = (price: number) => {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  }).format(price);
-};
-
 function POSDashboard() {
   const t = useTranslations('Navigation');
+  const locale = useLocale();
   const [currentPage, setCurrentPage] = useState<PageType>('billing');
+  const [isTransactionsPageMounted, setIsTransactionsPageMounted] = useState(false);
+  const [isUsersPageMounted, setIsUsersPageMounted] = useState(false);
+  const [isAuditPageMounted, setIsAuditPageMounted] = useState(false);
   // isProcessingPayment is now per-tab via UIStore
 
   // Auth
   const { data: session, status: authStatus } = useSession();
-  const rawRole = (session?.user as { role?: string })?.role;
-  const userRole = typeof rawRole === 'string'
-    ? rawRole.toUpperCase() as 'ADMIN' | 'MANAGER' | 'CASHIER' | 'VIEWER'
-    : undefined;
+  const userRole = useUserRole();
 
   // Offline context - USE THIS INSTEAD OF SYNC STORE for isOnline
   const { isOnline: isOnlineContext, networkStatus } = useOfflineContext();
@@ -119,6 +114,18 @@ function POSDashboard() {
   useEffect(() => {
     setIsOnline(isOnlineContext);
   }, [isOnlineContext]);
+
+  useEffect(() => {
+    if (currentPage === 'transactions' && !isTransactionsPageMounted) {
+      setIsTransactionsPageMounted(true);
+    }
+    if (currentPage === 'users' && !isUsersPageMounted) {
+      setIsUsersPageMounted(true);
+    }
+    if (currentPage === 'audit' && !isAuditPageMounted) {
+      setIsAuditPageMounted(true);
+    }
+  }, [currentPage, isTransactionsPageMounted, isUsersPageMounted, isAuditPageMounted]);
 
   // Settings store
   const { settings } = useSettingsStore();
@@ -438,6 +445,45 @@ function POSDashboard() {
     enabled: !isAnyDialogOpen,
   });
 
+  // Android back button handler
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    let backPressedOnce = false;
+    let backPressTimer: ReturnType<typeof setTimeout>;
+
+    const handler = CapacitorApp.addListener('backButton', () => {
+      // 1. কোনো dialog খোলা থাকলে বন্ধ করো
+      if (isCheckoutOpen) { setCheckoutOpen(false); return; }
+      if (isAddStockOpen) { setIsAddStockOpen(false); return; }
+      if (isProductDialogOpen) { setIsProductDialogOpen(false); return; }
+      if (isPrintDialogOpen) { setPrintDialogOpen(false); return; }
+      if (isMobileScannerOpen) { setIsMobileScannerOpen(false); return; }
+
+      // 2. billing ছাড়া অন্য পেজে থাকলে billing-এ ফিরে যাও
+      if (currentPage !== 'billing') {
+        setCurrentPage('billing');
+        return;
+      }
+
+      // 3. billing-এ থাকলে দু'বার back চাপলে exit
+      if (backPressedOnce) {
+        clearTimeout(backPressTimer);
+        CapacitorApp.exitApp();
+        return;
+      }
+
+      backPressedOnce = true;
+      toast({ title: 'আবার Back চাপুন বন্ধ করতে' });
+      backPressTimer = setTimeout(() => { backPressedOnce = false; }, 2000);
+    });
+
+    return () => {
+      clearTimeout(backPressTimer);
+      handler.then(h => h.remove());
+    };
+  }, [currentPage, isCheckoutOpen, isAddStockOpen, isProductDialogOpen, isPrintDialogOpen, isMobileScannerOpen, setCheckoutOpen, setPrintDialogOpen, toast]);
+
   // Handle checkout completion
 
   const processOfflineSale = useCallback(async (paymentData: PaymentData) => {
@@ -445,15 +491,17 @@ function POSDashboard() {
     if (toMoneyNumber(paymentData.amountPaid) === 0) paymentStatus = 'Due';
     else if (toMoneyNumber(paymentData.amountPaid) > 0 && toMoneyNumber(paymentData.amountPaid) < toMoneyNumber(paymentData.total)) paymentStatus = 'Partial';
 
+    const storedUser = readStoredSessionUser();
+    const activeUser = session?.user || storedUser;
     const sale: Sale = {
       id: uuidv4(),
       invoiceNumber: generateInvoiceNumber(),
       customerId: paymentData.customerId,
-      userId: (session?.user as { id?: string })?.id,
-      user: session?.user ? { 
-        id: (session.user as any).id, 
-        name: session.user.name || '', 
-        username: (session.user as any).username || '' 
+      userId: (activeUser as { id?: string })?.id,
+      user: activeUser ? {
+        id: (activeUser as any).id || '',
+        name: activeUser.name || (activeUser as any).username || '',
+        username: (activeUser as any).username || '',
       } : undefined,
       subtotal: cartItems.reduce((s, it) => s + it.totalPrice, 0),
       discount: paymentData.discount,
@@ -1010,7 +1058,7 @@ function POSDashboard() {
                               )}
                             </div>
                             <div className="text-right">
-                              <p className="font-semibold text-sm">{formatPrice(product.sellingPrice)}</p>
+                              <p className="font-semibold text-sm">₹{product.sellingPrice.toLocaleString('en-IN')}</p>
                               {product.currentStock <= 0 && (
                                 <p className="text-xs text-destructive">Out of stock</p>
                               )}
@@ -1051,13 +1099,13 @@ function POSDashboard() {
       case 'reports':
         return <Reports onNavigate={handleNavigate} />;
       case 'transactions':
-        return <TransactionHistory />;
+        return null;
       case 'expenses':
         return <Expenses onReport={() => setCurrentPage('expenses-report')} />;
       case 'expenses-report':
         return <ExpensesReport onBack={() => setCurrentPage('expenses')} />;
       case 'audit':
-        return <AuditLogs />;
+        return null;
       case 'menu':
         return (
           <div className="p-4 overflow-y-auto h-full">
@@ -1084,7 +1132,7 @@ function POSDashboard() {
           </div>
         );
       case 'users':
-        return <UsersManagement />;
+        return null;
       case 'settings':
         return <SettingsManagement />;
       default:
@@ -1131,9 +1179,22 @@ function POSDashboard() {
         {/* Page Content */}
         <main className="flex-1 flex flex-col min-h-0 overflow-hidden bg-background pb-16 lg:rounded-tl-2xl lg:shadow-[-4px_0_24px_-12px_rgba(0,0,0,0.1)] lg:border-t lg:border-l lg:border-border/50">
           {renderPageContent()}
+          {(currentPage === 'transactions' || isTransactionsPageMounted) && (
+            <div className={currentPage === 'transactions' ? 'flex-1 min-h-0' : 'hidden'}>
+              <TransactionHistory />
+            </div>
+          )}
+          {(currentPage === 'users' || isUsersPageMounted) && (
+            <div className={currentPage === 'users' ? 'flex-1 min-h-0' : 'hidden'}>
+              <UsersManagement />
+            </div>
+          )}
+          {(currentPage === 'audit' || isAuditPageMounted) && (
+            <div className={currentPage === 'audit' ? 'flex-1 min-h-0' : 'hidden'}>
+              <AuditLogs />
+            </div>
+          )}
         </main>
-      </div>
-
       {/* Mobile Bottom Navigation */}
       <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 border-t border-border/60 bg-card/95 backdrop-blur-sm py-1 px-2 bottom-nav">
         <div className="flex items-center justify-between gap-1">
@@ -1209,7 +1270,8 @@ function POSDashboard() {
         onOpenChange={setPrintDialogOpen}
         sale={currentSale}
       />
-    </div>
+  </div>
+</div>
   );
 }
 

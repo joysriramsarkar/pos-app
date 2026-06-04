@@ -1,9 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
+import { useNumberFormat } from '@/hooks/use-number-format';
 import { useSalesStore } from '@/stores/pos-store';
 import { TransactionFilters } from './TransactionFilters';
 import { TransactionTable } from './TransactionTable';
@@ -11,6 +13,8 @@ import { TransactionDetailsDialog } from './TransactionDetailsDialog';
 import { Transaction, PaginationData } from './types';
 
 export function TransactionHistory() {
+  const t = useTranslations('TransactionHistory');
+  const { formatNumber } = useNumberFormat();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -50,7 +54,7 @@ export function TransactionHistory() {
 
         const response = await fetch(`/api/sales?${params.toString()}`);
         if (!response.ok) {
-          throw new Error('Failed to fetch transactions');
+          throw new Error(t('error'));
         }
 
         const data = await response.json();
@@ -91,8 +95,8 @@ export function TransactionHistory() {
         console.error('Error fetching transactions:', error);
         toast({
           variant: 'destructive',
-          title: 'Error',
-          description: 'Failed to load transactions',
+          title: t('error'),
+          description: t('error'),
         });
       } finally {
         setIsLoading(false);
@@ -100,7 +104,7 @@ export function TransactionHistory() {
     };
 
     fetchTransactions();
-  }, [currentPage, searchQuery, filterStatus, refreshKey, toast]);
+  }, [currentPage, searchQuery, filterStatus, refreshKey, toast, t]);
 
   const handleViewDetails = (transaction: Transaction) => {
     setSelectedTransaction(transaction);
@@ -165,8 +169,8 @@ export function TransactionHistory() {
       console.error('Failed to update sale status:', error);
       toast({
         variant: 'destructive',
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to update sale status',
+        title: t('error'),
+        description: error instanceof Error ? error.message : t('error'),
       });
     } finally {
       setIsLoading(false);
@@ -183,8 +187,8 @@ export function TransactionHistory() {
   return (
     <div className="flex flex-col h-full gap-2 md:gap-4 p-2 md:p-4 overflow-hidden">
       <div className="space-y-1 md:space-y-2 shrink-0">
-        <h1 className="text-xl md:text-2xl font-bold">Transaction History</h1>
-        <p className="hidden md:block text-muted-foreground">View and manage all sales transactions</p>
+        <h1 className="text-xl md:text-2xl font-bold">{t('title')}</h1>
+        <p className="hidden md:block text-muted-foreground">{t('subtitle')}</p>
       </div>
 
       <TransactionFilters
@@ -208,19 +212,19 @@ export function TransactionHistory() {
 
       <Card className="flex-1 flex flex-col min-h-[65vh] md:min-h-0 overflow-hidden">
         <CardHeader className="border-b shrink-0">
-          <CardTitle>Transactions</CardTitle>
+          <CardTitle>{t('transactions')}</CardTitle>
           <CardDescription>
-            {pagination && `Showing ${transactions.length} of ${pagination.total} transactions`}
+            {pagination && `${t('showing')} ${formatNumber(transactions.length)} ${t('of')} ${formatNumber(pagination.total)} ${t('transactions')}`}
           </CardDescription>
         </CardHeader>
         <CardContent className="flex-1 p-0 overflow-hidden flex flex-col h-full">
           {isLoading ? (
             <div className="flex items-center justify-center flex-1">
-              <div className="text-muted-foreground">Loading transactions...</div>
+              <div className="text-muted-foreground">{t('loading_transactions')}</div>
             </div>
           ) : transactions.length === 0 ? (
             <div className="flex items-center justify-center flex-1">
-              <div className="text-muted-foreground">No transactions found</div>
+              <div className="text-muted-foreground">{t('no_transactions')}</div>
             </div>
           ) : (
             <TransactionTable
@@ -235,7 +239,7 @@ export function TransactionHistory() {
       {pagination && pagination.totalPages > 1 && (
         <div className="flex items-center justify-between shrink-0">
           <div className="text-sm text-muted-foreground">
-            Page {pagination.page} of {pagination.totalPages}
+            {t('page')} {formatNumber(pagination.page)} {t('of')} {formatNumber(pagination.totalPages)}
           </div>
           <div className="flex gap-2">
             <Button
@@ -244,7 +248,7 @@ export function TransactionHistory() {
               onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
               disabled={currentPage === 1}
             >
-              Previous
+              {t('previous')}
             </Button>
             <Button
               variant="outline"
@@ -252,7 +256,7 @@ export function TransactionHistory() {
               onClick={() => setCurrentPage(Math.min(pagination.totalPages, currentPage + 1))}
               disabled={currentPage === pagination.totalPages}
             >
-              Next
+              {t('next')}
             </Button>
           </div>
         </div>
@@ -267,3 +271,4 @@ export function TransactionHistory() {
     </div>
   );
 }
+

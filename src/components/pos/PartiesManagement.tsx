@@ -105,7 +105,7 @@ export function PartiesManagement() {
     const timeoutId = setTimeout(() => {
       customersController.abort();
       suppliersController.abort();
-    }, 8000);
+    }, 15000);
 
     const fetchData = async () => {
       try {

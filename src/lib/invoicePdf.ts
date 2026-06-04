@@ -114,12 +114,20 @@ export async function shareInvoiceAsPdf(
   const blob = await generatePdfFromHtmlString(invoiceHtml, format);
   const pdfFileName = `${fileName}.pdf`;
 
-  if (typeof navigator !== 'undefined' && 'share' in navigator && 'canShare' in navigator) {
+  if (typeof navigator !== 'undefined' && 'share' in navigator) {
     const file = new File([blob], pdfFileName, { type: 'application/pdf' });
-    const shareData = { title: `Invoice ${invoiceNumber}`, text: `Invoice from ${storeName}`, files: [file] };
-    if ((navigator as any).canShare(shareData)) {
-      await navigator.share(shareData);
-      return;
+    const shareData: any = { title: `Invoice ${invoiceNumber}`, text: `Invoice from ${storeName}`, files: [file] };
+    try {
+      // If canShare exists, prefer it; otherwise attempt share and catch failures
+      const canShareResult = typeof (navigator as any).canShare === 'function' ? (navigator as any).canShare(shareData) : true;
+      if (canShareResult) {
+        await (navigator as any).share(shareData);
+        return;
+      }
+    } catch (err: any) {
+      // Commonly fails when not triggered by a user gesture (NotAllowedError)
+      console.warn('navigator.share failed or was not allowed:', err);
+      // fall through to download fallback below
     }
   }
 
