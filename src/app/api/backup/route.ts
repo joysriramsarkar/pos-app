@@ -111,7 +111,8 @@ export async function POST(request: NextRequest) {
 
     // CRITICAL: Require confirmation token to prevent accidental data loss
     const confirmationToken = request.headers.get('x-restore-confirmation');
-    if (confirmationToken !== 'CONFIRM_RESTORE_DELETE_ALL_DATA') {
+    const expectedToken = process.env.RESTORE_CONFIRMATION_TOKEN;
+    if (!expectedToken || confirmationToken !== expectedToken) {
       return NextResponse.json(
         { error: "Restore confirmation required. This operation will DELETE ALL existing data." },
         { status: 400 },
