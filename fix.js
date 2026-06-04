@@ -1,1 +1,0 @@
-const fs = require("fs"); const file = "src/app/api/suppliers/route.ts"; let content = fs.readFileSync(file, "utf8"); content = content.replace("Math.min(100, Math.max(1, parseInt(searchParams.get(\"pageSize\") ?? \"50\", 10)));", "Math.min(10000, Math.max(1, parseInt(searchParams.get(\"pageSize\") ?? \"1000\", 10)));"); fs.writeFileSync(file, content);
