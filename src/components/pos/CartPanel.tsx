@@ -38,6 +38,7 @@ import type { PaymentMethod, Customer } from '@/types/pos';
 import { useCartStore, useUIStore } from '@/stores/pos-store';
 import { cn, convertBengaliToEnglishNumerals } from '@/lib/utils';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
+import { useNumberFormat } from '@/hooks/use-number-format';
 
 interface CartPanelProps {
   onCheckout: () => void;
@@ -87,19 +88,11 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
   const setPaymentMethod = useCartStore((state) => state.setPaymentMethod);
 
   const setCheckoutOpen = useUIStore((state) => state.setCheckoutOpen);
+  const { formatPrice } = useNumberFormat();
 
   const subtotal = getSubtotal();
   const total = getTotal();
   const itemCount = getItemCount();
-
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
-    }).format(price);
-  };
 
   const handleClearCart = useCallback(() => {
     if (items.length > 0) {

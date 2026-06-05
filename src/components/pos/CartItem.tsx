@@ -7,6 +7,7 @@ import type { CartItem as CartItemType } from '@/types/pos';
 import { useCartStore, useQuantityUsageStore } from '@/stores/pos-store';
 import { cn, convertBengaliToEnglishNumerals } from '@/lib/utils';
 import Decimal from 'decimal.js';
+import { useNumberFormat } from '@/hooks/use-number-format';
 
 const EMPTY_USAGE: Record<number, number> = {};
 
@@ -19,6 +20,7 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
   const updateQuantity = useCartStore((state) => state.updateQuantity);
   const removeItem = useCartStore((state) => state.removeItem);
   const itemRef = useRef<HTMLDivElement>(null);
+  const { formatPrice } = useNumberFormat();
 
   // Scroll into view and highlight when newly added
   useEffect(() => {
@@ -26,16 +28,6 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
       itemRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
   }, [isHighlighted]);
-
-
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
-    }).format(price);
-  };
 
   const getStep = (unit: string) => {
     if (['kg', 'liter'].includes(unit)) return 0.1;
