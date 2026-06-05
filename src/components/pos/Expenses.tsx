@@ -21,6 +21,7 @@ import { Label } from '@/components/ui/label';
 import { convertBengaliToEnglishNumerals, cn } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { useTranslations } from 'next-intl';
 
 const CATEGORIES = ['Rent', 'Utilities', 'Salaries', 'Supplies', 'Maintenance', 'Other'] as const;
 
@@ -55,6 +56,7 @@ interface ExpensesProps {
 }
 
 export function Expenses({ onReport }: ExpensesProps) {
+  const t = useTranslations('Expenses');
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [amount, setAmount] = useState('');
@@ -196,7 +198,7 @@ export function Expenses({ onReport }: ExpensesProps) {
         }),
       });
       if (res.ok) {
-        toast({ title: 'খরচ যোগ হয়েছে' });
+        toast({ title: t('expense_added') });
         setAmount('');
         setNotes('');
         setSupplierId('');
@@ -226,7 +228,7 @@ export function Expenses({ onReport }: ExpensesProps) {
         setSupplierId(data.id);
         setNewSupplierName('');
         setShowAddSupplier(false);
-        toast({ title: 'সাপ্লায়ার যোগ হয়েছে', description: `"${data.name}" যোগ করা হয়েছে।` });
+        toast({ title: t('supplier_added'), description: `"${data.name}" যোগ করা হয়েছে।` });
       } else {
         toast({ title: 'Error', variant: 'destructive' });
       }
@@ -264,7 +266,7 @@ export function Expenses({ onReport }: ExpensesProps) {
         }),
       });
       if (res.ok) {
-        toast({ title: 'খরচ আপডেট হয়েছে' });
+        toast({ title: t('expense_updated') });
         fetchExpenses();
         setShowEditDialog(false);
         setEditExpense(null);
@@ -283,7 +285,7 @@ export function Expenses({ onReport }: ExpensesProps) {
     try {
       const res = await fetch(`/api/expenses?id=${deleteId}`, { method: 'DELETE' });
       if (res.ok) {
-        toast({ title: 'মুছে ফেলা হয়েছে' });
+        toast({ title: t('deleted') });
         fetchExpenses();
       }
     } catch {
@@ -299,12 +301,12 @@ export function Expenses({ onReport }: ExpensesProps) {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Receipt className="w-6 h-6" /> Expenses
+            <Receipt className="w-6 h-6" /> {t('title')}
           </h1>
-          <p className="text-muted-foreground text-sm">{displayDateLabel} — খরচ</p>
+          <p className="text-muted-foreground text-sm">{displayDateLabel} — {t('subtitle')}</p>
         </div>
         <Button variant="outline" onClick={onReport} className="gap-2 border-blue-200 text-blue-600 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-400">
-          <BarChart3 className="w-4 h-4" /> রিপোর্ট
+          <BarChart3 className="w-4 h-4" /> {t('report')}
         </Button>
       </div>
 
@@ -315,11 +317,11 @@ export function Expenses({ onReport }: ExpensesProps) {
             <IndianRupee className="w-5 h-5 text-red-600 dark:text-red-400" />
           </div>
           <div>
-            <p className="text-xs text-red-600 dark:text-red-400 font-medium">আজকের মোট খরচ</p>
+            <p className="text-xs text-red-600 dark:text-red-400 font-medium">{t('today_total')}</p>
             <p className="text-2xl font-black text-red-700 dark:text-red-400">{formatPrice(todayTotal)}</p>
           </div>
           <div className="ml-auto text-right">
-            <p className="text-xs text-muted-foreground">{todayExpenses.length}টি এন্ট্রি</p>
+            <p className="text-xs text-muted-foreground">{todayExpenses.length}{t('entries')}</p>
           </div>
         </CardContent>
       </Card>
@@ -328,11 +330,11 @@ export function Expenses({ onReport }: ExpensesProps) {
         {/* Add Expense Form */}
         <Card className="col-span-1 h-fit rounded-2xl shadow-sm">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2"><Plus className="w-4 h-4" /> খরচ যোগ করুন</CardTitle>
+            <CardTitle className="text-base flex items-center gap-2"><Plus className="w-4 h-4" /> {t('add_expense')}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">পরিমাণ (₹)</label>
+              <label className="text-sm font-medium">{t('amount')} (₹)</label>
               <Input
                 type="text"
                 value={amount}
@@ -342,7 +344,7 @@ export function Expenses({ onReport }: ExpensesProps) {
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">ক্যাটাগরি</label>
+              <label className="text-sm font-medium">{t('category')}</label>
               <Select value={category} onValueChange={(v) => { setCategory(v); setSupplierId(''); }}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -354,11 +356,11 @@ export function Expenses({ onReport }: ExpensesProps) {
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <label className="text-sm font-medium flex items-center gap-1.5">
-                    <Truck className="w-3.5 h-3.5" /> সাপ্লায়ার
+                    <Truck className="w-3.5 h-3.5" /> {t('supplier')}
                   </label>
                   <Button type="button" variant="ghost" size="sm" className="h-6 text-xs gap-1 text-blue-600 hover:text-blue-700 px-1"
                     onClick={() => setShowAddSupplier(true)}>
-                    <UserPlus className="w-3 h-3" /> নতুন
+                    <UserPlus className="w-3 h-3" /> {t('new')}
                   </Button>
                 </div>
                 <Popover open={supplierOpen} onOpenChange={setSupplierOpen}>
@@ -372,7 +374,7 @@ export function Expenses({ onReport }: ExpensesProps) {
                       <span className="truncate">
                         {supplierId && supplierId !== 'none'
                           ? suppliers.find((s) => s.id === supplierId)?.name
-                          : "সাপ্লায়ার নির্বাচন করুন"}
+                          : t('select_supplier')}
                       </span>
                       <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                     </Button>
@@ -382,10 +384,10 @@ export function Expenses({ onReport }: ExpensesProps) {
                       <CommandInput
                         value={supplierSearch}
                         onValueChange={setSupplierSearch}
-                        placeholder="সাপ্লায়ার খুঁজুন..."
+                        placeholder={t('select_supplier')}
                       />
                       <CommandList>
-                        <CommandEmpty>কোনো সাপ্লায়ার পাওয়া যায়নি।</CommandEmpty>
+                        <CommandEmpty>{t('no_supplier_found')}</CommandEmpty>
                         <CommandGroup>
                           <CommandItem
                             value="none"
@@ -400,7 +402,7 @@ export function Expenses({ onReport }: ExpensesProps) {
                                 supplierId === 'none' || !supplierId ? "opacity-100" : "opacity-0"
                               )}
                             />
-                            — কোনো সাপ্লায়ার নেই —
+                            {t('no_supplier')}
                           </CommandItem>
                           {suppliers.map((supplier) => (
                             <CommandItem
@@ -428,12 +430,12 @@ export function Expenses({ onReport }: ExpensesProps) {
               </div>
             )}
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">নোট</label>
-              <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="ঐচ্ছিক বিবরণ..." />
+              <label className="text-sm font-medium">{t('notes')}</label>
+              <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={t('optional_description')} />
             </div>
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <label className="text-sm font-medium">তারিখ</label>
+                <label className="text-sm font-medium">{t('date')}</label>
                 <Button
                   type="button"
                   variant={useCustomDate ? 'default' : 'outline'}
@@ -441,7 +443,7 @@ export function Expenses({ onReport }: ExpensesProps) {
                   className="h-6 text-xs gap-1 px-2"
                   onClick={() => { setUseCustomDate(v => !v); setCustomDate(''); }}
                 >
-                  <CalendarDays className="w-3 h-3" /> কাস্টম
+                  <CalendarDays className="w-3 h-3" /> {t('custom')}
                 </Button>
               </div>
               {useCustomDate ? (
@@ -452,11 +454,11 @@ export function Expenses({ onReport }: ExpensesProps) {
                   max={today}
                 />
               ) : (
-                <p className="text-sm text-muted-foreground">{format(new Date(), 'dd MMM yyyy')} (আজ)</p>
+                <p className="text-sm text-muted-foreground">{format(new Date(), 'dd MMM yyyy')} ({t('today')})</p>
               )}
             </div>
             <Button className="w-full" onClick={handleAddExpense} disabled={isLoading || !amount || (useCustomDate && !customDate)}>
-              <Plus className="w-4 h-4 mr-2" /> যোগ করুন
+              <Plus className="w-4 h-4 mr-2" /> {t('add')}
             </Button>
           </CardContent>
         </Card>
@@ -465,17 +467,17 @@ export function Expenses({ onReport }: ExpensesProps) {
         <Card className="col-span-1 md:col-span-2 rounded-2xl shadow-sm">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
-              <Receipt className="w-4 h-4 text-red-500" /> {useCustomDate && customDate ? 'খরচের তালিকা' : 'আজকের খরচের তালিকা'}
+              <Receipt className="w-4 h-4 text-red-500" /> {useCustomDate && customDate ? t('expense_list') : t('today_expense_list')}
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>ক্যাটাগরি</TableHead>
-                  <TableHead>নোট / সাপ্লায়ার</TableHead>
-                  <TableHead className="text-right">পরিমাণ</TableHead>
-                  <TableHead className="w-10 text-right">কর্ম</TableHead>
+                  <TableHead>{t('category')}</TableHead>
+                  <TableHead>{t('notes')} / {t('supplier')}</TableHead>
+                  <TableHead className="text-right">{t('amount')}</TableHead>
+                  <TableHead className="w-10 text-right">{t('action')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -512,7 +514,7 @@ export function Expenses({ onReport }: ExpensesProps) {
                   <TableRow>
                     <TableCell colSpan={4} className="text-center text-muted-foreground py-12">
                       <Receipt className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                      <p className="text-sm">{useCustomDate && customDate ? 'এই তারিখে কোনো খরচ নেই।' : 'আজকে কোনো খরচ নেই।'}</p>
+                      <p className="text-sm">{useCustomDate && customDate ? t('no_expenses_date') : t('no_expenses_today')}</p>
                     </TableCell>
                   </TableRow>
                 )}
@@ -520,7 +522,7 @@ export function Expenses({ onReport }: ExpensesProps) {
             </Table>
             {filteredExpenses.length > 0 && (
               <div className="flex justify-end px-4 py-3 border-t">
-                <span className="text-sm font-semibold">মোট: {formatPrice(filteredTotal)}</span>
+                <span className="text-sm font-semibold">{t('total')}: {formatPrice(filteredTotal)}</span>
               </div>
             )}
           </CardContent>
@@ -532,12 +534,12 @@ export function Expenses({ onReport }: ExpensesProps) {
         <DialogContent className="sm:max-w-lg w-[95vw]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Pencil className="w-4 h-4" /> খরচ সম্পাদনা করুন
+              <Pencil className="w-4 h-4" /> {t('edit_expense')}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-3">
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">পরিমাণ (₹)</label>
+              <label className="text-sm font-medium">{t('amount')} (₹)</label>
               <Input
                 type="text"
                 value={editAmount}
@@ -546,7 +548,7 @@ export function Expenses({ onReport }: ExpensesProps) {
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">ক্যাটাগরি</label>
+              <label className="text-sm font-medium">{t('category')}</label>
               <Select value={editCategory} onValueChange={(v) => { setEditCategory(v); if (v !== 'Supplies') setEditSupplierId(''); }}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -558,11 +560,11 @@ export function Expenses({ onReport }: ExpensesProps) {
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <label className="text-sm font-medium flex items-center gap-1.5">
-                    <Truck className="w-3.5 h-3.5" /> সাপ্লায়ার
+                    <Truck className="w-3.5 h-3.5" /> {t('supplier')}
                   </label>
                   <Button type="button" variant="ghost" size="sm" className="h-6 text-xs gap-1 text-blue-600 hover:text-blue-700 px-1"
                     onClick={() => setShowAddSupplier(true)}>
-                    <UserPlus className="w-3 h-3" /> নতুন
+                    <UserPlus className="w-3 h-3" /> {t('new')}
                   </Button>
                 </div>
                 <Popover open={editSupplierOpen} onOpenChange={setEditSupplierOpen}>
@@ -576,7 +578,7 @@ export function Expenses({ onReport }: ExpensesProps) {
                       <span className="truncate">
                         {editSupplierId && editSupplierId !== 'none'
                           ? suppliers.find((s) => s.id === editSupplierId)?.name
-                          : "সাপ্লায়ার নির্বাচন করুন"}
+                          : t('select_supplier')}
                       </span>
                       <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                     </Button>
@@ -586,10 +588,10 @@ export function Expenses({ onReport }: ExpensesProps) {
                       <CommandInput
                         value={supplierSearch}
                         onValueChange={setSupplierSearch}
-                        placeholder="সাপ্লায়ার খুঁজুন..."
+                        placeholder={t('select_supplier')}
                       />
                       <CommandList>
-                        <CommandEmpty>কোনো সাপ্লায়ার পাওয়া যায়নি।</CommandEmpty>
+                        <CommandEmpty>{t('no_supplier_found')}</CommandEmpty>
                         <CommandGroup>
                           <CommandItem
                             value="none"
@@ -604,7 +606,7 @@ export function Expenses({ onReport }: ExpensesProps) {
                                 editSupplierId === 'none' || !editSupplierId ? "opacity-100" : "opacity-0"
                               )}
                             />
-                            — কোনো সাপ্লায়ার নেই —
+                            {t('no_supplier')}
                           </CommandItem>
                           {suppliers.map((supplier) => (
                             <CommandItem
@@ -632,11 +634,11 @@ export function Expenses({ onReport }: ExpensesProps) {
               </div>
             )}
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">নোট</label>
-              <Input value={editNotes} onChange={(e) => setEditNotes(e.target.value)} placeholder="ঐচ্ছিক বিবরণ..." />
+              <label className="text-sm font-medium">{t('notes')}</label>
+              <Input value={editNotes} onChange={(e) => setEditNotes(e.target.value)} placeholder={t('optional_description')} />
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">তারিখ</label>
+              <label className="text-sm font-medium">{t('date')}</label>
               <Input
                 type="date"
                 value={editDate}
@@ -647,10 +649,10 @@ export function Expenses({ onReport }: ExpensesProps) {
           </div>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => { setShowEditDialog(false); setEditExpense(null); }}>
-              বাতিল
+              {t('cancel')}
             </Button>
             <Button onClick={handleUpdateExpense} disabled={isSavingEdit || !editAmount || !editCategory || !editDate}>
-              <Plus className="w-4 h-4 mr-1" /> সংরক্ষণ
+              <Plus className="w-4 h-4 mr-1" /> {t('save')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -661,24 +663,24 @@ export function Expenses({ onReport }: ExpensesProps) {
         <DialogContent className="sm:max-w-sm w-[95vw]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <UserPlus className="w-4 h-4" /> নতুন সাপ্লায়ার যোগ করুন
+              <UserPlus className="w-4 h-4" /> {t('add_supplier')}
             </DialogTitle>
           </DialogHeader>
           <div className="py-3 space-y-2">
-            <Label htmlFor="new-supplier-name">সাপ্লায়ারের নাম</Label>
+            <Label htmlFor="new-supplier-name">{t('supplier_name')}</Label>
             <Input
               id="new-supplier-name"
               value={newSupplierName}
               onChange={e => setNewSupplierName(e.target.value)}
-              placeholder="নাম লিখুন..."
+              placeholder={t('enter_name')}
               onKeyDown={e => e.key === 'Enter' && handleAddSupplier()}
               autoFocus
             />
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setShowAddSupplier(false)}>বাতিল</Button>
+            <Button variant="outline" onClick={() => setShowAddSupplier(false)}>{t('cancel')}</Button>
             <Button onClick={handleAddSupplier} disabled={addingSupplier || !newSupplierName.trim()}>
-              <Plus className="w-4 h-4 mr-1" /> যোগ করুন
+              <Plus className="w-4 h-4 mr-1" /> {t('add')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -688,13 +690,13 @@ export function Expenses({ onReport }: ExpensesProps) {
       <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>খরচ মুছবেন?</AlertDialogTitle>
-            <AlertDialogDescription>এই কাজটি পূর্বাবস্থায় ফেরানো যাবে না।</AlertDialogDescription>
+            <AlertDialogTitle>{t('delete_expense')}</AlertDialogTitle>
+            <AlertDialogDescription>{t('cannot_undo')}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>বাতিল</AlertDialogCancel>
+            <AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
             <AlertDialogAction onClick={handleDeleteExpense} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              মুছুন
+              {t('delete')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

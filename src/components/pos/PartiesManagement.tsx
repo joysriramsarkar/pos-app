@@ -49,12 +49,14 @@ import { cn, convertBengaliToEnglishNumerals } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { toMoneyNumber } from '@/lib/money';
 import Decimal from 'decimal.js';
+import { useTranslations } from 'next-intl';
 
 
 
 type PartyType = 'customer' | 'supplier';
 
 export function PartiesManagement() {
+  const t = useTranslations('Parties');
   const [activeTab, setActiveTab] = useState<PartyType>('customer');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);

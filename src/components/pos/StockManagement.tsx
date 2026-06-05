@@ -358,140 +358,209 @@ export function StockManagement({ onAddProduct, onEditProduct, onAddStock, onDel
 
       {/* Product List */}
       <div className="flex-1 min-h-0 overflow-y-auto">
-        <Table>
-          <TableHeader className="sticky top-0 bg-background z-10">
-            <TableRow>
-              <TableHead className="w-[40%]">
-                <Button variant="ghost" size="sm" className="h-8 -ml-3" onClick={() => handleSort('name')}>
-                  Item Name
-                  <ArrowUpDown className={cn("w-4 h-4 ml-2", sortField === 'name' && "text-primary")} />
-                </Button>
-              </TableHead>
-              <TableHead>
-                <Button variant="ghost" size="sm" className="h-8 -ml-3" onClick={() => handleSort('category')}>
-                  Category
-                  <ArrowUpDown className={cn("w-4 h-4 ml-2", sortField === 'category' && "text-primary")} />
-                </Button>
-              </TableHead>
-              <TableHead className="text-right">Buy Price</TableHead>
-              <TableHead className="text-right">
-                <Button variant="ghost" size="sm" className="h-8 -ml-3" onClick={() => handleSort('price')}>
-                  Sell Price
-                  <ArrowUpDown className={cn("w-4 h-4 ml-2", sortField === 'price' && "text-primary")} />
-                </Button>
-              </TableHead>
-              <TableHead className="text-center">
-                <Button variant="ghost" size="sm" className="h-8 -ml-3" onClick={() => handleSort('stock')}>
-                  Stock
-                  <ArrowUpDown className={cn("w-4 h-4 ml-2", sortField === 'stock' && "text-primary")} />
-                </Button>
-              </TableHead>
-              <TableHead className="text-center">Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isSearching && filteredProducts.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
-                  Searching...
-                </TableCell>
-              </TableRow>
-            ) : filteredProducts.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={7} className="text-center py-12">
-                  <Package className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-muted-foreground">No items found</p>
-                </TableCell>
-              </TableRow>
-            ) : (
-              filteredProducts.map((product) => {
-                const status = getStockStatus(product);
-                return (
-                  <TableRow key={product.id} className="group">
-                    <TableCell>
-                      <div>
-                        <p className="font-medium">{product.name}</p>
-                        {product.nameBn && (
-                          <p className="text-xs text-muted-foreground">{product.nameBn}</p>
-                        )}
-                        {product.barcode && (
-                          <p className="text-xs text-muted-foreground font-mono">{product.barcode}</p>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="text-xs">{product.category}</Badge>
-                    </TableCell>
-                    <TableCell className="text-right">{formatPrice(product.buyingPrice)}</TableCell>
-                    <TableCell className="text-right font-medium">{formatPrice(product.sellingPrice)}</TableCell>
-                    <TableCell className="text-center">
-                      <span className={cn(
-                        "font-medium",
-                        product.currentStock < 0 && "text-red-600 font-bold",
-                        product.currentStock === 0 && "text-red-600",
-                        product.currentStock > 0 && product.currentStock <= product.minStockLevel && "text-amber-600"
-                      )}>
-                        {product.currentStock} {product.unit}
-                        {product.currentStock < 0 && ' ⚠️'}
-                      </span>
-                      <p className="text-xs text-muted-foreground">Min: {product.minStockLevel}</p>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <Badge variant={status.variant} className="text-xs">
-                        {status.label}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                        {product.isActive && (
-                          <>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-8"
-                              onClick={() => onAddStock?.(product)}
-                            >
-                              <Plus className="w-4 h-4 mr-1" />
-                              <span className="hidden sm:inline">Stock</span>
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 text-amber-600 hover:text-amber-700 hover:bg-amber-50"
-                              title="স্টক কমান (Adjustment)"
-                              onClick={() => setAdjustmentProduct(product)}
-                            >
-                              <MinusCircle className="w-4 h-4" />
-                            </Button>
-                          </>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8"
-                          onClick={() => onEditProduct?.(product)}
-                        >
-                          <Edit className="w-4 h-4" />
+
+        {/* Mobile Card View */}
+        <div className="md:hidden flex flex-col divide-y">
+          {isSearching && filteredProducts.length === 0 ? (
+            <p className="text-center py-12 text-muted-foreground text-sm">Searching...</p>
+          ) : filteredProducts.length === 0 ? (
+            <div className="text-center py-12">
+              <Package className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+              <p className="text-muted-foreground">No items found</p>
+            </div>
+          ) : filteredProducts.map((product) => {
+            const status = getStockStatus(product);
+            return (
+              <div key={product.id} className="p-3 hover:bg-muted/50 transition-colors">
+                <div className="flex justify-between items-start mb-2">
+                  <div className="flex flex-col min-w-0 pr-2">
+                    <span className="font-medium text-sm truncate">{product.name}</span>
+                    {product.nameBn && <span className="text-xs text-muted-foreground truncate">{product.nameBn}</span>}
+                    {product.barcode && <span className="text-xs text-muted-foreground font-mono">{product.barcode}</span>}
+                    <Badge variant="outline" className="text-[10px] h-4 px-1 mt-1 w-fit">{product.category}</Badge>
+                  </div>
+                  <div className="flex flex-col items-end shrink-0 gap-1">
+                    <Badge variant={status.variant} className="text-[10px] h-5 px-1.5">{status.label}</Badge>
+                    <span className={cn(
+                      "text-sm font-bold",
+                      product.currentStock < 0 && "text-red-600",
+                      product.currentStock === 0 && "text-red-600",
+                      product.currentStock > 0 && product.currentStock <= product.minStockLevel && "text-amber-600"
+                    )}>
+                      {product.currentStock}{product.currentStock < 0 && ' ⚠️'} {product.unit}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">Min: {product.minStockLevel}</span>
+                  </div>
+                </div>
+                <div className="flex justify-between items-center mt-1">
+                  <div className="flex gap-3 text-xs text-muted-foreground">
+                    <span>Buy: <span className="font-medium text-foreground">{formatPrice(product.buyingPrice)}</span></span>
+                    <span>Sell: <span className="font-medium text-foreground">{formatPrice(product.sellingPrice)}</span></span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {product.isActive && (
+                      <>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onAddStock?.(product)}>
+                          <Plus className="w-3.5 h-3.5" />
                         </Button>
-                        {canDelete && product.isActive && (
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-amber-600" onClick={() => setAdjustmentProduct(product)}>
+                          <MinusCircle className="w-3.5 h-3.5" />
+                        </Button>
+                      </>
+                    )}
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEditProduct?.(product)}>
+                      <Edit className="w-3.5 h-3.5" />
+                    </Button>
+                    {canDelete && product.isActive && (
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => onDeleteProduct?.(product)}>
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Desktop Table View */}
+        <div className="hidden md:block">
+          <Table>
+            <TableHeader className="sticky top-0 bg-background z-10">
+              <TableRow>
+                <TableHead className="w-[40%]">
+                  <Button variant="ghost" size="sm" className="h-8 -ml-3" onClick={() => handleSort('name')}>
+                    Item Name
+                    <ArrowUpDown className={cn("w-4 h-4 ml-2", sortField === 'name' && "text-primary")} />
+                  </Button>
+                </TableHead>
+                <TableHead>
+                  <Button variant="ghost" size="sm" className="h-8 -ml-3" onClick={() => handleSort('category')}>
+                    Category
+                    <ArrowUpDown className={cn("w-4 h-4 ml-2", sortField === 'category' && "text-primary")} />
+                  </Button>
+                </TableHead>
+                <TableHead className="text-right">Buy Price</TableHead>
+                <TableHead className="text-right">
+                  <Button variant="ghost" size="sm" className="h-8 -ml-3" onClick={() => handleSort('price')}>
+                    Sell Price
+                    <ArrowUpDown className={cn("w-4 h-4 ml-2", sortField === 'price' && "text-primary")} />
+                  </Button>
+                </TableHead>
+                <TableHead className="text-center">
+                  <Button variant="ghost" size="sm" className="h-8 -ml-3" onClick={() => handleSort('stock')}>
+                    Stock
+                    <ArrowUpDown className={cn("w-4 h-4 ml-2", sortField === 'stock' && "text-primary")} />
+                  </Button>
+                </TableHead>
+                <TableHead className="text-center">Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isSearching && filteredProducts.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
+                    Searching...
+                  </TableCell>
+                </TableRow>
+              ) : filteredProducts.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-12">
+                    <Package className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-muted-foreground">No items found</p>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredProducts.map((product) => {
+                  const status = getStockStatus(product);
+                  return (
+                    <TableRow key={product.id} className="group">
+                      <TableCell>
+                        <div>
+                          <p className="font-medium">{product.name}</p>
+                          {product.nameBn && (
+                            <p className="text-xs text-muted-foreground">{product.nameBn}</p>
+                          )}
+                          {product.barcode && (
+                            <p className="text-xs text-muted-foreground font-mono">{product.barcode}</p>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="text-xs">{product.category}</Badge>
+                      </TableCell>
+                      <TableCell className="text-right">{formatPrice(product.buyingPrice)}</TableCell>
+                      <TableCell className="text-right font-medium">{formatPrice(product.sellingPrice)}</TableCell>
+                      <TableCell className="text-center">
+                        <span className={cn(
+                          "font-medium",
+                          product.currentStock < 0 && "text-red-600 font-bold",
+                          product.currentStock === 0 && "text-red-600",
+                          product.currentStock > 0 && product.currentStock <= product.minStockLevel && "text-amber-600"
+                        )}>
+                          {product.currentStock} {product.unit}
+                          {product.currentStock < 0 && ' ⚠️'}
+                        </span>
+                        <p className="text-xs text-muted-foreground">Min: {product.minStockLevel}</p>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge variant={status.variant} className="text-xs">
+                          {status.label}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {product.isActive && (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8"
+                                onClick={() => onAddStock?.(product)}
+                              >
+                                <Plus className="w-4 h-4 mr-1" />
+                                Stock
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 text-amber-600 hover:text-amber-700 hover:bg-amber-50"
+                                title="স্টক কমান (Adjustment)"
+                                onClick={() => setAdjustmentProduct(product)}
+                              >
+                                <MinusCircle className="w-4 h-4" />
+                              </Button>
+                            </>
+                          )}
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="h-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-                            onClick={() => onDeleteProduct?.(product)}
+                            className="h-8"
+                            onClick={() => onEditProduct?.(product)}
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <Edit className="w-4 h-4" />
                           </Button>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              })
-            )}
-          </TableBody>
-        </Table>
+                          {canDelete && product.isActive && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                              onClick={() => onDeleteProduct?.(product)}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+        </div>
+
         {/* Infinite scroll sentinel */}
         <div ref={sentinelRef} className="py-3 text-center text-sm text-muted-foreground">
           {isLoadingMore && 'Loading more...'}

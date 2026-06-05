@@ -16,7 +16,6 @@ export function useLogout() {
 
     // Clear persisted stores
     useCartStore.persist.clearStorage();
-    useSalesStore.persist.clearStorage();
 
     // Clear all browser storage
     localStorage.clear();

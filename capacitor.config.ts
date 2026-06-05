@@ -3,10 +3,10 @@ import type { CapacitorConfig } from '@capacitor/cli';
 const config: CapacitorConfig = {
   appId: 'com.lakhan.pos',
   appName: 'Lakhan POS',
-  webDir: 'public',
+  webDir: 'out',
   // server: {
-  //   url: 'https://lakhanb.vercel.app', // Hardcoded production URL; only uncomment for specific production builds to avoid sending dev data to prod
-  //   cleartext: false
+  //   url: 'http://192.168.x.x:3000', // uncomment for live-reload dev only; never use prod URL here
+  //   cleartext: true
   // },
   plugins: {
     StatusBar: {

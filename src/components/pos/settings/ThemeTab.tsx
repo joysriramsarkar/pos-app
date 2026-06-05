@@ -1,9 +1,9 @@
+import { useTranslations } from "next-intl";
 import { AppSettings } from "@/stores/settings-store";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Loader2, Save, Moon, Sun, Monitor } from "lucide-react";
 
 interface ThemeTabProps {
@@ -15,33 +15,34 @@ interface ThemeTabProps {
 }
 
 const PRESET_COLORS = [
-  { color: "#16a34a", label: "সবুজ" },
-  { color: "#2563eb", label: "নীল" },
-  { color: "#9333ea", label: "বেগুনি" },
-  { color: "#dc2626", label: "লাল" },
-  { color: "#ea580c", label: "কমলা" },
-  { color: "#0891b2", label: "সায়ান" },
-  { color: "#db2777", label: "গোলাপি" },
-  { color: "#64748b", label: "ধূসর" },
-];
-
-const THEME_MODES = [
-  { value: "light", label: "হালকা", icon: Sun },
-  { value: "dark", label: "গাঢ়", icon: Moon },
-  { value: "system", label: "সিস্টেম", icon: Monitor },
+  { color: "#16a34a", label: "Green" },
+  { color: "#2563eb", label: "Blue" },
+  { color: "#9333ea", label: "Purple" },
+  { color: "#dc2626", label: "Red" },
+  { color: "#ea580c", label: "Orange" },
+  { color: "#0891b2", label: "Cyan" },
+  { color: "#db2777", label: "Pink" },
+  { color: "#64748b", label: "Gray" },
 ];
 
 export default function ThemeTab({ localSettings, handleChange, handleSave, isSaving, hasChanges }: ThemeTabProps) {
+  const t = useTranslations("Settings");
+
+  const THEME_MODES = [
+    { value: "light", label: t("theme_light"), icon: Sun },
+    { value: "dark", label: t("theme_dark"), icon: Moon },
+    { value: "system", label: t("theme_system"), icon: Monitor },
+  ];
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle>থিম সেটিংস</CardTitle>
-        <CardDescription>অ্যাপের চেহারা কাস্টমাইজ করুন।</CardDescription>
+        <CardTitle>{t("theme_title")}</CardTitle>
+        <CardDescription>{t("theme_desc")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Theme Mode */}
         <div className="space-y-3">
-          <Label className="text-sm font-medium">মোড (Mode)</Label>
+          <Label className="text-sm font-medium">{t("theme_mode")}</Label>
           <div className="grid grid-cols-3 gap-3">
             {THEME_MODES.map(({ value, label, icon: Icon }) => (
               <button
@@ -60,9 +61,8 @@ export default function ThemeTab({ localSettings, handleChange, handleSave, isSa
           </div>
         </div>
 
-        {/* Primary Color */}
         <div className="space-y-3">
-          <Label className="text-sm font-medium">প্রাইমারি কালার</Label>
+          <Label className="text-sm font-medium">{t("primary_color")}</Label>
           <div className="flex flex-wrap gap-2">
             {PRESET_COLORS.map(({ color, label }) => (
               <button
@@ -91,7 +91,7 @@ export default function ThemeTab({ localSettings, handleChange, handleSave, isSa
         <div className="pt-2 flex justify-end">
           <Button onClick={() => handleSave(["theme_mode", "primary_color"])} disabled={isSaving || !hasChanges()} className="bg-primary text-primary-foreground hover:bg-primary/90">
             {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-            সংরক্ষণ করুন
+            {t("save")}
           </Button>
         </div>
       </CardContent>

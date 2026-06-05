@@ -593,7 +593,6 @@ interface SalesActions {
 }
 
 export const useSalesStore = create<SalesState & SalesActions>()(
-  persist(
     (set, get) => ({
       sales: [],
       isLoading: false,
@@ -623,15 +622,7 @@ export const useSalesStore = create<SalesState & SalesActions>()(
       getSalesByCustomerId: (customerId) => {
         return get().sales.filter((s) => s.customerId === customerId);
       },
-    }),
-    {
-      name: 'lakhan-bhandar-sales',
-      storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({
-        sales: state.sales,
-      }),
-    }
-  )
+    })
 );
 
 interface QuantityUsageState {

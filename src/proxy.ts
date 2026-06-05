@@ -2,6 +2,24 @@ import { withAuth } from "next-auth/middleware";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? "http://localhost:3000")
+  .split(",")
+  .map((o) => o.trim());
+
+const CORS_METHODS = "GET,POST,PUT,PATCH,DELETE,OPTIONS";
+const CORS_HEADERS = "Content-Type, Authorization";
+
+function applyCors(request: NextRequest, response: NextResponse): NextResponse {
+  const origin = request.headers.get("origin") ?? "";
+  if (allowedOrigins.includes(origin)) {
+    response.headers.set("Access-Control-Allow-Origin", origin);
+    response.headers.set("Access-Control-Allow-Methods", CORS_METHODS);
+    response.headers.set("Access-Control-Allow-Headers", CORS_HEADERS);
+    response.headers.set("Access-Control-Allow-Credentials", "true");
+  }
+  return response;
+}
+
 // C2 + H5: Rate limiter — Redis (Upstash) if configured, else in-memory fallback
 const RATE_LIMIT_RULES: Record<string, { max: number; windowMs: number }> = {
   "/api/auth/callback/credentials": { max: 10, windowMs: 60_000 },
@@ -71,19 +89,28 @@ async function isRateLimited(ip: string, pathname: string): Promise<boolean> {
 
 export default withAuth(
   async function middleware(request: NextRequest) {
+    const { pathname } = request.nextUrl;
+
+    if (request.method === "OPTIONS" && pathname.startsWith("/api/")) {
+      return applyCors(request, new NextResponse(null, { status: 204 }));
+    }
+
     const ip =
       request.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
       request.headers.get("x-real-ip") ??
       "unknown";
 
-    if (await isRateLimited(ip, request.nextUrl.pathname)) {
-      return NextResponse.json(
-        { error: "Too many requests. Please try again later." },
-        { status: 429, headers: { "Retry-After": "60" } }
+    if (await isRateLimited(ip, pathname)) {
+      return applyCors(
+        request,
+        NextResponse.json(
+          { error: "Too many requests. Please try again later." },
+          { status: 429, headers: { "Retry-After": "60" } }
+        )
       );
     }
 
-    return NextResponse.next();
+    return applyCors(request, NextResponse.next());
   },
   {
     pages: { signIn: "/login" },

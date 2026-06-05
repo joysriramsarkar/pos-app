@@ -49,6 +49,8 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { format, subDays } from 'date-fns';
+import { useTranslations } from 'next-intl';
+import { useNumberFormat } from '@/hooks/use-number-format';
 
 type ChartType = 'bar' | 'line';
 type DatePreset = '1' | '7' | '30' | '90' | 'custom';
@@ -64,6 +66,8 @@ function mergeSmallSlices(data: { name: string; value: number }[], threshold = 0
 }
 
 const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate }) => {
+  const t = useTranslations('Reports');
+  const { formatNumber, formatPrice } = useNumberFormat();
   const [salesData, setSalesData] = useState<SaleChartPoint[]>([]);
   const [summaryData, setSummaryData] = useState<SummaryData | null>(null);
   const [stockData, setStockData] = useState<StockItem[]>([]);
@@ -317,7 +321,7 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
           className="min-h-9 text-xs"
           onClick={() => setPreset(p)}
         >
-          {p === '1' ? 'Today' : `${p}d`}
+          {p === '1' ? t('today') : `${p}d`}
         </Button>
       ))}
       <Button
@@ -326,7 +330,7 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
         className="min-h-9 text-xs"
         onClick={() => setPreset('custom')}
       >
-        Custom
+        {t('custom')}
       </Button>
     </div>
   );
@@ -334,11 +338,11 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
   const CustomDateInputs = preset === 'custom' && (
     <div className="w-full flex items-end gap-2 flex-wrap">
       <div className="flex items-center gap-1 flex-1 min-w-48">
-        <Label className="text-xs shrink-0">From</Label>
+        <Label className="text-xs shrink-0">{t('from')}</Label>
         <Input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} className="h-9 text-xs flex-1 min-w-32" />
       </div>
       <div className="flex items-center gap-1 flex-1 min-w-48">
-        <Label className="text-xs shrink-0">To</Label>
+        <Label className="text-xs shrink-0">{t('to')}</Label>
         <Input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} className="h-9 text-xs flex-1 min-w-32" />
       </div>
     </div>
@@ -349,9 +353,9 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
       <div className="shrink-0 border-b bg-background p-4">
         <h1 className="text-lg md:text-xl font-bold flex items-center gap-2">
           <TrendingUp className="w-6 h-6" />
-          Reports & Analytics
+          {t('title')}
         </h1>
-        <p className="text-sm text-muted-foreground">Comprehensive business overview</p>
+        <p className="text-sm text-muted-foreground">{t('subtitle')}</p>
       </div>
 
       <Dialog open={isAiDialogOpen} onOpenChange={setIsAiDialogOpen}>
@@ -359,14 +363,14 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-indigo-600">
               <Lightbulb className="w-5 h-5" />
-              AI Business Advisor
+              {t('ai_advisor')}
             </DialogTitle>
             <DialogDescription>
-              Personalized business advice based on your current reports.
+              {t('ai_description')}
             </DialogDescription>
           </DialogHeader>
           <div className="p-4 bg-muted/30 rounded-xl min-h-25 text-sm whitespace-pre-wrap">
-            {isAiLoading ? 'Analyzing your data and generating advice...' : aiAdvice}
+            {isAiLoading ? t('ai_loading') : aiAdvice}
           </div>
         </DialogContent>
       </Dialog>
@@ -375,7 +379,7 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
         <div className="shrink-0 bg-destructive/10 border-b border-destructive/30 p-4 flex items-center gap-3">
           <AlertTriangle className="w-5 h-5 text-destructive shrink-0" />
           <p className="text-sm font-medium text-destructive flex-1">{errorMessage}</p>
-          <Button variant="ghost" size="sm" onClick={() => fetchTab(activeTab, dateParams)} className="text-destructive hover:text-destructive min-h-9">Retry</Button>
+          <Button variant="ghost" size="sm" onClick={() => fetchTab(activeTab, dateParams)} className="text-destructive hover:text-destructive min-h-9">{t('retry')}</Button>
         </div>
       )}
 
@@ -384,11 +388,11 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
           <Card className="rounded-xl">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">Total Revenue</CardTitle>
+              <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">{t('total_revenue')}</CardTitle>
               <DollarSign className="w-4 h-4 text-primary" />
             </CardHeader>
             <CardContent>
-              <div className="text-lg md:text-2xl font-bold">₹{summaryData?.totalRevenue?.toFixed(2) || '0.00'}</div>
+              <div className="text-lg md:text-2xl font-bold">{formatPrice(summaryData?.totalRevenue ?? 0)}</div>
               <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
                 {(summaryData?.revenueGrowth ?? 0) >= 0
                   ? <TrendingUp className="w-3 h-3 text-emerald-500" />
@@ -396,40 +400,40 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
                 <span className={`font-medium ${(summaryData?.revenueGrowth ?? 0) >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
                   {summaryData?.revenueGrowth || '0'}%
                 </span>
-                <span className="hidden sm:inline"> vs prev period</span>
+                <span className="hidden sm:inline"> {t('vs_prev')}</span>
               </p>
             </CardContent>
           </Card>
           <Card className="rounded-xl">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">Net Profit</CardTitle>
+              <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">{t('net_profit')}</CardTitle>
               <TrendingUp className="w-4 h-4 text-emerald-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-lg md:text-2xl font-bold text-emerald-600">₹{summaryData?.totalProfit?.toFixed(2) || '0.00'}</div>
+              <div className="text-lg md:text-2xl font-bold text-emerald-600">{formatPrice(summaryData?.totalProfit ?? 0)}</div>
               <p className="text-xs text-muted-foreground mt-1">
-                <span className="text-emerald-500 font-medium">{summaryData?.profitMargin || '0'}%</span> margin
+                <span className="text-emerald-500 font-medium">{summaryData?.profitMargin || '0'}%</span> {t('margin')}
               </p>
             </CardContent>
           </Card>
           <Card className="rounded-xl">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">Total Sales</CardTitle>
+              <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">{t('total_sales')}</CardTitle>
               <Package className="w-4 h-4 text-blue-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-lg md:text-2xl font-bold">{summaryData?.totalSalesCount || 0}</div>
-              <p className="text-xs text-muted-foreground mt-1">Invoices</p>
+              <div className="text-lg md:text-2xl font-bold">{formatNumber(summaryData?.totalSalesCount || 0)}</div>
+              <p className="text-xs text-muted-foreground mt-1">{t('invoices')}</p>
             </CardContent>
           </Card>
           <Card className="rounded-xl">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">Dues</CardTitle>
+              <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">{t('dues')}</CardTitle>
               <Users className="w-4 h-4 text-amber-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-lg md:text-2xl font-bold text-amber-600">₹{outstandingDues}</div>
-              <p className="text-xs text-muted-foreground mt-1">To be collected</p>
+              <div className="text-lg md:text-2xl font-bold text-amber-600">{formatPrice(Number(outstandingDues))}</div>
+              <p className="text-xs text-muted-foreground mt-1">{t('to_collect')}</p>
             </CardContent>
           </Card>
         </div>
@@ -437,14 +441,14 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
         <Tabs defaultValue="sales" className="w-full" onValueChange={setActiveTab}>
           <div className="w-full overflow-x-auto pb-2">
             <TabsList className="h-auto flex flex-wrap gap-1 bg-muted p-1 rounded-lg w-full sm:w-auto">
-              <TabsTrigger className="flex-1 sm:flex-none" value="sales">Sales</TabsTrigger>
-              <TabsTrigger className="flex-1 sm:flex-none" value="payment">Payment</TabsTrigger>
-              <TabsTrigger className="flex-1 sm:flex-none" value="stock">Auto Restock</TabsTrigger>
-              <TabsTrigger className="flex-1 sm:flex-none" value="dues">Dues</TabsTrigger>
-              <TabsTrigger className="flex-1 sm:flex-none" value="products">Top Items</TabsTrigger>
-              <TabsTrigger className="flex-1 sm:flex-none" value="categories">Categories</TabsTrigger>
-              <TabsTrigger className="flex-1 sm:flex-none" value="customers">Customers</TabsTrigger>
-              <TabsTrigger className="flex-1 sm:flex-none" value="expenses">Expenses</TabsTrigger>
+              <TabsTrigger className="flex-1 sm:flex-none" value="sales">{t('tab_sales')}</TabsTrigger>
+              <TabsTrigger className="flex-1 sm:flex-none" value="payment">{t('tab_payment')}</TabsTrigger>
+              <TabsTrigger className="flex-1 sm:flex-none" value="stock">{t('tab_stock')}</TabsTrigger>
+              <TabsTrigger className="flex-1 sm:flex-none" value="dues">{t('tab_dues')}</TabsTrigger>
+              <TabsTrigger className="flex-1 sm:flex-none" value="products">{t('tab_products')}</TabsTrigger>
+              <TabsTrigger className="flex-1 sm:flex-none" value="categories">{t('tab_categories')}</TabsTrigger>
+              <TabsTrigger className="flex-1 sm:flex-none" value="customers">{t('tab_customers')}</TabsTrigger>
+              <TabsTrigger className="flex-1 sm:flex-none" value="expenses">{t('tab_expenses')}</TabsTrigger>
             </TabsList>
           </div>
 
@@ -454,8 +458,8 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
             <Card className="rounded-xl">
               <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
                 <div>
-                  <CardTitle>Sales Trend</CardTitle>
-                  <CardDescription>{isToday ? 'Hourly sales for today' : 'Daily sales and profit for selected period'}</CardDescription>
+                  <CardTitle>{t('sales_trend')}</CardTitle>
+                  <CardDescription>{isToday ? t('hourly_sales') : t('daily_sales')}</CardDescription>
                 </div>
                 <div className="flex flex-wrap gap-2 items-center">
                   {DateFilter}
@@ -469,13 +473,13 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
                     } catch { setAiAdvice('Sorry, could not fetch AI advice right now.'); }
                     finally { setIsAiLoading(false); }
                   }}>
-                    <Lightbulb className="w-4 h-4" /><span className="hidden sm:inline">Ask AI</span>
+                    <Lightbulb className="w-4 h-4" /><span className="hidden sm:inline">{t('ask_ai')}</span>
                   </Button>
                   <Button variant="outline" size="sm" className="gap-1 min-h-9" onClick={handleExportCSV}>
                     <Download className="w-4 h-4" /> CSV
                   </Button>
-                  <Button variant="outline" size="sm" className="gap-1 min-h-9" onClick={() => setChartType(t => t === 'bar' ? 'line' : 'bar')}>
-                    <BarChart2 className="w-4 h-4" />{chartType === 'bar' ? 'Line' : 'Bar'}
+                  <Button variant="outline" size="sm" className="gap-1 min-h-9" onClick={() => setChartType(ct => ct === 'bar' ? 'line' : 'bar')}>
+                    <BarChart2 className="w-4 h-4" />{chartType === 'bar' ? t('line') : t('bar')}
                   </Button>
                 </div>
               </CardHeader>
@@ -483,7 +487,7 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
                 <div className="w-full h-64 md:h-80">
                   {isLoading ? (
                     <div className="w-full h-full flex items-center justify-center border border-dashed rounded-lg">
-                      <p className="text-muted-foreground">Loading chart data...</p>
+                      <p className="text-muted-foreground">{t('loading_chart')}</p>
                     </div>
                   ) : salesData?.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
@@ -511,7 +515,7 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
                     </ResponsiveContainer>
                   ) : (
                     <div className="w-full h-full flex items-center justify-center border border-dashed rounded-lg">
-                      <p className="text-muted-foreground">No sales data for this period.</p>
+                      <p className="text-muted-foreground">{t('no_sales_data')}</p>
                     </div>
                   )}
                 </div>
@@ -526,8 +530,8 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Card className="rounded-xl">
                 <CardHeader>
-                  <CardTitle>Payment Method Breakdown</CardTitle>
-                  <CardDescription>Revenue by payment method</CardDescription>
+                  <CardTitle>{t('payment_breakdown')}</CardTitle>
+                  <CardDescription>{t('revenue_by_payment')}</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="w-full h-64">
@@ -547,7 +551,7 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
                       </ResponsiveContainer>
                     ) : (
                       <div className="w-full h-full flex items-center justify-center border border-dashed rounded-lg">
-                        <p className="text-muted-foreground">{tabLoading['payment'] || tabLoading['sales'] ? 'Loading...' : 'No data.'}</p>
+                        <p className="text-muted-foreground">{tabLoading['payment'] || tabLoading['sales'] ? t('loading') : t('no_data')}</p>
                       </div>
                     )}
                   </div>
@@ -555,15 +559,15 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
               </Card>
               <Card className="rounded-xl">
                 <CardHeader>
-                  <CardTitle>Payment Summary</CardTitle>
-                  <CardDescription>Totals per method</CardDescription>
+                  <CardTitle>{t('payment_summary')}</CardTitle>
+                  <CardDescription>{t('totals_per_method')}</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Method</TableHead>
-                        <TableHead className="text-right">Amount</TableHead>
+                        <TableHead>{t('method')}</TableHead>
+                        <TableHead className="text-right">{t('amount')}</TableHead>
                         <TableHead className="text-right">%</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -576,14 +580,14 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
                               <span className="w-3 h-3 rounded-full inline-block" style={{ background: PAYMENT_COLORS[i % PAYMENT_COLORS.length] }} />
                               {p.name}
                             </TableCell>
-                            <TableCell className="text-right font-medium">₹{(p.value as number).toFixed(2)}</TableCell>
-                            <TableCell className="text-right text-muted-foreground">{total > 0 ? ((p.value as number / total) * 100).toFixed(1) : 0}%</TableCell>
+                            <TableCell className="text-right font-medium">{formatPrice(p.value as number)}</TableCell>
+                            <TableCell className="text-right text-muted-foreground">{total > 0 ? formatNumber(Number(((p.value as number / total) * 100).toFixed(1))) : 0}%</TableCell>
                           </TableRow>
                         );
                       }) : (
                         <TableRow>
                           <TableCell colSpan={3} className="text-center py-6 text-muted-foreground">
-                            {tabLoading['payment'] || tabLoading['sales'] ? 'Loading...' : 'No payment data.'}
+                            {tabLoading['payment'] || tabLoading['sales'] ? t('loading') : t('no_payment_data')}
                           </TableCell>
                         </TableRow>
                       )}
@@ -599,8 +603,8 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
             <Card className="rounded-xl">
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
-                  <CardTitle>Auto Restock List</CardTitle>
-                  <CardDescription>Items at or below minimum stock level</CardDescription>
+                  <CardTitle>{t('auto_restock')}</CardTitle>
+                  <CardDescription>{t('low_stock_desc')}</CardDescription>
                 </div>
                 <Button variant="outline" size="sm" onClick={() => {
                   const itemsText = stockData.map(i => `${i.name} - Stock: ${i.currentStock}`).join('\n');
@@ -613,7 +617,7 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
                   URL.revokeObjectURL(url);
                 }}>
                   <Download className="w-4 h-4 mr-2" />
-                  Download List
+                  {t('download_list')}
                 </Button>
               </CardHeader>
               <CardContent>
@@ -621,15 +625,15 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Product</TableHead>
-                        <TableHead className="text-right">Stock</TableHead>
-                        <TableHead className="hidden sm:table-cell text-right">Min Level</TableHead>
-                        <TableHead className="text-right">Status</TableHead>
+                        <TableHead>{t('product')}</TableHead>
+                        <TableHead className="text-right">{t('stock')}</TableHead>
+                        <TableHead className="hidden sm:table-cell text-right">{t('min_level')}</TableHead>
+                        <TableHead className="text-right">{t('status')}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {tabLoading['stock'] ? (
-                        <TableRow><TableCell colSpan={4} className="text-center py-6 text-muted-foreground">Loading stock data...</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={4} className="text-center py-6 text-muted-foreground">{t('loading_stock')}</TableCell></TableRow>
                       ) : tabError['stock'] ? (
                         <TableRow><TableCell colSpan={4} className="text-center py-6 text-destructive">{tabError['stock']}</TableCell></TableRow>
                       ) : stockData?.length > 0 ? stockData.map((item) => (
@@ -642,15 +646,15 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
                           <TableCell className="hidden sm:table-cell text-right">{item.minStockLevel} {item.unit}</TableCell>
                           <TableCell className="text-right">
                             {item.currentStock === 0
-                              ? <Badge variant="destructive" className="text-xs">Out of Stock</Badge>
-                              : <Badge variant="destructive" className="text-xs bg-orange-500 hover:bg-orange-600">Low</Badge>
+                              ? <Badge variant="destructive" className="text-xs">{t('out_of_stock')}</Badge>
+                              : <Badge variant="destructive" className="text-xs bg-orange-500 hover:bg-orange-600">{t('low')}</Badge>
                             }
                           </TableCell>
                         </TableRow>
                       )) : (
                         <TableRow>
                           <TableCell colSpan={4} className="text-center py-6 text-muted-foreground">
-                            {'✅ All items are well stocked.'}
+                            {t('all_stocked')}
                           </TableCell>
                         </TableRow>
                       )}
@@ -666,8 +670,8 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
             <Card className="rounded-xl">
               <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
                 <div>
-                  <CardTitle>Outstanding Customer Dues</CardTitle>
-                  <CardDescription>Customers with pending payments — Total: ₹{outstandingDues}</CardDescription>
+                  <CardTitle>{t('outstanding_dues')}</CardTitle>
+                  <CardDescription>{t('pending_payments')} {formatPrice(Number(outstandingDues))}</CardDescription>
                 </div>
                 <Button variant="outline" size="sm" className="gap-1" onClick={() => downloadCSV(
                   [['Customer','Phone','Total Due','Last Purchase'], ...dueData.map(c => [c.name, c.phone||'', Number(c.totalDue).toFixed(2), new Date(c.updatedAt).toLocaleDateString()])],
@@ -679,15 +683,15 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Customer</TableHead>
-                        <TableHead className="text-right">Total Due</TableHead>
-                        <TableHead className="hidden sm:table-cell text-right">Last Purchase</TableHead>
-                        <TableHead className="hidden sm:table-cell text-right">Orders</TableHead>
+                        <TableHead>{t('customer')}</TableHead>
+                        <TableHead className="text-right">{t('total_due')}</TableHead>
+                        <TableHead className="hidden sm:table-cell text-right">{t('last_purchase')}</TableHead>
+                        <TableHead className="hidden sm:table-cell text-right">{t('orders')}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {tabLoading['dues'] ? (
-                        <TableRow><TableCell colSpan={4} className="text-center py-6 text-muted-foreground">Loading customer dues...</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={4} className="text-center py-6 text-muted-foreground">{t('loading_dues')}</TableCell></TableRow>
                       ) : tabError['dues'] ? (
                         <TableRow><TableCell colSpan={4} className="text-center py-6 text-destructive">{tabError['dues']}</TableCell></TableRow>
                       ) : dueData?.length > 0 ? dueData.map((c) => (
@@ -696,7 +700,7 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
                             <p className="text-sm">{c.name}</p>
                             <p className="text-xs text-muted-foreground">{c.phone || 'N/A'}</p>
                           </TableCell>
-                          <TableCell className="text-right text-amber-600 font-bold">₹{Number(c.totalDue).toFixed(2)}</TableCell>
+                          <TableCell className="text-right text-amber-600 font-bold">{formatPrice(Number(c.totalDue))}</TableCell>
                           <TableCell className="hidden sm:table-cell text-right text-muted-foreground text-xs">{new Date(c.updatedAt).toLocaleDateString()}</TableCell>
                           <TableCell className="hidden sm:table-cell text-right">
                             <Badge variant="outline">{c._count?.sales || 0}</Badge>
@@ -705,7 +709,7 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
                       )) : (
                         <TableRow>
                           <TableCell colSpan={4} className="text-center py-6 text-muted-foreground">
-                            {'✅ No pending dues.'}
+                            {t('no_dues')}
                           </TableCell>
                         </TableRow>
                       )}
@@ -722,8 +726,8 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
             <Card className="rounded-xl">
               <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
                 <div>
-                  <CardTitle>Top Selling Products</CardTitle>
-                  <CardDescription>Best performing items — click any row for detailed report</CardDescription>
+                  <CardTitle>{t('top_products')}</CardTitle>
+                  <CardDescription>{t('best_items')}</CardDescription>
                 </div>
                 <div className="flex flex-wrap gap-2 items-center">
                   {DateFilter}
@@ -739,16 +743,16 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
                     <TableHeader>
                       <TableRow>
                         <TableHead>#</TableHead>
-                        <TableHead>Product</TableHead>
-                        <TableHead className="text-right">Qty Sold</TableHead>
-                        <TableHead className="text-right">Revenue</TableHead>
-                        <TableHead className="text-right">Profit</TableHead>
+                        <TableHead>{t('product')}</TableHead>
+                        <TableHead className="text-right">{t('qty_sold')}</TableHead>
+                        <TableHead className="text-right">{t('revenue')}</TableHead>
+                        <TableHead className="text-right">{t('profit')}</TableHead>
                         <TableHead className="w-8"></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {tabLoading['products'] ? (
-                        <TableRow><TableCell colSpan={6} className="text-center py-6 text-muted-foreground">Loading products data...</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={6} className="text-center py-6 text-muted-foreground">{t('loading_products')}</TableCell></TableRow>
                       ) : tabError['products'] ? (
                         <TableRow><TableCell colSpan={6} className="text-center py-6 text-destructive">{tabError['products']}</TableCell></TableRow>
                       ) : topProducts?.length > 0 ? topProducts.map((p, i) => (
@@ -759,16 +763,16 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
                             {p.nameBn && <p className="text-xs text-muted-foreground">{p.nameBn}</p>}
                           </TableCell>
                           <TableCell className="text-right">{p.quantity} <span className="text-muted-foreground text-xs">{p.unit}</span></TableCell>
-                          <TableCell className="text-right font-medium">₹{p.revenue.toFixed(2)}</TableCell>
+                          <TableCell className="text-right font-medium">{formatPrice(p.revenue)}</TableCell>
                           <TableCell className={`text-right font-medium ${p.profit >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                            ₹{p.profit.toFixed(2)}
+                            {formatPrice(p.profit)}
                           </TableCell>
                           <TableCell><ChevronRight className="w-4 h-4 text-muted-foreground" /></TableCell>
                         </TableRow>
                       )) : (
                         <TableRow>
                           <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
-                            {'No product data.'}
+                            {t('no_product_data')}
                           </TableCell>
                         </TableRow>
                       )}
@@ -785,13 +789,13 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Card className="rounded-xl">
                 <CardHeader>
-                  <CardTitle>Category Revenue</CardTitle>
-                  <CardDescription>Sales breakdown by product category</CardDescription>
+                  <CardTitle>{t('category_revenue')}</CardTitle>
+                  <CardDescription>{t('category_breakdown_desc')}</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="w-full h-64">
                     {tabLoading['categories'] ? (
-                      <div className="w-full h-full flex items-center justify-center"><p className="text-muted-foreground">Loading...</p></div>
+                      <div className="w-full h-full flex items-center justify-center"><p className="text-muted-foreground">{t('loading')}</p></div>
                     ) : categoryData.length > 0 ? (
                       <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
@@ -808,7 +812,7 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
                       </ResponsiveContainer>
                     ) : (
                       <div className="w-full h-full flex items-center justify-center border border-dashed rounded-lg">
-                        <p className="text-muted-foreground">No data.</p>
+                        <p className="text-muted-foreground">{t('no_data')}</p>
                       </div>
                     )}
                   </div>
@@ -816,23 +820,23 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
               </Card>
               <Card className="rounded-xl">
                 <CardHeader>
-                  <CardTitle>Category Breakdown</CardTitle>
-                  <CardDescription>Revenue, profit & margin per category</CardDescription>
+                  <CardTitle>{t('category_breakdown')}</CardTitle>
+                  <CardDescription>{t('revenue_profit_margin')}</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="overflow-x-auto">
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Category</TableHead>
-                          <TableHead className="text-right">Revenue</TableHead>
-                          <TableHead className="text-right">Margin</TableHead>
-                          <TableHead className="text-right">%</TableHead>
+                          <TableHead>{t('category')}</TableHead>
+                          <TableHead className="text-right">{t('revenue')}</TableHead>
+                          <TableHead className="text-right">{t('margin_col')}</TableHead>
+                          <TableHead className="text-right">{t('share')}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {tabLoading['categories'] ? (
-                          <TableRow><TableCell colSpan={4} className="text-center py-6 text-muted-foreground">Loading...</TableCell></TableRow>
+                          <TableRow><TableCell colSpan={4} className="text-center py-6 text-muted-foreground">{t('loading')}</TableCell></TableRow>
                         ) : tabError['categories'] ? (
                           <TableRow><TableCell colSpan={4} className="text-center py-6 text-destructive">{tabError['categories']}</TableCell></TableRow>
                         ) : categoryData.length > 0 ? categoryData.map((c, i) => (
@@ -841,14 +845,14 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
                               <span className="w-3 h-3 rounded-full inline-block shrink-0" style={{ background: PAYMENT_COLORS[i % PAYMENT_COLORS.length] }} />
                               {c.name}
                             </TableCell>
-                            <TableCell className="text-right font-medium">₹{c.revenue.toFixed(2)}</TableCell>
-                            <TableCell className="text-right text-emerald-600">{c.margin}%</TableCell>
-                            <TableCell className="text-right text-muted-foreground">{c.percentage}%</TableCell>
+                            <TableCell className="text-right font-medium">{formatPrice(Number(c.revenue))}</TableCell>
+                            <TableCell className="text-right text-muted-foreground">{formatNumber(Number(c.margin))}%</TableCell>
+                            <TableCell className="text-right text-muted-foreground">{formatNumber(Number(c.percentage))}%</TableCell>
                           </TableRow>
                         )) : (
                           <TableRow>
                             <TableCell colSpan={4} className="text-center py-6 text-muted-foreground">
-                              {'No category data.'}
+                              {t('no_category_data')}
                             </TableCell>
                           </TableRow>
                         )}
@@ -873,8 +877,8 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
             <Card className="rounded-xl">
               <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
                 <div>
-                  <CardTitle>Top Customers</CardTitle>
-                  <CardDescription>Highest spending customers for selected period</CardDescription>
+                  <CardTitle>{t('top_customers')}</CardTitle>
+                  <CardDescription>{t('highest_spending')}</CardDescription>
                 </div>
                 <div className="flex flex-wrap gap-2 items-center">
                   {DateFilter}
@@ -890,16 +894,16 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
                     <TableHeader>
                       <TableRow>
                         <TableHead>#</TableHead>
-                        <TableHead>Customer</TableHead>
-                        <TableHead className="text-right">Spent</TableHead>
-                        <TableHead className="text-right hidden sm:table-cell">Orders</TableHead>
-                        <TableHead className="text-right hidden sm:table-cell">AOV</TableHead>
+                        <TableHead>{t('customer')}</TableHead>
+                        <TableHead className="text-right">{t('spent')}</TableHead>
+                        <TableHead className="text-right hidden sm:table-cell">{t('orders')}</TableHead>
+                        <TableHead className="text-right hidden sm:table-cell">{t('aov')}</TableHead>
                         <TableHead className="text-right"></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {tabLoading['customers'] ? (
-                        <TableRow><TableCell colSpan={6} className="text-center py-6 text-muted-foreground">Loading customers...</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={6} className="text-center py-6 text-muted-foreground">{t('loading_customers')}</TableCell></TableRow>
                       ) : tabError['customers'] ? (
                         <TableRow><TableCell colSpan={6} className="text-center py-6 text-destructive">{tabError['customers']}</TableCell></TableRow>
                       ) : topCustomers.length > 0 ? topCustomers.map((c, i: number) => (
@@ -909,15 +913,15 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
                             <p className="text-sm">{c.name}</p>
                             <p className="text-xs text-muted-foreground">{c.phone || 'N/A'}</p>
                           </TableCell>
-                          <TableCell className="text-right font-medium">₹{c.totalSpent.toFixed(2)}</TableCell>
+                          <TableCell className="text-right font-medium">{formatPrice(c.totalSpent)}</TableCell>
                           <TableCell className="text-right hidden sm:table-cell"><Badge variant="outline">{c.orderCount}</Badge></TableCell>
-                          <TableCell className="text-right hidden sm:table-cell text-muted-foreground text-sm">₹{c.aov.toFixed(2)}</TableCell>
+                          <TableCell className="text-right hidden sm:table-cell text-muted-foreground text-sm">{formatPrice(c.aov)}</TableCell>
                           <TableCell className="text-right"><ChevronRight className="w-4 h-4 text-muted-foreground" /></TableCell>
                         </TableRow>
                       )) : (
                         <TableRow>
                           <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
-                            {'No customer data.'}
+                            {t('no_customer_data')}
                           </TableCell>
                         </TableRow>
                       )}
@@ -993,7 +997,8 @@ function ProductDetailContent({ product, dateParams, detail, setDetail, isLoadin
       .finally(() => setIsLoading(false));
   }, [product?.id, dateParams, setIsLoading, setDetail]);
 
-  if (isLoading) return <div className="py-16 text-center text-muted-foreground">Loading product report...</div>;
+  const t = useTranslations('Reports');
+  if (isLoading) return <div className="py-16 text-center text-muted-foreground">{t('loading')}</div>;
   if (!detail || !detail.summary || !detail.product) return null;
 
   const { summary, product: p, dailyTrend = [], hourlyPattern = [], weeklyPattern = [], topCustomers = [] } = detail;
@@ -1003,10 +1008,10 @@ function ProductDetailContent({ product, dateParams, detail, setDetail, isLoadin
       {/* Summary Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: 'Total Sold', value: `${summary.totalQty} ${p.unit}`, color: 'text-blue-600' },
-          { label: 'Revenue', value: `₹${summary.totalRevenue.toFixed(0)}`, color: 'text-primary' },
-          { label: 'Profit', value: `₹${summary.totalProfit.toFixed(0)}`, color: summary.totalProfit >= 0 ? 'text-emerald-600' : 'text-red-500' },
-          { label: 'Margin', value: `${summary.profitMargin}%`, color: 'text-amber-600' },
+          { label: t('total_sold'), value: `${summary.totalQty} ${p.unit}`, color: 'text-blue-600' },
+          { label: t('revenue'), value: `₹${summary.totalRevenue.toFixed(0)}`, color: 'text-primary' },
+          { label: t('profit'), value: `₹${summary.totalProfit.toFixed(0)}`, color: summary.totalProfit >= 0 ? 'text-emerald-600' : 'text-red-500' },
+          { label: t('margin_label'), value: `${summary.profitMargin}%`, color: 'text-amber-600' },
         ].map(s => (
           <div key={s.label} className="bg-muted/50 rounded-xl p-3 text-center">
             <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
@@ -1018,10 +1023,10 @@ function ProductDetailContent({ product, dateParams, detail, setDetail, isLoadin
       {/* Peak info + stock */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: 'Peak Hour', value: summary.peakHour },
-          { label: 'Peak Day', value: summary.peakDay },
-          { label: 'Avg Qty/Order', value: summary.avgOrderQty.toFixed(1) },
-          { label: 'Current Stock', value: `${p.currentStock} ${p.unit}`, color: p.currentStock <= p.minStockLevel ? 'text-red-500' : 'text-emerald-600' },
+          { label: t('peak_hour'), value: summary.peakHour },
+          { label: t('peak_day'), value: summary.peakDay },
+          { label: t('avg_qty'), value: summary.avgOrderQty.toFixed(1) },
+          { label: t('current_stock'), value: `${p.currentStock} ${p.unit}`, color: p.currentStock <= p.minStockLevel ? 'text-red-500' : 'text-emerald-600' },
         ].map(s => (
           <div key={s.label} className="border rounded-xl p-3 text-center">
             <p className={`text-base font-semibold ${(s as any).color ?? ''}`}>{s.value}</p>
@@ -1033,7 +1038,7 @@ function ProductDetailContent({ product, dateParams, detail, setDetail, isLoadin
       {/* Daily Trend */}
       {dailyTrend?.length > 0 && (
         <div>
-          <p className="text-sm font-semibold mb-2">Daily Sales Trend</p>
+          <p className="text-sm font-semibold mb-2">{t('daily_trend')}</p>
           <div className="h-44">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={dailyTrend} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
@@ -1053,7 +1058,7 @@ function ProductDetailContent({ product, dateParams, detail, setDetail, isLoadin
       {/* Weekly + Hourly patterns side by side */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <p className="text-sm font-semibold mb-2">Weekly Pattern</p>
+          <p className="text-sm font-semibold mb-2">{t('weekly_pattern')}</p>
           <div className="h-36">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={weeklyPattern} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
@@ -1070,7 +1075,7 @@ function ProductDetailContent({ product, dateParams, detail, setDetail, isLoadin
           </div>
         </div>
         <div>
-          <p className="text-sm font-semibold mb-2">Hourly Pattern</p>
+          <p className="text-sm font-semibold mb-2">{t('hourly_pattern')}</p>
           <div className="h-36">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={hourlyPattern} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
@@ -1091,14 +1096,14 @@ function ProductDetailContent({ product, dateParams, detail, setDetail, isLoadin
       {/* Top Customers */}
       {topCustomers?.length > 0 && (
         <div>
-          <p className="text-sm font-semibold mb-2">Top Customers for This Product</p>
+          <p className="text-sm font-semibold mb-2">{t('top_customers_product')}</p>
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>#</TableHead>
-                <TableHead>Customer</TableHead>
-                <TableHead className="text-right">Qty Bought</TableHead>
-                <TableHead className="text-right">Revenue</TableHead>
+                <TableHead>{t('customer')}</TableHead>
+                <TableHead className="text-right">{t('qty_bought')}</TableHead>
+                <TableHead className="text-right">{t('revenue')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -1118,7 +1123,7 @@ function ProductDetailContent({ product, dateParams, detail, setDetail, isLoadin
         </div>
       )}
       {topCustomers?.length === 0 && (
-        <p className="text-sm text-muted-foreground text-center py-4">No customer data — all sales were walk-in.</p>
+        <p className="text-sm text-muted-foreground text-center py-4">{t('walk_in_only')}</p>
       )}
     </div>
   );
@@ -1141,16 +1146,17 @@ function CustomerDetailContent({ customer, dateParams, detail, setDetail, isLoad
       .finally(() => setIsLoading(false));
   }, [customer?.id, dateParams, setIsLoading, setDetail]);
 
-  if (isLoading) return <div className="py-10 text-center text-muted-foreground">Loading...</div>;
+  const t = useTranslations('Reports');
+  if (isLoading) return <div className="py-10 text-center text-muted-foreground">{t('loading')}</div>;
   if (!detail) return null;
 
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-3 gap-3">
         {[
-          { label: 'Total Spent', value: `₹${detail.totalSpent.toFixed(2)}`, color: 'text-primary' },
-          { label: 'Orders', value: detail.orderCount, color: '' },
-          { label: 'Avg Order', value: `₹${detail.aov.toFixed(2)}`, color: '' },
+          { label: t('total_spent'), value: `₹${detail.totalSpent.toFixed(2)}`, color: 'text-primary' },
+          { label: t('orders'), value: detail.orderCount, color: '' },
+          { label: t('avg_order'), value: `₹${detail.aov.toFixed(2)}`, color: '' },
         ].map(s => (
           <div key={s.label} className="bg-muted rounded-lg p-3 text-center">
             <p className={`text-lg font-bold ${s.color}`}>{s.value}</p>
@@ -1161,7 +1167,7 @@ function CustomerDetailContent({ customer, dateParams, detail, setDetail, isLoad
 
       {detail.monthlyTrend?.length > 0 && (
         <div>
-          <p className="text-sm font-medium mb-2">Monthly Spending</p>
+          <p className="text-sm font-medium mb-2">{t('monthly_spending')}</p>
           <div className="h-40">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={detail.monthlyTrend} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
@@ -1177,13 +1183,13 @@ function CustomerDetailContent({ customer, dateParams, detail, setDetail, isLoad
 
       {detail.topProducts?.length > 0 && (
         <div>
-          <p className="text-sm font-medium mb-2">Top Products</p>
+          <p className="text-sm font-medium mb-2">{t('top_products_label')}</p>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Product</TableHead>
-                <TableHead className="text-right">Qty</TableHead>
-                <TableHead className="text-right">Revenue</TableHead>
+                <TableHead>{t('product')}</TableHead>
+                <TableHead className="text-right">{t('qty')}</TableHead>
+                <TableHead className="text-right">{t('revenue')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

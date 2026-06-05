@@ -52,7 +52,7 @@ export function TransactionHistory() {
           params.append('status', filterStatus);
         }
 
-        const response = await fetch(`/api/sales?${params.toString()}`);
+        const response = await fetch(`/api/sales?${params.toString()}`, { cache: 'no-store' });
         if (!response.ok) {
           throw new Error(t('error'));
         }
@@ -104,7 +104,7 @@ export function TransactionHistory() {
     };
 
     fetchTransactions();
-  }, [currentPage, searchQuery, filterStatus, refreshKey, toast, t]);
+  }, [currentPage, searchQuery, filterStatus, filterPaymentMethod, refreshKey, toast, t]);
 
   const handleViewDetails = (transaction: Transaction) => {
     setSelectedTransaction(transaction);

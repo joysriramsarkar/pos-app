@@ -7,8 +7,6 @@ services:
       NODE_ENV: production
     expose:
       - "3000"
-    depends_on:
-      - caddy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
       interval: 30s
@@ -19,6 +17,9 @@ services:
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
     ports:
       - "80:80"
       - "443:443"

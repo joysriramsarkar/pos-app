@@ -1,3 +1,4 @@
+import { useTranslations } from "next-intl";
 import { AppSettings } from "@/stores/settings-store";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,15 +15,17 @@ interface LanguageTabProps {
 }
 
 export default function LanguageTab({ localSettings, handleChange, handleSave, isSaving, hasChanges }: LanguageTabProps) {
+  const t = useTranslations("Settings");
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle>ভাষা সেটিংস</CardTitle>
-        <CardDescription>অ্যাপ ও রিসিপ্টের ভাষা নির্ধারণ করুন।</CardDescription>
+        <CardTitle>{t("language_title")}</CardTitle>
+        <CardDescription>{t("language_desc")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="space-y-2">
-          <Label>অ্যাপের ভাষা</Label>
+          <Label>{t("app_language")}</Label>
           <Select value={localSettings.app_language} onValueChange={(val) => handleChange("app_language", val as "en" | "bn")}>
             <SelectTrigger className="w-full md:w-[300px]">
               <SelectValue />
@@ -35,7 +38,7 @@ export default function LanguageTab({ localSettings, handleChange, handleSave, i
         </div>
 
         <div className="space-y-2">
-          <Label>রিসিপ্টের ভাষা</Label>
+          <Label>{t("receipt_language")}</Label>
           <Select value={localSettings.receipt_language} onValueChange={(val) => handleChange("receipt_language", val as "en" | "bn")}>
             <SelectTrigger className="w-full md:w-[300px]">
               <SelectValue />
@@ -51,7 +54,7 @@ export default function LanguageTab({ localSettings, handleChange, handleSave, i
         <div className="pt-2 flex justify-end">
           <Button onClick={() => handleSave(["app_language", "receipt_language"])} disabled={isSaving || !hasChanges()} className="bg-primary text-primary-foreground hover:bg-primary/90">
             {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-            সংরক্ষণ করুন
+            {t("save")}
           </Button>
         </div>
       </CardContent>

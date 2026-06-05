@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useTranslations } from 'next-intl';
+import { useNumberFormat } from '@/hooks/use-number-format';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -54,6 +55,7 @@ interface DashboardProps {
 
 export function Dashboard({ onNavigate }: DashboardProps) {
   const t = useTranslations('Dashboard');
+  const { formatPrice } = useNumberFormat();
   const handleLogout = useLogout();
   const { data: session } = useSession();
   const rawName = (session?.user as { name?: string })?.name;
@@ -296,13 +298,6 @@ export function Dashboard({ onNavigate }: DashboardProps) {
     };
   }, []);
 
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 0,
-    }).format(price);
-  };
 
   const formatTime = (date: Date) => {
     const now = new Date();

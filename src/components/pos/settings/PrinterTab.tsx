@@ -1,3 +1,4 @@
+import { useTranslations } from "next-intl";
 import { AppSettings } from "@/stores/settings-store";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,55 +18,47 @@ interface PrinterTabProps {
 }
 
 export default function PrinterTab({ localSettings, handleChange, handleSave, isSaving, hasChanges }: PrinterTabProps) {
+  const t = useTranslations("Settings");
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle>প্রিন্টার সেটিংস</CardTitle>
-        <CardDescription>রিসিপ্ট প্রিন্টিং পছন্দ কনফিগার করুন।</CardDescription>
+        <CardTitle>{t("printer_title")}</CardTitle>
+        <CardDescription>{t("printer_desc")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
         <div className="space-y-3">
-          <Label className="text-sm font-medium">ডিফল্ট পেপার সাইজ</Label>
+          <Label className="text-sm font-medium">{t("paper_size")}</Label>
           <RadioGroup
             value={localSettings.print_paper_size}
             onValueChange={(val) => handleChange("print_paper_size", val as "58mm" | "80mm" | "A4" | "A5")}
             className="flex flex-wrap gap-4"
           >
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="58mm" id="58mm" />
-              <Label htmlFor="58mm">58mm (Thermal)</Label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="80mm" id="80mm" />
-              <Label htmlFor="80mm">80mm (Thermal)</Label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="A4" id="A4" />
-              <Label htmlFor="A4">A4</Label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="A5" id="A5" />
-              <Label htmlFor="A5">A5</Label>
-            </div>
+            {(["58mm", "80mm", "A4", "A5"] as const).map((size) => (
+              <div key={size} className="flex items-center space-x-2">
+                <RadioGroupItem value={size} id={size} />
+                <Label htmlFor={size}>{size}{size.includes("mm") ? " (Thermal)" : ""}</Label>
+              </div>
+            ))}
           </RadioGroup>
         </div>
 
         <div className="space-y-2">
-          <Label>ফন্ট সাইজ</Label>
+          <Label>{t("font_size")}</Label>
           <Select value={localSettings.print_font_size} onValueChange={(val) => handleChange("print_font_size", val as "small" | "medium" | "large")}>
             <SelectTrigger className="w-[200px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="small">ছোট (Small)</SelectItem>
-              <SelectItem value="medium">মাঝারি (Medium)</SelectItem>
-              <SelectItem value="large">বড় (Large)</SelectItem>
+              <SelectItem value="small">{t("font_small")}</SelectItem>
+              <SelectItem value="medium">{t("font_medium")}</SelectItem>
+              <SelectItem value="large">{t("font_large")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
 
         <div className="space-y-2">
-          <Label>রিসিপ্ট হেডার <span className="text-muted-foreground font-normal">(সর্বোচ্চ ১০০ অক্ষর)</span></Label>
+          <Label>{t("receipt_header")} <span className="text-muted-foreground font-normal">({t("max_chars")})</span></Label>
           <Textarea
             maxLength={100}
             placeholder="Custom header text for receipts"
@@ -75,7 +68,7 @@ export default function PrinterTab({ localSettings, handleChange, handleSave, is
         </div>
 
         <div className="space-y-2">
-          <Label>রিসিপ্ট ফুটার <span className="text-muted-foreground font-normal">(সর্বোচ্চ ১০০ অক্ষর)</span></Label>
+          <Label>{t("receipt_footer")} <span className="text-muted-foreground font-normal">({t("max_chars")})</span></Label>
           <Textarea
             maxLength={100}
             placeholder="Thank you message, terms, etc."
@@ -86,8 +79,8 @@ export default function PrinterTab({ localSettings, handleChange, handleSave, is
 
         <div className="flex items-center justify-between rounded-lg border p-4">
           <div className="space-y-0.5">
-            <Label className="text-sm font-medium">অটো-প্রিন্ট</Label>
-            <p className="text-xs text-muted-foreground">বিক্রয়ের পর অটোমেটিক প্রিন্ট করুন</p>
+            <Label className="text-sm font-medium">{t("auto_print")}</Label>
+            <p className="text-xs text-muted-foreground">{t("auto_print_desc")}</p>
           </div>
           <Switch
             checked={localSettings.auto_print}
@@ -98,7 +91,7 @@ export default function PrinterTab({ localSettings, handleChange, handleSave, is
         <div className="pt-2 flex justify-end">
           <Button onClick={() => handleSave(["print_paper_size", "print_font_size", "print_header", "print_footer", "auto_print"])} disabled={isSaving || !hasChanges()} className="bg-primary text-primary-foreground hover:bg-primary/90">
             {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-            সংরক্ষণ করুন
+            {t("save")}
           </Button>
         </div>
       </CardContent>
