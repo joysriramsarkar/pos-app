@@ -8,7 +8,7 @@ mock.module('next-auth/react', () => ({
 }));
 
 // Mock the permissions library to avoid database dependencies in tests
-mock.module('@/lib/permissions', () => ({
+mock.module('@/lib/permissions-helpers', () => ({
   roleHasPermission: (role: string, permissionCode: string) => {
     if (role === 'ADMIN') return true;
     if (role === 'MANAGER' && permissionCode === 'reports.view') return true;

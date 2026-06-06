@@ -3,6 +3,8 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { GlobalWindow } from 'happy-dom';
 
+import { NextIntlClientProvider } from 'next-intl';
+
 const mockToast = mock();
 mock.module('@/hooks/use-toast', () => ({
   useToast: () => ({ toast: mockToast })
@@ -45,7 +47,7 @@ global.requestAnimationFrame = (cb) => setTimeout(cb, 0);
 mock.module('@/components/ui/button', () => ({
   Button: ({ children, onClick, disabled, className, type, variant, size, title }: any) => {
     // Expose the submission trigger
-    if (children === 'Update Product') {
+    if (children === 'update_product') {
       (window as any).__submitClick = onClick;
     }
     return <button disabled={disabled}>{children}</button>;
@@ -111,7 +113,9 @@ describe('ProductDialog', () => {
     // NOTE: For the `useEffect` to trigger and sync state from `product`, `product` must be passed!
     // Happy DOM may not immediately trigger `useEffect` in `createRoot` if we don't await
     root.render(
-      <ProductDialog open={true} onOpenChange={() => {}} product={testProduct as any} onSubmit={onSubmit} />
+      <NextIntlClientProvider locale="en" messages={{ ProductDialog: { update_product: 'update_product', save_failed: 'Save Failed' }, Common: { cancel: 'Cancel' } }} onError={() => {}}>
+        <ProductDialog open={true} onOpenChange={() => {}} product={testProduct as any} onSubmit={onSubmit} />
+      </NextIntlClientProvider>
     );
 
     // Give generous time for React's useEffect to run and update internal state

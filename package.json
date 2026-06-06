@@ -13,7 +13,7 @@
     "db:seed": "prisma db seed --config prisma.config.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "bun test --isolate",
+    "test": "bun test --isolate src",
     "check": "npm run lint && npm run typecheck"
   },
   "dependencies": {
