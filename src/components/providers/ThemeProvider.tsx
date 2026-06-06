@@ -32,7 +32,7 @@ function hexToHsl(hex: string): string {
   s = Math.round(s * 100);
   l = Math.round(l * 100);
 
-  return `${h} ${s}% ${l}%`;
+  return `hsl(${h} ${s}% ${l}%)`;
 }
 
 function DynamicColorProvider({ children }: { children: React.ReactNode }) {

@@ -137,6 +137,7 @@
     "order_total": "অর্ডারের মোট",
     "mixed_payment": "মিশ্র পেমেন্ট",
     "due_payment_label": "বাকি পেমেন্ট",
+    "due": "বাকি",
     "prepaid": "প্রিপেইড"
   },
   "Common": {

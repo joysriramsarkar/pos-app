@@ -307,7 +307,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   })) ?? [];
 
   return (
-    <div className="space-y-6 p-4 md:p-6 animate-page-enter">
+    <div className="space-y-3 p-3 md:p-4 animate-page-enter overflow-y-auto h-full">
       {/* Mobile Quick Search - only visible on mobile */}
       <div className="md:hidden">
         <button
@@ -437,7 +437,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
       </Card>
 
       {/* Stats Cards - 5 cards, responsive grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
         <StatCard
           title={t('today_sales')}
           value={formatTaka(stats?.todaySales ?? 0)}
@@ -1009,13 +1009,13 @@ function StatCard({
     <Card className={`overflow-hidden shadow-md bg-gradient-to-br ${cardGradient} animate-stagger-in transition-all duration-200 hover:scale-[1.02] hover:shadow-lg cursor-default`} style={{ animationDelay: `${(staggerDelay ?? 0) * 0.05}s` }}>
       <CardContent className="p-3 md:p-4">
         <div className="flex items-center gap-2.5 md:gap-3">
-          <div className={`h-10 w-10 md:h-12 md:w-12 rounded-xl ${iconBg} flex items-center justify-center shadow-md shrink-0`}>
+          <div className={`h-8 w-8 md:h-10 md:w-10 rounded-xl ${iconBg} flex items-center justify-center shadow-md shrink-0`}>
             {icon}
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-[11px] md:text-xs text-muted-foreground/70 truncate font-medium uppercase tracking-wide">{title}</p>
             <div className="flex items-center gap-1.5 md:gap-2">
-              <p className={`text-xl md:text-2xl lg:text-3xl font-bold whitespace-nowrap leading-tight ${numberPopping ? 'animate-number-pop' : ''}`}>{trendLabel}{value}</p>
+              <p className={`text-lg md:text-xl font-bold whitespace-nowrap leading-tight ${numberPopping ? 'animate-number-pop' : ''}`}>{trendLabel}{value}</p>
               {trend && (
                 <span className={`inline-flex items-center text-xs font-medium px-1 py-0.5 rounded-full shrink-0 ${
                   trend === 'up'
@@ -1112,7 +1112,7 @@ function PaymentRow({
 
 function DashboardSkeleton() {
   return (
-    <div className="space-y-6 p-4 md:p-6">
+    <div className="space-y-3 p-3 md:p-4 overflow-y-auto h-full">
       {/* Mobile search skeleton */}
       <div className="md:hidden">
         <Skeleton className="h-11 w-full rounded-xl skeleton-shimmer" />
@@ -1125,12 +1125,12 @@ function DashboardSkeleton() {
           <Skeleton className="h-4 w-36" />
         </div>
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
         {[1, 2, 3, 4, 5].map((i) => (
           <Card key={i}>
             <CardContent className="p-3 md:p-4">
               <div className="flex items-center gap-2.5 md:gap-3">
-                <Skeleton className="h-10 w-10 md:h-12 md:w-12 rounded-xl" />
+                <Skeleton className="h-8 w-8 md:h-10 md:w-10 rounded-xl" />
                 <div className="flex-1">
                   <Skeleton className="h-3 w-16 mb-2" />
                   <Skeleton className="h-5 w-24" />

@@ -125,6 +125,7 @@ function POSDashboard() {
   const [mobileCartOpen, setMobileCartOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [searchFocusKey, setSearchFocusKey] = useState(0);
+  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
   // isProcessingPayment is now per-tab via UIStore
 
   const { theme, setTheme } = useTheme();
@@ -297,6 +298,22 @@ function POSDashboard() {
   // ✅ HYDRATION TRACKING: Prevent SSR/client mismatch
   useEffect(() => {
     setIsHydrated(true);
+  }, []);
+
+  // Mobile virtual keyboard detection via visualViewport API
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.visualViewport) return;
+    const vv = window.visualViewport;
+    const THRESHOLD = 150; // px — keyboard আসলে viewport ছোট হয়
+    const initialHeight = vv.height;
+
+    const handleResize = () => {
+      const diff = initialHeight - vv.height;
+      setIsKeyboardOpen(diff > THRESHOLD);
+    };
+
+    vv.addEventListener('resize', handleResize);
+    return () => vv.removeEventListener('resize', handleResize);
   }, []);
 
   // Load customers on mount
@@ -1266,7 +1283,7 @@ function POSDashboard() {
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 flex flex-col min-h-0 overflow-hidden bg-background pb-16 lg:rounded-tl-2xl lg:shadow-[-4px_0_24px_-12px_rgba(0,0,0,0.1)] lg:border-t lg:border-l lg:border-border/50">
+        <main className="flex-1 flex flex-col min-h-0 overflow-hidden bg-background pb-[calc(4rem+env(safe-area-inset-bottom))] lg:pb-0 lg:rounded-tl-2xl lg:shadow-[-4px_0_24px_-12px_rgba(0,0,0,0.1)] lg:border-t lg:border-l lg:border-border/50">
           <AnimatePresence mode="wait">
             {!['transactions', 'users', 'audit'].includes(currentPage) && (
               <motion.div
@@ -1312,8 +1329,11 @@ function POSDashboard() {
             </motion.div>
           )}
         </main>
-      {/* Mobile Bottom Navigation */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 border-t border-border/60 bg-card/95 backdrop-blur-sm py-1 px-2 bottom-nav pb-safe">
+      {/* Mobile Bottom Navigation — keyboard খোলা থাকলে হাইড */}
+      <nav className={cn(
+        "lg:hidden fixed bottom-0 left-0 right-0 z-30 border-t border-border/60 bg-card/95 backdrop-blur-sm py-1 px-2 bottom-nav pb-safe transition-transform duration-200",
+        isKeyboardOpen ? "translate-y-full" : "translate-y-0"
+      )}>
         <div className="flex items-center justify-between gap-1">
           {mobileBottomNavItems.map((item) => {
             const isActive = item.id === 'cart' 

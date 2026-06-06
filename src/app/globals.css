@@ -124,20 +124,22 @@
   }
 }
 
-/* Custom scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: oklch(0.7 0.05 160 / 30%);
-  border-radius: 9999px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: oklch(0.5 0.15 160 / 50%);
+/* Custom scrollbar — শুধুমাত্র মাউস (non-touch) ডিভাইসে */
+@media (pointer: fine) {
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: oklch(0.7 0.05 160 / 30%);
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: oklch(0.5 0.15 160 / 50%);
+  }
 }
 
 /* Custom selection */
@@ -282,15 +284,15 @@
   background: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(255, 255, 255, 0.15) 50%,
+    rgba(255, 255, 255, 0.12) 50%,
     transparent 100%
   );
-  animation: btn-shimmer-slide 3s ease-in-out infinite;
+  animation: btn-shimmer-slide 5s ease-in-out infinite;
 }
 
 @keyframes btn-shimmer-slide {
   0% { left: -100%; }
-  50% { left: 100%; }
+  40% { left: 100%; }
   100% { left: 100%; }
 }
 
