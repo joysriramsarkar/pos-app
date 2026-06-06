@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import { useTranslations } from 'next-intl';
+import { useNumberFormat } from '@/hooks/use-number-format';
 import {
   Dialog,
   DialogContent,
@@ -126,6 +128,10 @@ export function ProductDialog({
   const [isWebScannerOpen, setIsWebScannerOpen] = useState(false);
   const [isNameBnTouched, setIsNameBnTouched] = useState(false);
 
+  const t = useTranslations('ProductDialog');
+  const tc = useTranslations('Common');
+  const { formatNumber } = useNumberFormat();
+
   const isNativeApp = typeof Capacitor !== 'undefined' && Capacitor.isNativePlatform();
 
   const { scannerId, isInitialized, startShutdown } = useCameraBarcodeScanner({
@@ -226,21 +232,21 @@ export function ProductDialog({
   const handleSubmit = async () => {
     setFormError(null);
     if (!name.trim()) {
-      setFormError('Product name is required.');
+      setFormError(t('name_required'));
       return;
     }
     if (!isCategoryValid) {
-      setFormError('Please select or enter a category.');
+      setFormError(t('category_required'));
       return;
     }
     const bp = parseFloat(buyingPrice);
     const sp = parseFloat(sellingPrice);
     if (isNaN(bp) || bp < 0) {
-      setFormError('Buying price must be a valid non-negative number.');
+      setFormError(t('buying_price_invalid'));
       return;
     }
     if (isNaN(sp) || sp < 0) {
-      setFormError('Selling price must be a valid non-negative number.');
+      setFormError(t('selling_price_invalid'));
       return;
     }
 
@@ -263,9 +269,9 @@ export function ProductDialog({
       onSubmit?.(data);
       onOpenChange(false);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to save product';
+      const msg = err instanceof Error ? err.message : t('failed_save');
       setFormError(msg);
-      toast({ title: 'Save Failed', description: msg, variant: 'destructive' });
+      toast({ title: t('save_failed'), description: msg, variant: 'destructive' });
     } finally {
       setIsSubmitting(false);
     }
@@ -290,22 +296,22 @@ export function ProductDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Package className="w-5 h-5" />
-            {isEditing ? 'Edit Product' : 'Add New Product'}
+            {isEditing ? t('edit_product') : t('add_product')}
           </DialogTitle>
           <DialogDescription>
-            {isEditing ? 'Update product details' : 'Add a new product to your inventory'}
+            {isEditing ? t('edit_desc') : t('add_desc')}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
           {/* Product Name */}
           <div className="space-y-2">
-            <Label htmlFor="product-form-name">Product Name *</Label>
+            <Label htmlFor="product-form-name">{t('product_name')}</Label>
             <Input
               id="product-form-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g., Tata Salt"
+              placeholder={t('product_name_placeholder')}
               className={showNameError ? 'border-destructive focus-visible:ring-destructive' : ''}
             />
           </div>
@@ -314,7 +320,7 @@ export function ProductDialog({
           <div className="space-y-2">
             <Label htmlFor="product-form-nameBn" className="flex items-center gap-2">
               <Languages className="w-4 h-4" />
-              Bengali Name (বাংলা)
+              {t('bengali_name')}
             </Label>
             <Input
               id="product-form-nameBn"
@@ -323,7 +329,7 @@ export function ProductDialog({
                 setNameBn(e.target.value);
                 setIsNameBnTouched(true);
               }}
-              placeholder="e.g., টাটা লবণ"
+              placeholder={t('bengali_name_placeholder')}
             />
           </div>
 
@@ -331,14 +337,14 @@ export function ProductDialog({
           <div className="space-y-2">
             <Label htmlFor="product-form-barcode" className="flex items-center gap-2">
               <Barcode className="w-4 h-4" />
-              Barcode
+              {t('barcode')}
             </Label>
             <div className="flex gap-2">
               <Input
                 id="product-form-barcode"
                 value={barcode}
                 onChange={(e) => setBarcode(convertBengaliToEnglishNumerals(e.target.value.replace(/\s+/g, '')))}
-                placeholder="Scan or enter barcode"
+                placeholder={t('barcode_placeholder')}
                 className="flex-1 font-mono"
               />
               <Button
@@ -346,7 +352,7 @@ export function ProductDialog({
                 variant="outline"
                 size="icon"
                 onClick={() => isNativeApp ? setIsScannerOpen(true) : setIsWebScannerOpen(true)}
-                title="Scan barcode"
+                title={t('scan_barcode')}
                 className="md:hidden"
               >
                 <ScanLine className="w-4 h-4" />
@@ -356,7 +362,7 @@ export function ProductDialog({
                 variant="outline"
                 size="icon"
                 onClick={handleGenerateBarcode}
-                title="Generate barcode"
+                title={t('generate_barcode')}
               >
                 <RefreshCw className="w-4 h-4" />
               </Button>
@@ -377,7 +383,7 @@ export function ProductDialog({
                 <div id={scannerId} className="w-full" />
                 {!isInitialized && (
                   <div className="absolute inset-0 flex items-center justify-center bg-black/60">
-                    <p className="text-white text-sm">ক্যামেরা চালু হচ্ছে...</p>
+                    <p className="text-white text-sm">{t('camera_starting')}</p>
                   </div>
                 )}
               </div>
@@ -386,7 +392,7 @@ export function ProductDialog({
 
           {/* Category */}
           <div className="space-y-2">
-            <Label htmlFor="product-form-category">Category *</Label>
+            <Label htmlFor="product-form-category">{t('category')}</Label>
             <Select 
               value={category} 
               onValueChange={(val) => {
@@ -397,14 +403,14 @@ export function ProductDialog({
               }}
             >
               <SelectTrigger id="product-form-category" className={showCategoryError ? 'border-destructive focus-visible:ring-destructive' : ''}>
-                <SelectValue placeholder="Select category" />
+                <SelectValue placeholder={t('category_placeholder')} />
               </SelectTrigger>
               <SelectContent>
                 {allCategories.map((cat) => (
                   <SelectItem key={cat} value={cat}>{cat}</SelectItem>
                 ))}
                 <SelectItem value="new_category_custom_value" className="text-primary font-medium">
-                  + Add New Category
+                  {t('add_new_category')}
                 </SelectItem>
               </SelectContent>
             </Select>
@@ -416,7 +422,7 @@ export function ProductDialog({
                   name="newCategory"
                   value={newCategory}
                   onChange={(e) => setNewCategory(e.target.value)}
-                  placeholder="Enter new category name"
+                  placeholder={t('new_category_placeholder')}
                   className={cn("h-9 text-sm", showCategoryError ? 'border-destructive focus-visible:ring-destructive' : '')}
                   autoFocus
                 />
@@ -426,10 +432,10 @@ export function ProductDialog({
 
           {/* Unit */}
           <div className="space-y-2">
-            <Label htmlFor="product-form-unit">Unit</Label>
+            <Label htmlFor="product-form-unit">{t('unit')}</Label>
             <Select value={unit} onValueChange={setUnit}>
               <SelectTrigger id="product-form-unit">
-                <SelectValue placeholder="Select unit" />
+                <SelectValue placeholder={t('unit_placeholder')} />
               </SelectTrigger>
               <SelectContent>
                 {UNITS.map((u) => (
@@ -444,7 +450,7 @@ export function ProductDialog({
           {/* Prices */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="product-form-buyingPrice">Buying Price (₹) *</Label>
+              <Label htmlFor="product-form-buyingPrice">{t('buying_price')}</Label>
               <Input
                 id="product-form-buyingPrice"
                 type="number"
@@ -457,7 +463,7 @@ export function ProductDialog({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="product-form-sellingPrice">Selling Price (₹) *</Label>
+              <Label htmlFor="product-form-sellingPrice">{t('selling_price')}</Label>
               <Input
                 id="product-form-sellingPrice"
                 type="number"
@@ -475,10 +481,10 @@ export function ProductDialog({
           {profitMargin && (
             <div className="flex items-center gap-2 text-sm">
               <Badge variant={parseFloat(profitMargin) >= 10 ? 'default' : 'secondary'}>
-                {profitMargin}% margin
+                {profitMargin}{t('margin')}
               </Badge>
               <span className="text-muted-foreground">
-                Profit: ₹{(parseFloat(sellingPrice) - parseFloat(buyingPrice)).toFixed(2)} per {unit}
+                {t('profit', { amount: formatNumber((parseFloat(sellingPrice) - parseFloat(buyingPrice)).toFixed(2)), unit })}
               </span>
             </div>
           )}
@@ -488,7 +494,7 @@ export function ProductDialog({
           {/* Stock */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="product-form-currentStock">Current Stock</Label>
+              <Label htmlFor="product-form-currentStock">{t('current_stock')}</Label>
               <Input
                 id="product-form-currentStock"
                 type="number"
@@ -500,7 +506,7 @@ export function ProductDialog({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="product-form-minStockLevel">Min Stock Level</Label>
+              <Label htmlFor="product-form-minStockLevel">{t('min_stock')}</Label>
               <Input
                 id="product-form-minStockLevel"
                 type="number"
@@ -516,8 +522,8 @@ export function ProductDialog({
           {/* Active Status */}
           <div className="flex items-center justify-between">
             <div>
-              <Label htmlFor="product-form-isActive">Active</Label>
-              <p className="text-xs text-muted-foreground">Inactive products won't appear in POS</p>
+              <Label htmlFor="product-form-isActive">{t('active')}</Label>
+              <p className="text-xs text-muted-foreground">{t('inactive_note')}</p>
             </div>
             <Switch
               id="product-form-isActive"
@@ -540,18 +546,18 @@ export function ProductDialog({
           open={isScannerOpen}
           onOpenChange={setIsScannerOpen}
           onBarcodeScanned={(scanned) => { setBarcode(scanned); setIsScannerOpen(false); }}
-          title="Scan Product Barcode"
-          description="Position the barcode in the center of the frame"
+          title={t('scan_product_barcode')}
+          description={t('position_barcode')}
           singleScan
         />
       )}
 
         <DialogFooter className="gap-2 sm:gap-0">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {tc('cancel')}
           </Button>
           <Button onClick={handleSubmit} disabled={!isValid || isSubmitting}>
-            {isSubmitting ? 'Saving...' : isEditing ? 'Update Product' : 'Add Product'}
+            {isSubmitting ? t('saving') : isEditing ? t('update_product') : t('add_product_btn')}
           </Button>
         </DialogFooter>
       </DialogContent>

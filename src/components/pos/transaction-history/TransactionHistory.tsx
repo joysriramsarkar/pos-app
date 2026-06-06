@@ -11,6 +11,7 @@ import { TransactionFilters } from './TransactionFilters';
 import { TransactionTable } from './TransactionTable';
 import { TransactionDetailsDialog } from './TransactionDetailsDialog';
 import { Transaction, PaginationData } from './types';
+import RefundDialog from '@/components/pos/RefundDialog';
 
 export function TransactionHistory() {
   const t = useTranslations('TransactionHistory');
@@ -25,6 +26,8 @@ export function TransactionHistory() {
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [showRefundDialog, setShowRefundDialog] = useState(false);
+  const [refundSale, setRefundSale] = useState<Transaction | null>(null);
   const { toast } = useToast();
   
   // ✅ Watch store sales and refresh when new sales are added
@@ -124,6 +127,12 @@ export function TransactionHistory() {
 
   const handleUpdateSaleStatus = async (status: 'Cancelled' | 'Refunded') => {
     if (!selectedTransaction) return;
+    if (status === 'Refunded') {
+      setIsDetailOpen(false);
+      setRefundSale(selectedTransaction);
+      setShowRefundDialog(true);
+      return;
+    }
     const confirmMessage =
       status === 'Cancelled'
         ? 'Are you sure you want to cancel this order?'
@@ -267,6 +276,30 @@ export function TransactionHistory() {
         isOpen={isDetailOpen}
         onOpenChange={setIsDetailOpen}
         onUpdateStatus={handleUpdateSaleStatus}
+      />
+
+      <RefundDialog
+        open={showRefundDialog}
+        onOpenChange={setShowRefundDialog}
+        sale={refundSale ? {
+          id: refundSale.id,
+          invoiceNumber: refundSale.invoiceNumber,
+          customerId: refundSale.customer?.id || null,
+          totalAmount: refundSale.totalAmount ?? 0,
+          amountPaid: refundSale.amountPaid ?? 0,
+          paymentMethod: refundSale.paymentMethod,
+          items: refundSale.items.map(item => ({
+            productId: item.productId,
+            productName: item.productName,
+            quantity: item.quantity ?? 0,
+            unitPrice: item.unitPrice ?? 0,
+            totalPrice: item.totalPrice ?? 0,
+            unit: item.unit || 'pcs',
+          })),
+        } : null}
+        onSuccess={() => {
+          setRefreshKey(k => k + 1);
+        }}
       />
     </div>
   );

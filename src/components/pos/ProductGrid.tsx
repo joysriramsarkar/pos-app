@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback, useRef } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -12,6 +12,7 @@ import { Capacitor } from '@capacitor/core';
 import type { Product } from '@/types/pos';
 import { useProductsStore, useUIStore, useCartStore } from '@/stores/pos-store';
 import { cn, convertBengaliToEnglishNumerals } from '@/lib/utils';
+import { useTranslations } from 'next-intl';
 
 const cleanSearchQuery = (q: string) => q.replace(/rs\.?|₹/gi, '').trim();
 import { useToast } from '@/hooks/use-toast';
@@ -24,6 +25,7 @@ interface ProductGridProps {
   showSearch?: boolean;
   showCategories?: boolean;
   showViewToggle?: boolean;
+  searchFocusKey?: number;
 }
 
 export function ProductGrid({
@@ -32,13 +34,24 @@ export function ProductGrid({
   showSearch = true,
   showCategories = true,
   showViewToggle = true,
+  searchFocusKey,
 }: ProductGridProps) {
+  const t = useTranslations('Billing');
+  const tc = useTranslations('Common');
+
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [localSearchQuery, setLocalSearchQuery] = useState('');
   const [isCameraScannerOpen, setIsCameraScannerOpen] = useState(false);
   const [cameraScanError, setCameraScanError] = useState<string | null>(null);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (searchFocusKey && searchInputRef.current) {
+      searchInputRef.current.focus();
+      searchInputRef.current.select();
+    }
+  }, [searchFocusKey]);
 
   const storeProducts = useProductsStore((state) => state.products);
   const storeCategories = useProductsStore((state) => state.categories);
@@ -129,10 +142,10 @@ export function ProductGrid({
         if (externalProducts) onProductSelect?.(matchedProduct);
         else addItem(matchedProduct, 1);
         setCameraScanError(null);
-        toast({ title: 'Scanned', description: matchedProduct.name });
+        toast({ title: t('scanned'), description: matchedProduct.name });
         if (navigator?.vibrate) navigator.vibrate(50);
       } else {
-        setCameraScanError(`আইটেম পাওয়া যায়নি: ${cleanedBarcode}`);
+        setCameraScanError(`${t('item_not_found')}: ${cleanedBarcode}`);
         if (externalProducts) setLocalSearchQuery(barcode);
         else setSearchQuery(barcode);
       }
@@ -182,7 +195,7 @@ export function ProductGrid({
                 name="product-search"
                 ref={searchInputRef}
                 type="text"
-                placeholder="Search products by name, barcode..."
+                placeholder={t('search_placeholder')}
                 value={searchQuery}
                 onChange={handleSearchChange}
                 onKeyDown={(e) => {
@@ -222,10 +235,10 @@ export function ProductGrid({
                 variant="outline"
                 onClick={() => setIsCameraScannerOpen(true)}
                 className="w-full md:w-auto md:hidden"
-                title="Scan barcode with camera"
+                title={t('scan_barcode_title')}
               >
                 <Camera className="w-4 h-4 mr-2" />
-                Scan
+                {t('scan')}
               </Button>
             )}
           </div>
@@ -234,22 +247,22 @@ export function ProductGrid({
             <ScrollArea className="w-full whitespace-nowrap">
               <div className="flex gap-2 pb-2">
                 <Badge
-                  variant={selectedCategoryId === null ? 'default' : 'outline'}
+                  variant="outline"
                   className={cn(
                     "cursor-pointer touch-manipulation transition-all px-3 py-1 text-xs",
-                    selectedCategoryId === null ? "shadow-md bg-primary" : "hover:bg-primary/10 hover:text-primary"
+                    selectedCategoryId === null ? "shadow-sm bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-500/20" : "hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-blue-600 dark:hover:text-blue-400 border-border/50 bg-background"
                   )}
                   onClick={() => handleCategorySelect(null)}
                 >
-                  All
+                  {tc('all')}
                 </Badge>
                 {storeCategories.map((category) => (
                   <Badge
                     key={category}
-                    variant={selectedCategoryId === category ? 'default' : 'outline'}
+                    variant="outline"
                     className={cn(
                       "cursor-pointer touch-manipulation transition-all px-3 py-1 text-xs",
-                      selectedCategoryId === category ? "shadow-md bg-primary" : "hover:bg-primary/10 hover:text-primary border-border/50 bg-background"
+                      selectedCategoryId === category ? "shadow-sm bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-500/20" : "hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-blue-600 dark:hover:text-blue-400 border-border/50 bg-background"
                     )}
                     onClick={() => handleCategorySelect(category)}
                   >
@@ -269,11 +282,11 @@ export function ProductGrid({
                   onClick={clearFilters}
                   className="h-7 text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                 >
-                  Clear filters
+                  {t('clear_filters')}
                 </Button>
               )}
               <span className="text-xs font-medium text-muted-foreground bg-muted/50 px-2 py-1 rounded-md">
-                {filteredProducts.length} product{filteredProducts.length !== 1 ? 's' : ''}
+                {t('product_count', { count: filteredProducts.length })}
               </span>
             </div>
 
@@ -308,11 +321,11 @@ export function ProductGrid({
           {filteredProducts.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-center bg-card rounded-2xl border border-dashed border-border/60">
               <Package className="w-12 h-12 text-muted-foreground mb-4" />
-              <p className="text-lg font-medium text-muted-foreground">No products found</p>
-              <p className="text-sm text-muted-foreground mt-1">Try adjusting your search or filters</p>
+              <p className="text-lg font-medium text-muted-foreground">{t('no_products')}</p>
+              <p className="text-sm text-muted-foreground mt-1">{t('try_adjusting')}</p>
               {(searchQuery || selectedCategoryId) && (
                 <Button variant="outline" size="sm" onClick={clearFilters} className="mt-4">
-                  Clear all filters
+                  {t('clear_all_filters')}
                 </Button>
               )}
             </div>

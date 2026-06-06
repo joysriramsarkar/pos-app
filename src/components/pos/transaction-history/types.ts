@@ -1,9 +1,11 @@
 export interface TransactionItem {
   id: string;
+  productId: string;
   productName: string;
   quantity: number | null;
   unitPrice: number | null;
   totalPrice: number | null;
+  unit?: string;
 }
 
 export interface Transaction {

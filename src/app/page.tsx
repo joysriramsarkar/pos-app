@@ -2,10 +2,13 @@
 
 import dynamic from 'next/dynamic';
 import { useSession } from 'next-auth/react';
-
 import { useCallback, useEffect, useState, useMemo, useRef } from 'react';
 import { useTranslations, useLocale } from 'next-intl';
 import type { Product as ProductType } from '@/types/pos';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useTheme } from 'next-themes';
+
+// Lazy load page components
 const ProductGrid = dynamic(() => import('@/components/pos/ProductGrid').then(m => ({ default: m.ProductGrid })), { ssr: false });
 const CartPanel = dynamic(() => import('@/components/pos/CartPanel'), { ssr: false });
 const Dashboard = dynamic(() => import('@/components/pos/Dashboard').then(m => ({ default: m.Dashboard })), { ssr: false });
@@ -19,6 +22,13 @@ const Expenses = dynamic(() => import('@/components/pos/Expenses').then(m => ({ 
 const ExpensesReport = dynamic(() => import('@/components/pos/ExpensesReport').then(m => ({ default: m.ExpensesReport })), { ssr: false });
 const ProductStatistics = dynamic(() => import('@/components/pos/ProductStatistics').then(m => ({ default: m.ProductStatistics })), { ssr: false });
 const SettingsManagement = dynamic(() => import('@/components/pos/SettingsManagement'), { ssr: false });
+
+// New lazy loaded components
+const NotificationBell = dynamic(() => import('@/components/pos/NotificationBell'), { ssr: false });
+const KeyboardShortcuts = dynamic(() => import('@/components/pos/KeyboardShortcuts'), { ssr: false });
+const DueCollection = dynamic(() => import('@/components/pos/DueCollection'), { ssr: false });
+const PurchaseOrderManagement = dynamic(() => import('@/components/pos/PurchaseOrderManagement'), { ssr: false });
+
 import { AddStockDialog, type StockEntryData } from '@/components/pos/AddStockDialog';
 import { ProductDialog, type ProductFormData } from '@/components/pos/ProductDialog';
 import { CameraScannerDialog } from '@/components/pos/CameraScannerDialog';
@@ -28,6 +38,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Input } from '@/components/ui/input';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useOfflineContext } from '@/lib/offline/offline-context';
 import { getSyncWorker } from '@/lib/offline/sync-worker';
@@ -51,6 +63,13 @@ import {
   UserCog,
   History,
   Banknote,
+  IndianRupee,
+  ClipboardList,
+  ChevronRight,
+  User,
+  Languages,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useCartStore, useProductsStore, useSyncStore, useUIStore, useCustomersStore, useSalesStore, useQuantityUsageStore } from '@/stores/pos-store';
@@ -71,27 +90,29 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning';
 
 
-type PageType = 'dashboard' | 'billing' | 'stock' | 'stock-statistics' | 'parties' | 'reports' | 'transactions' | 'expenses' | 'expenses-report' | 'settings' | 'users' | 'menu' | 'audit';
+type PageType = 'dashboard' | 'billing' | 'stock' | 'stock-statistics' | 'parties' | 'reports' | 'transactions' | 'expenses' | 'expenses-report' | 'settings' | 'users' | 'menu' | 'audit' | 'due-collection' | 'purchase-orders';
 
-const navItems: { id: Exclude<PageType, 'menu'>; label: string; icon: React.ReactNode }[] = [
+const navItems: { id: Exclude<PageType, 'menu' | 'stock-statistics' | 'expenses-report'>; label: string; icon: React.ReactNode }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
   { id: 'billing', label: 'Billing', icon: <ShoppingCart className="w-5 h-5" /> },
   { id: 'stock', label: 'Inventory Management', icon: <Package className="w-5 h-5" /> },
   { id: 'parties', label: 'Parties', icon: <Users className="w-5 h-5" /> },
+  { id: 'due-collection', label: 'Due Collection', icon: <IndianRupee className="w-5 h-5" /> },
   { id: 'reports', label: 'Reports', icon: <FileText className="w-5 h-5" /> },
   { id: 'transactions', label: 'Transactions', icon: <History className="w-5 h-5" /> },
   { id: 'expenses', label: 'Expenses', icon: <Banknote className="w-5 h-5" /> },
   { id: 'users', label: 'Users', icon: <UserCog className="w-5 h-5" /> },
   { id: 'settings', label: 'Settings', icon: <Settings className="w-5 h-5" /> },
-  { id: 'audit', label: 'Audit Logs', icon: <History className="w-5 h-5" /> },
+  { id: 'audit', label: 'Audit Logs', icon: <ClipboardList className="w-5 h-5" /> },
+  { id: 'purchase-orders', label: 'Purchase Orders', icon: <ShoppingCart className="w-5 h-5" /> },
 ];
 
-// নতুন মোবাইল বটম নেভিগেশন আইটেম যোগ
-const mobileBottomNavItems: { id: PageType | 'menu'; label: string; icon: React.ReactNode }[] = [
+const mobileBottomNavItems: { id: PageType | 'cart' | 'more'; label: string; icon: React.ReactNode }[] = [
   { id: 'dashboard', label: 'Home', icon: <LayoutDashboard className="w-6 h-6 md:w-5 md:h-5" /> },
   { id: 'billing', label: 'Bill', icon: <ShoppingCart className="w-6 h-6 md:w-5 md:h-5" /> },
   { id: 'stock', label: 'Stock', icon: <Package className="w-6 h-6 md:w-5 md:h-5" /> },
-  { id: 'menu', label: 'Menu', icon: <Menu className="w-6 h-6 md:w-5 md:h-5" /> },
+  { id: 'cart', label: 'Cart', icon: <ShoppingCart className="w-6 h-6 md:w-5 md:h-5" /> },
+  { id: 'more', label: 'More', icon: <Menu className="w-6 h-6 md:w-5 md:h-5" /> },
 ];
 
 function POSDashboard() {
@@ -101,7 +122,21 @@ function POSDashboard() {
   const [isTransactionsPageMounted, setIsTransactionsPageMounted] = useState(false);
   const [isUsersPageMounted, setIsUsersPageMounted] = useState(false);
   const [isAuditPageMounted, setIsAuditPageMounted] = useState(false);
+  const [mobileCartOpen, setMobileCartOpen] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [searchFocusKey, setSearchFocusKey] = useState(0);
   // isProcessingPayment is now per-tab via UIStore
+
+  const { theme, setTheme } = useTheme();
+  
+  const toggleLanguage = useCallback(() => {
+    const { settings, updateSetting } = useSettingsStore.getState();
+    updateSetting('app_language', settings.app_language === 'bn' ? 'en' : 'bn');
+  }, []);
+  
+  const toggleTheme = useCallback(() => {
+    setTheme(theme === 'dark' ? 'light' : 'dark');
+  }, [theme, setTheme]);
 
   // Auth
   const { data: session, status: authStatus } = useSession();
@@ -163,6 +198,22 @@ function POSDashboard() {
   const setLastScannedBarcode = useCartStore((state) => state.setLastScannedBarcode);
   const cartItems = useCartStore((state) => state.tabs.find(t => t.id === state.activeTabId)?.items ?? state.tabs[0].items);
 
+  const cartItemCount = useMemo(() => {
+    return cartItems.reduce((sum, item) => sum + item.quantity, 0);
+  }, [cartItems]);
+
+  const cartTotal = useMemo(() => {
+    return cartItems.reduce((sum, item) => sum + item.totalPrice, 0);
+  }, [cartItems]);
+
+  const handleSearchFocus = useCallback(() => {
+    setSearchFocusKey((k) => k + 1);
+  }, []);
+
+  const handleNewBill = useCallback(() => {
+    clearCart();
+  }, [clearCart]);
+
   // Removed isOnline from useSyncStore - now using useOfflineContext above
   const setOnline = useSyncStore((state) => state.setOnline);
   const isSyncing = useSyncStore((state) => state.isSyncing);
@@ -197,7 +248,8 @@ function POSDashboard() {
         item.id === 'dashboard' ||
         item.id === 'billing' ||
         item.id === 'parties' ||
-        item.id === 'transactions'
+        item.id === 'transactions' ||
+        item.id === 'due-collection'
       );
     } else {
       // VIEWER or unknown
@@ -208,6 +260,10 @@ function POSDashboard() {
       );
     }
   }, [userRole, authStatus]);
+
+  const filteredMoreMenuItems = useMemo(() => {
+    return filteredNavItems.filter(item => item.id !== 'dashboard' && item.id !== 'billing' && item.id !== 'stock');
+  }, [filteredNavItems]);
 
   // Mobile product search - server-side with offline fallback
   const [mobileSearchResults, setMobileSearchResults] = useState<ProductType[]>([]);
@@ -906,27 +962,35 @@ function POSDashboard() {
   const renderSidebar = () => (
     <nav className="flex flex-col h-full bg-slate-50 dark:bg-slate-900/50">
       <div className="p-4 border-b bg-background/50 backdrop-blur-sm">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shadow-sm">
-            <Store className="w-6 h-6 text-primary" />
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shadow-sm shrink-0">
+              <Store className="w-6 h-6 text-primary" />
+            </div>
+            <div className="min-w-0">
+              <h1 className="font-bold text-sm bg-linear-to-r from-primary to-primary/70 bg-clip-text text-transparent truncate">{storeName}</h1>
+              <p className="text-xs text-muted-foreground truncate">{storeNameBn}</p>
+            </div>
           </div>
-          <div>
-            <h1 className="font-bold text-sm bg-linear-to-r from-primary to-primary/70 bg-clip-text text-transparent">{storeName}</h1>
-            <p className="text-xs text-muted-foreground">{storeNameBn}</p>
+          <div className="flex items-center gap-2 shrink-0">
+            <NotificationBell variant="desktop" />
           </div>
         </div>
       </div>
 
       <div className="flex-1 p-3 space-y-1.5 overflow-y-auto">
-        {filteredNavItems.map((item) => (
-          <button
+        {filteredNavItems.map((item, index) => (
+          <motion.button
             key={item.id}
+            initial={{ opacity: 0, x: -12 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.2, delay: index * 0.03, ease: 'easeOut' }}
             onClick={() => handleNavigate(item.id)}
             className={cn(
               'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all duration-200 font-medium group',
               currentPage === item.id
-                ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20 scale-[1.02]'
-                : 'hover:bg-primary/10 text-foreground hover:text-primary hover:scale-[1.01]'
+                ? 'bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 shadow-sm shadow-blue-500/5 scale-[1.02]'
+                : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-foreground hover:text-blue-600 dark:hover:text-blue-400 hover:scale-[1.01]'
             )}
           >
             <div className={cn(
@@ -935,8 +999,11 @@ function POSDashboard() {
             )}>
               {item.icon}
             </div>
-            <span className="font-medium tracking-tight">{t(item.id as any)}</span>
-          </button>
+            <span className="font-medium tracking-tight text-sm truncate flex-1">{t(item.id as any)}</span>
+            {currentPage === item.id && (
+              <ChevronRight className="w-4 h-4 opacity-60" />
+            )}
+          </motion.button>
         ))}
       </div>
 
@@ -994,7 +1061,7 @@ function POSDashboard() {
                   </div>
                 </div>
               ) : (
-                <ProductGrid />
+                <ProductGrid searchFocusKey={searchFocusKey} />
               )}
             </div>
 
@@ -1096,6 +1163,10 @@ function POSDashboard() {
         return <ProductStatistics onBack={() => setCurrentPage('stock')} />;
       case 'parties':
         return <PartiesManagement />;
+      case 'due-collection':
+        return <DueCollection />;
+      case 'purchase-orders':
+        return <PurchaseOrderManagement />;
       case 'reports':
         return <Reports onNavigate={handleNavigate} />;
       case 'transactions':
@@ -1117,7 +1188,7 @@ function POSDashboard() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               {filteredNavItems
-                .filter((item) => ['reports', 'settings', 'parties', 'users', 'transactions', 'expenses', 'audit'].includes(item.id))
+                .filter((item) => ['reports', 'settings', 'parties', 'users', 'transactions', 'expenses', 'audit', 'due-collection', 'purchase-orders'].includes(item.id))
                 .map((item) => (
                   <button
                     key={item.id}
@@ -1147,6 +1218,15 @@ function POSDashboard() {
 
   return (
     <div className="h-dvh w-full overflow-hidden flex flex-col lg:flex-row bg-slate-100/50 dark:bg-background">
+      <KeyboardShortcuts
+        activePage={currentPage}
+        setActivePage={setCurrentPage}
+        onCheckout={handleOpenCheckout}
+        onNewBill={handleNewBill}
+        onSearch={handleSearchFocus}
+        onAddProduct={handleAddProduct}
+        onBarcodeScan={handleOpenMobileScanner}
+      />
       {/* Desktop Sidebar */}
       <aside className="hidden lg:block w-64 border-r border-border/50 bg-card shrink-0 no-print shadow-xs z-10 transition-all duration-300">
         {renderSidebar()}
@@ -1167,59 +1247,166 @@ function POSDashboard() {
               </div>
             </div>
 
-            {/* Page indicator for non-billing pages */}
-            {currentPage !== 'billing' && (
-              <Badge variant="secondary" className="text-xs shadow-sm">
-                {currentPage === 'menu' ? 'Menu' : navItems.find(n => n.id === currentPage)?.label}
-              </Badge>
-            )}
+            {/* Page indicator & Bell for non-billing pages */}
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="icon" onClick={toggleTheme} className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-primary/10">
+                {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              </Button>
+              <Button variant="ghost" size="icon" onClick={toggleLanguage} className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-primary/10">
+                <Languages className="h-4 w-4" />
+              </Button>
+              <NotificationBell variant="mobile" />
+              {currentPage !== 'billing' && (
+                <Badge variant="secondary" className="text-xs shadow-sm">
+                  {currentPage === 'menu' ? 'Menu' : navItems.find(n => n.id === currentPage)?.label}
+                </Badge>
+              )}
+            </div>
           </div>
         </header>
 
         {/* Page Content */}
         <main className="flex-1 flex flex-col min-h-0 overflow-hidden bg-background pb-16 lg:rounded-tl-2xl lg:shadow-[-4px_0_24px_-12px_rgba(0,0,0,0.1)] lg:border-t lg:border-l lg:border-border/50">
-          {renderPageContent()}
+          <AnimatePresence mode="wait">
+            {!['transactions', 'users', 'audit'].includes(currentPage) && (
+              <motion.div
+                key={currentPage}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.2, ease: 'easeInOut' }}
+                className="flex-1 flex flex-col min-h-0 min-w-0"
+              >
+                {renderPageContent()}
+              </motion.div>
+            )}
+          </AnimatePresence>
           {(currentPage === 'transactions' || isTransactionsPageMounted) && (
-            <div className={currentPage === 'transactions' ? 'flex-1 min-h-0' : 'hidden'}>
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: currentPage === 'transactions' ? 1 : 0, y: currentPage === 'transactions' ? 0 : 8 }}
+              transition={{ duration: 0.2, ease: 'easeInOut' }}
+              className={cn("flex-1 min-h-0", currentPage !== 'transactions' && "hidden")}
+            >
               <TransactionHistory />
-            </div>
+            </motion.div>
           )}
           {(currentPage === 'users' || isUsersPageMounted) && (
-            <div className={currentPage === 'users' ? 'flex-1 min-h-0' : 'hidden'}>
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: currentPage === 'users' ? 1 : 0, y: currentPage === 'users' ? 0 : 8 }}
+              transition={{ duration: 0.2, ease: 'easeInOut' }}
+              className={cn("flex-1 min-h-0", currentPage !== 'users' && "hidden")}
+            >
               <UsersManagement />
-            </div>
+            </motion.div>
           )}
           {(currentPage === 'audit' || isAuditPageMounted) && (
-            <div className={currentPage === 'audit' ? 'flex-1 min-h-0' : 'hidden'}>
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: currentPage === 'audit' ? 1 : 0, y: currentPage === 'audit' ? 0 : 8 }}
+              transition={{ duration: 0.2, ease: 'easeInOut' }}
+              className={cn("flex-1 min-h-0", currentPage !== 'audit' && "hidden")}
+            >
               <AuditLogs />
-            </div>
+            </motion.div>
           )}
         </main>
       {/* Mobile Bottom Navigation */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 border-t border-border/60 bg-card/95 backdrop-blur-sm py-1 px-2 bottom-nav">
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 border-t border-border/60 bg-card/95 backdrop-blur-sm py-1 px-2 bottom-nav pb-safe">
         <div className="flex items-center justify-between gap-1">
-          {mobileBottomNavItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => {
-                if (item.id === 'menu') {
-                  setCurrentPage('menu');
-                } else {
-                  setCurrentPage(item.id as PageType);
-                }
-              }}
-              className={cn(
-                'flex flex-col items-center justify-center flex-1 py-1 rounded-lg text-xs text-muted-foreground hover:bg-primary/10 hover:text-primary transition',
-                currentPage === item.id ? 'bg-primary/10 text-primary font-semibold' : ''
-              )}
-              aria-label={t(item.id as any)}
-            >
-              {item.icon}
-              <span className="mt-0.5 text-[10px] leading-none">{t(item.id as any)}</span>
-            </button>
-          ))}
+          {mobileBottomNavItems.map((item) => {
+            const isActive = item.id === 'cart' 
+              ? (currentPage === 'billing' && cartItemCount > 0)
+              : item.id === 'more'
+                ? filteredMoreMenuItems.some(nav => nav.id === currentPage)
+                : currentPage === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => {
+                  if (item.id === 'cart') {
+                    if (cartItemCount > 0) setMobileCartOpen(true);
+                    else setCurrentPage('billing');
+                  } else if (item.id === 'more') {
+                    setMoreMenuOpen(true);
+                  } else {
+                    setCurrentPage(item.id as PageType);
+                  }
+                }}
+                className={cn(
+                  'flex flex-col items-center justify-center flex-1 py-1 rounded-lg text-xs text-muted-foreground hover:bg-primary/10 hover:text-primary transition',
+                  isActive ? 'bg-primary/10 text-primary font-semibold' : ''
+                )}
+                aria-label={t(item.id as any)}
+              >
+                <div className="relative">
+                  {item.icon}
+                  {item.id === 'cart' && cartItemCount > 0 && (
+                    <Badge className="absolute -top-1.5 -right-2 h-4 min-w-4 p-0 flex items-center justify-center text-[8px] text-white bg-red-500 border border-white dark:border-card animate-pulse">
+                      {cartItemCount}
+                    </Badge>
+                  )}
+                </div>
+                <span className="mt-0.5 text-[10px] leading-none">{t(item.id as any)}</span>
+              </button>
+            );
+          })}
         </div>
       </nav>
+
+      {/* Mobile Cart Sheet */}
+      <Sheet open={mobileCartOpen} onOpenChange={setMobileCartOpen}>
+        <SheetContent side="bottom" className="h-[85vh] rounded-t-2xl p-0 overflow-hidden">
+          <SheetHeader className="px-4 py-2 border-b">
+            <SheetTitle className="text-sm font-semibold">{t('cart_nav')}</SheetTitle>
+          </SheetHeader>
+          <div className="h-full pb-10">
+            <CartPanel onCheckout={() => { setMobileCartOpen(false); handleOpenCheckout(); }} customers={customers} onScan={handleOpenMobileScanner} />
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* More Menu Bottom Sheet */}
+      <Sheet open={moreMenuOpen} onOpenChange={setMoreMenuOpen}>
+        <SheetContent side="bottom" className="rounded-t-2xl p-0 max-h-[70vh] overflow-hidden">
+          <SheetHeader className="px-4 pt-4 pb-2 border-b">
+            <SheetTitle className="text-base font-semibold">{t('more')}</SheetTitle>
+          </SheetHeader>
+          <div className="p-4 overflow-y-auto max-h-[55vh]">
+            <div className="grid grid-cols-4 gap-3">
+              {filteredMoreMenuItems.map((item) => {
+                const isActive = currentPage === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    className={cn(
+                      "flex flex-col items-center gap-1.5 p-2 rounded-xl transition-all duration-200",
+                      isActive
+                        ? "bg-primary/10 text-primary"
+                        : "hover:bg-muted text-muted-foreground hover:text-foreground"
+                    )}
+                    onClick={() => {
+                      setCurrentPage(item.id);
+                      setMoreMenuOpen(false);
+                    }}
+                  >
+                    <div className={cn(
+                      "h-10 w-10 rounded-full flex items-center justify-center",
+                      isActive ? "bg-primary/20" : "bg-muted/50"
+                    )}>
+                      {item.icon}
+                    </div>
+                    <span className="text-[10px] font-medium leading-tight text-center truncate w-full">
+                      {t(item.id as any)}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* Mobile Scanner Dialog */}
       <CameraScannerDialog

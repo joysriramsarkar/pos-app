@@ -6,6 +6,7 @@ import { BarcodeScanner, BarcodeFormat } from '@capacitor-mlkit/barcode-scanning
 import { convertBengaliToEnglishNumerals, isValidEanUpcBarcode } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { CheckCircle2, X, AlertCircle } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 
 interface ScannedPreviewItem {
   name: string;
@@ -31,6 +32,8 @@ export function CameraScannerDialog({
   scannedItems = [],
   liveExternalError = null,
 }: CameraScannerDialogProps) {
+  const tBilling = useTranslations('Billing');
+  const tCommon = useTranslations('Common');
   const [localError, setLocalError] = useState<string | null>(null);
   const displayError = liveExternalError || localError;
   const listenerRef = useRef<{ remove: () => Promise<void> } | null>(null);
@@ -63,7 +66,7 @@ export function CameraScannerDialog({
     const startScanner = async () => {
       const { camera } = await BarcodeScanner.requestPermissions();
       if (camera !== 'granted') {
-        setLocalError('ক্যামেরার পারমিশন ছাড়া স্ক্যান সম্ভব নয়!');
+        setLocalError(tBilling('camera_permission_required'));
         return;
       }
 
@@ -88,7 +91,7 @@ export function CameraScannerDialog({
             if (navigator?.vibrate) navigator.vibrate(50);
             if (singleScan) stopScanner().then(() => onOpenChange(false));
           } else {
-            setLocalError('অবৈধ বারকোড: ' + normalized);
+            setLocalError(tBilling('invalid_barcode', { barcode: normalized }));
           }
         }
       );
@@ -107,10 +110,10 @@ export function CameraScannerDialog({
       });
     };
 
-    startScanner().catch((err) => setLocalError('Scanner error: ' + err?.message));
+    startScanner().catch((err) => setLocalError(tBilling('scanner_error', { error: err?.message || '' })));
 
     return () => { stopScanner(); };
-  }, [open]);
+  }, [open, tBilling, isAndroidApp, onBarcodeScanned, onOpenChange, singleScan, stopScanner]);
 
   if (!open || !isAndroidApp) return null;
 
@@ -134,7 +137,7 @@ export function CameraScannerDialog({
             <span className="text-center">{displayError}</span>
           </div>
         ) : (
-          <p className="text-white/70 text-sm text-center">বারকোড ফ্রেমের মধ্যে ধরুন</p>
+          <p className="text-white/70 text-sm text-center">{tBilling('scan_barcode_desc')}</p>
         )}
 
         {!singleScan && scannedItems.length > 0 && (
@@ -158,7 +161,7 @@ export function CameraScannerDialog({
             className="w-full bg-white/10 border-white/30 text-white hover:bg-white/20"
           >
             <X className="w-4 h-4 mr-2" />
-            Done ({scannedItems.reduce((s, i) => s + i.qty, 0)} scanned)
+            {tBilling('done_scanned', { count: scannedItems.reduce((s, i) => s + i.qty, 0) })}
           </Button>
         )}
         {singleScan && (
@@ -168,7 +171,7 @@ export function CameraScannerDialog({
             className="w-full bg-white/10 border-white/30 text-white hover:bg-white/20"
           >
             <X className="w-4 h-4 mr-2" />
-            Cancel
+            {tCommon('cancel')}
           </Button>
         )}
       </div>

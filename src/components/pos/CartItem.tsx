@@ -8,6 +8,7 @@ import { useCartStore, useQuantityUsageStore } from '@/stores/pos-store';
 import { cn, convertBengaliToEnglishNumerals } from '@/lib/utils';
 import Decimal from 'decimal.js';
 import { useNumberFormat } from '@/hooks/use-number-format';
+import { useTranslations } from 'next-intl';
 
 const EMPTY_USAGE: Record<number, number> = {};
 
@@ -21,6 +22,7 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
   const removeItem = useCartStore((state) => state.removeItem);
   const itemRef = useRef<HTMLDivElement>(null);
   const { formatPrice } = useNumberFormat();
+  const t = useTranslations('Cart');
 
   // Scroll into view and highlight when newly added
   useEffect(() => {
@@ -230,7 +232,7 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
           {/* Stock Warning */}
           {isOverStock && (
             <Badge variant="destructive" className="text-xs">
-              Only {item.availableStock} in stock
+              {t('only_stock', { stock: item.availableStock })}
             </Badge>
           )}
 

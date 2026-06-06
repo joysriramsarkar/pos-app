@@ -28,9 +28,12 @@ import {
 } from 'lucide-react';
 import type { PaymentMethod, Sale, Customer } from '@/types/pos';
 import { useCartStore, useUIStore, useProductsStore, useCustomersStore } from '@/stores/pos-store';
+import { useSettingsStore } from '@/stores/settings-store';
+import { useTranslations } from 'next-intl';
 import { cn, convertBengaliToEnglishNumerals } from '@/lib/utils';
 import { toMoneyNumber } from '@/lib/money';
 import { DebtRepaymentDialog } from './DebtRepaymentDialog';
+import ReceiptPrint from './ReceiptPrint';
 
 interface CheckoutDialogProps {
   open?: boolean;
@@ -78,6 +81,10 @@ export function CheckoutDialog({
   const [isLocalProcessing, setIsLocalProcessing] = useState(false);
 
   const prevOpenRef = useRef(false);
+
+  const t = useTranslations('Checkout');
+  const tc = useTranslations('Common');
+  const currencySymbol = useSettingsStore((state) => state.settings.currency_symbol);
 
   const isCurrentlyProcessing = isProcessing || isLocalProcessing;
   const showSuccess = !!completedSale && !isCurrentlyProcessing;
@@ -248,7 +255,7 @@ export function CheckoutDialog({
 
   const handleComplete = useCallback(async () => {
     if (paymentMethod !== 'Due' && parsedAmount < remainingTotal && !customerId) {
-      setInputError(`Insufficient amount. Need ${formatPrice(remainingTotal - parsedAmount)} more or select a customer for partial payment.`);
+      setInputError(t('insufficient_amount', { amount: formatPrice(remainingTotal - parsedAmount) }));
       return;
     }
 
@@ -257,7 +264,7 @@ export function CheckoutDialog({
     for (const cartItem of items) {
       const product = productMap.get(cartItem.productId);
       if (!product) {
-        setInputError(`Product "${cartItem.productName}" no longer exists.`);
+        setInputError(t('product_no_longer_exists', { name: cartItem.productName }));
         return;
       }
       if (cartItem.quantity > product.currentStock) {
@@ -271,9 +278,9 @@ export function CheckoutDialog({
 
     if (insufficientStockItems.length > 0) {
       const itemsText = insufficientStockItems
-        .map((item) => `${item.name} (Need: ${item.qty}, Available: ${item.available})`)
+        .map((item) => `${item.name} (${t('need')}: ${item.qty}, ${t('available')}: ${item.available})`)
         .join('\n');
-      setInputError(`Insufficient stock for:\n${itemsText}`);
+      setInputError(`${t('insufficient_stock')}\n${itemsText}`);
       return;
     }
 
@@ -342,12 +349,12 @@ export function CheckoutDialog({
     addAsPrePayment,
   ]);
 
+  const [showReceiptPrint, setShowReceiptPrint] = useState(false);
   const handlePrint = useCallback(() => {
     if (lastSale) {
-      setCurrentSale(lastSale);
-      setPrintDialogOpen(true);
+      setShowReceiptPrint(true);
     }
-  }, [lastSale, setCurrentSale, setPrintDialogOpen]);
+  }, [lastSale]);
 
   const paymentMethodIcon = useMemo(() => {
     const finalPaymentMethod = remainingTotal === 0 ? 'Prepaid' : paymentMethod;
@@ -368,219 +375,251 @@ export function CheckoutDialog({
     : change;
 
   return (
-    <Dialog open={isOpen} onOpenChange={isCurrentlyProcessing ? () => {} : handleOpenChange}>
-      <DialogContent className="sm:max-w-106.25 flex flex-col max-h-[90dvh] md:max-h-[85vh] p-0 overflow-hidden" onInteractOutside={isCurrentlyProcessing ? (e) => e.preventDefault() : undefined}>
-        {isCurrentlyProcessing && (
-          <div className="flex flex-col items-center py-16 gap-4">
-            <span className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-            <p className="text-muted-foreground font-medium">Processing sale...</p>
-          </div>
-        )}
-        {showSuccess && (
-          <div className="flex flex-col items-center py-6 px-6">
-            <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mb-4">
-              <CheckCircle2 className="w-8 h-8 text-green-600" />
+    <>
+      <Dialog open={isOpen} onOpenChange={isCurrentlyProcessing ? () => {} : handleOpenChange}>
+        <DialogContent className="sm:max-w-106.25 flex flex-col max-h-[90dvh] md:max-h-[85vh] p-0 overflow-hidden" onInteractOutside={isCurrentlyProcessing ? (e) => e.preventDefault() : undefined}>
+          {isCurrentlyProcessing && (
+            <div className="flex flex-col items-center py-16 gap-4">
+              <span className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+              <p className="text-muted-foreground font-medium">{t('processing')}</p>
             </div>
-            <h2 className="text-xl font-semibold mb-2">Payment Successful!</h2>
-            <p className="text-muted-foreground text-center">Sale completed for {formatPrice(displayedTotal)}</p>
-            {(displayedPaymentMethod === 'Cash' || displayedPaymentMethod === 'Mixed') && displayedChange > 0 && (
-              <div className="mt-4 p-4 bg-muted rounded-lg w-full text-center">
-                <p className="text-sm text-muted-foreground">Change to return</p>
-                <p className="text-2xl font-bold text-primary">{formatPrice(displayedChange)}</p>
+          )}
+          {showSuccess && (
+            <div className="flex flex-col items-center py-6 px-6">
+              <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mb-4">
+                <CheckCircle2 className="w-8 h-8 text-green-600" />
+              </div>
+              <h2 className="text-xl font-semibold mb-2">{t('payment_successful')}</h2>
+              <p className="text-muted-foreground text-center">{t('sale_completed', { amount: formatPrice(displayedTotal) })}</p>
+              {(displayedPaymentMethod === 'Cash' || displayedPaymentMethod === 'Mixed') && displayedChange > 0 && (
+                <div className="mt-4 p-4 bg-muted rounded-lg w-full text-center">
+                  <p className="text-sm text-muted-foreground">{t('change_to_return')}</p>
+                  <p className="text-2xl font-bold text-primary">{formatPrice(displayedChange)}</p>
+                </div>
+              )}
+              <div className="flex gap-3 mt-6 w-full">
+                <Button variant="outline" className="flex-1" onClick={handlePrint}>
+                  <Printer className="w-4 h-4 mr-2" />{t('print')}
+                </Button>
+                <Button className="flex-1 bg-blue-600 text-white hover:bg-blue-700" onClick={handleClose}>
+                  <Receipt className="w-4 h-4 mr-2" />{t('new_sale')}
+                </Button>
+              </div>
+            </div>
+          )}
+          {!isCurrentlyProcessing && !showSuccess && (<>
+          <DialogHeader className="px-6 pt-6 pb-4 flex-none border-b">
+            <DialogTitle className="flex items-center gap-2">
+              <Calculator className="w-5 h-5" />
+              {t('title')}
+            </DialogTitle>
+            <DialogDescription>{t('review_order')}</DialogDescription>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto min-h-0 px-6 py-4 space-y-4">
+            {displayedCustomerName && (
+              <div className="flex items-center flex-wrap gap-1.5 text-sm bg-muted p-2 rounded-lg w-full overflow-hidden">
+                <Badge variant="secondary" className="max-w-full truncate">{displayedCustomerName}</Badge>
+                {paymentMethod === 'Due' && <Badge variant="outline" className="text-amber-600 shrink-0">{t('due_payment_label')}</Badge>}
               </div>
             )}
-            <div className="flex gap-3 mt-6 w-full">
-              <Button variant="outline" className="flex-1" onClick={handlePrint}>
-                <Printer className="w-4 h-4 mr-2" />Print
-              </Button>
-              <Button className="flex-1 bg-blue-600 text-white hover:bg-blue-700" onClick={handleClose}>
-                <Receipt className="w-4 h-4 mr-2" />New Sale
-              </Button>
-            </div>
-          </div>
-        )}
-        {!isCurrentlyProcessing && !showSuccess && (<>
-        <DialogHeader className="px-6 pt-6 pb-4 flex-none border-b">
-          <DialogTitle className="flex items-center gap-2">
-            <Calculator className="w-5 h-5" />
-            Checkout
-          </DialogTitle>
-          <DialogDescription>Review your order and complete payment</DialogDescription>
-        </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto min-h-0 px-6 py-4 space-y-4">
-          {displayedCustomerName && (
-            <div className="flex items-center flex-wrap gap-1.5 text-sm bg-muted p-2 rounded-lg w-full overflow-hidden">
-              <Badge variant="secondary" className="max-w-full truncate">{displayedCustomerName}</Badge>
-              {paymentMethod === 'Due' && <Badge variant="outline" className="text-amber-600 shrink-0">Due Payment</Badge>}
-            </div>
-          )}
-
-          <div className="space-y-2">
-            {items.map((item) => (
-              <div key={item.id} className="flex justify-between text-sm">
-                <span className="truncate flex-1">{item.productName}<span className="text-muted-foreground ml-1">×{item.quantity}{item.unit ? ` ${item.unit}` : ''}</span></span>
-                <span className="font-medium ml-2">{formatPrice(item.totalPrice)}</span>
-              </div>
-            ))}
-          </div>
-
-          <div className="space-y-1.5 border-t pt-4">
-            <div className="flex justify-between text-sm"><span className="text-muted-foreground">Subtotal</span><span>{formatPrice(subtotal)}</span></div>
-            {discount > 0 && <div className="flex justify-between text-sm text-green-600"><span>Discount</span><span>-{formatPrice(discount)}</span></div>}
-            {tax > 0 && <div className="flex justify-between text-sm"><span className="text-muted-foreground">Tax</span><span>{formatPrice(tax)}</span></div>}
-            <Separator className="my-2" />
-            <div className="flex justify-between font-semibold text-lg"><span>Total</span><span className="text-primary">{formatPrice(total)}</span></div>
-          </div>
-
-          {customer && toMoneyNumber(customer.prepaidBalance) > 0 && (
-            <div className="p-3 bg-green-50 border border-green-200 rounded-lg space-y-2">
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label htmlFor="use-prepaid" className="font-medium flex items-center gap-2">
-                    <Wallet className="w-5 h-5 text-green-600" />
-                    Use Prepaid Balance
-                  </Label>
-                  <p className="text-xs text-muted-foreground">Available: {formatPrice(customer.prepaidBalance)}</p>
+            <div className="space-y-2">
+              {items.map((item) => (
+                <div key={item.id} className="flex justify-between text-sm">
+                  <span className="truncate flex-1">{item.productName}<span className="text-muted-foreground ml-1">×{item.quantity}{item.unit ? ` ${item.unit}` : ''}</span></span>
+                  <span className="font-medium ml-2">{formatPrice(item.totalPrice)}</span>
                 </div>
-                <Switch id="use-prepaid" checked={usePrepaid} onCheckedChange={setUsePrepaid} />
+              ))}
+            </div>
+
+            <div className="space-y-1.5 border-t pt-4">
+              <div className="flex justify-between text-sm"><span className="text-muted-foreground">{t('subtotal')}</span><span>{formatPrice(subtotal)}</span></div>
+              {discount > 0 && <div className="flex justify-between text-sm text-green-600"><span>{t('discount')}</span><span>-{formatPrice(discount)}</span></div>}
+              {tax > 0 && <div className="flex justify-between text-sm"><span className="text-muted-foreground">{t('tax')}</span><span>{formatPrice(tax)}</span></div>}
+              <Separator className="my-2" />
+              <div className="flex justify-between font-semibold text-lg"><span>{t('total')}</span><span className="text-primary">{formatPrice(total)}</span></div>
+            </div>
+
+            {customer && toMoneyNumber(customer.prepaidBalance) > 0 && (
+              <div className="p-3 bg-green-50 border border-green-200 rounded-lg space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label htmlFor="use-prepaid" className="font-medium flex items-center gap-2">
+                       <Wallet className="w-5 h-5 text-green-600" />
+                       {t('use_prepaid')}
+                    </Label>
+                    <p className="text-xs text-muted-foreground">{t('available')}: {formatPrice(customer.prepaidBalance)}</p>
+                  </div>
+                  <Switch id="use-prepaid" checked={usePrepaid} onCheckedChange={setUsePrepaid} />
+                </div>
+                {usePrepaid && (
+                  <p className="text-sm text-green-700 font-medium text-center pt-1">
+                    {t('prepaid_applied', { amount: formatPrice(prepaidAmountToUse) })}
+                  </p>
+                )}
               </div>
-              {usePrepaid && (
-                <p className="text-sm text-green-700 font-medium text-center pt-1">
-                  Applying {formatPrice(prepaidAmountToUse)} from balance.
+            )}
+
+            <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+              <span className="text-sm font-medium">{t('payment_method')}</span>
+              <Badge variant="secondary" className="gap-1 px-2 py-1">
+                {paymentMethodIcon}
+                {remainingTotal === 0 ? t('prepaid') : (
+                  paymentMethod === 'Cash' ? t('cash') :
+                  paymentMethod === 'UPI' ? t('upi') :
+                  paymentMethod === 'Mixed' ? t('mixed_payment') :
+                  paymentMethod === 'Due' ? t('due') : paymentMethod
+                )}
+              </Badge>
+            </div>
+
+            {remainingTotal > 0 && paymentMethod !== 'Due' && (
+              <div className="space-y-3">
+                <Label htmlFor="amount-received">{t('amount_to_pay')}</Label>
+
+                {paymentMethod === 'Mixed' ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label className="text-xs">{t('cash')}</Label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">{currencySymbol}</span>
+                        <Input
+                          id="cash-received"
+                          type="text"
+                          inputMode="numeric"
+                          value={cashReceived}
+                          onChange={handleCashChange}
+                          placeholder="0"
+                          className="pl-8 text-xl h-12 font-semibold text-right"
+                          disabled={isProcessing}
+                          readOnly
+                          onFocus={e => e.currentTarget.removeAttribute('readonly')}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="text-xs">{t('upi')}</Label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">{currencySymbol}</span>
+                        <Input
+                          id="upi-received"
+                          type="text"
+                          inputMode="numeric"
+                          value={upiReceived}
+                          onChange={handleUpiChange}
+                          placeholder="0"
+                          className="pl-8 text-xl h-12 font-semibold text-right"
+                          disabled={isProcessing}
+                          readOnly
+                          onFocus={e => e.currentTarget.removeAttribute('readonly')}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">{currencySymbol}</span>
+                    <Input
+                      id="amount-received"
+                      type="text"
+                      inputMode="numeric"
+                      value={amountReceived}
+                      onChange={handleAmountChange}
+                      placeholder="0"
+                      className="pl-8 text-xl h-12 font-semibold text-right"
+                      disabled={isProcessing}
+                      readOnly
+                      onFocus={e => e.currentTarget.removeAttribute('readonly')}
+                    />
+                  </div>
+                )}
+
+                <div className="grid grid-cols-3 gap-2">
+                  {QUICK_AMOUNTS.map((amount) => (
+                    <Button key={amount} variant="outline" size="sm" onClick={() => handleQuickAmount(amount)} disabled={isProcessing} className="h-9">{currencySymbol}{amount}</Button>
+                  ))}
+                </div>
+
+                {parsedAmount > 0 && (
+                  <div className={cn('p-3 rounded-lg text-center', change >= 0 ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700')}>
+                    {change >= 0 ? (
+                      <><p className="text-sm">{t('change')}</p><p className="text-xl font-bold">{formatPrice(change)}</p></>
+                    ) : (
+                      <><p className="text-sm flex items-center justify-center gap-1"><AlertCircle className="w-4 h-4" />{t('balance_due')}</p><p className="text-xl font-bold">{formatPrice(Math.abs(change))}</p></>
+                    )}
+                  </div>
+                )}
+
+                {change > 0 && customerId && (
+                  <div className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <Label htmlFor="add-prepayment" className="font-medium flex items-center gap-2 cursor-pointer">
+                      <Wallet className="w-4 h-4 text-blue-600" />
+                      <span className="text-sm">{t('add_as_prepayment', { amount: formatPrice(change) })}</span>
+                    </Label>
+                    <Switch id="add-prepayment" checked={addAsPrePayment} onCheckedChange={setAddAsPrePayment} />
+                  </div>
+                )}
+
+                {change > 0 && !customerId && (
+                  <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-center">
+                    <p className="text-sm text-green-700 font-medium">{t('return_to_customer', { amount: formatPrice(change) })}</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {inputError && <p className="text-sm text-destructive flex items-center gap-1"><AlertCircle className="w-4 h-4" />{inputError}</p>}
+
+            {paymentMethod === 'Due' && remainingTotal > 0 && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <p className="text-sm text-amber-700 flex items-center gap-2">
+                  <Clock className="w-4 h-4" />
+                  {t('due_balance_info', { amount: formatPrice(remainingTotal) })}
                 </p>
-              )}
-            </div>
-          )}
-
-          <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-            <span className="text-sm font-medium">Payment Method</span>
-            <Badge variant="secondary" className="gap-1 px-2 py-1">
-              {paymentMethodIcon}
-              {remainingTotal === 0 ? 'Prepaid' : paymentMethod}
-            </Badge>
+              </div>
+            )}
           </div>
 
-          {remainingTotal > 0 && paymentMethod !== 'Due' && (
-            <div className="space-y-3">
-              <Label htmlFor="amount-received">Amount to Pay</Label>
-
-              {paymentMethod === 'Mixed' ? (
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <Label className="text-xs">Cash</Label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">₹</span>
-                      <Input
-                        id="cash-received"
-                        type="text"
-                        inputMode="numeric"
-                        value={cashReceived}
-                        onChange={handleCashChange}
-                        placeholder="0"
-                        className="pl-8 text-xl h-12 font-semibold text-right"
-                        disabled={isProcessing}
-                        readOnly
-                        onFocus={e => e.currentTarget.removeAttribute('readonly')}
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <Label className="text-xs">UPI</Label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">₹</span>
-                      <Input
-                        id="upi-received"
-                        type="text"
-                        inputMode="numeric"
-                        value={upiReceived}
-                        onChange={handleUpiChange}
-                        placeholder="0"
-                        className="pl-8 text-xl h-12 font-semibold text-right"
-                        disabled={isProcessing}
-                        readOnly
-                        onFocus={e => e.currentTarget.removeAttribute('readonly')}
-                      />
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">₹</span>
-                  <Input
-                    id="amount-received"
-                    type="text"
-                    inputMode="numeric"
-                    value={amountReceived}
-                    onChange={handleAmountChange}
-                    placeholder="0"
-                    className="pl-8 text-xl h-12 font-semibold text-right"
-                    disabled={isProcessing}
-                    readOnly
-                    onFocus={e => e.currentTarget.removeAttribute('readonly')}
-                  />
-                </div>
-              )}
-
-              <div className="grid grid-cols-3 gap-2">
-                {QUICK_AMOUNTS.map((amount) => (
-                  <Button key={amount} variant="outline" size="sm" onClick={() => handleQuickAmount(amount)} disabled={isProcessing} className="h-9">₹{amount}</Button>
-                ))}
-              </div>
-
-              {parsedAmount > 0 && (
-                <div className={cn('p-3 rounded-lg text-center', change >= 0 ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700')}>
-                  {change >= 0 ? (
-                    <><p className="text-sm">Change</p><p className="text-xl font-bold">{formatPrice(change)}</p></>
-                  ) : (
-                    <><p className="text-sm flex items-center justify-center gap-1"><AlertCircle className="w-4 h-4" />Balance Due</p><p className="text-xl font-bold">{formatPrice(Math.abs(change))}</p></>
-                  )}
-                </div>
-              )}
-
-              {change > 0 && customerId && (
-                <div className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                  <Label htmlFor="add-prepayment" className="font-medium flex items-center gap-2 cursor-pointer">
-                    <Wallet className="w-4 h-4 text-blue-600" />
-                    <span className="text-sm">Add {formatPrice(change)} as prepayment?</span>
-                  </Label>
-                  <Switch id="add-prepayment" checked={addAsPrePayment} onCheckedChange={setAddAsPrePayment} />
-                </div>
-              )}
-
-              {change > 0 && !customerId && (
-                <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-center">
-                  <p className="text-sm text-green-700 font-medium">Return {formatPrice(change)} to customer</p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {inputError && <p className="text-sm text-destructive flex items-center gap-1"><AlertCircle className="w-4 h-4" />{inputError}</p>}
-
-          {paymentMethod === 'Due' && remainingTotal > 0 && (
-            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
-              <p className="text-sm text-amber-700 flex items-center gap-2">
-                <Clock className="w-4 h-4" />
-                {formatPrice(remainingTotal)} will be added to customer's due balance.
-              </p>
-            </div>
-          )}
-        </div>
-
-        <DialogFooter className="px-6 pb-6 pt-4 flex-none border-t bg-background gap-2 sm:gap-0">
-          <Button variant="outline" onClick={() => handleOpenChange(false)}>Cancel</Button>
-          <Button
-            onClick={handleComplete}
-            disabled={!isValidPayment}
-            className="min-w-30 bg-blue-600 text-white hover:bg-blue-700"
-          >
-            <CheckCircle2 className="w-4 h-4 mr-2" />Complete Sale
-          </Button>
-        </DialogFooter>
-        </>)}
-      </DialogContent>
-    </Dialog>
+          <DialogFooter className="px-6 pb-6 pt-4 flex-none border-t bg-background gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => handleOpenChange(false)}>{tc('cancel')}</Button>
+            <Button
+              onClick={handleComplete}
+              disabled={!isValidPayment}
+              className="min-w-30 bg-blue-600 text-white hover:bg-blue-700"
+            >
+              <CheckCircle2 className="w-4 h-4 mr-2" />{t('complete_sale')}
+            </Button>
+          </DialogFooter>
+          </>)}
+        </DialogContent>
+      </Dialog>
+      {lastSale && (
+        <ReceiptPrint
+          open={showReceiptPrint}
+          onOpenChange={setShowReceiptPrint}
+          saleData={{
+            invoiceNumber: lastSale.invoiceNumber,
+            createdAt: lastSale.createdAt instanceof Date ? lastSale.createdAt.toISOString() : String(lastSale.createdAt),
+            customerName: displayedCustomerName || null,
+            items: lastSale.items.map(item => ({
+              productName: item.productName,
+              quantity: Number(item.quantity ?? 0),
+              unitPrice: Number(item.unitPrice),
+              totalPrice: Number(item.totalPrice),
+              unit: String((item as any).unit || 'piece'),
+            })),
+            subtotal: Number(lastSale.subtotal),
+            discount: Number(lastSale.discount),
+            tax: Number(lastSale.tax),
+            totalAmount: Number(lastSale.totalAmount),
+            amountPaid: Number(lastSale.amountPaid),
+            paymentMethod: lastSale.paymentMethod,
+            paymentStatus: lastSale.paymentStatus,
+          }}
+        />
+      )}
+    </>
   );
 }
 

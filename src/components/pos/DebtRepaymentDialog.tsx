@@ -1,6 +1,9 @@
 'use client';
 
 import { useState, useCallback, useMemo } from 'react';
+import { useTranslations } from 'next-intl';
+import { useNumberFormat } from '@/hooks/use-number-format';
+import { useSettingsStore } from '@/stores/settings-store';
 import {
   Dialog,
   DialogContent,
@@ -32,17 +35,13 @@ export function DebtRepaymentDialog({
   customerName,
   onConfirm,
 }: DebtRepaymentDialogProps) {
+  const t = useTranslations('Parties');
+  const tc = useTranslations('Common');
+  const { formatPrice } = useNumberFormat();
+  const currencySymbol = useSettingsStore((state) => state.settings.currency_symbol);
+
   const [repaymentAmount, setRepaymentAmount] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
-
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
-    }).format(price);
-  };
 
   const maxRepayment = Math.min(excessAmount, debtAmount);
 
@@ -61,19 +60,19 @@ export function DebtRepaymentDialog({
 
   const handleConfirm = useCallback(() => {
     if (repaymentAmount === '') {
-      setError('Please enter an amount');
+      setError(t('repay_enter_amount'));
       return;
     }
 
     const amount = parseFloat(repaymentAmount);
 
     if (isNaN(amount) || amount <= 0) {
-      setError('Please enter a valid amount');
+      setError(t('repay_invalid_amount'));
       return;
     }
 
     if (amount > maxRepayment) {
-      setError(`Amount cannot exceed ${formatPrice(maxRepayment)}`);
+      setError(t('repay_amount_exceeds', { max: formatPrice(maxRepayment) }));
       return;
     }
 
@@ -81,7 +80,7 @@ export function DebtRepaymentDialog({
     setRepaymentAmount('');
     setError(null);
     onOpenChange(false);
-  }, [repaymentAmount, maxRepayment, onConfirm, onOpenChange]);
+  }, [repaymentAmount, maxRepayment, onConfirm, onOpenChange, t, formatPrice]);
 
   const handleSkip = useCallback(() => {
     setRepaymentAmount('');
@@ -100,28 +99,28 @@ export function DebtRepaymentDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Apply Excess Payment to Debt</DialogTitle>
+          <DialogTitle>{t('debt_repayment')}</DialogTitle>
           <DialogDescription>
-            {customerName} has outstanding debt. Would you like to use the excess payment to repay some of it?
+            {t('debt_repayment_desc', { name: customerName })}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-xs text-muted-foreground mb-1">Outstanding Debt</p>
+              <p className="text-xs text-muted-foreground mb-1">{t('outstanding_debt')}</p>
               <p className="text-lg font-bold text-red-700">{formatPrice(debtAmount)}</p>
             </div>
             <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-              <p className="text-xs text-muted-foreground mb-1">Excess Payment</p>
+              <p className="text-xs text-muted-foreground mb-1">{t('excess_payment')}</p>
               <p className="text-lg font-bold text-green-700">{formatPrice(excessAmount)}</p>
             </div>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="repayment-amount">Amount to Repay</Label>
+            <Label htmlFor="repayment-amount">{t('amount_to_repay')}</Label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">₹</span>
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">{currencySymbol}</span>
               <Input
                 id="repayment-amount"
                 type="text"
@@ -137,7 +136,7 @@ export function DebtRepaymentDialog({
           {parsedAmount > 0 && (
             <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
               <p className="text-sm text-blue-700">
-                Remaining debt after repayment: <span className="font-bold">{formatPrice(remainingDebt)}</span>
+                {t('remaining_debt', { amount: formatPrice(remainingDebt) })}
               </p>
             </div>
           )}
@@ -150,7 +149,7 @@ export function DebtRepaymentDialog({
               disabled={maxRepayment < 1000}
               className="text-xs"
             >
-              ₹1000
+              {currencySymbol}১০০০
             </Button>
             <Button
               variant="outline"
@@ -159,7 +158,7 @@ export function DebtRepaymentDialog({
               disabled={maxRepayment < 5000}
               className="text-xs"
             >
-              ₹5000
+              {currencySymbol}৫০০০
             </Button>
             <Button
               variant="outline"
@@ -167,7 +166,7 @@ export function DebtRepaymentDialog({
               onClick={() => handleQuickAmount(maxRepayment)}
               className="text-xs"
             >
-              All ({formatPrice(maxRepayment)})
+              {t('all_amount', { amount: formatPrice(maxRepayment) })}
             </Button>
           </div>
 
@@ -181,14 +180,14 @@ export function DebtRepaymentDialog({
 
         <DialogFooter className="gap-2 sm:gap-0">
           <Button variant="outline" onClick={handleSkip}>
-            Skip
+            {t('skip')}
           </Button>
           <Button
             onClick={handleConfirm}
             disabled={!repaymentAmount || parsedAmount <= 0}
             className="bg-blue-600 text-white hover:bg-blue-700"
           >
-            Confirm
+            {tc('confirm')}
           </Button>
         </DialogFooter>
       </DialogContent>

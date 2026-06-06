@@ -23,6 +23,7 @@ import { useSettingsStore } from "@/stores/settings-store";
 import { Share2, Printer } from "lucide-react";
 import { shareInvoiceAsPdf } from "@/lib/invoicePdf";
 import { useToast } from '@/hooks/use-toast';
+import { useTranslations } from 'next-intl';
 
 interface PrintDialogProps {
   open: boolean;
@@ -193,6 +194,7 @@ export function PrintDialog({
   const [preparedFile, setPreparedFile] = React.useState<File | null>(null);
   const [isPreparing, setIsPreparing] = React.useState(false);
   const { toast } = useToast();
+  const t = useTranslations("PrintDialog");
 
   const storeConfig = {
     name: settings.store_name || "Lakhan Bhandar",
@@ -320,18 +322,18 @@ export function PrintDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[95vw] md:max-w-4xl max-h-[95dvh] md:max-h-[90vh] overflow-hidden flex flex-col print-dialog-content p-3 md:p-6 w-[calc(100vw-1rem)] mx-auto">
-        <DialogHeader className="no-print">
-          <DialogTitle>Print / Share Invoice</DialogTitle>
+        <DialogHeader className="no-print shrink-0">
+          <DialogTitle>{t('title')}</DialogTitle>
           <DialogDescription>
-            Select format for invoice #{sale.invoiceNumber}
+            {t('select_format')} #{sale.invoiceNumber}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-hidden flex flex-col md:flex-row gap-4">
+        <div className="flex-1 min-h-0 overflow-hidden flex flex-col md:flex-row gap-4">
           {/* Left Side - Options */}
           <div className="w-full md:w-72 shrink-0 space-y-3 no-print overflow-y-auto">
             <div className="space-y-3">
-              <Label className="text-base font-semibold">Print Format</Label>
+              <Label className="text-base font-semibold">{t('print_format')}</Label>
               <RadioGroup
                 value={selectedFormat}
                 onValueChange={(v) => setSelectedFormat(v as PrintFormat)}
@@ -363,10 +365,10 @@ export function PrintDialog({
             <Separator />
 
             <div className="space-y-4">
-              <Label className="text-base font-semibold">Options</Label>
+              <Label className="text-base font-semibold">{t('options')}</Label>
               <div className="flex items-center justify-between">
                 <Label htmlFor="show-logo" className="font-normal">
-                  Show Logo
+                  {t('show_logo')}
                 </Label>
                 <Switch
                   id="show-logo"
@@ -376,7 +378,7 @@ export function PrintDialog({
               </div>
               <div className="flex items-center justify-between">
                 <Label htmlFor="show-gst" className="font-normal">
-                  Show GST Number
+                  {t('show_gst')}
                 </Label>
                 <Switch
                   id="show-gst"
@@ -393,7 +395,7 @@ export function PrintDialog({
                 htmlFor="footer-message"
                 className="text-base font-semibold"
               >
-                Footer Message
+                {t('footer_message')}
               </Label>
               <textarea
                 id="footer-message"
@@ -406,9 +408,9 @@ export function PrintDialog({
 
             {/* Share info */}
             <div className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground space-y-1">
-              <p className="font-medium text-foreground">Share Invoice</p>
-              <p>On mobile: shares PDF via WhatsApp, Telegram, etc.</p>
-              <p>On desktop: downloads the PDF file.</p>
+              <p className="font-medium text-foreground">{t('share_invoice')}</p>
+              <p>{t('share_mobile')}</p>
+              <p>{t('share_desktop')}</p>
             </div>
           </div>
 
@@ -429,9 +431,9 @@ export function PrintDialog({
 
         <Separator className="no-print" />
 
-        <DialogFooter className="gap-2 no-print flex-wrap">
+        <DialogFooter className="gap-2 no-print flex-wrap shrink-0">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t('close')}
           </Button>
           <Button
             variant="outline"
@@ -440,14 +442,14 @@ export function PrintDialog({
             className="gap-2 border-green-500 text-green-600 hover:bg-green-50"
           >
             <Share2 className="w-4 h-4" />
-            {isPreparing ? 'Preparing...' : preparedFile ? (isSharing ? 'Sharing...' : 'Tap to Share') : (isSharing ? 'Sharing...' : 'Share / WhatsApp')}
+            {isPreparing ? t('preparing') : preparedFile ? (isSharing ? t('sharing') : t('tap_to_share')) : (isSharing ? t('sharing') : t('share_whatsapp'))}
           </Button>
           <Button
             onClick={handlePrint}
             className="bg-blue-600 text-white hover:bg-blue-700 gap-2"
           >
             <Printer className="w-4 h-4" />
-            Print Invoice
+            {t('print_invoice')}
           </Button>
         </DialogFooter>
       </DialogContent>

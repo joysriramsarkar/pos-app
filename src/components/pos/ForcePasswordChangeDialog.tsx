@@ -6,8 +6,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useTranslations } from "next-intl";
 
 export function ForcePasswordChangeDialog() {
+  const t = useTranslations("PasswordChange");
   const { data: session } = useSession();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -22,11 +24,11 @@ export function ForcePasswordChangeDialog() {
     setError("");
 
     if (newPassword !== confirmPassword) {
-      setError("নতুন পাসওয়ার্ড দুটো মিলছে না।");
+      setError(t("password_mismatch"));
       return;
     }
     if (newPassword.length < 6) {
-      setError("পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে।");
+      setError(t("password_min"));
       return;
     }
 
@@ -40,7 +42,7 @@ export function ForcePasswordChangeDialog() {
 
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "পাসওয়ার্ড পরিবর্তন ব্যর্থ হয়েছে।");
+        setError(data.error || t("change_failed"));
         return;
       }
 
@@ -48,7 +50,7 @@ export function ForcePasswordChangeDialog() {
       const { signOut } = await import("next-auth/react");
       await signOut({ redirect: true, callbackUrl: "/login?passwordChanged=1" });
     } catch {
-      setError("একটি সমস্যা হয়েছে। আবার চেষ্টা করুন।");
+      setError(t("generic_error"));
     } finally {
       setIsLoading(false);
     }
@@ -62,14 +64,14 @@ export function ForcePasswordChangeDialog() {
         onEscapeKeyDown={(e) => e.preventDefault()}
       >
         <DialogHeader>
-          <DialogTitle>পাসওয়ার্ড পরিবর্তন করুন</DialogTitle>
+          <DialogTitle>{t("title")}</DialogTitle>
           <DialogDescription>
-            নিরাপত্তার জন্য প্রথমবার লগইনে পাসওয়ার্ড পরিবর্তন করা বাধ্যতামূলক।
+            {t("force_change_desc")}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 pt-2">
           <div className="space-y-2">
-            <Label htmlFor="currentPassword">বর্তমান পাসওয়ার্ড</Label>
+            <Label htmlFor="currentPassword">{t("current_password")}</Label>
             <Input
               id="currentPassword"
               type="password"
@@ -81,7 +83,7 @@ export function ForcePasswordChangeDialog() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="newPassword">নতুন পাসওয়ার্ড</Label>
+            <Label htmlFor="newPassword">{t("new_password")}</Label>
             <Input
               id="newPassword"
               type="password"
@@ -93,7 +95,7 @@ export function ForcePasswordChangeDialog() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="confirmPassword">নতুন পাসওয়ার্ড নিশ্চিত করুন</Label>
+            <Label htmlFor="confirmPassword">{t("confirm_password")}</Label>
             <Input
               id="confirmPassword"
               type="password"
@@ -110,7 +112,7 @@ export function ForcePasswordChangeDialog() {
             </p>
           )}
           <Button type="submit" className="w-full" disabled={isLoading}>
-            {isLoading ? "পরিবর্তন হচ্ছে..." : "পাসওয়ার্ড পরিবর্তন করুন"}
+            {isLoading ? t("changing") : t("change_btn")}
           </Button>
         </form>
       </DialogContent>

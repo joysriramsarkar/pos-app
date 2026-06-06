@@ -349,7 +349,7 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
   );
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-muted/20">
+    <div className="flex-1 flex flex-col min-h-0 w-full overflow-hidden bg-muted/20">
       <div className="shrink-0 border-b bg-background p-4">
         <h1 className="text-lg md:text-xl font-bold flex items-center gap-2">
           <TrendingUp className="w-6 h-6" />
@@ -459,7 +459,7 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
               <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
                 <div>
                   <CardTitle>{t('sales_trend')}</CardTitle>
-                  <CardDescription>{isToday ? t('hourly_sales') : t('daily_sales')}</CardDescription>
+                  <CardDescription>{isToday ? t('hourly_sales_desc') : t('daily_sales_desc')}</CardDescription>
                 </div>
                 <div className="flex flex-wrap gap-2 items-center">
                   {DateFilter}
@@ -1211,7 +1211,6 @@ function CustomerDetailContent({ customer, dateParams, detail, setDetail, isLoad
 export default React.memo(Reports);
 
 const CHART_COLORS = ['#ef4444', '#f59e0b', '#8b5cf6', '#3b82f6', '#10b981', '#ec4899'];
-const fp = (n: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0 }).format(n);
 
 function ExpensesTabContent({ expenses, dateParams, onNavigate, isLoading }: {
   expenses: any[];
@@ -1219,6 +1218,8 @@ function ExpensesTabContent({ expenses, dateParams, onNavigate, isLoading }: {
   onNavigate?: (page: string) => void;
   isLoading?: boolean;
 }) {
+  const { formatPrice: fp } = useNumberFormat();
+
   // Filter expenses by dateParams range
   const filtered = useMemo(() => {
     const p = new URLSearchParams(dateParams);
@@ -1262,7 +1263,8 @@ function ExpensesTabContent({ expenses, dateParams, onNavigate, isLoading }: {
     return Object.entries(map).map(([label, amount]) => ({ label, amount }));
   }, [filtered, daysDiff]);
 
-  const trendTitle = daysDiff <= 1 ? 'ঘণ্টাভিত্তিক খরচ' : daysDiff <= 60 ? 'দৈনিক খরচ' : 'মাসিক খরচ';
+  const t = useTranslations('Expenses');
+  const trendTitle = daysDiff <= 1 ? t('hourly') : daysDiff <= 60 ? t('daily') : t('monthly');
 
   const handleDownloadCSV = () => {
     if (!filtered.length) return;
@@ -1292,14 +1294,14 @@ function ExpensesTabContent({ expenses, dateParams, onNavigate, isLoading }: {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <p className="text-sm text-muted-foreground">ফিল্টার সময়ের মোট খরচ: <span className="font-bold text-red-600">{fp(total)}</span> ({filtered.length}টি)</p>
+        <p className="text-sm text-muted-foreground">{t('total_filtered_expense')}: <span className="font-bold text-red-600">{fp(total)}</span> ({filtered.length})</p>
         <div className="flex gap-2">
           <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={handleDownloadCSV}>
             <Download className="w-3.5 h-3.5" /> CSV
           </Button>
           {onNavigate && (
             <Button size="sm" variant="outline" className="gap-1.5 text-xs border-red-200 text-red-600 hover:bg-red-50" onClick={() => onNavigate('expenses-report')}>
-              <ExternalLink className="w-3.5 h-3.5" /> বিস্তারিত রিপোর্ট
+              <ExternalLink className="w-3.5 h-3.5" /> {t('detailed_report')}
             </Button>
           )}
         </div>
@@ -1310,14 +1312,14 @@ function ExpensesTabContent({ expenses, dateParams, onNavigate, isLoading }: {
           <CardHeader className="pb-2"><CardTitle className="text-sm">{trendTitle}</CardTitle></CardHeader>
           <CardContent>
             {trendData.length === 0 ? (
-              <p className="text-center text-muted-foreground text-sm py-8">কোনো ডেটা নেই</p>
+              <p className="text-center text-muted-foreground text-sm py-8">{t('no_data')}</p>
             ) : (
               <ResponsiveContainer width="100%" height={200}>
                 <BarChart data={trendData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
                   <XAxis dataKey="label" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
                   <YAxis tickFormatter={v => `₹${v >= 1000 ? (v/1000).toFixed(1)+'k' : v}`} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} width={45} />
-                  <RechartsTooltip formatter={(v: number) => [fp(v), 'খরচ']} contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
+                  <RechartsTooltip formatter={(v: number) => [fp(v), t('expense')]} contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
                   <Bar dataKey="amount" fill="#ef4444" radius={[4,4,0,0]} maxBarSize={40} />
                 </BarChart>
               </ResponsiveContainer>
@@ -1326,10 +1328,10 @@ function ExpensesTabContent({ expenses, dateParams, onNavigate, isLoading }: {
         </Card>
 
         <Card className="rounded-xl">
-          <CardHeader className="pb-2"><CardTitle className="text-sm">ক্যাটাগরি অনুযায়ী</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">{t('by_category')}</CardTitle></CardHeader>
           <CardContent>
             {pieData.length === 0 ? (
-              <p className="text-center text-muted-foreground text-sm py-8">কোনো ডেটা নেই</p>
+              <p className="text-center text-muted-foreground text-sm py-8">{t('no_data')}</p>
             ) : (
               <ResponsiveContainer width="100%" height={200}>
                 <PieChart>
@@ -1346,20 +1348,20 @@ function ExpensesTabContent({ expenses, dateParams, onNavigate, isLoading }: {
       </div>
 
       <Card className="rounded-xl">
-        <CardHeader className="pb-2"><CardTitle className="text-sm">ক্যাটাগরি ব্রেকডাউন</CardTitle></CardHeader>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">{t('category_breakdown')}</CardTitle></CardHeader>
         <CardContent className="p-0">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>ক্যাটাগরি</TableHead>
-                <TableHead className="text-right">সংখ্যা</TableHead>
-                <TableHead className="text-right">মোট</TableHead>
+                <TableHead>{t('category')}</TableHead>
+                <TableHead className="text-right">{t('count')}</TableHead>
+                <TableHead className="text-right">{t('total')}</TableHead>
                 <TableHead className="text-right">%</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {categoryTotals.length === 0 ? (
-                <TableRow><TableCell colSpan={4} className="text-center py-6 text-muted-foreground text-sm">কোনো ডেটা নেই</TableCell></TableRow>
+                <TableRow><TableCell colSpan={4} className="text-center py-6 text-muted-foreground text-sm">{t('no_data')}</TableCell></TableRow>
               ) : categoryTotals.map(([cat, amt]) => (
                 <TableRow key={cat}>
                   <TableCell className="text-sm">{cat}</TableCell>

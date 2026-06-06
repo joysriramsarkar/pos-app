@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
+import { useNumberFormat } from '@/hooks/use-number-format';
 import {
   Dialog,
   DialogContent,
@@ -20,7 +22,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Package, Calendar, User, IndianRupee } from 'lucide-react';
+import { Package, Calendar, User } from 'lucide-react';
 import type { Product, Supplier } from '@/types/pos';
 import { useProductsStore } from '@/stores/pos-store';
 import { cn, convertBengaliToEnglishNumerals } from '@/lib/utils';
@@ -56,6 +58,10 @@ export function AddStockDialog({
   suppliers = mockSuppliers,
   onSubmit,
 }: AddStockDialogProps) {
+  const t = useTranslations('Stock');
+  const tc = useTranslations('Common');
+  const { formatPrice: formatPriceLocale } = useNumberFormat();
+
   const [selectedProductId, setSelectedProductId] = useState<string>('');
   const [quantity, setQuantity] = useState<string>('');
   const [purchasePrice, setPurchasePrice] = useState<string>('');
@@ -106,11 +112,7 @@ export function AddStockDialog({
   }, [open, initialProduct]);
 
   const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 0,
-    }).format(price);
+    return formatPriceLocale(price);
   };
 
   const handleSubmit = async () => {
@@ -145,32 +147,32 @@ export function AddStockDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Package className="w-5 h-5" />
-            Add Stock Entry
+            {t('add_stock_entry')}
           </DialogTitle>
           <DialogDescription>
-            Record a new stock purchase entry
+            {t('record_stock_entry')}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
           {/* Product Select */}
           <div className="space-y-2">
-            <Label htmlFor="add-stock-product">Product *</Label>
+            <Label htmlFor="add-stock-product">{t('product')}</Label>
             <Select
               value={selectedProductId}
               onValueChange={setSelectedProductId}
               disabled={!!initialProduct}
             >
               <SelectTrigger id="add-stock-product">
-                <SelectValue placeholder="Select product" />
+                <SelectValue placeholder={t('select_product')} />
               </SelectTrigger>
               <SelectContent>
                 {products.filter(p => p.isActive).map((product) => (
                   <SelectItem key={product.id} value={product.id}>
                     <div className="flex items-center justify-between gap-4">
-                      <span>{product.name}</span>
+                      <span>{product.nameBn || product.name}</span>
                       <Badge variant="outline" className="text-xs">
-                        Stock: {product.currentStock}
+                        {t('stock')}: {product.currentStock}
                       </Badge>
                     </div>
                   </SelectItem>
@@ -179,15 +181,15 @@ export function AddStockDialog({
             </Select>
             {selectedProduct && (
               <p className="text-xs text-muted-foreground">
-                Current stock: {selectedProduct.currentStock} {selectedProduct.unit} • 
-                Min level: {selectedProduct.minStockLevel}
+                {t('current_stock_label')}: {selectedProduct.currentStock} {selectedProduct.unit} • 
+                {t('min_level')}: {selectedProduct.minStockLevel}
               </p>
             )}
           </div>
 
           {/* Quantity */}
           <div className="space-y-2">
-            <Label htmlFor="add-stock-quantity">Quantity *</Label>
+            <Label htmlFor="add-stock-quantity">{t('quantity')}</Label>
             <div className="flex items-center gap-2">
               <Input
                 id="add-stock-quantity"
@@ -200,16 +202,16 @@ export function AddStockDialog({
                 className="flex-1"
               />
               <span className="text-sm text-muted-foreground w-16">
-                {selectedProduct?.unit || 'units'}
+                {selectedProduct?.unit || t('units')}
               </span>
             </div>
           </div>
 
           {/* Purchase Price */}
           <div className="space-y-2">
-              <Label htmlFor="add-stock-price">Purchase Price (per unit) *</Label>
+              <Label htmlFor="add-stock-price">{t('purchase_price')}</Label>
             <div className="relative">
-              <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">৳</span>
               <Input
                 id="add-stock-price"
                 type="number"
@@ -223,8 +225,8 @@ export function AddStockDialog({
             </div>
             {selectedProduct && (
               <p className="text-xs text-muted-foreground">
-                Usual price: {formatPrice(selectedProduct.buyingPrice)} • 
-                Selling: {formatPrice(selectedProduct.sellingPrice)}
+                {t('usual_price')}: {formatPrice(Number(selectedProduct.buyingPrice))} • 
+                {t('selling')}: {formatPrice(Number(selectedProduct.sellingPrice))}
               </p>
             )}
           </div>
@@ -233,7 +235,7 @@ export function AddStockDialog({
           {total > 0 && (
             <div className="p-3 bg-muted rounded-lg">
               <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Total Amount</span>
+                <span className="text-sm text-muted-foreground">{t('total_amount')}</span>
                 <span className="text-lg font-bold">{formatPrice(total)}</span>
               </div>
             </div>
@@ -243,7 +245,7 @@ export function AddStockDialog({
           <div className="space-y-2">
             <Label htmlFor="add-stock-date" className="flex items-center gap-2">
               <Calendar className="w-4 h-4" />
-              Date
+              {t('date')}
             </Label>
             <Input
               id="add-stock-date"
@@ -257,11 +259,11 @@ export function AddStockDialog({
           <div className="space-y-2">
             <Label htmlFor="add-stock-supplier" className="flex items-center gap-2">
               <User className="w-4 h-4" />
-              Supplier (Optional)
+              {t('supplier_optional')}
             </Label>
             <Select value={supplierId} onValueChange={setSupplierId}>
               <SelectTrigger id="add-stock-supplier">
-                <SelectValue placeholder="Select supplier" />
+                <SelectValue placeholder={t('select_supplier')} />
               </SelectTrigger>
               <SelectContent>
                 {liveSupplers.filter(s => s.isActive).map((supplier) => (
@@ -275,22 +277,22 @@ export function AddStockDialog({
 
           {/* Notes */}
           <div className="space-y-2">
-            <Label htmlFor="add-stock-notes">Notes (Optional)</Label>
+            <Label htmlFor="add-stock-notes">{t('notes_optional')}</Label>
             <Input
               id="add-stock-notes"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Invoice number, remarks..."
+              placeholder={t('invoice_remarks')}
             />
           </div>
         </div>
 
         <DialogFooter className="gap-2 sm:gap-0">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {tc('cancel')}
           </Button>
           <Button onClick={handleSubmit} disabled={!isValid || isSubmitting} className="bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600">
-            {isSubmitting ? 'Saving...' : 'Add Stock'}
+            {isSubmitting ? t('saving') : t('add_stock_btn')}
           </Button>
         </DialogFooter>
       </DialogContent>

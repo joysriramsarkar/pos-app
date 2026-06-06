@@ -284,6 +284,10 @@ export const ProductsDB = {
     return clearStore(STORES.PRODUCTS);
   },
 
+  async delete(id: string): Promise<void> {
+    return deleteFromStore(STORES.PRODUCTS, id);
+  },
+
   async updateStock(productId: string, quantityChange: number): Promise<void> {
     const product = await this.getById(productId);
     if (product) {

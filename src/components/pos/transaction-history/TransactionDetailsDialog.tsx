@@ -23,6 +23,7 @@ import { shareInvoiceAsPdf } from "@/lib/invoicePdf";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useIsAdmin } from "@/hooks/use-permissions";
 import { useToast } from '@/hooks/use-toast';
+import { useTranslations } from 'next-intl';
 
 interface TransactionDetailsDialogProps {
   transaction: Transaction | null;
@@ -44,6 +45,10 @@ export function TransactionDetailsDialog({
   const { settings } = useSettingsStore();
   const isAdmin = useIsAdmin();
 
+  const t = useTranslations('TransactionDetails');
+  const tc = useTranslations('Common');
+  const th = useTranslations('TransactionHistory');
+
   if (!transaction) return null;
 
   const storeConfig = {
@@ -52,6 +57,57 @@ export function TransactionDetailsDialog({
     address: settings.store_address || "",
     phone: settings.store_phone || "",
     gstNumber: settings.store_gst || "",
+  };
+
+  const getStatusText = (status: string) => {
+    if (!status) return '';
+    switch (status.toUpperCase()) {
+      case 'COMPLETED':
+        return t('completed');
+      case 'CANCELLED':
+        return t('cancelled');
+      case 'REFUNDED':
+        return t('refunded');
+      default:
+        return status;
+    }
+  };
+
+  const getPaymentStatusText = (status: string) => {
+    if (!status) return '';
+    switch (status.toUpperCase()) {
+      case 'PAID':
+        return t('paid');
+      case 'PARTIAL':
+        return th('partial', { defaultValue: 'Partial' });
+      case 'DUE':
+        return t('due');
+      default:
+        return status;
+    }
+  };
+
+  const getPaymentMethodText = (method: string) => {
+    if (!method) return '';
+    switch (method.toUpperCase()) {
+      case 'CASH':
+      case 'নগদ':
+        return th('cash');
+      case 'UPI':
+      case 'ইউপিআই':
+        return th('upi');
+      case 'DUE':
+      case 'বাকি':
+        return th('due');
+      case 'PREPAID':
+      case 'আগাম জমা':
+        return th('prepaid');
+      case 'MIXED':
+      case 'মিশ্র':
+        return th('mixed');
+      default:
+        return method;
+    }
   };
 
   const handleShare = async () => {
@@ -110,7 +166,7 @@ export function TransactionDetailsDialog({
       const blob = await generateInvoicePdf(html, printFormat);
       const file = new File([blob], `Invoice-${transaction.invoiceNumber}.pdf`, { type: 'application/pdf' });
       setPreparedFile(file);
-      toast({ title: 'Invoice Ready', description: 'Tap the Share button again to complete sharing (required on some browsers).' });
+      toast({ title: t('invoice_ready'), description: t('invoice_ready_desc') });
     } catch (err: unknown) {
       if ((err instanceof Error ? err.name : "") !== "AbortError") {
         console.error("Share failed:", err);
@@ -131,7 +187,7 @@ export function TransactionDetailsDialog({
         if (canShare) {
           await (navigator as any).share(shareData);
           setPreparedFile(null);
-          toast({ title: 'Shared', description: 'Invoice shared successfully.' });
+          toast({ title: t('shared'), description: t('shared_desc') });
           onOpenChange(false);
           return;
         }
@@ -148,9 +204,9 @@ export function TransactionDetailsDialog({
         a.click();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
         setPreparedFile(null);
-        toast({ title: 'Downloaded', description: 'Invoice downloaded as a fallback.' });
+        toast({ title: t('downloaded'), description: t('downloaded_desc') });
       } catch (err) {
-        toast({ title: 'Share failed', description: 'Unable to share or download the invoice.', variant: 'destructive' });
+        toast({ title: t('share_failed'), description: t('share_failed_desc'), variant: 'destructive' });
       }
     } finally {
       setIsSharing(false);
@@ -164,7 +220,7 @@ export function TransactionDetailsDialog({
         <div className="sticky top-0 z-10 bg-background border-b px-4 py-3 md:px-6 md:py-4 flex items-start justify-between gap-3 shrink-0">
           <div className="min-w-0">
             <h2 className="text-lg md:text-xl font-semibold leading-tight">
-              Transaction Details - {transaction.invoiceNumber}
+              {t('title', { invoice: transaction.invoiceNumber })}
             </h2>
             <p className="text-xs md:text-sm text-muted-foreground mt-0.5">
               {format(transaction.createdAt, "dd MMMM yyyy HH:mm:ss")}
@@ -177,40 +233,40 @@ export function TransactionDetailsDialog({
         </div>
 
         {/* Scrollable body */}
-        <div className="overflow-y-auto flex-1 p-4 md:p-6">
+        <div className="overflow-y-auto flex-1 min-h-0 p-4 md:p-6">
           <div className="space-y-4 md:space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
             <Card className="bg-muted/30">
               <CardContent className="p-3 md:pt-4 md:p-6 pb-3 md:pb-4">
                 <div className="text-xs md:text-sm text-muted-foreground">
-                  Customer
+                  {t('customer')}
                 </div>
                 <div className="font-semibold text-base md:text-lg mt-1">
-                  {transaction.customer?.name || "Walk-in"}
+                  {transaction.customer?.name || t('walk_in')}
                 </div>
               </CardContent>
             </Card>
             <Card className="bg-muted/30">
               <CardContent className="p-3 md:pt-4 md:p-6 pb-3 md:pb-4">
                 <div className="text-xs md:text-sm text-muted-foreground">
-                  Created By
+                  {t('created_by')}
                 </div>
                 <div className="font-semibold text-base md:text-lg mt-1">
-                  {transaction.user?.name || transaction.user?.username || "Unknown"}
+                  {transaction.user?.name || transaction.user?.username || t('unknown')}
                 </div>
               </CardContent>
             </Card>
           </div>
 
           <div className="space-y-2">
-            <h3 className="font-semibold">Items</h3>
+            <h3 className="font-semibold">{t('items')}</h3>
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
-                  <TableHead>Product</TableHead>
-                  <TableHead className="text-right">Qty</TableHead>
-                  <TableHead className="text-right">Unit Price</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
+                  <TableHead>{t('product')}</TableHead>
+                  <TableHead className="text-right">{t('qty')}</TableHead>
+                  <TableHead className="text-right">{t('unit_price')}</TableHead>
+                  <TableHead className="text-right">{t('total')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -234,7 +290,7 @@ export function TransactionDetailsDialog({
 
           <div className="space-y-1.5 md:space-y-2 border-t pt-3 md:pt-4 text-sm md:text-base">
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Subtotal:</span>
+              <span className="text-muted-foreground">{t('subtotal')}:</span>
               <span>
                 {formatPrice(
                   Number(transaction.totalAmount ?? 0) +
@@ -245,29 +301,29 @@ export function TransactionDetailsDialog({
             </div>
             {(Number(transaction.discount ?? 0)) > 0 && (
               <div className="flex justify-between text-red-600">
-                <span>Discount:</span>
+                <span>{t('discount')}:</span>
                 <span>-{formatPrice(Number(transaction.discount ?? 0))}</span>
               </div>
             )}
             {(Number(transaction.tax ?? 0)) > 0 && (
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Tax:</span>
+                <span className="text-muted-foreground">{t('tax')}:</span>
                 <span>{formatPrice(Number(transaction.tax ?? 0))}</span>
               </div>
             )}
             <div className="flex justify-between font-semibold text-base md:text-lg border-t pt-2 mt-2">
-              <span>Total Amount:</span>
+              <span>{t('total_amount')}:</span>
               <span>{formatPrice(Number(transaction.totalAmount ?? 0))}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Amount Paid:</span>
+              <span className="text-muted-foreground">{t('amount_paid')}:</span>
               <span className="font-semibold">
                 {formatPrice(Number(transaction.amountPaid ?? 0))}
               </span>
             </div>
             {(Number(transaction.totalAmount ?? 0) - Number(transaction.amountPaid ?? 0)) > 0 && (
               <div className="flex justify-between text-red-600 font-semibold">
-                <span>Due:</span>
+                <span>{t('due')}:</span>
                 <span>
                   {formatPrice(
                     Number(transaction.totalAmount ?? 0) - Number(transaction.amountPaid ?? 0),
@@ -281,39 +337,39 @@ export function TransactionDetailsDialog({
             <Card className="bg-muted/30">
               <CardContent className="p-3 md:pt-4 md:p-6 pb-3 md:pb-4">
                 <div className="text-xs md:text-sm text-muted-foreground">
-                  Payment Method
+                  {t('payment_method')}
                 </div>
                 <Badge variant="outline" className="mt-2">
-                  {transaction.paymentMethod}
+                  {getPaymentMethodText(transaction.paymentMethod)}
                 </Badge>
               </CardContent>
             </Card>
             <Card className="bg-muted/30">
               <CardContent className="p-3 md:pt-4 md:p-6 pb-3 md:pb-4">
                 <div className="text-xs md:text-sm text-muted-foreground">
-                  Payment Status
+                  {t('payment_status')}
                 </div>
                 <Badge
                   className={`mt-2 ${getPaymentStatusColor(transaction.paymentStatus)}`}
                 >
-                  {transaction.paymentStatus}
+                  {getPaymentStatusText(transaction.paymentStatus)}
                 </Badge>
               </CardContent>
             </Card>
           </div>
 
           <div className="flex items-center justify-between border rounded-lg px-4 py-3 bg-muted/30">
-            <span className="text-sm text-muted-foreground">Order Status</span>
+            <span className="text-sm text-muted-foreground">{t('order_status')}</span>
             <Badge
               variant={transaction.status === 'Completed' ? 'default' : 'destructive'}
               className={transaction.status === 'Cancelled' ? 'bg-red-100 text-red-700 border-red-300 dark:bg-red-900/30 dark:text-red-400' : transaction.status === 'Refunded' ? 'bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-900/30 dark:text-amber-400' : ''}
             >
-              {transaction.status}
+              {getStatusText(transaction.status)}
             </Badge>
           </div>
 
           <div className="flex flex-col gap-3 mt-4">
-            <div className="text-sm font-medium">Actions</div>
+            <div className="text-sm font-medium">{t('actions')}</div>
             <div className="flex flex-wrap gap-2">
               <Button
                 variant="outline"
@@ -322,7 +378,7 @@ export function TransactionDetailsDialog({
                 className="h-10 gap-2 border-green-500 text-green-600 hover:bg-green-50"
               >
                 <Share2 className="w-4 h-4" />
-                {isPreparing ? 'Preparing...' : preparedFile ? (isSharing ? 'Sharing...' : 'Tap to Share') : (isSharing ? 'Sharing...' : 'Share / WhatsApp')}
+                {isPreparing ? t('preparing') : preparedFile ? (isSharing ? t('sharing') : t('tap_to_share')) : (isSharing ? t('sharing') : t('share_whatsapp'))}
               </Button>
               {isAdmin && transaction.status === "Completed" && (
                 <>
@@ -331,14 +387,14 @@ export function TransactionDetailsDialog({
                     onClick={() => onUpdateStatus("Cancelled")}
                     className="h-10"
                   >
-                    Cancel Order
+                    {t('cancel_order')}
                   </Button>
                   <Button
                     variant="outline"
                     onClick={() => onUpdateStatus("Refunded")}
                     className="h-10"
                   >
-                    Refund Order
+                    {t('refund_order')}
                   </Button>
                 </>
               )}

@@ -116,8 +116,8 @@ function ThermalInvoice({
         )}
         <h1 className="font-bold text-sm tracking-wide uppercase">{config.name}</h1>
         <p className={`${fontSize} font-medium`}>{config.nameBn}</p>
-        {config.address && <p className={`${fontSize} text-gray-600`}>{config.address}</p>}
-        {config.phone && <p className={`${fontSize} text-gray-600`}>☎ {config.phone}</p>}
+        {config.address && <p className={`${fontSize} text-[#666]`}>{config.address}</p>}
+        {config.phone && <p className={`${fontSize} text-[#666]`}>☎ {config.phone}</p>}
       </div>
 
       <div style={{ borderTop: '2px solid #000', margin: '0 8px' }} />
@@ -126,26 +126,26 @@ function ThermalInvoice({
       {/* Invoice Info */}
       <div className={`${fontSize} space-y-0.5 ${sectionPadding} py-2`}>
         <div className="flex justify-between min-w-0">
-          <span className="text-gray-500">Invoice#</span>
+          <span className="text-[#888]">Invoice#</span>
           <span className="font-bold shrink-0 ml-2">{sale.invoiceNumber}</span>
         </div>
         <div className="flex justify-between min-w-0">
-          <span className="text-gray-500">Date</span>
+          <span className="text-[#888]">Date</span>
           <span className="shrink-0 ml-2">{formatDate(sale.createdAt)}</span>
         </div>
         <div className="flex justify-between min-w-0">
-          <span className="text-gray-500">Time</span>
+          <span className="text-[#888]">Time</span>
           <span className="shrink-0 ml-2">{formatTime(sale.createdAt)}</span>
         </div>
         {sale.customer && (
           <div className="mt-1 pt-1" style={{ borderTop: '1px dashed #999' }}>
             <div className="flex justify-between min-w-0">
-              <span className="text-gray-500">Customer</span>
+              <span className="text-[#888]">Customer</span>
               <span className="truncate ml-2 font-medium">{sale.customer.name}</span>
             </div>
             {sale.customer.phone && (
               <div className="flex justify-between min-w-0">
-                <span className="text-gray-500">Phone</span>
+                <span className="text-[#888]">Phone</span>
                 <span className="shrink-0 ml-2">{sale.customer.phone}</span>
               </div>
             )}
@@ -181,18 +181,18 @@ function ThermalInvoice({
         {/* Totals */}
         <div className="mt-1 space-y-0.5" style={{ borderTop: '1px solid #000', paddingTop: 4 }}>
           <div className="flex justify-between min-w-0">
-            <span className="text-gray-500">Subtotal</span>
+            <span className="text-[#888]">Subtotal</span>
             <span className="font-medium">{formatCurrency(sale.subtotal)}</span>
           </div>
           {(sale.discount ?? 0) > 0 && (
             <div className="flex justify-between min-w-0">
-              <span className="text-gray-500">Discount</span>
+              <span className="text-[#888]">Discount</span>
               <span className="font-medium">-{formatCurrency(sale.discount)}</span>
             </div>
           )}
           {(sale.tax ?? 0) > 0 && (
             <div className="flex justify-between min-w-0">
-              <span className="text-gray-500">Tax</span>
+              <span className="text-[#888]">Tax</span>
               <span className="font-medium">+{formatCurrency(sale.tax)}</span>
             </div>
           )}
@@ -212,16 +212,16 @@ function ThermalInvoice({
       {/* Payment Info */}
       <div className={`${fontSize} space-y-0.5 ${sectionPadding} py-1`}>
         <div className="flex justify-between min-w-0">
-          <span className="text-gray-500">Payment</span>
+          <span className="text-[#888]">Payment</span>
           <span className="font-semibold">{sale.paymentMethod}</span>
         </div>
         <div className="flex justify-between min-w-0">
-          <span className="text-gray-500">Status</span>
+          <span className="text-[#888]">Status</span>
           <span className="font-semibold">{sale.paymentStatus}</span>
         </div>
         {toMoneyNumber(sale.amountPaid ?? 0) < toMoneyNumber(sale.totalAmount ?? 0) && (
           <div className="flex justify-between min-w-0">
-            <span className="text-gray-500">Due</span>
+            <span className="text-[#888]">Due</span>
             <span className="font-bold">{formatCurrency(toMoneyNumber(new Decimal(sale.totalAmount ?? 0).minus(sale.amountPaid ?? 0)))}</span>
           </div>
         )}
@@ -231,8 +231,8 @@ function ThermalInvoice({
       <div style={{ borderTop: '1px dashed #555', margin: '4px 8px 0' }} />
       <div className={`${fontSize} text-center py-3 space-y-0.5`}>
         <p className="font-bold text-sm">ধন্যবাদ!</p>
-        <p className="text-gray-600">Thank you for shopping!</p>
-        {footerMessage && <p className="text-gray-400 text-[8px] mt-1">{footerMessage}</p>}
+        <p className="text-[#666]">Thank you for shopping!</p>
+        {footerMessage && <p className="text-[#aaa] text-[8px] mt-1">{footerMessage}</p>}
       </div>
     </div>
   );

@@ -60,3 +60,6 @@ merge_prs.sh
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+
+# Large diff files
+diff.txt

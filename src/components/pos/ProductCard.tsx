@@ -8,6 +8,8 @@ import { Package, AlertTriangle, Plus } from 'lucide-react';
 import type { Product } from '@/types/pos';
 import { useCartStore } from '@/stores/pos-store';
 import { cn } from '@/lib/utils';
+import { useTranslations } from 'next-intl';
+import { useNumberFormat } from '@/hooks/use-number-format';
 
 interface ProductCardProps {
   product: Product;
@@ -15,17 +17,11 @@ interface ProductCardProps {
 
 export function ProductCard({ product }: ProductCardProps) {
   const addItem = useCartStore((state) => state.addItem);
+  const t = useTranslations('Billing');
+  const { formatPrice } = useNumberFormat();
+  
   const isLowStock = product.currentStock <= product.minStockLevel;
   const isOutOfStock = product.currentStock <= 0;
-
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
-    }).format(price);
-  };
 
   const handleAddToCart = () => {
     if (!isOutOfStock) {
@@ -53,14 +49,14 @@ export function ProductCard({ product }: ProductCardProps) {
         onKeyDown={handleKeyDown}
         onClick={handleAddToCart}
         role="button"
-        aria-label={`Add ${product.name} to cart, ${formatPrice(product.sellingPrice)} per ${product.unit}`}
+        aria-label={`${t('add_to_cart')} ${product.name}, ${formatPrice(product.sellingPrice)} / ${product.unit}`}
         aria-disabled={isOutOfStock}
       >
         {/* Low Stock Warning Banner */}
         {isLowStock && !isOutOfStock && (
           <div className="absolute top-0 left-0 right-0 bg-amber-500/90 backdrop-blur-sm text-white text-[10px] font-semibold tracking-wider uppercase py-1 px-2 text-center z-10 shadow-sm flex items-center justify-center gap-1">
             <AlertTriangle className="w-3 h-3" />
-            Low Stock
+            {t('low_stock')}
           </div>
         )}
 
@@ -68,7 +64,7 @@ export function ProductCard({ product }: ProductCardProps) {
         {isOutOfStock && (
           <div className="absolute inset-0 bg-background/60 backdrop-blur-[2px] flex items-center justify-center z-10 transition-opacity">
             <Badge variant="destructive" className="text-sm shadow-md shadow-red-500/20 px-3 py-1 bg-red-500 text-white">
-              Out of Stock
+              {t('out_of_stock')}
             </Badge>
           </div>
         )}
@@ -122,7 +118,7 @@ export function ProductCard({ product }: ProductCardProps) {
                     "font-medium",
                     isLowStock && !isOutOfStock ? "text-amber-600 dark:text-amber-500" : ""
                   )}>
-                    Stock: {product.currentStock} {product.unit}
+                    {t('stock')}: {product.currentStock} {product.unit}
                   </span>
                 </div>
               </div>
@@ -133,18 +129,18 @@ export function ProductCard({ product }: ProductCardProps) {
               size="sm"
               className={cn(
                 "w-full mt-2 transition-all duration-300 touch-manipulation shadow-xs",
-                "sm:opacity-0 sm:-translate-y-2 sm:group-hover:opacity-100 sm:group-hover:translate-y-0",
-                "opacity-100 translate-y-0 bg-primary/10 text-primary lg:hover:bg-primary lg:hover:text-primary-foreground"
+                "lg:opacity-0 lg:-translate-y-2 lg:group-hover:opacity-100 lg:group-hover:translate-y-0",
+                "opacity-100 translate-y-0 bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground"
               )}
               disabled={isOutOfStock}
               onClick={(e) => {
                 e.stopPropagation();
                 handleAddToCart();
               }}
-              aria-label="Add to cart"
+              aria-label={t('add_to_cart')}
             >
               <Plus className="w-4 h-4 mr-1" />
-              Add to Cart
+              {t('add_to_cart')}
             </Button>
           </div>
         </CardContent>

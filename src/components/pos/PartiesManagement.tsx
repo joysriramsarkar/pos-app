@@ -516,15 +516,15 @@ export function PartiesManagement() {
           <div>
             <h1 className="text-xl font-bold flex items-center gap-2">
               <Users className="w-6 h-6" />
-              Parties
+              {t('title')}
             </h1>
             <p className="text-sm text-muted-foreground">
-              Customers & Suppliers
+              {t('subtitle')}
             </p>
           </div>
           <Button onClick={() => setShowAddDialog(true)} className="bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600">
             <UserPlus className="w-4 h-4 mr-2" />
-            Add {activeTab === 'customer' ? 'Customer' : 'Supplier'}
+            {activeTab === 'customer' ? t('add_customer_btn') : t('add_supplier_btn')}
           </Button>
         </div>
 
@@ -532,19 +532,19 @@ export function PartiesManagement() {
         <div className="grid grid-cols-3 gap-3 mb-4">
           <Card className="bg-muted/50">
             <CardContent className="p-3">
-              <p className="text-xs text-muted-foreground">Total Due</p>
+              <p className="text-xs text-muted-foreground">{t('total_due')}</p>
               <p className="text-lg font-bold text-red-600">{formatPrice(totalDue)}</p>
             </CardContent>
           </Card>
           <Card className="bg-muted/50">
             <CardContent className="p-3">
-              <p className="text-xs text-muted-foreground">Customers with Due</p>
+              <p className="text-xs text-muted-foreground">{t('customers_with_due')}</p>
               <p className="text-lg font-bold">{customersWithDue}</p>
             </CardContent>
           </Card>
           <Card className="bg-muted/50">
             <CardContent className="p-3">
-              <p className="text-xs text-muted-foreground">Total Customers</p>
+              <p className="text-xs text-muted-foreground">{t('total_customers')}</p>
               <p className="text-lg font-bold">{customers.filter(c => c.isActive).length}</p>
             </CardContent>
           </Card>
@@ -595,11 +595,11 @@ export function PartiesManagement() {
           <Table>
             <TableHeader className="sticky top-0 bg-background z-10">
               <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Contact</TableHead>
-                <TableHead className="text-right">Balance</TableHead>
-                <TableHead className="text-right">Due</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead>{t('name_col')}</TableHead>
+                <TableHead>{t('contact_col')}</TableHead>
+                <TableHead className="text-right">{t('balance_col')}</TableHead>
+                <TableHead className="text-right">{t('due_col')}</TableHead>
+                <TableHead className="text-right">{t('actions_col')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -607,7 +607,7 @@ export function PartiesManagement() {
                 <TableRow>
                   <TableCell colSpan={5} className="text-center py-12">
                     <Users className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                    <p className="text-muted-foreground">No customers found</p>
+                    <p className="text-muted-foreground">{t('no_customers')}</p>
                   </TableCell>
                 </TableRow>
               ) : (
@@ -647,7 +647,7 @@ export function PartiesManagement() {
                       )}
                     </TableCell>
                     <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                      <div className="flex items-center justify-end gap-1 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
                         <Button
                           variant="ghost"
                           size="sm"
@@ -655,7 +655,7 @@ export function PartiesManagement() {
                           onClick={() => handleEditParty(customer)}
                         >
                           <Edit className="w-4 h-4 md:mr-1" />
-                          <span className="hidden md:inline">Edit</span>
+                          <span className="hidden md:inline">{t('edit')}</span>
                         </Button>
                         <Button
                           variant="ghost"
@@ -664,7 +664,7 @@ export function PartiesManagement() {
                           onClick={() => handleViewLedger(customer)}
                         >
                           <FileText className="w-4 h-4 md:mr-1" />
-                          <span className="hidden md:inline">Ledger</span>
+                          <span className="hidden md:inline">{t('ledger')}</span>
                         </Button>
                         <Button
                           variant="ghost"
@@ -673,7 +673,7 @@ export function PartiesManagement() {
                           onClick={() => handleRecordPrepayment(customer)}
                         >
                           <PlusCircle className="w-4 h-4 md:mr-1" />
-                          <span className="hidden md:inline">Prepayment</span>
+                          <span className="hidden md:inline">{t('prepayment')}</span>
                         </Button>
                         {toMoneyNumber(customer.prepaidBalance) > 0 && (
                           <Button
@@ -683,7 +683,7 @@ export function PartiesManagement() {
                             onClick={() => handleWithdraw(customer)}
                           >
                             <ArrowUpFromLine className="w-4 h-4 md:mr-1" />
-                            <span className="hidden md:inline">Withdraw</span>
+                            <span className="hidden md:inline">{t('withdraw')}</span>
                           </Button>
                         )}
                         {toMoneyNumber(customer.totalDue) > 0 && (
@@ -694,7 +694,7 @@ export function PartiesManagement() {
                             onClick={() => handleRecordPayment(customer)}
                           >
                             <IndianRupee className="w-4 h-4 md:mr-1" />
-                            <span className="hidden md:inline">Payment</span>
+                            <span className="hidden md:inline">{t('payment')}</span>
                           </Button>
                         )}
                       </div>
@@ -708,10 +708,10 @@ export function PartiesManagement() {
           <Table>
             <TableHeader className="sticky top-0 bg-background z-10">
               <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Contact</TableHead>
-                <TableHead>Address</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead>{t('name_col')}</TableHead>
+                <TableHead>{t('contact_col')}</TableHead>
+                <TableHead>{t('address_col')}</TableHead>
+                <TableHead className="text-right">{t('actions_col')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -719,7 +719,7 @@ export function PartiesManagement() {
                 <TableRow>
                   <TableCell colSpan={4} className="text-center py-12">
                     <Users className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                    <p className="text-muted-foreground">No suppliers found</p>
+                    <p className="text-muted-foreground">{t('no_suppliers')}</p>
                   </TableCell>
                 </TableRow>
               ) : (
@@ -743,7 +743,7 @@ export function PartiesManagement() {
                       )}
                     </TableCell>
                     <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                      <div className="flex items-center justify-end gap-1 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
                         <Button
                           variant="ghost"
                           size="sm"
@@ -751,7 +751,7 @@ export function PartiesManagement() {
                           onClick={() => handleEditParty(supplier)}
                         >
                           <Edit className="w-4 h-4 md:mr-1" />
-                          <span className="hidden md:inline">Edit</span>
+                          <span className="hidden md:inline">{t('edit')}</span>
                         </Button>
                       </div>
                     </TableCell>

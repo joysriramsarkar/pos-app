@@ -6,12 +6,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, BarChart3, Tag, Truck, TrendingDown, IndianRupee, CalendarDays, Calendar, CalendarRange, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft, BarChart3, Tag, Truck, TrendingDown, Banknote, CalendarDays, Calendar, CalendarRange, ChevronLeft, ChevronRight } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, subDays, addDays, subMonths, getWeek, getYear } from 'date-fns';
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
+import { useTranslations } from 'next-intl';
+import { useNumberFormat } from '@/hooks/use-number-format';
+import { useSettingsStore } from '@/stores/settings-store';
 
 const CATEGORIES = ['Rent', 'Utilities', 'Salaries', 'Supplies', 'Maintenance', 'Other'] as const;
 
@@ -26,9 +29,6 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 const CHART_COLORS = ['#ef4444', '#f59e0b', '#8b5cf6', '#3b82f6', '#10b981', '#ec4899', '#f97316', '#14b8a6'];
 
-const fp = (n: number) =>
-  new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n);
-
 type ViewMode = 'daily' | 'weekly' | 'monthly';
 
 interface ExpensesReportProps {
@@ -36,6 +36,9 @@ interface ExpensesReportProps {
 }
 
 export function ExpensesReport({ onBack }: ExpensesReportProps) {
+  const t = useTranslations('Expenses');
+  const { formatPrice, formatDate, formatStringNumbers } = useNumberFormat();
+  const currencySymbol = useSettingsStore((s) => s.settings.currency_symbol);
   const [expenses, setExpenses] = useState<any[]>([]);
   const [filterCategory, setFilterCategory] = useState('All');
   const [viewMode, setViewMode] = useState<ViewMode>('daily');
@@ -155,7 +158,7 @@ export function ExpensesReport({ onBack }: ExpensesReportProps) {
   };
 
   const tooltipStyle = { borderRadius: '8px', fontSize: '12px' };
-  const yFmt = (v: number) => `₹${v >= 1000 ? (v / 1000).toFixed(1) + 'k' : v}`;
+  const yFmt = (v: number) => `${currencySymbol}${v >= 1000 ? formatStringNumbers((v / 1000).toFixed(1)) + 'k' : formatStringNumbers(v)}`;
 
   const chartData = viewMode === 'daily'
     ? filtered.map(e => ({ time: format(new Date(e.date), 'HH:mm'), amount: e.amount ?? 0, label: e.notes || e.category }))
@@ -163,9 +166,8 @@ export function ExpensesReport({ onBack }: ExpensesReportProps) {
   const chartKey = viewMode === 'daily' ? 'time' : viewMode === 'weekly' ? 'week' : 'month';
   const chartColor = viewMode === 'daily' ? '#ef4444' : viewMode === 'weekly' ? '#f59e0b' : '#8b5cf6';
   const tableColor = viewMode === 'daily' ? 'text-red-600' : viewMode === 'weekly' ? 'text-amber-600' : 'text-purple-600';
-
   return (
-    <div className="flex flex-col h-full overflow-y-auto gap-4 p-4 pb-24">
+    <div className="flex flex-col gap-4 p-4 md:p-6 bg-slate-50/50 min-h-screen">
       {/* Header */}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={onBack} className="h-9 w-9 shrink-0">
@@ -173,13 +175,13 @@ export function ExpensesReport({ onBack }: ExpensesReportProps) {
         </Button>
         <div>
           <h1 className="text-xl font-bold flex items-center gap-2">
-            <BarChart3 className="w-5 h-5" /> খরচের বিস্তারিত রিপোর্ট
+            <BarChart3 className="w-5 h-5" /> {t('report_title')}
           </h1>
-          <p className="text-muted-foreground text-xs">দৈনিক · সাপ্তাহিক · মাসিক বিশ্লেষণ</p>
+          <p className="text-muted-foreground text-xs">{t('report_analysis')}</p>
         </div>
       </div>
 
-      {/* Filters — একটাই কার্ড, সব কন্ট্রোল এখানে */}
+      {/* Filters */}
       <Card className="rounded-2xl shadow-sm">
         <CardContent className="p-3 flex flex-col gap-2">
           {/* Row 1: View mode */}
@@ -189,25 +191,25 @@ export function ExpensesReport({ onBack }: ExpensesReportProps) {
               className="h-8 text-xs flex-1 gap-1"
               onClick={() => setViewMode('daily')}
             >
-              <CalendarDays className="w-3.5 h-3.5" /> দৈনিক
+              <CalendarDays className="w-3.5 h-3.5" /> {t('daily')}
             </Button>
             <Button
               size="sm" variant={viewMode === 'weekly' ? 'default' : 'outline'}
               className="h-8 text-xs flex-1 gap-1"
               onClick={() => setViewMode('weekly')}
             >
-              <Calendar className="w-3.5 h-3.5" /> সাপ্তাহিক
+              <Calendar className="w-3.5 h-3.5" /> {t('weekly')}
             </Button>
             <Button
               size="sm" variant={viewMode === 'monthly' ? 'default' : 'outline'}
               className="h-8 text-xs flex-1 gap-1"
               onClick={() => setViewMode('monthly')}
             >
-              <CalendarRange className="w-3.5 h-3.5" /> মাসিক
+              <CalendarRange className="w-3.5 h-3.5" /> {t('monthly')}
             </Button>
           </div>
 
-          {/* Row 2: Date controls — দৈনিকে একটা date, বাকিতে রেঞ্জ + প্রিসেট */}
+          {/* Row 2: Date controls */}
           {viewMode === 'daily' ? (
             <div className="flex items-center gap-1">
               <Button size="sm" variant="outline" className="h-9 w-9 p-0" onClick={() => setSingleDate(d => format(subDays(new Date(d), 1), 'yyyy-MM-dd'))}>
@@ -216,7 +218,7 @@ export function ExpensesReport({ onBack }: ExpensesReportProps) {
               <Button size="sm" variant={singleDate === format(new Date(), 'yyyy-MM-dd') ? 'default' : 'outline'}
                 className="h-9 flex-1 text-xs font-medium"
                 onClick={() => setSingleDate(format(new Date(), 'yyyy-MM-dd'))}>
-                {singleDate === format(new Date(), 'yyyy-MM-dd') ? 'আজ' : format(new Date(singleDate), 'dd MMM yyyy')}
+                {singleDate === format(new Date(), 'yyyy-MM-dd') ? t('today_label') : formatDate(new Date(singleDate), { day: '2-digit', month: 'short', year: 'numeric' })}
               </Button>
               <Button size="sm" variant="outline" className="h-9 w-9 p-0"
                 disabled={singleDate >= format(new Date(), 'yyyy-MM-dd')}
@@ -227,17 +229,17 @@ export function ExpensesReport({ onBack }: ExpensesReportProps) {
           ) : (
             <div className="flex items-center gap-2 flex-wrap">
               {[7, 30, 90].map(d => (
-                <Button key={d} size="sm" variant="outline" className="h-8 text-xs" onClick={() => setRangePreset(d)}>{d}d</Button>
+                <Button key={d} size="sm" variant="outline" className="h-8 text-xs" onClick={() => setRangePreset(d)}>{formatStringNumbers(d)}d</Button>
               ))}
               <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => {
                 setDateFrom(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
                 setDateTo(format(new Date(), 'yyyy-MM-dd'));
-              }}>এই মাস</Button>
+              }}>{t('this_month')}</Button>
               <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => {
                 const last = subMonths(new Date(), 1);
                 setDateFrom(format(startOfMonth(last), 'yyyy-MM-dd'));
                 setDateTo(format(endOfMonth(last), 'yyyy-MM-dd'));
-              }}>গত মাস</Button>
+              }}>{t('last_month')}</Button>
               <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="h-8 text-xs w-36" />
               <span className="text-xs text-muted-foreground">–</span>
               <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="h-8 text-xs w-36" />
@@ -248,8 +250,8 @@ export function ExpensesReport({ onBack }: ExpensesReportProps) {
           <Select value={filterCategory} onValueChange={setFilterCategory}>
             <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="All">সব ক্যাটাগরি</SelectItem>
-              {CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+              <SelectItem value="All">{t('all_categories')}</SelectItem>
+              {CATEGORIES.map(c => <SelectItem key={c} value={c}>{t(`categories_map.${c}`)}</SelectItem>)}
             </SelectContent>
           </Select>
         </CardContent>
@@ -259,25 +261,25 @@ export function ExpensesReport({ onBack }: ExpensesReportProps) {
       <div className="grid grid-cols-3 gap-3">
         <Card className="rounded-2xl shadow-sm bg-red-50/60 dark:bg-red-950/20 border-red-200 dark:border-red-800/40">
           <CardContent className="p-3 flex items-center gap-2">
-            <IndianRupee className="w-5 h-5 text-red-600 shrink-0" />
+            <Banknote className="w-5 h-5 text-red-600 shrink-0" />
             <div>
-              <p className="text-[10px] text-red-600 font-medium">মোট খরচ</p>
-              <p className="text-lg font-black text-red-700">{fp(total)}</p>
+              <p className="text-[10px] text-red-600 font-medium">{t('total')}</p>
+              <p className="text-lg font-black text-red-700">{formatPrice(total)}</p>
             </div>
           </CardContent>
         </Card>
         <Card className="rounded-2xl shadow-sm">
           <CardContent className="p-3">
-            <p className="text-[10px] text-muted-foreground">এন্ট্রি</p>
-            <p className="text-lg font-bold">{filtered.length}টি</p>
+            <p className="text-[10px] text-muted-foreground">{t('entry')}</p>
+            <p className="text-lg font-bold">{t('entries_count', { count: formatStringNumbers(filtered.length) })}</p>
           </CardContent>
         </Card>
         <Card className="rounded-2xl shadow-sm">
           <CardContent className="p-3">
             <p className="text-[10px] text-muted-foreground">
-              {viewMode === 'daily' ? 'গড় এন্ট্রি' : 'গড় দৈনিক'}
+              {viewMode === 'daily' ? t('avg_entry') : t('avg_daily')}
             </p>
-            <p className="text-lg font-bold">{fp(dailyData.length ? total / dailyData.length : 0)}</p>
+            <p className="text-lg font-bold">{formatPrice(dailyData.length ? total / dailyData.length : 0)}</p>
           </CardContent>
         </Card>
       </div>
@@ -286,12 +288,12 @@ export function ExpensesReport({ onBack }: ExpensesReportProps) {
       <Card className="rounded-2xl shadow-sm">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm">
-            {viewMode === 'daily' ? 'দৈনিক খরচ' : viewMode === 'weekly' ? 'সাপ্তাহিক খরচ' : 'মাসিক খরচ'}
+            {viewMode === 'daily' ? `${t('daily')} ${t('title')}` : viewMode === 'weekly' ? `${t('weekly')} ${t('title')}` : `${t('monthly')} ${t('title')}`}
           </CardTitle>
         </CardHeader>
         <CardContent>
           {chartData.length === 0 ? (
-            <p className="text-center text-muted-foreground text-sm py-8">কোনো ডেটা নেই</p>
+            <p className="text-center text-muted-foreground text-sm py-8">{t('no_data')}</p>
           ) : (
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={chartData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
@@ -300,38 +302,38 @@ export function ExpensesReport({ onBack }: ExpensesReportProps) {
                 <YAxis tickFormatter={yFmt} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} width={45} />
                 <Tooltip
                   formatter={(v: number, _: string, props: any) => [
-                    fp(v),
-                    viewMode === 'daily' ? (props.payload?.label || 'খরচ') : 'খরচ'
+                    formatPrice(v),
+                    viewMode === 'daily' ? (props.payload?.label || t('title')) : t('title')
                   ]}
                   contentStyle={tooltipStyle}
                 />
-                <Bar dataKey="amount" name="খরচ" fill={chartColor} radius={[4, 4, 0, 0]} maxBarSize={40} />
+                <Bar dataKey="amount" name={t('title')} fill={chartColor} radius={[4, 4, 0, 0]} maxBarSize={40} />
               </BarChart>
             </ResponsiveContainer>
           )}
         </CardContent>
       </Card>
 
-      {/* দৈনিক মোডে লাইন চার্ট শুধু একটা দিনের এন্ট্রি দেখাবে */}
+      {/* Detail list for daily mode */}
       {viewMode === 'daily' && (
         <Card className="rounded-2xl shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center gap-2">
-              <TrendingDown className="w-4 h-4 text-red-500" /> {format(new Date(singleDate), 'dd MMM yyyy')} — এন্ট্রি তালিকা
+              <TrendingDown className="w-4 h-4 text-red-500" /> {formatDate(new Date(singleDate), { day: '2-digit', month: 'short', year: 'numeric' })} — {t('entry_list')}
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>বিবরণ</TableHead>
-                  <TableHead>ক্যাটাগরি</TableHead>
-                  <TableHead className="text-right">পরিমাণ</TableHead>
+                  <TableHead>{t('description')}</TableHead>
+                  <TableHead>{t('category')}</TableHead>
+                  <TableHead className="text-right">{t('amount')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filtered.length === 0 ? (
-                  <TableRow><TableCell colSpan={3} className="text-center py-6 text-muted-foreground text-sm">কোনো ডেটা নেই</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={3} className="text-center py-6 text-muted-foreground text-sm">{t('no_data')}</TableCell></TableRow>
                 ) : filtered.map(e => (
                   <TableRow key={e.id}>
                     <TableCell className="text-sm">
@@ -343,9 +345,9 @@ export function ExpensesReport({ onBack }: ExpensesReportProps) {
                       {e.notes || '—'}
                     </TableCell>
                     <TableCell>
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.Other}`}>{e.category}</span>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${CATEGORY_COLORS[e.category] ?? CATEGORY_COLORS.Other}`}>{t(`categories_map.${e.category}`)}</span>
                     </TableCell>
-                    <TableCell className="text-right font-semibold text-sm text-red-600">{fp(Number(e.amount))}</TableCell>
+                    <TableCell className="text-right font-semibold text-sm text-red-600">{formatPrice(Number(e.amount))}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -354,30 +356,30 @@ export function ExpensesReport({ onBack }: ExpensesReportProps) {
         </Card>
       )}
 
-      {/* সাপ্তাহিক/মাসিক মোডে গ্রুপ তালিকা */}
+      {/* Weekly/Monthly list */}
       {viewMode !== 'daily' && (
         <Card className="rounded-2xl shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center gap-2">
               <TrendingDown className="w-4 h-4" />
-              {viewMode === 'weekly' ? 'সাপ্তাহিক' : 'মাসিক'} তালিকা
+              {viewMode === 'weekly' ? t('weekly_list') : t('monthly_list')}
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>{viewMode === 'weekly' ? 'সপ্তাহ' : 'মাস'}</TableHead>
-                  <TableHead className="text-right">মোট</TableHead>
+                  <TableHead>{viewMode === 'weekly' ? t('week') : t('month')}</TableHead>
+                  <TableHead className="text-right">{t('total')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {chartData.length === 0 ? (
-                  <TableRow><TableCell colSpan={2} className="text-center py-6 text-muted-foreground text-sm">কোনো ডেটা নেই</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={2} className="text-center py-6 text-muted-foreground text-sm">{t('no_data')}</TableCell></TableRow>
                 ) : (chartData as any[]).map((g: any) => (
                   <TableRow key={g[chartKey]}>
                     <TableCell className="text-sm">{g[chartKey]}</TableCell>
-                    <TableCell className={`text-right font-semibold text-sm ${tableColor}`}>{fp(g.amount)}</TableCell>
+                    <TableCell className={`text-right font-semibold text-sm ${tableColor}`}>{formatPrice(g.amount)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -390,18 +392,18 @@ export function ExpensesReport({ onBack }: ExpensesReportProps) {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card className="rounded-2xl shadow-sm">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-2"><Tag className="w-4 h-4" /> ক্যাটাগরি পাই চার্ট</CardTitle>
+            <CardTitle className="text-sm flex items-center gap-2"><Tag className="w-4 h-4" /> {t('category_pie_chart')}</CardTitle>
           </CardHeader>
           <CardContent>
             {pieData.length === 0 ? (
-              <p className="text-center text-muted-foreground text-sm py-8">কোনো ডেটা নেই</p>
+              <p className="text-center text-muted-foreground text-sm py-8">{t('no_data')}</p>
             ) : (
               <ResponsiveContainer width="100%" height={200}>
                 <PieChart>
-                  <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={75} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
+                  <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={75} label={({ name, percent }) => `${t(`categories_map.${name}`)} ${formatStringNumbers((percent * 100).toFixed(0))}%`} labelLine={false}>
                     {pieData.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
                   </Pie>
-                  <Tooltip formatter={(v: number) => fp(v)} contentStyle={tooltipStyle} />
+                  <Tooltip formatter={(v: number) => formatPrice(v)} contentStyle={tooltipStyle} />
                 </PieChart>
               </ResponsiveContainer>
             )}
@@ -410,27 +412,27 @@ export function ExpensesReport({ onBack }: ExpensesReportProps) {
 
         <Card className="rounded-2xl shadow-sm">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-2"><Tag className="w-4 h-4" /> ক্যাটাগরি ব্রেকডাউন</CardTitle>
+            <CardTitle className="text-sm flex items-center gap-2"><Tag className="w-4 h-4" /> {t('category_breakdown')}</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>ক্যাটাগরি</TableHead>
-                  <TableHead className="text-right">মোট</TableHead>
+                  <TableHead>{t('category')}</TableHead>
+                  <TableHead className="text-right">{t('total')}</TableHead>
                   <TableHead className="text-right">%</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {categoryTotals.length === 0 ? (
-                  <TableRow><TableCell colSpan={3} className="text-center py-6 text-muted-foreground text-sm">কোনো ডেটা নেই</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={3} className="text-center py-6 text-muted-foreground text-sm">{t('no_data')}</TableCell></TableRow>
                 ) : categoryTotals.map(([cat, amt]) => (
                   <TableRow key={cat}>
                     <TableCell>
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${CATEGORY_COLORS[cat] ?? CATEGORY_COLORS.Other}`}>{cat}</span>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${CATEGORY_COLORS[cat] ?? CATEGORY_COLORS.Other}`}>{t(`categories_map.${cat}`)}</span>
                     </TableCell>
-                    <TableCell className="text-right font-semibold text-sm">{fp(amt)}</TableCell>
-                    <TableCell className="text-right text-xs text-muted-foreground">{total > 0 ? ((amt / total) * 100).toFixed(1) : 0}%</TableCell>
+                    <TableCell className="text-right font-semibold text-sm">{formatPrice(amt)}</TableCell>
+                    <TableCell className="text-right text-xs text-muted-foreground">{total > 0 ? formatStringNumbers(((amt / total) * 100).toFixed(1)) : formatStringNumbers(0)}%</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -443,14 +445,14 @@ export function ExpensesReport({ onBack }: ExpensesReportProps) {
       {supplierTotals.length > 0 && (
         <Card className="rounded-2xl shadow-sm">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-2"><Truck className="w-4 h-4" /> সাপ্লায়ার অনুযায়ী খরচ</CardTitle>
+            <CardTitle className="text-sm flex items-center gap-2"><Truck className="w-4 h-4" /> {t('supplier_expenses')}</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>সাপ্লায়ার</TableHead>
-                  <TableHead className="text-right">মোট</TableHead>
+                  <TableHead>{t('supplier_label')}</TableHead>
+                  <TableHead className="text-right">{t('total')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -459,7 +461,7 @@ export function ExpensesReport({ onBack }: ExpensesReportProps) {
                     <TableCell className="text-sm flex items-center gap-1.5 font-medium">
                       <Truck className="w-3.5 h-3.5 text-amber-600 shrink-0" />{s.name}
                     </TableCell>
-                    <TableCell className="text-right font-semibold text-sm">{fp(s.total)}</TableCell>
+                    <TableCell className="text-right font-semibold text-sm">{formatPrice(s.total)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

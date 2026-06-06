@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
+import { useTranslations } from "next-intl";
 import {
   Dialog,
   DialogContent,
@@ -43,6 +44,8 @@ function useUserForm(
   onSuccess: () => void,
 ) {
   const { toast } = useToast();
+  const t = useTranslations("Users");
+  const tp = useTranslations("PasswordChange");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState<User>({
@@ -61,23 +64,23 @@ function useUserForm(
     const newErrors: Record<string, string> = {};
 
     if (!formData.username?.trim()) {
-      newErrors.username = "Username is required";
+      newErrors.username = t("username_required");
     } else if (formData.username.length < 3) {
-      newErrors.username = "Username must be at least 3 characters";
+      newErrors.username = t("username_min");
     }
 
     if (!formData.name?.trim()) {
-      newErrors.name = "Full name is required";
+      newErrors.name = t("name_required");
     }
 
     if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = "Invalid email address";
+      newErrors.email = t("email_invalid");
     }
 
     if (!isEditing && !password) {
-      newErrors.password = "Password is required for new users";
+      newErrors.password = t("password_required");
     } else if (password && password.length < 6) {
-      newErrors.password = "Password must be at least 6 characters";
+      newErrors.password = tp("password_min");
     }
 
     setErrors(newErrors);
@@ -111,13 +114,13 @@ function useUserForm(
       if (!response.ok) {
         const error = await response.json();
         throw new Error(
-          error.error || `Failed to ${isEditing ? "update" : "create"} user`,
+          error.error || (isEditing ? t("update_failed") : t("add_failed")),
         );
       }
 
       toast({
-        title: "Success",
-        description: `User ${isEditing ? "updated" : "created"} successfully`,
+        title: t("success"),
+        description: isEditing ? t("user_updated") : t("user_added"),
       });
 
       onSuccess();
@@ -125,8 +128,8 @@ function useUserForm(
     } catch (err) {
       console.error("Error saving user:", err);
       toast({
-        title: "Error",
-        description: err instanceof Error ? err.message : "Failed to save user",
+        title: t("error"),
+        description: err instanceof Error ? err.message : (isEditing ? t("update_failed") : t("add_failed")),
         variant: "destructive",
       });
     } finally {
@@ -153,6 +156,9 @@ export function AddUserDialog({
   onClose,
   onSuccess,
 }: AddUserDialogProps) {
+  const t = useTranslations("Users");
+  const tc = useTranslations("Common");
+  const tp = useTranslations("PasswordChange");
   const {
     loading,
     showPassword,
@@ -170,25 +176,23 @@ export function AddUserDialog({
     <Dialog open={true} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[500px] w-[95vw] max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{isEditing ? "Edit User" : "Add New User"}</DialogTitle>
+          <DialogTitle>{isEditing ? t("edit_user") : t("add_new_user")}</DialogTitle>
           <DialogDescription>
-            {isEditing
-              ? "Update user information and role"
-              : "Create a new system user"}
+            {t("enter_user_details")}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Username */}
           <div className="space-y-2">
-            <Label htmlFor="username">Username</Label>
+            <Label htmlFor="username">{t("username_label")}</Label>
             <Input
               id="username"
               value={formData.username}
               onChange={(e) =>
                 setFormData({ ...formData, username: e.target.value })
               }
-              placeholder="Enter username"
+              placeholder={t("enter_username")}
               disabled={loading}
               className={errors.username ? "border-destructive" : ""}
             />
@@ -199,14 +203,14 @@ export function AddUserDialog({
 
           {/* Full Name */}
           <div className="space-y-2">
-            <Label htmlFor="name">Full Name</Label>
+            <Label htmlFor="name">{t("name_label")}</Label>
             <Input
               id="name"
               value={formData.name}
               onChange={(e) =>
                 setFormData({ ...formData, name: e.target.value })
               }
-              placeholder="Enter full name"
+              placeholder={t("enter_name")}
               disabled={loading}
               className={errors.name ? "border-destructive" : ""}
             />
@@ -217,7 +221,7 @@ export function AddUserDialog({
 
           {/* Email */}
           <div className="space-y-2">
-            <Label htmlFor="email">Email (Optional)</Label>
+            <Label htmlFor="email">{t("email_label")}</Label>
             <Input
               id="email"
               type="email"
@@ -225,7 +229,7 @@ export function AddUserDialog({
               onChange={(e) =>
                 setFormData({ ...formData, email: e.target.value || undefined })
               }
-              placeholder="Enter email address"
+              placeholder={t("enter_email")}
               disabled={loading}
               className={errors.email ? "border-destructive" : ""}
             />
@@ -236,21 +240,21 @@ export function AddUserDialog({
 
           {/* Phone */}
           <div className="space-y-2">
-            <Label htmlFor="phone">Phone (Optional)</Label>
+            <Label htmlFor="phone">{t("phone_label")}</Label>
             <Input
               id="phone"
               value={formData.phone || ""}
               onChange={(e) =>
                 setFormData({ ...formData, phone: e.target.value || undefined })
               }
-              placeholder="Enter phone number"
+              placeholder={t("enter_phone")}
               disabled={loading}
             />
           </div>
 
           {/* Role */}
           <div className="space-y-2">
-            <Label htmlFor="role">Role</Label>
+            <Label htmlFor="role">{t("role_label")}</Label>
             <Select
               value={formData.role}
               onValueChange={(value: User["role"]) =>
@@ -262,33 +266,30 @@ export function AddUserDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="ADMIN">Admin - Full access</SelectItem>
+                <SelectItem value="ADMIN">{t("role_admin")} - {t("role_admin_desc")}</SelectItem>
                 <SelectItem value="MANAGER">
-                  Manager - Manage products & sales
+                  {t("role_manager")} - {t("role_manager_desc")}
                 </SelectItem>
                 <SelectItem value="CASHIER">
-                  Cashier - Create sales only
+                  {t("role_cashier")} - {t("role_cashier_desc")}
                 </SelectItem>
                 <SelectItem value="VIEWER">
-                  Viewer - View reports only
+                  {t("role_viewer")} - {t("role_viewer_desc")}
                 </SelectItem>
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              {formData.role === "ADMIN" &&
-                "Full system access including user and settings management"}
-              {formData.role === "MANAGER" &&
-                "Can manage products, stock, sales, and view reports"}
-              {formData.role === "CASHIER" &&
-                "Can create sales and manage customers"}
-              {formData.role === "VIEWER" && "Can only view reports and sales"}
+              {formData.role === "ADMIN" && t("role_admin_desc")}
+              {formData.role === "MANAGER" && t("role_manager_desc")}
+              {formData.role === "CASHIER" && t("role_cashier_desc")}
+              {formData.role === "VIEWER" && t("role_viewer_desc")}
             </p>
           </div>
 
           {/* Password */}
           <div className="space-y-2">
             <Label htmlFor="password">
-              Password {isEditing && "(leave blank to keep current)"}
+              {t("password_label")} {isEditing && `(${t("leave_blank_placeholder")})`}
             </Label>
             <div className="relative">
               <Input
@@ -297,7 +298,7 @@ export function AddUserDialog({
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder={
-                  isEditing ? "Enter new password (optional)" : "Enter password"
+                  isEditing ? t("enter_new_password_placeholder") : t("enter_password")
                 }
                 disabled={loading}
                 className={errors.password ? "border-destructive" : ""}
@@ -319,7 +320,7 @@ export function AddUserDialog({
             )}
             {!isEditing && (
               <p className="text-xs text-muted-foreground">
-                Minimum 6 characters
+                {tp("password_min")}
               </p>
             )}
           </div>
@@ -332,7 +333,7 @@ export function AddUserDialog({
               onClick={onClose}
               disabled={loading}
             >
-              Cancel
+              {tc("cancel")}
             </Button>
             <Button
               type="submit"
@@ -340,7 +341,7 @@ export function AddUserDialog({
               className="bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 gap-2"
             >
               {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-              {isEditing ? "Update User" : "Create User"}
+              {isEditing ? t("update_user") : t("create_user")}
             </Button>
           </div>
         </form>
@@ -348,3 +349,5 @@ export function AddUserDialog({
     </Dialog>
   );
 }
+
+export default AddUserDialog;

@@ -19,9 +19,11 @@ async function generatePdfFromHtmlString(
 
   // Create a temporary div in the main document (not iframe) for Capacitor compatibility
   const container = document.createElement('div');
-  container.style.cssText = 'position:fixed;left:-9999px;top:0;width:' + (isThermal ? pdfWidthMm * 3.78 : 794) + 'px;background:white;';
+  container.style.cssText = 'position:fixed;left:-9999px;top:0;width:' + (isThermal ? pdfWidthMm * 3.78 : 794) + 'px;background:white;color:#000;font-family:Arial,sans-serif;';
   container.innerHTML = invoiceHtml;
   document.body.appendChild(container);
+
+  // globals.css uses hsl() variables now, which are supported by html2canvas natively.
 
   // Wait for fonts/layout
   await new Promise(r => setTimeout(r, 400));

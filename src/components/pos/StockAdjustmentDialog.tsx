@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -31,20 +32,23 @@ interface StockAdjustmentDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-const ADJUSTMENT_TYPES = [
-  { value: 'home_consumption', label: 'বাড়ির খরচ (Home Use)' },
-  { value: 'damaged', label: 'নষ্ট / ড্যামেজ (Damaged)' },
-  { value: 'expired', label: 'মেয়াদ উত্তীর্ণ (Expired)' },
-  { value: 'other', label: 'অন্যান্য (Other)' },
-];
-
 export function StockAdjustmentDialog({ product, open, onOpenChange }: StockAdjustmentDialogProps) {
+  const t = useTranslations('Stock');
+  const tc = useTranslations('Common');
+  
   const [quantity, setQuantity] = useState('');
   const [adjustmentType, setAdjustmentType] = useState('home_consumption');
   const [reason, setReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
   const updateProductStock = useProductsStore((state) => state.updateProductStock);
+
+  const ADJUSTMENT_TYPES = [
+    { value: 'home_consumption', label: t('reason_home_use') },
+    { value: 'damaged', label: t('reason_damaged') },
+    { value: 'expired', label: t('reason_expired') },
+    { value: 'other', label: t('reason_other') },
+  ];
 
   const handleClose = () => {
     setQuantity('');
@@ -57,11 +61,11 @@ export function StockAdjustmentDialog({ product, open, onOpenChange }: StockAdju
     if (!product) return;
     const qty = parseFloat(quantity);
     if (!qty || qty <= 0) {
-      toast({ title: 'পরিমাণ সঠিক নয়', variant: 'destructive' });
+      toast({ title: t('invalid_quantity'), variant: 'destructive' });
       return;
     }
     if (!reason.trim()) {
-      toast({ title: 'কারণ লিখুন', variant: 'destructive' });
+      toast({ title: t('reason_required'), variant: 'destructive' });
       return;
     }
 
@@ -76,11 +80,11 @@ export function StockAdjustmentDialog({ product, open, onOpenChange }: StockAdju
       if (!res.ok) throw new Error(data.error);
 
       updateProductStock(product.id, -qty);
-      toast({ title: 'স্টক আপডেট হয়েছে', description: data.message });
+      toast({ title: t('stock_updated'), description: data.message });
       handleClose();
     } catch (error) {
       toast({
-        title: 'ব্যর্থ হয়েছে',
+        title: t('stock_update_failed'),
         description: error instanceof Error ? error.message : 'Unknown error',
         variant: 'destructive',
       });
@@ -97,18 +101,18 @@ export function StockAdjustmentDialog({ product, open, onOpenChange }: StockAdju
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <MinusCircle className="w-5 h-5 text-amber-500" />
-            স্টক কমানো (Stock Adjustment)
+            {t('stock_adjustment_title')}
           </DialogTitle>
           <DialogDescription>
             <span className="font-semibold text-foreground">{product.name}</span>
-            {' — '}বর্তমান স্টক:{' '}
+            {' — '}{t('current_stock_label')}:{' '}
             <span className="font-semibold">{product.currentStock} {product.unit}</span>
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
           <div className="space-y-1.5">
-            <Label>কারণের ধরন</Label>
+            <Label>{t('reason_type')}</Label>
             <Select value={adjustmentType} onValueChange={setAdjustmentType}>
               <SelectTrigger>
                 <SelectValue />
@@ -122,24 +126,24 @@ export function StockAdjustmentDialog({ product, open, onOpenChange }: StockAdju
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="adj-quantity">পরিমাণ ({product.unit})</Label>
+            <Label htmlFor="adj-quantity">{t('quantity_unit', { unit: product.unit })}</Label>
             <Input
               id="adj-quantity"
               type="number"
               min="0.001"
               step="any"
               max={product.currentStock}
-              placeholder={`সর্বোচ্চ ${product.currentStock}`}
+              placeholder={t('max_placeholder', { stock: product.currentStock })}
               value={quantity}
               onChange={(e) => setQuantity(convertBengaliToEnglishNumerals(e.target.value))}
             />
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="adj-reason">বিস্তারিত কারণ</Label>
+            <Label htmlFor="adj-reason">{t('detailed_reason')}</Label>
             <Input
               id="adj-reason"
-              placeholder="যেমন: সাবান ২ পিস বাড়িতে নেওয়া হয়েছে"
+              placeholder={t('reason_placeholder')}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
             />
@@ -147,16 +151,18 @@ export function StockAdjustmentDialog({ product, open, onOpenChange }: StockAdju
         </div>
 
         <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={handleClose} disabled={isSubmitting}>বাতিল</Button>
+          <Button variant="outline" onClick={handleClose} disabled={isSubmitting}>{tc('cancel')}</Button>
           <Button
             onClick={handleSubmit}
             disabled={isSubmitting || !quantity || !reason.trim()}
             className="bg-amber-500 hover:bg-amber-600 text-white"
           >
-            {isSubmitting ? 'সেভ হচ্ছে...' : 'স্টক কমান'}
+            {isSubmitting ? tc('loading') : t('save_btn')}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
+
+export default StockAdjustmentDialog;

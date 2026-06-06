@@ -1,8 +1,15 @@
-﻿import { useLocale } from 'next-intl';
+import { useLocale } from 'next-intl';
 import { convertEnglishToBengaliNumerals } from '@/lib/utils';
+import { useSettingsStore } from '@/stores/settings-store';
 
-export function makeFormatters(isBn: boolean) {
+export function makeFormatters(isBn: boolean, currencySymbol: string = '₹') {
   const intlLocale = isBn ? 'bn-BD' : 'en-IN';
+
+  let currencyCode = 'INR';
+  if (currencySymbol === '৳') currencyCode = 'BDT';
+  else if (currencySymbol === '$') currencyCode = 'USD';
+  else if (currencySymbol === '€') currencyCode = 'EUR';
+  else if (currencySymbol === '£') currencyCode = 'GBP';
 
   const formatNumber = (value: number | string): string => {
     const num = typeof value === 'string' ? parseFloat(value) : value;
@@ -12,12 +19,23 @@ export function makeFormatters(isBn: boolean) {
   };
 
   const formatPrice = (price: number | null | undefined): string => {
-    const formatted = new Intl.NumberFormat(intlLocale, {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 0,
-    }).format(price ?? 0);
-    return isBn ? convertEnglishToBengaliNumerals(formatted) : formatted;
+    const isStandard = ['INR', 'BDT', 'USD', 'EUR', 'GBP'].includes(currencyCode);
+    
+    if (isStandard) {
+      const formatted = new Intl.NumberFormat(intlLocale, {
+        style: 'currency',
+        currency: currencyCode,
+        minimumFractionDigits: 0,
+      }).format(price ?? 0);
+      return isBn ? convertEnglishToBengaliNumerals(formatted) : formatted;
+    } else {
+      const numFormatted = new Intl.NumberFormat(intlLocale, {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
+      }).format(price ?? 0);
+      const digitFormatted = isBn ? convertEnglishToBengaliNumerals(numFormatted) : numFormatted;
+      return `${currencySymbol}${digitFormatted}`;
+    }
   };
 
   const formatDate = (date: Date | string, options?: Intl.DateTimeFormatOptions): string => {
@@ -39,5 +57,6 @@ export function makeFormatters(isBn: boolean) {
 
 export function useNumberFormat() {
   const locale = useLocale();
-  return makeFormatters(locale === 'bn');
+  const currencySymbol = useSettingsStore((state) => state.settings.currency_symbol);
+  return makeFormatters(locale === 'bn', currencySymbol);
 }

@@ -21,6 +21,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useProductsStore, useSyncStore } from '@/stores/pos-store';
 import { useToast } from '@/hooks/use-toast';
+import { useTranslations } from 'next-intl';
 import { Upload, FileDown, Table as TableIcon, AlertCircle, CheckCircle } from 'lucide-react';
 import {
   Table,
@@ -49,6 +50,8 @@ export function BulkStockUpdateDialog({ open, onOpenChange }: BulkStockUpdateDia
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { products, updateProductStock, setProducts } = useProductsStore();
+  const t = useTranslations('Stock');
+  const tc = useTranslations('Common');
 
   // Pre-compute a map for O(1) barcode lookups
   const barcodeMap = useMemo(() => {
@@ -85,14 +88,14 @@ export function BulkStockUpdateDialog({ open, onOpenChange }: BulkStockUpdateDia
       skipEmptyLines: true,
       complete: (results) => {
         if (results.errors.length > 0) {
-          setError(`Error parsing file: ${results.errors[0].message}`);
+          setError(t('error_parsing', { error: results.errors[0].message }));
           return;
         }
 
         const requiredHeaders = ['barcode', 'quantity_to_add'];
         const headers = results.meta.fields;
         if (!headers || !requiredHeaders.every(h => headers.includes(h))) {
-            setError(`Invalid CSV format. Required headers are: ${requiredHeaders.join(', ')}`);
+            setError(t('invalid_csv_format', { headers: requiredHeaders.join(', ') }));
             return;
         }
 
@@ -108,20 +111,20 @@ export function BulkStockUpdateDialog({ open, onOpenChange }: BulkStockUpdateDia
             const product = barcodeMap.get(normalizedRowBarcode);
             return {
                 barcode: row.barcode,
-                name: product?.name || 'Unknown Product',
+                name: product?.name || t('unknown_product'),
                 quantity: parseInt(convertBengaliToEnglishNumerals(row.quantity_to_add), 10)
             }
-        });
+          });
 
         if (stockUpdateData.length === 0) {
-            setError("No valid stock updates found in the file. Please fill the 'quantity_to_add' column.");
+            setError(t('no_valid_updates'));
             return;
         }
 
         setParsedData(stockUpdateData);
       },
       error: (err) => {
-        setError(`Error parsing file: ${err.message}`);
+        setError(t('error_parsing', { error: err.message }));
       }
     });
   };
@@ -168,7 +171,7 @@ export function BulkStockUpdateDialog({ open, onOpenChange }: BulkStockUpdateDia
 
   const handleSave = async () => {
     if (parsedData.length === 0) {
-      setError("No data to save.");
+      setError(t('no_data_to_save'));
       return;
     }
 
@@ -237,9 +240,9 @@ export function BulkStockUpdateDialog({ open, onOpenChange }: BulkStockUpdateDia
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl w-[95vw] max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Bulk Stock Update</DialogTitle>
+          <DialogTitle>{t('bulk_stock_update')}</DialogTitle>
           <DialogDescription>
-            Update stock quantities in bulk using a CSV file.
+            {t('bulk_desc')}
           </DialogDescription>
         </DialogHeader>
 
@@ -247,7 +250,7 @@ export function BulkStockUpdateDialog({ open, onOpenChange }: BulkStockUpdateDia
             <div className="grid grid-cols-2 gap-4">
                 <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
                     <Upload className="w-4 h-4 mr-2" />
-                    Upload CSV
+                    {t('upload_csv')}
                 </Button>
                 <Input
                     ref={fileInputRef}
@@ -261,13 +264,13 @@ export function BulkStockUpdateDialog({ open, onOpenChange }: BulkStockUpdateDia
 
                 <Button variant="secondary" onClick={handleDownloadTemplate}>
                     <FileDown className="w-4 h-4 mr-2" />
-                    Download Template
+                    {t('download_template')}
                 </Button>
             </div>
 
             {file && (
                 <div className="text-sm text-muted-foreground">
-                    Selected file: {file.name}
+                    {t('selected_file', { name: file.name })}
                 </div>
             )}
 
@@ -282,15 +285,15 @@ export function BulkStockUpdateDialog({ open, onOpenChange }: BulkStockUpdateDia
                 <div>
                     <h3 className="text-lg font-medium mb-2 flex items-center gap-2">
                         <TableIcon className="w-5 h-5" />
-                        Preview Data
+                        {t('preview_data')}
                     </h3>
                     <ScrollArea className="h-64 border rounded-md">
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead>Barcode</TableHead>
-                                    <TableHead>Product Name</TableHead>
-                                    <TableHead className="text-right">Quantity to Add</TableHead>
+                                    <TableHead>{t('barcode')}</TableHead>
+                                    <TableHead>{t('product_name')}</TableHead>
+                                    <TableHead className="text-right">{t('qty_to_add')}</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -311,11 +314,11 @@ export function BulkStockUpdateDialog({ open, onOpenChange }: BulkStockUpdateDia
 
         <DialogFooter className="gap-2 sm:gap-0">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {tc('cancel')}
           </Button>
           <Button onClick={handleSave} disabled={parsedData.length === 0} className="bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600">
             <CheckCircle className="w-4 h-4 mr-2" />
-            Save Changes
+            {t('save_changes')}
           </Button>
         </DialogFooter>
       </DialogContent>

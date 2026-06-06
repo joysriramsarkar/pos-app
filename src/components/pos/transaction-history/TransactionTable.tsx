@@ -9,10 +9,11 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Download, Clock, User, FileText } from 'lucide-react';
+import { Download, Clock, User } from 'lucide-react';
 import { format } from 'date-fns';
 import { useNumberFormat } from '@/hooks/use-number-format';
-import { formatPrice, getStatusColor, getPaymentStatusColor } from './utils';
+import { useTranslations } from 'next-intl';
+import { getStatusColor, getPaymentStatusColor } from './utils';
 import { Transaction } from './types';
 
 interface TransactionTableProps {
@@ -27,10 +28,63 @@ export function TransactionTable({
   onExport,
 }: TransactionTableProps) {
   const { formatPrice: formatPriceBengali } = useNumberFormat();
+  const t = useTranslations('TransactionHistory');
+  const tc = useTranslations('Common');
 
   // Create a Bengali-aware price formatter
   const displayPrice = (price: number | null | undefined) => {
     return formatPriceBengali(price);
+  };
+
+  const getStatusText = (status: string) => {
+    if (!status) return '';
+    switch (status.toUpperCase()) {
+      case 'COMPLETED':
+        return t('completed');
+      case 'CANCELLED':
+        return t('cancelled');
+      case 'REFUNDED':
+        return t('refunded');
+      default:
+        return status;
+    }
+  };
+
+  const getPaymentStatusText = (status: string) => {
+    if (!status) return '';
+    switch (status.toUpperCase()) {
+      case 'PAID':
+        return t('paid', { defaultValue: 'Paid' });
+      case 'PARTIAL':
+        return tc('partial', { defaultValue: 'Partial' });
+      case 'DUE':
+        return t('due', { defaultValue: 'Due' });
+      default:
+        return status;
+    }
+  };
+
+  const getPaymentMethodText = (method: string) => {
+    if (!method) return '';
+    switch (method.toUpperCase()) {
+      case 'CASH':
+      case 'নগদ':
+        return t('cash');
+      case 'UPI':
+      case 'ইউপিআই':
+        return t('upi');
+      case 'DUE':
+      case 'বাকি':
+        return t('due');
+      case 'PREPAID':
+      case 'আগাম জমা':
+        return t('prepaid');
+      case 'MIXED':
+      case 'মিশ্র':
+        return t('mixed');
+      default:
+        return method;
+    }
   };
 
   return (
@@ -49,7 +103,7 @@ export function TransactionTable({
                   {transaction.invoiceNumber}
                 </span>
                 <span className="text-sm font-medium truncate mt-0.5">
-                  {transaction.customer?.name || "Walk-in Customer"}
+                  {transaction.customer?.name || t('walk_in_customer')}
                 </span>
               </div>
               <div className="flex flex-col items-end shrink-0">
@@ -66,13 +120,13 @@ export function TransactionTable({
             <div className="flex justify-between items-center mt-1">
               <div className="flex items-center gap-1.5 flex-wrap">
                 <Badge variant="outline" className="text-[10px] h-5 px-1.5 font-medium">
-                  {transaction.paymentMethod}
+                  {getPaymentMethodText(transaction.paymentMethod)}
                 </Badge>
                 <Badge className={`text-[10px] h-5 px-1.5 ${getPaymentStatusColor(transaction.paymentStatus)}`}>
-                  {transaction.paymentStatus}
+                  {getPaymentStatusText(transaction.paymentStatus)}
                 </Badge>
                 <Badge className={`text-[10px] h-5 px-1.5 ${getStatusColor(transaction.status)}`}>
-                  {transaction.status}
+                  {getStatusText(transaction.status)}
                 </Badge>
               </div>
               
@@ -95,15 +149,15 @@ export function TransactionTable({
         <Table>
           <TableHeader className="sticky top-0 bg-background z-10">
             <TableRow className="hover:bg-transparent border-b min-h-12">
-              <TableHead className="w-32 py-2">Invoice</TableHead>
-              <TableHead className="w-36 py-2">Date & Time</TableHead>
-              <TableHead className="w-48 py-2">Customer</TableHead>
-              <TableHead className="w-36 py-2">User</TableHead>
-              <TableHead className="w-28 text-right py-2">Amount</TableHead>
-              <TableHead className="w-28 text-right py-2">Paid</TableHead>
-              <TableHead className="w-24 py-2">Payment</TableHead>
-              <TableHead className="w-28 py-2">Status</TableHead>
-              <TableHead className="w-16 text-center py-2">Export</TableHead>
+              <TableHead className="w-32 py-2">{t('invoice')}</TableHead>
+              <TableHead className="w-36 py-2">{t('date_time')}</TableHead>
+              <TableHead className="w-48 py-2">{t('customer')}</TableHead>
+              <TableHead className="w-36 py-2">{t('user')}</TableHead>
+              <TableHead className="w-28 text-right py-2">{t('amount')}</TableHead>
+              <TableHead className="w-28 text-right py-2">{t('paid')}</TableHead>
+              <TableHead className="w-24 py-2">{tc('payment')}</TableHead>
+              <TableHead className="w-28 py-2">{t('status')}</TableHead>
+              <TableHead className="w-16 text-center py-2">{t('export')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -127,7 +181,7 @@ export function TransactionTable({
                       )}
                     </div>
                   ) : (
-                    <span className="text-sm text-muted-foreground italic">Walk-in Customer</span>
+                    <span className="text-sm text-muted-foreground italic">{t('walk_in_customer')}</span>
                   )}
                 </TableCell>
                 <TableCell className="py-2">
@@ -148,16 +202,16 @@ export function TransactionTable({
                 </TableCell>
                 <TableCell className="py-2">
                   <Badge variant="outline" className="text-xs font-medium bg-background">
-                    {transaction.paymentMethod}
+                    {getPaymentMethodText(transaction.paymentMethod)}
                   </Badge>
                 </TableCell>
                 <TableCell className="py-2">
                   <div className="flex flex-col gap-1 items-start">
                     <Badge className={`text-[10px] px-1.5 py-0 h-4 ${getPaymentStatusColor(transaction.paymentStatus)}`}>
-                      {transaction.paymentStatus}
+                      {getPaymentStatusText(transaction.paymentStatus)}
                     </Badge>
                     <Badge className={`text-[10px] px-1.5 py-0 h-4 ${getStatusColor(transaction.status)}`}>
-                      {transaction.status}
+                      {getStatusText(transaction.status)}
                     </Badge>
                   </div>
                 </TableCell>
@@ -167,7 +221,7 @@ export function TransactionTable({
                     size="icon"
                     onClick={(e) => { e.stopPropagation(); onExport(transaction); }}
                     className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                    title="Export Invoice Data"
+                    title={t('export')}
                   >
                     <Download className="w-3.5 h-3.5" />
                   </Button>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState, useEffect } from 'react';
+import { useCallback, useState, useEffect, useMemo } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { toMoneyNumber } from '@/lib/money';
 import { Button } from '@/components/ui/button';
@@ -39,6 +39,7 @@ import { useCartStore, useUIStore } from '@/stores/pos-store';
 import { cn, convertBengaliToEnglishNumerals } from '@/lib/utils';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { useNumberFormat } from '@/hooks/use-number-format';
+import { useTranslations } from 'next-intl';
 
 interface CartPanelProps {
   onCheckout: () => void;
@@ -46,14 +47,17 @@ interface CartPanelProps {
   onScan?: () => void;
 }
 
-const paymentMethods: { method: PaymentMethod; icon: React.ReactNode; label: string; color: string }[] = [
-  { method: 'Cash', icon: <Banknote className="w-2 h-2" />, label: 'Cash', color: 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100' },
-  { method: 'UPI', icon: <Smartphone className="w-2 h-2" />, label: 'UPI', color: 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100' },
-  { method: 'Mixed', icon: (<div className="flex items-center gap-1"><Banknote className="w-2 h-2" /><Smartphone className="w-2 h-2" /></div>), label: 'Mixed', color: 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100' },
-  { method: 'Due', icon: <Clock className="w-5 h-5" />, label: 'Due', color: 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100' },
+const paymentMethods: { method: PaymentMethod; icon: React.ReactNode; labelKey: string; color: string }[] = [
+  { method: 'Cash', icon: <Banknote className="w-4 h-4" />, labelKey: 'cash', color: 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100' },
+  { method: 'UPI', icon: <Smartphone className="w-4 h-4" />, labelKey: 'upi', color: 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100' },
+  { method: 'Mixed', icon: (<div className="flex items-center gap-1"><Banknote className="w-4 h-4" /><Smartphone className="w-4 h-4" /></div>), labelKey: 'mixed', color: 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100' },
+  { method: 'Due', icon: <Clock className="w-4 h-4" />, labelKey: 'due_payment', color: 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100' },
 ];
 
 export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps) {
+  const t = useTranslations('Cart');
+  const tc = useTranslations('Common');
+
   const [showDiscountInput, setShowDiscountInput] = useState(false);
   const [customerSearchOpen, setCustomerSearchOpen] = useState(false);
   const [customerSearchQuery, setCustomerSearchQuery] = useState('');
@@ -170,8 +174,8 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
     // Validate phone if provided
     if (newParty.phone && !/^[0-9]{10}$/.test(newParty.phone)) {
       toast({
-        title: 'Invalid Phone Number',
-        description: 'Phone number must be exactly 10 digits.',
+        title: t('invalid_phone'),
+        description: t('phone_digits'),
         variant: 'destructive',
       });
       return;
@@ -195,14 +199,14 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
       setShowAddPartyDialog(false);
       setNewParty({ name: '', phone: '', address: '', notes: '' });
       toast({
-        title: 'Customer Added',
-        description: `${newCustomer.name} has been added and selected.`,
+        title: t('customer_added'),
+        description: t('customer_added_desc', { name: newCustomer.name }),
       });
     } catch (error) {
       console.error('Failed to add customer:', error);
       toast({
-        title: 'Failed to Create Customer',
-        description: error instanceof Error ? error.message : 'An unexpected error occurred.',
+        title: t('failed_create_customer'),
+        description: error instanceof Error ? error.message : t('unexpected_error'),
         variant: 'destructive',
       });
     }
@@ -220,10 +224,9 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
     : customers.slice(0, 20);
 
   const isCartEmpty = items.length === 0;
-  const itemCountDisplay = itemCount === 0 ? 'Empty' : `${itemCount} item${itemCount !== 1 ? 's' : ''}`;  // unique SKUs
+  const itemCountDisplay = itemCount === 0 ? t('empty') : `${itemCount} ${itemCount === 1 ? t('item') : t('items')}`;
 
   const isAndroidApp = typeof Capacitor !== 'undefined' && Capacitor.isNativePlatform();
-
 
   return (
     <div className="flex flex-col h-full bg-background min-h-0">
@@ -259,7 +262,7 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
                 size="sm"
                 onClick={addTab}
                 className="h-7 px-2 ml-1 text-muted-foreground shrink-0 rounded-full"
-                title="New Bill"
+                title={t('new_bill')}
               >
                 <Plus className="w-4 h-4" />
               </Button>
@@ -270,10 +273,10 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
       </div>
 
       {/* Header */}
-      <div className="flex items-center justify-between p-1.5 md:p-2 border-b shrink-0">
+      <div className="flex items-center justify-between p-1.5 md:p-2 border-b shrink-0 bg-emerald-50/20 dark:bg-emerald-950/5">
         <div className="flex items-center gap-2">
-          <ShoppingCart className="w-4 h-4 md:w-5 md:h-5 text-primary" />
-          <h2 className="font-semibold text-base">Cart</h2>
+          <ShoppingCart className="w-4 h-4 md:w-5 md:h-5 text-emerald-600 dark:text-emerald-500" />
+          <h2 className="font-semibold text-base">{t('title')}</h2>
           <Badge variant="secondary" className="ml-1 text-[10px]">
             {itemCountDisplay}
           </Badge>
@@ -286,14 +289,14 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
             className="text-muted-foreground hover:text-destructive h-7 px-2 text-xs"
           >
             <Trash2 className="w-3 h-3 mr-1" />
-            Clear
+            {t('clear')}
           </Button>
         )}
       </div>
 
       {/* Customer Selector */}
       <div className="px-2 border-b shrink-0 py-1 md:py-2">
-        <Label className="text-xs text-muted-foreground mb-1 block">Customer</Label>
+        <Label className="text-xs text-muted-foreground mb-1 block">{t('customer')}</Label>
         <div className="relative">
           <Button
             variant="outline"
@@ -301,8 +304,8 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
             onClick={() => setCustomerSearchOpen(!customerSearchOpen)}
           >
             <div className="flex items-center gap-2">
-              <User className="w-3 h-3 md:w-4 md:h-4" />
-              {customerName || 'Walk-in Customer'}
+              <User className="w-3 h-3 md:w-4 md:h-4 text-emerald-600 dark:text-emerald-500" />
+              {customerName || t('walk_in')}
             </div>
             <ChevronDown className="w-3 h-3 md:w-4 md:h-4 text-muted-foreground" />
           </Button>
@@ -310,17 +313,17 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
           {customerSearchOpen && (
             <div className="absolute top-full left-0 right-0 mt-1 bg-popover border rounded-md shadow-lg z-50">
               <div className="p-2 border-b">
-                <label htmlFor="customer-search" className="sr-only">Search customer</label>
+                <label htmlFor="customer-search" className="sr-only">{t('search_customer')}</label>
                 <Input
                   id="customer-search"
                   name="customer-search"
-                  placeholder="Search customer..."
+                  placeholder={t('search_customer')}
                   value={customerSearchQuery}
                   onChange={(e) => setCustomerSearchQuery(e.target.value)}
                   className="h-8"
                   autoFocus
                 />
-                {isSearching && <p className="text-xs text-muted-foreground px-1 pt-1">Searching...</p>}
+                {isSearching && <p className="text-xs text-muted-foreground px-1 pt-1">{t('searching')}</p>}
               </div>
               <div className="max-h-48 overflow-y-auto">
                 <div className="p-2">
@@ -329,7 +332,7 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
                     className="w-full justify-start h-9 text-sm"
                     onClick={() => handleCustomerSelect(null)}
                   >
-                    Walk-in Customer
+                    {t('walk_in')}
                   </Button>
                   {displayCustomers.map((customer) => (
                     <Button
@@ -346,48 +349,46 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
                       </div>
                       {toMoneyNumber(customer.totalDue) > 0 && (
                         <Badge variant="destructive" className="ml-auto text-xs">
-                          Due: {formatPrice(customer.totalDue)}
+                          {t('due')}: {formatPrice(customer.totalDue)}
                         </Badge>
                       )}
                     </Button>
                   ))}
                 </div>
               </div>
-              {onScan && (
-                <div className="p-2 border-t">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full"
-                    onClick={() => {
-                      setShowAddPartyDialog(true);
-                      setCustomerSearchOpen(false);
-                    }}
-                  >
-                    <UserPlus className="w-4 h-4 mr-1" />
-                    New Customer
-                  </Button>
-                </div>
-              )}
+              <div className="p-2 border-t">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full h-8 text-xs"
+                  onClick={() => {
+                    setShowAddPartyDialog(true);
+                    setCustomerSearchOpen(false);
+                  }}
+                >
+                  <UserPlus className="w-4 h-4 mr-1 text-emerald-600" />
+                  {t('new_customer')}
+                </Button>
+              </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* Cart Items - Mobile: flex-1 overflow-y-auto, Desktop: normal */}
+      {/* Cart Items */}
       <div className="flex-1 min-h-0 overflow-y-auto pb-28 sm:pb-0">
         <div className="p-1 md:p-2 space-y-1">
           {isCartEmpty ? (
             <div className="flex flex-col items-center justify-center py-8 md:py-12 text-center">
-              <ShoppingCart className="w-8 h-8 md:w-10 md:h-10 text-muted-foreground mb-2" />
-              <p className="text-muted-foreground text-xs md:text-sm">Cart is empty</p>
-              <p className="text-xs text-muted-foreground mt-0.5 mb-3">
-                Scan or tap products to add them
+              <ShoppingCart className="w-8 h-8 md:w-10 md:h-10 text-muted-foreground/50 mb-2" />
+              <p className="text-muted-foreground text-xs md:text-sm">{t('empty')}</p>
+              <p className="text-xs text-muted-foreground/70 mt-1 mb-3">
+                {t('empty_desc')}
               </p>
-              {isAndroidApp && onScan && (
-                <Button variant="outline" size="sm" onClick={onScan} className="gap-2">
+              {onScan && (
+                <Button variant="outline" size="sm" onClick={onScan} className="gap-2 md:hidden">
                   <ScanLine className="w-4 h-4" />
-                  Scan Barcode
+                  {t('scan_barcode')}
                 </Button>
               )}
             </div>
@@ -397,62 +398,63 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
         </div>
       </div>
 
-      {/* Payment Method & Totals - Mobile: Fixed at bottom, Desktop: In-flow */}
-      <div className="flex-none mt-auto sm:relative bg-background border-t p-2 md:p-0 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.1)] md:shadow-none z-40 md:z-auto pb-[env(safe-area-inset-bottom)]">
-        {/* Payment Method Selector - Visible Cards */}
+      {/* Payment Method & Totals */}
+      <div className="flex-none mt-auto sm:relative bg-background border-t p-2 md:p-0 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.05)] md:shadow-none z-40 md:z-auto pb-[env(safe-area-inset-bottom)]">
+        {/* Payment Method Selector */}
         <div className="p-2 md:p-3 border-b md:border-b-0">
-          <Label className="text-[10px] font-semibold text-muted-foreground mb-1.5 block uppercase tracking-wider">Payment Method</Label>
+          <Label className="text-[10px] font-semibold text-muted-foreground mb-1.5 block uppercase tracking-wider">{t('payment_method')}</Label>
           <div className="grid grid-cols-4 gap-1">
             {paymentMethods
-              .filter(({ method }) => method !== 'Due' || customerName) // Hide Due for walk-in customers
-              .map(({ method, icon, label, color }) => (
-              <button
-                key={method}
-                type="button"
-                onClick={() => setPaymentMethod(method)}
-                className={cn(
+              .filter(({ method }) => method !== 'Due' || customerName) // Hide Due for walk-in
+              .map(({ method, icon, labelKey, color }) => (
+                <button
+                  key={method}
+                  type="button"
+                  onClick={() => setPaymentMethod(method)}
+                  className={cn(
                     'relative flex flex-col items-center justify-center min-w-0 max-w-full whitespace-nowrap rounded-lg border-2 transition-all duration-200 touch-manipulation h-9 px-1 py-0.5',
                     paymentMethod === method
-                      ? 'border-primary bg-primary/10 shadow-md shadow-primary/10 scale-[1.02]'
-                      : 'border-border/50 bg-background hover:bg-muted/80 hover:border-primary/30'
+                      ? 'border-emerald-600 bg-emerald-500/10 dark:border-emerald-500 shadow-md shadow-emerald-500/10 scale-[1.02]'
+                      : 'border-border/50 bg-background hover:bg-muted/80 hover:border-emerald-500/30'
                   )}
                 >
                   {paymentMethod === method && (
-                    <div className="absolute top-1.5 right-1.5 bg-primary rounded-full p-0.5 shadow-sm">
+                    <div className="absolute top-1 right-1 bg-emerald-600 rounded-full p-0.5 shadow-sm">
                       <Check className="w-2.5 h-2.5 text-white" />
                     </div>
                   )}
                   <div className={cn(
                     'mb-0.5 transition-transform duration-200 inline-flex items-center justify-center text-muted-foreground',
-                    paymentMethod === method ? 'text-primary scale-110' : 'group-hover:scale-110'
+                    paymentMethod === method ? 'text-emerald-600 dark:text-emerald-400 scale-110' : 'group-hover:scale-110'
                   )}>
                     {icon}
                   </div>
                   <span className={cn(
                     'text-[10px] font-bold tracking-tight sm:text-xs',
-                    paymentMethod === method ? 'text-primary' : 'text-foreground'
+                    paymentMethod === method ? 'text-emerald-600 dark:text-emerald-400' : 'text-foreground'
                   )}>
-                    {label}
+                    {t(labelKey as any)}
                   </span>
                 </button>
               ))}
           </div>
+
           {/* Subtotal */}
-          <div className="flex justify-between text-xs mt-1.5">
-            <span className="text-muted-foreground font-medium">Subtotal</span>
+          <div className="flex justify-between text-xs mt-2.5 border-t pt-1.5">
+            <span className="text-muted-foreground font-medium">{t('subtotal')}</span>
             <span className="font-semibold">{formatPrice(subtotal)}</span>
           </div>
 
           {/* Discount */}
-          <div className="flex justify-between items-center text-xs">
-            <span className="text-muted-foreground font-medium">Discount</span>
+          <div className="flex justify-between items-center text-xs mt-1">
+            <span className="text-muted-foreground font-medium">{t('discount')}</span>
             <div className="flex items-center gap-1">
               {showDiscountInput ? (
                 <Input
                   type="number"
                   value={discount || ''}
                   onChange={handleDiscountChange}
-                  className="w-16 h-6 text-right text-xs px-1.5 rounded-md border-primary/30 focus-visible:ring-primary/50"
+                  className="w-16 h-6 text-right text-xs px-1.5 rounded-md border-emerald-500/30 focus-visible:ring-emerald-500/50"
                   placeholder="0"
                   min={0}
                   max={subtotal}
@@ -463,10 +465,10 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-6 px-2 text-xs font-semibold text-primary hover:bg-primary/10 rounded-md"
+                  className="h-6 px-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 rounded-md"
                   onClick={() => setShowDiscountInput(true)}
                 >
-                  {discount > 0 ? formatPrice(discount) : '+ Add'}
+                  {discount > 0 ? formatPrice(discount) : t('add_discount')}
                 </Button>
               )}
             </div>
@@ -474,33 +476,33 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
 
           {/* Tax */}
           {tax > 0 && (
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground font-medium">Tax</span>
+            <div className="flex justify-between text-xs mt-1">
+              <span className="text-muted-foreground font-medium">{t('tax')}</span>
               <span className="font-semibold">{formatPrice(tax)}</span>
             </div>
           )}
 
-          <Separator className="my-1.5 bg-border/60" />
+          <Separator className="my-2 bg-border/60" />
 
-          {/* Total and Checkout Button in compact row */}
+          {/* Total and Checkout Button */}
           <div className="flex flex-col gap-2">
             <div className="flex items-end justify-between">
-              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Total</span>
-              <span className="text-xl md:text-2xl font-black text-primary tracking-tight">{formatPrice(total)}</span>
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{t('total')}</span>
+              <span className="text-xl md:text-2xl font-black text-emerald-600 dark:text-emerald-400 tracking-tight">{formatPrice(total)}</span>
             </div>
             <Button
               size="lg"
               className={cn(
-                "w-full h-10 md:h-12 text-sm md:text-base font-bold rounded-xl shadow-lg transition-all duration-300 touch-manipulation flex items-center justify-center gap-2",
+                "w-full h-10 md:h-12 text-sm md:text-base font-bold rounded-xl shadow-lg transition-all duration-300 touch-manipulation flex items-center justify-center gap-2 btn-shimmer-overlay",
                 isCartEmpty || total <= 0
-                  ? "bg-muted text-muted-foreground shadow-none"
-                  : "bg-primary text-primary-foreground hover:bg-primary/90 hover:shadow-primary/25 hover:-translate-y-0.5 active:translate-y-0"
+                  ? "bg-muted text-muted-foreground shadow-none pointer-events-none"
+                  : "bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600 hover:shadow-emerald-600/25 hover:-translate-y-0.5 active:translate-y-0"
               )}
               disabled={isCartEmpty || total <= 0}
               onClick={handleCheckout}
             >
-              <CreditCard className="w-5 h-5 md:w-6 md:h-6" />
-              Complete Checkout
+              <CreditCard className="w-4 h-4 md:w-5 md:h-5" />
+              {t('complete_checkout')}
             </Button>
           </div>
         </div>
@@ -511,72 +513,73 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
         <DialogContent className="sm:max-w-md w-[95vw] max-h-[90dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <UserPlus className="w-5 h-5" />
-              Add New Customer
+              <UserPlus className="w-5 h-5 text-emerald-600" />
+              {t('add_new_customer')}
             </DialogTitle>
             <DialogDescription>
-              Create a new customer and add to this order
+              {t('enter_customer_details')}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="cart-party-name">Name *</Label>
+              <Label htmlFor="cart-party-name">{t('customer_name')}</Label>
               <Input
                 id="cart-party-name"
                 value={newParty.name}
                 onChange={(e) => setNewParty(prev => ({ ...prev, name: e.target.value }))}
-                placeholder="Enter customer name"
+                placeholder={t('enter_name')}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="cart-party-phone">Phone</Label>
+              <Label htmlFor="cart-party-phone">{t('customer_phone')}</Label>
               <Input
                 id="cart-party-phone"
                 value={newParty.phone}
                 onChange={(e) => setNewParty(prev => ({ ...prev, phone: e.target.value }))}
-                placeholder="10-digit phone number"
+                placeholder={t('enter_phone')}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="cart-party-address">Address</Label>
+              <Label htmlFor="cart-party-address">{t('customer_address')}</Label>
               <Input
                 id="cart-party-address"
                 value={newParty.address}
                 onChange={(e) => setNewParty(prev => ({ ...prev, address: e.target.value }))}
-                placeholder="Enter address"
+                placeholder={t('enter_address')}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="cart-party-notes">Notes</Label>
+              <Label htmlFor="cart-party-notes">{t('customer_notes')}</Label>
               <Textarea
                 id="cart-party-notes"
                 value={newParty.notes}
                 onChange={(e) => setNewParty(prev => ({ ...prev, notes: e.target.value }))}
-                placeholder="Enter notes"
+                placeholder={t('customer_notes')}
                 className="resize-none h-20"
               />
             </div>
           </div>
 
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={() => {
                 setShowAddPartyDialog(false);
                 setNewParty({ name: '', phone: '', address: '', notes: '' });
               }}
             >
-              Cancel
+              {tc('cancel')}
             </Button>
-            <Button 
-              onClick={handleAddPartyFromCart} 
+            <Button
+              onClick={handleAddPartyFromCart}
               disabled={!newParty.name}
+              className="bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600"
             >
-              Create Customer
+              {t('create_customer')}
             </Button>
           </DialogFooter>
         </DialogContent>
