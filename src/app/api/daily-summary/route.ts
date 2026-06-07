@@ -68,7 +68,7 @@ export async function GET() {
       else if (method === 'Due' || method === 'Prepaid') bnMethod = 'বাকি';
 
       if (paymentBreakdown[bnMethod]) {
-        paymentBreakdown[bnMethod].amount += Number(sale.totalAmount);
+        paymentBreakdown[bnMethod].amount += Number(Number(sale.totalAmount));
         paymentBreakdown[bnMethod].count += 1;
       }
     }
@@ -87,7 +87,7 @@ export async function GET() {
     const expenseByCategory: Record<string, number> = {};
     for (const expense of todayExpenses) {
       const cat = expense.category || 'অন্যান্য';
-      expenseByCategory[cat] = (expenseByCategory[cat] || 0) + Number(expense.amount);
+      expenseByCategory[cat] = (expenseByCategory[cat] || 0) + Number(Number(expense.amount));
     }
 
     // ---- COST OF GOODS SOLD ----
@@ -109,7 +109,7 @@ export async function GET() {
 
     const costOfGoodsSold = todaySaleItems.reduce((sum, item) => {
       const buyingPrice = productBuyingPriceMap.get(item.productId) ?? 0;
-      return sum + buyingPrice * item.quantity;
+      return sum + buyingPrice * Number(item.quantity);
     }, 0);
 
     // ---- PROFIT ----
@@ -155,8 +155,8 @@ export async function GET() {
           productSalesMap[item.productId].nameBn = fullProduct.nameBn;
         }
       }
-      productSalesMap[item.productId].quantity += item.quantity;
-      productSalesMap[item.productId].revenue += Number(item.totalPrice);
+      productSalesMap[item.productId].quantity += Number(item.quantity);
+      productSalesMap[item.productId].revenue += Number(Number(item.totalPrice));
     }
 
     const topProducts = Object.values(productSalesMap)
@@ -174,8 +174,8 @@ export async function GET() {
         minStockLevel: true,
       },
     });
-    const lowStockProducts = allActiveProducts.filter((p) => p.currentStock <= p.minStockLevel);
-    const outOfStockProducts = allActiveProducts.filter((p) => p.currentStock === 0);
+    const lowStockProducts = allActiveProducts.filter((p) => Number(p.currentStock) <= Number(p.minStockLevel));
+    const outOfStockProducts = allActiveProducts.filter((p) => Number(p.currentStock) === 0);
 
     // ---- CUSTOMER DUES SUMMARY ----
     const customersWithDue = await db.customer.findMany({

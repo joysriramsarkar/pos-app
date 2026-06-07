@@ -98,7 +98,7 @@ export class OfflineSyncWorker {
           if (payload.id && payload.updatedAt) {
              const time = new Date(payload.updatedAt).getTime();
              const key = `${item.entityType}_${payload.id}`;
-             if (!latestVersions.has(key) || time > latestVersions.get(key)) {
+             if (!latestVersions.has(key) || time > latestVersions.get(key)!) {
                  latestVersions.set(key, time);
              }
           }
@@ -118,7 +118,7 @@ export class OfflineSyncWorker {
           if (payload.id && payload.updatedAt) {
              const time = new Date(payload.updatedAt).getTime();
              const key = `${item.entityType}_${payload.id}`;
-             if (latestVersions.has(key) && time < latestVersions.get(key)) {
+             if (latestVersions.has(key) && time < latestVersions.get(key)!) {
                 isStale = true;
              }
           }

@@ -5,6 +5,12 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { Prisma } from "@prisma/client";
+import type { SaleItem } from "@prisma/client";
+
+interface SaleItemWithProduct extends SaleItem {
+  product?: { unit: string };
+}
 import { generateServerInvoiceNumber } from "@/lib/invoice";
 import { v4 as uuidv4 } from "uuid";
 import { SaleInputSchema } from "@/schemas";
@@ -486,7 +492,7 @@ async function handlePut(request: NextRequest) {
       });
 
       const productReturnQuantities = existingSale.items.reduce((acc, item) => {
-        acc.set(item.productId, (acc.get(item.productId) || 0) + item.quantity);
+        acc.set(item.productId, (acc.get(item.productId) || 0) + Number(item.quantity));
         return acc;
       }, new Map<string, number>());
 

@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
             qty: 0,
             revenue: 0,
           };
-          existing.qty += item.quantity;
+          existing.qty += Number(item.quantity);
           existing.revenue += Number(item.totalPrice);
           productMap.set(item.productId, existing);
         });

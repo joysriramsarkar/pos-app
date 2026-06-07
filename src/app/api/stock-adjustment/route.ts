@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
       const product = await tx.product.findUnique({ where: { id: productId } });
       if (!product) throw new Error(`Product ${productId} not found`);
 
-      if (product.currentStock < quantity) {
+      if (Number(product.currentStock) < quantity) {
         throw new Error(`অপর্যাপ্ত স্টক। বর্তমান স্টক: ${product.currentStock} ${product.unit}`);
       }
 

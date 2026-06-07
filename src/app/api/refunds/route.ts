@@ -125,7 +125,7 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      if (refundItem.quantity > saleItem.quantity) {
+      if (Number(refundItem.quantity) > Number(saleItem.quantity)) {
         return NextResponse.json(
           { success: false, error: `রিফান্ড পরিমাণ মূল পরিমাণের বেশি: ${saleItem.productName} (সর্বোচ্চ: ${saleItem.quantity})` },
           { status: 400 }
@@ -152,7 +152,7 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
-      if (originalSale.customer && Number(originalSale.customer.totalDue) <= 0) {
+      if (originalSale.customer && Number(Number(originalSale.customer.totalDue)) <= 0) {
         return NextResponse.json(
           { success: false, error: 'ক্রেতার কোনো বকেয়া নেই। নগদ রিফান্ড নির্বাচন করুন।' },
           { status: 400 }
@@ -164,7 +164,7 @@ export async function POST(request: NextRequest) {
     const isFullRefund = items.length === originalSale.items.length &&
       items.every(ri => {
         const si = saleItemMap.get(ri.productId);
-        return si && ri.quantity === si.quantity;
+        return si && Number(ri.quantity) === Number(si.quantity);
       });
 
     // Calculate refund proportion of discount and tax
@@ -198,8 +198,8 @@ export async function POST(request: NextRequest) {
             create: validatedItems.map(item => ({
               productId: item.productId,
               productName: item.productName,
-              quantity: -item.quantity,
-              unitPrice: item.unitPrice,
+              quantity: -Number(item.quantity),
+              unitPrice: Number(item.unitPrice),
               totalPrice: -item.totalPrice,
             })),
           },
@@ -216,7 +216,7 @@ export async function POST(request: NextRequest) {
           where: { id: item.productId },
           data: {
             currentStock: {
-              increment: item.quantity,
+              increment: Number(item.quantity),
             },
           },
         });
@@ -227,7 +227,7 @@ export async function POST(request: NextRequest) {
         data: validatedItems.map(item => ({
           productId: item.productId,
           changeType: 'return',
-          quantity: item.quantity,
+          quantity: Number(item.quantity),
           reason: `Refund: ${refundInvoiceNumber} for original ${originalSale.invoiceNumber}`,
           referenceId: refundSale.id,
         })),
@@ -239,7 +239,7 @@ export async function POST(request: NextRequest) {
           where: { id: originalSale.customerId },
         });
         if (customer) {
-          const currentDue = Number(customer.totalDue);
+          const currentDue = Number(Number(customer.totalDue));
           const dueReduction = Math.min(netRefundAmount, currentDue);
           const newDue = currentDue - dueReduction;
           

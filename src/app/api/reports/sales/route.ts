@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
     });
     const costMap = new Map(products.map((p) => [p.id, Number(p.buyingPrice)]));
     const totalCost = costAgg.reduce(
-      (sum, i) => sum + (costMap.get(i.productId) || 0) * i.quantity,
+      (sum, i) => sum + (costMap.get(i.productId) || 0) * Number(i.quantity),
       0
     );
 
@@ -113,11 +113,11 @@ export async function GET(request: NextRequest) {
       hourlySales.forEach((sale) => {
         const hour = toZonedTime(sale.createdAt, TZ).getHours();
         const cost = sale.items.reduce(
-          (s, i) => s + (costMap.get(i.productId) || 0) * i.quantity,
+          (s, i) => s + (costMap.get(i.productId) || 0) * Number(i.quantity),
           0
         );
-        chartData[hour].revenue += Number(sale.totalAmount);
-        chartData[hour].profit += Number(sale.totalAmount) - cost;
+        chartData[hour].revenue += Number(Number(sale.totalAmount));
+        chartData[hour].profit += Number(Number(sale.totalAmount)) - cost;
         chartData[hour].count += 1;
       });
     } else {
@@ -147,11 +147,11 @@ export async function GET(request: NextRequest) {
         const day = salesByDay.get(key);
         if (day) {
           const cost = sale.items.reduce(
-            (s, i) => s + (costMap.get(i.productId) || 0) * i.quantity,
+            (s, i) => s + (costMap.get(i.productId) || 0) * Number(i.quantity),
             0
           );
-          day.revenue += Number(sale.totalAmount);
-          day.profit += Number(sale.totalAmount) - cost;
+          day.revenue += Number(Number(sale.totalAmount));
+          day.profit += Number(Number(sale.totalAmount)) - cost;
           day.count += 1;
         }
       });

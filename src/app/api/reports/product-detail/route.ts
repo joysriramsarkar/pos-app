@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
       const day = format(new Date(item.createdAt), 'yyyy-MM-dd');
       const existing = dailySalesMap.get(day) ?? { qty: 0, revenue: 0 };
       dailySalesMap.set(day, {
-        qty: existing.qty + (item.quantity ?? 0),
+        qty: existing.qty + Number(Number(item.quantity) ?? 0),
         revenue: existing.revenue + Number(item.totalPrice ?? 0),
       });
     }
@@ -76,19 +76,19 @@ export async function GET(request: NextRequest) {
     const hourlySalesMap = new Map<number, number>();
     for (const item of saleItems) {
       const hour = new Date(item.createdAt).getHours();
-      hourlySalesMap.set(hour, (hourlySalesMap.get(hour) ?? 0) + (item.quantity ?? 0));
+      hourlySalesMap.set(hour, (hourlySalesMap.get(hour) ?? 0) + (Number(item.quantity) ?? 0));
     }
     const hourlySales = Array.from({ length: 24 }, (_, h) => ({
       hour: h,
       qty: hourlySalesMap.get(h) ?? 0,
     }));
 
-    const totalQtySold = saleItems.reduce((s, i) => s + (i.quantity ?? 0), 0);
+    const totalQtySold = saleItems.reduce((s, i) => s + Number(i.quantity ?? 0), 0);
     const totalRevenue = saleItems.reduce((s, i) => s + Number(i.totalPrice ?? 0), 0);
     const totalProfit = totalRevenue - Number(product.buyingPrice) * totalQtySold;
     const totalStockAdded = stockHistory
-      .filter(h => h.quantity > 0)
-      .reduce((s, h) => s + h.quantity, 0);
+      .filter(h => Number(h.quantity) > 0)
+      .reduce((s, h) => s + Number(h.quantity), 0);
 
     return NextResponse.json({
       product,

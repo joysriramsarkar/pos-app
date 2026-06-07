@@ -86,7 +86,7 @@ export async function GET(request: NextRequest) {
 // POST /api/sync - Sync offline data with idempotency guarantee
 export async function POST(request: NextRequest) {
   const authResult = await requireAuth(request);
-  if (!authResult.authorized) return authResult.response;
+  if (!authResult.authorized) return authResult.response!;
   const session = authResult.session;
 
   try {
@@ -460,7 +460,7 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
             });
           }
 
-          const dueAmount = subtractMoney(totalAmount, amountPaidValue);
+          const dueAmount = subtractMoney(totalAmount, amountPaid);
 
           let totalDueIncrement = 0;
           let totalDueDecrement = 0;
@@ -783,7 +783,7 @@ async function syncProduct(tx: Prisma.TransactionClient, productData: z.infer<ty
 // PUT /api/sync - Mark sync item as complete
 export async function PUT(request: NextRequest) {
   const authResult = await requireAuth(request);
-  if (!authResult.authorized) return authResult.response;
+  if (!authResult.authorized) return authResult.response!;
 
   try {
     const body = await request.json();

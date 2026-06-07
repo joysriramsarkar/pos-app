@@ -62,8 +62,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     for (const item of saleItems) {
       const date = item.createdAt;
-      const qty = item.quantity;
-      const revenue = Number(item.totalPrice);
+      const qty = Number(item.quantity);
+      const revenue = Number(Number(item.totalPrice));
       const profit = revenue - Number(product.buyingPrice) * qty;
 
       // Daily trend

@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    const todaySalesTotal = todaySales.reduce((sum, sale) => sum + Number(sale.totalAmount || 0), 0);
+    const todaySalesTotal = todaySales.reduce((sum, sale) => sum + Number(Number(sale.totalAmount) || 0), 0);
     const todayOrdersCount = todaySales.length;
     const todayCashTotal = todaySales.reduce((sum, sale) => sum + Number(sale.cashAmount || 0), 0);
     const todayUpiTotal = todaySales.reduce((sum, sale) => sum + Number(sale.upiAmount || 0), 0);
@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    const yesterdaySalesTotal = yesterdaySales.reduce((sum, sale) => sum + Number(sale.totalAmount || 0), 0);
+    const yesterdaySalesTotal = yesterdaySales.reduce((sum, sale) => sum + Number(Number(sale.totalAmount) || 0), 0);
     const yesterdayOrdersCount = yesterdaySales.length;
 
     // Yesterday's expenses
@@ -184,7 +184,7 @@ export async function GET(request: NextRequest) {
 
     const costOfGoodsSold = todaySaleItems.reduce((sum, item) => {
       const buyingPrice = productBuyingPriceMap.get(item.productId) ?? 0;
-      return sum + (buyingPrice * item.quantity);
+      return sum + (buyingPrice * Number(item.quantity));
     }, 0);
 
     // Today's profit: sales - expenses - cost of goods

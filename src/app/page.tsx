@@ -3,7 +3,6 @@
 import dynamic from 'next/dynamic';
 import { useSession } from 'next-auth/react';
 import { useCallback, useEffect, useState, useMemo, useRef } from 'react';
-import { useCheckout } from '@/hooks/useCheckout';
 import { useBarcodeScanner } from '@/hooks/useBarcodeScanner';
 import { useProductCRUD } from '@/hooks/useProductCRUD';
 import { useTranslations, useLocale } from 'next-intl';
@@ -739,7 +738,11 @@ function POSDashboard() {
     }
   }, [isOnline, processOfflineSale, activeTabId, setTabProcessing, toast, setCompletedCheckoutSale, setCheckoutOpen]);
 
-    const { isCheckoutOpen, setCheckoutOpen, handleOpenCheckout } = useCheckout();
+
+
+  const handleOpenCheckout = useCallback(() => {
+    setCheckoutOpen(true);
+  }, [setCheckoutOpen]);
 
   // Handle stock entry
   const handleStockEntry = useCallback(async (data: StockEntryData) => {
