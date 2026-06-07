@@ -14,15 +14,15 @@ import {
   findSaleItemTotalMismatch,
 } from "@/lib/sale-calculations";
 
-import { requirePermission, getAuthenticatedUser } from "@/lib/api-middleware";
+import { withAuthMiddleware, getAuthenticatedUser } from "@/lib/api-middleware";
 import { logAudit } from "@/lib/audit";
 
 const getIp = (req: NextRequest) => req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || undefined;
 
 // GET /api/sales - Fetch sales
-export async function GET(request: NextRequest) {
-  const authError = await requirePermission(request, "sales.view");
-  if (authError) return authError;
+export const GET = withAuthMiddleware(handleGet, { permissionCode: "sales.view" });
+
+async function handleGet(request: NextRequest) {
 
   try {
     const { searchParams } = new URL(request.url);
@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      const saleWithUnit = { ...sale, items: sale.items.map(item => ({ ...item, unit: (item as any).product?.unit ?? '' })) };
+      const saleWithUnit = { ...sale, items: sale.items.map(item => ({ ...item, unit: (item as SaleItemWithProduct).product?.unit ?? '' })) };
       return NextResponse.json({ success: true, data: saleWithUnit });
     }
 
@@ -123,7 +123,7 @@ export async function GET(request: NextRequest) {
 
     const salesWithUnit = sales.map(sale => ({
       ...sale,
-      items: sale.items.map(item => ({ ...item, unit: (item as any).product?.unit ?? '' })),
+      items: sale.items.map(item => ({ ...item, unit: (item as SaleItemWithProduct).product?.unit ?? '' })),
     }));
 
     return NextResponse.json({
@@ -146,9 +146,9 @@ export async function GET(request: NextRequest) {
 }
 
 // POST /api/sales - Create new sale
-export async function POST(request: NextRequest) {
-  const authError = await requirePermission(request, "sales.create");
-  if (authError) return authError;
+export const POST = withAuthMiddleware(handlePost, { permissionCode: "sales.create" });
+
+async function handlePost(request: NextRequest) {
 
   try {
     let body;
@@ -258,7 +258,7 @@ export async function POST(request: NextRequest) {
           },
         });
 
-        (newSale as any).items = (newSale as any).items.map((item: any) => ({ ...item, unit: item.product?.unit ?? '' }));
+        (newSale as Prisma.SaleGetPayload<{include: {items: {include: {product: {select: {unit: true}}}}}}>).items = newSale.items.map((item) => ({ ...item, unit: (item as unknown as SaleItemWithProduct).product?.unit ?? '' }));
 
         const stockDeductions = aggregateSaleItemQuantities(validatedItems);
 
@@ -266,16 +266,14 @@ export async function POST(request: NextRequest) {
           const itemProductIds = stockDeductions.map((item) => item.productId);
           const itemQuantities = stockDeductions.map((item) => item.quantity);
 
-          const updateResult = await tx.$executeRaw`
-          UPDATE products AS p
-          SET
-            "current_stock" = p."current_stock" - u.quantity::float,
-            "updated_at" = NOW()
-          FROM (
-            SELECT unnest(${itemProductIds}::text[]) as id, unnest(${itemQuantities}::float[]) as quantity
-          ) AS u
-          WHERE p.id = u.id AND p."current_stock" >= u.quantity::float
-        `;
+          let updateResult = 0;
+          for (let i = 0; i < stockDeductions.length; i++) {
+            const res = await tx.product.updateMany({
+              where: { id: stockDeductions[i].productId, currentStock: { gte: stockDeductions[i].quantity } },
+              data: { currentStock: { decrement: stockDeductions[i].quantity }, updatedAt: new Date() }
+            });
+            updateResult += res.count;
+          }
 
           if (updateResult !== stockDeductions.length) {
             throw new Error(`Insufficient stock for one or more products. Another transaction may have depleted stock.`);
@@ -299,15 +297,18 @@ export async function POST(request: NextRequest) {
           const currentTotalDue = Number(customer.totalDue) || 0;
           const currentPrepaidBalance = Number(customer.prepaidBalance) || 0;
 
+          const dueAmount = subtractMoney(totalAmount, amountPaidValue);
+
+          let totalDueIncrement = 0;
+          let totalDueDecrement = 0;
+          let prepaidBalanceIncrement = changeAsPrepayment || 0;
+          let prepaidBalanceDecrement = prepaidToUse || 0;
+          let balanceAfterPayment = currentTotalDue;
+
           if (prepaidToUse > 0) {
             if (currentPrepaidBalance < prepaidToUse) {
               throw new Error(`Insufficient prepaid balance. Available: ${currentPrepaidBalance}, Tried to use: ${prepaidToUse}`);
             }
-            const newPrepaidBalance = subtractMoney(currentPrepaidBalance, prepaidToUse);
-            await tx.customer.update({
-              where: { id: customerId },
-              data: { prepaidBalance: newPrepaidBalance, updatedAt: new Date() },
-            });
             await tx.ledgerEntry.create({
               data: {
                 customerId,
@@ -320,18 +321,14 @@ export async function POST(request: NextRequest) {
             });
           }
 
-          const dueAmount = subtractMoney(totalAmount, amountPaidValue);
           if (dueAmount > 0) {
             const creditAmount = subtractMoney(totalAmount, prepaidToUse);
-            const creditBalanceAfter = addMoney(currentTotalDue, creditAmount);
-            const newTotalDueAfterCredit = creditBalanceAfter;
-            const balanceAfterPayment = subtractMoney(newTotalDueAfterCredit, externalPaidAmount);
+            totalDueIncrement = creditAmount;
+            totalDueDecrement = externalPaidAmount;
 
-            await tx.customer.update({
-              where: { id: customerId },
-              data: { totalDue: balanceAfterPayment, updatedAt: new Date() },
-            });
-            
+            const creditBalanceAfter = addMoney(currentTotalDue, creditAmount);
+            balanceAfterPayment = Math.max(0, subtractMoney(creditBalanceAfter, externalPaidAmount));
+
             await tx.ledgerEntry.create({
               data: {
                 customerId,
@@ -356,17 +353,15 @@ export async function POST(request: NextRequest) {
             }
           } else if (externalPaidAmount > 0 && currentTotalDue > 0) {
             // Full payment or overpayment with existing due
-            const newTotalDue = Math.max(0, subtractMoney(currentTotalDue, externalPaidAmount));
-            await tx.customer.update({
-              where: { id: customerId },
-              data: { totalDue: newTotalDue, updatedAt: new Date() },
-            });
+            totalDueDecrement = externalPaidAmount;
+            balanceAfterPayment = Math.max(0, subtractMoney(currentTotalDue, externalPaidAmount));
+
             await tx.ledgerEntry.create({
               data: {
                 customerId,
                 entryType: "debit",
                 amount: externalPaidAmount,
-                balanceAfter: newTotalDue,
+                balanceAfter: balanceAfterPayment,
                 description: `Payment for sale: ${newSale.invoiceNumber}`,
                 referenceId: newSale.id,
               },
@@ -374,21 +369,39 @@ export async function POST(request: NextRequest) {
           }
 
           if (changeAsPrepayment > 0) {
-            const newPrepaidBalance = addMoney(currentPrepaidBalance, changeAsPrepayment);
-            await tx.customer.update({
-              where: { id: customerId },
-              data: { prepaidBalance: newPrepaidBalance, updatedAt: new Date() },
-            });
             await tx.ledgerEntry.create({
               data: {
                 customerId,
                 entryType: "prepayment-added",
                 amount: changeAsPrepayment,
-                balanceAfter: currentTotalDue,
+                balanceAfter: balanceAfterPayment,
                 description: `Change added as prepaid: ${newSale.invoiceNumber}`,
                 referenceId: newSale.id,
               },
             });
+          }
+
+          if (totalDueIncrement > 0 || totalDueDecrement > 0 || prepaidBalanceIncrement > 0 || prepaidBalanceDecrement > 0) {
+             const dataUpdate: any = { updatedAt: new Date() };
+             if (totalDueIncrement > 0 || totalDueDecrement > 0) {
+               if (totalDueIncrement > totalDueDecrement) {
+                 dataUpdate.totalDue = { increment: totalDueIncrement - totalDueDecrement };
+               } else {
+                 dataUpdate.totalDue = { decrement: totalDueDecrement - totalDueIncrement };
+               }
+             }
+             if (prepaidBalanceIncrement > 0 || prepaidBalanceDecrement > 0) {
+               if (prepaidBalanceIncrement > prepaidBalanceDecrement) {
+                 dataUpdate.prepaidBalance = { increment: prepaidBalanceIncrement - prepaidBalanceDecrement };
+               } else {
+                 dataUpdate.prepaidBalance = { decrement: prepaidBalanceDecrement - prepaidBalanceIncrement };
+               }
+             }
+
+             await tx.customer.update({
+                where: { id: customerId },
+                data: dataUpdate
+             });
           }
         }
 
@@ -402,7 +415,7 @@ export async function POST(request: NextRequest) {
       action: 'CREATE_SALE',
       entityType: 'Sale',
       entityId: sale.id,
-      details: { invoiceNumber: (sale as any).invoiceNumber, totalAmount: (sale as any).totalAmount },
+      details: { invoiceNumber: sale.invoiceNumber, totalAmount: sale.totalAmount.toNumber() },
       ipAddress: getIp(request),
     });
 
@@ -433,9 +446,9 @@ export async function POST(request: NextRequest) {
 }
 
 // PUT /api/sales - Update sale (cancel/refund)
-export async function PUT(request: NextRequest) {
-  const authError = await requirePermission(request, "sales.edit");
-  if (authError) return authError;
+export const PUT = withAuthMiddleware(handlePut, { permissionCode: "sales.edit" });
+
+async function handlePut(request: NextRequest) {
 
   try {
     const body = await request.json();
@@ -481,15 +494,12 @@ export async function PUT(request: NextRequest) {
       const quantities = Array.from(productReturnQuantities.values());
 
       if (productIds.length > 0) {
-        await tx.$executeRaw`
-          UPDATE products AS p
-          SET "current_stock" = p."current_stock" + update_data.quantity,
-              "updated_at" = NOW()
-          FROM (
-            SELECT unnest(${productIds}::text[]) AS id, unnest(${quantities}::float[]) AS quantity
-          ) AS update_data
-          WHERE p.id = update_data.id
-        `;
+        for (let i = 0; i < productIds.length; i++) {
+          await tx.product.update({
+            where: { id: productIds[i] },
+            data: { currentStock: { increment: quantities[i] }, updatedAt: new Date() }
+          });
+        }
 
         await tx.stockHistory.createMany({
           data: productIds.map((id, index) => ({
@@ -526,8 +536,12 @@ export async function PUT(request: NextRequest) {
         const newPrepaidBalance = Math.max(0, addMoney(customer.prepaidBalance, prepaidBalanceAdjustment));
 
         const customerUpdateData: any = { updatedAt: new Date() };
-        if (dueAmount > 0) customerUpdateData.totalDue = newTotalDue;
-        if (prepaidBalanceAdjustment !== 0) customerUpdateData.prepaidBalance = newPrepaidBalance;
+        if (dueAmount > 0) customerUpdateData.totalDue = { decrement: dueAmount };
+        if (prepaidBalanceAdjustment > 0) {
+           customerUpdateData.prepaidBalance = { increment: prepaidBalanceAdjustment };
+        } else if (prepaidBalanceAdjustment < 0) {
+           customerUpdateData.prepaidBalance = { decrement: Math.abs(prepaidBalanceAdjustment) };
+        }
 
         if (dueAmount > 0 || prepaidBalanceAdjustment !== 0) {
           await tx.customer.update({ where: { id: existingSale.customerId }, data: customerUpdateData });

@@ -63,3 +63,4 @@ merge_prs.sh
 
 # Large diff files
 diff.txt
+.vscode/

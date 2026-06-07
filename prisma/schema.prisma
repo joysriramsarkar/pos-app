@@ -22,8 +22,8 @@ model Product {
   buyingPrice   Decimal  @default(0) @map("buying_price")
   sellingPrice  Decimal  @default(0) @map("selling_price")
   unit          String   @default("piece") // piece, kg, gram, liter, packet
-  currentStock  Float    @default(0) @map("current_stock")
-  minStockLevel Float    @default(5) @map("min_stock_level")
+  currentStock  Decimal  @default(0) @map("current_stock")
+  minStockLevel Decimal  @default(5) @map("min_stock_level")
   isActive      Boolean  @default(true) @map("is_active") // Soft delete
   imageUrl      String?  @map("image_url")
   createdAt     DateTime @default(now()) @map("created_at")
@@ -55,7 +55,7 @@ model StockHistory {
   id          String   @id @default(cuid())
   productId   String   @map("product_id")
   changeType  String // "purchase", "sale", "adjustment", "return"
-  quantity    Float // Positive for addition, negative for deduction
+  quantity    Decimal // Positive for addition, negative for deduction
   reason      String?
   referenceId String?  @map("reference_id") // Sale ID or Purchase ID
   createdAt   DateTime @default(now()) @map("created_at")
@@ -152,7 +152,7 @@ model SaleItem {
   saleId      String   @map("sale_id")
   productId   String   @map("product_id")
   productName String   @map("product_name") // Snapshot at time of sale
-  quantity    Float
+  quantity    Decimal
   unitPrice   Decimal  @map("unit_price") // Price at time of sale
   totalPrice  Decimal  @map("total_price")
   createdAt   DateTime @default(now()) @map("created_at")
@@ -194,7 +194,7 @@ model SaleReturnItem {
   saleItemId   String   @map("sale_item_id")
   productId    String   @map("product_id")
   productName  String   @map("product_name")
-  quantity     Float
+  quantity     Decimal
   unitPrice    Decimal  @map("unit_price")
   totalPrice   Decimal  @map("total_price")
   createdAt    DateTime @default(now()) @map("created_at")
@@ -252,7 +252,7 @@ model PurchaseItem {
   purchaseId  String   @map("purchase_id")
   productId   String   @map("product_id")
   productName String   @map("product_name")
-  quantity    Float
+  quantity    Decimal
   buyingPrice Decimal  @map("buying_price")
   totalPrice  Decimal  @map("total_price")
   createdAt   DateTime @default(now()) @map("created_at")
@@ -315,19 +315,19 @@ enum UserRole {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  username  String   @unique
-  email     String?  @unique
-  password  String
-  name      String
-  phone     String?
-  role                   UserRole @default(VIEWER)
-  isActive               Boolean  @default(true) @map("is_active")
-  requiresPasswordChange Boolean  @default(false) @map("requires_password_change")
-  failedLoginAttempts    Int      @default(0) @map("failed_login_attempts")
+  id                     String    @id @default(cuid())
+  username               String    @unique
+  email                  String?   @unique
+  password               String
+  name                   String
+  phone                  String?
+  role                   UserRole  @default(VIEWER)
+  isActive               Boolean   @default(true) @map("is_active")
+  requiresPasswordChange Boolean   @default(false) @map("requires_password_change")
+  failedLoginAttempts    Int       @default(0) @map("failed_login_attempts")
   lockedUntil            DateTime? @map("locked_until")
-  createdAt              DateTime @default(now()) @map("created_at")
-  updatedAt              DateTime @updatedAt @map("updated_at")
+  createdAt              DateTime  @default(now()) @map("created_at")
+  updatedAt              DateTime  @updatedAt @map("updated_at")
 
   // Relations
   sales       Sale[]
@@ -372,15 +372,15 @@ model RolePermission {
 // ============================================================================
 
 model Expense {
-  id           String    @id @default(cuid())
+  id           String   @id @default(cuid())
   amount       Decimal
   category     String
   notes        String?
-  date         DateTime  @default(now())
-  supplierId   String?   @map("supplier_id")
-  supplierName String?   @map("supplier_name")
-  isActive     Boolean   @default(true) @map("is_active")
-  createdAt    DateTime  @default(now()) @map("created_at")
+  date         DateTime @default(now())
+  supplierId   String?  @map("supplier_id")
+  supplierName String?  @map("supplier_name")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
 
   supplier Supplier? @relation(fields: [supplierId], references: [id])
 
@@ -394,17 +394,17 @@ model Expense {
 // ============================================================================
 
 model AuditLog {
-  id          String   @id @default(cuid())
-  userId      String?  @map("user_id")
-  action      String   // e.g., "CREATE_PRODUCT", "DELETE_SALE", "UPDATE_CUSTOMER", "LOGIN"
-  entityType  String   // e.g., "Product", "Sale", "Customer", "User"
-  entityId    String?  @map("entity_id")
-  details     String?  // JSON stringified details of the change
-  ipAddress   String?  @map("ip_address")
-  userAgent   String?  @map("user_agent")
-  createdAt   DateTime @default(now()) @map("created_at")
+  id         String   @id @default(cuid())
+  userId     String?  @map("user_id")
+  action     String // e.g., "CREATE_PRODUCT", "DELETE_SALE", "UPDATE_CUSTOMER", "LOGIN"
+  entityType String // e.g., "Product", "Sale", "Customer", "User"
+  entityId   String?  @map("entity_id")
+  details    String? // JSON stringified details of the change
+  ipAddress  String?  @map("ip_address")
+  userAgent  String?  @map("user_agent")
+  createdAt  DateTime @default(now()) @map("created_at")
 
-  user        User?    @relation(fields: [userId], references: [id])
+  user User? @relation(fields: [userId], references: [id])
 
   @@index([userId])
   @@index([entityType])

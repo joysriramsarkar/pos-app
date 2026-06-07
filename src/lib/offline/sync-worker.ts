@@ -89,11 +89,46 @@ export class OfflineSyncWorker {
       const batches: (typeof pendingItems)[] = [];
       let currentBatch: typeof pendingItems = [];
 
+            const latestVersions = new Map<string, number>();
+
+      // Pre-process for Last-Write-Wins (LWW)
+      for (const item of pendingItems) {
+        try {
+          const payload = JSON.parse(item.payload);
+          if (payload.id && payload.updatedAt) {
+             const time = new Date(payload.updatedAt).getTime();
+             const key = `${item.entityType}_${payload.id}`;
+             if (!latestVersions.has(key) || time > latestVersions.get(key)) {
+                 latestVersions.set(key, time);
+             }
+          }
+        } catch(e) {}
+      }
+
       for (const item of pendingItems) {
         if (item.retryCount >= 5) {
           await SyncQueueDB.markFailed(item.id, "Max retries exceeded");
           failureCount++;
           continue;
+        }
+
+        let isStale = false;
+        try {
+          const payload = JSON.parse(item.payload);
+          if (payload.id && payload.updatedAt) {
+             const time = new Date(payload.updatedAt).getTime();
+             const key = `${item.entityType}_${payload.id}`;
+             if (latestVersions.has(key) && time < latestVersions.get(key)) {
+                isStale = true;
+             }
+          }
+        } catch(e) {}
+
+        if (isStale) {
+           // Skip older versions of the same entity update (Last-Write-Wins)
+           await SyncQueueDB.markSynced(item.id);
+           successCount++;
+           continue;
         }
 
         const conflict = currentBatch.some((batchItem) =>
