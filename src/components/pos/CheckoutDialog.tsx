@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import { useSession } from 'next-auth/react';
 import {
   Dialog,
   DialogContent,
@@ -85,6 +86,8 @@ export function CheckoutDialog({
   const t = useTranslations('Checkout');
   const tc = useTranslations('Common');
   const currencySymbol = useSettingsStore((state) => state.settings.currency_symbol);
+  const { data: session } = useSession();
+  const cashierName = (session?.user as any)?.name || (session?.user as any)?.username || 'অ্যাডমিন';
 
   const isCurrentlyProcessing = isProcessing || isLocalProcessing;
   const showSuccess = !!completedSale && !isCurrentlyProcessing;
@@ -602,6 +605,7 @@ export function CheckoutDialog({
             invoiceNumber: lastSale.invoiceNumber,
             createdAt: lastSale.createdAt instanceof Date ? lastSale.createdAt.toISOString() : String(lastSale.createdAt),
             customerName: displayedCustomerName || null,
+            cashierName,
             items: lastSale.items.map(item => ({
               productName: item.productName,
               quantity: Number(item.quantity ?? 0),

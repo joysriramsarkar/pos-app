@@ -12,6 +12,14 @@ import { TransactionTable } from './TransactionTable';
 import { TransactionDetailsDialog } from './TransactionDetailsDialog';
 import { Transaction, PaginationData } from './types';
 import RefundDialog from '@/components/pos/RefundDialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
 
 export function TransactionHistory() {
   const t = useTranslations('TransactionHistory');
@@ -28,6 +36,8 @@ export function TransactionHistory() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [showRefundDialog, setShowRefundDialog] = useState(false);
   const [refundSale, setRefundSale] = useState<Transaction | null>(null);
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
+  const [pendingCancelStatus, setPendingCancelStatus] = useState<'Cancelled' | null>(null);
   const { toast } = useToast();
   
   // ✅ Watch store sales and refresh when new sales are added
@@ -133,14 +143,19 @@ export function TransactionHistory() {
       setShowRefundDialog(true);
       return;
     }
-    const confirmMessage =
-      status === 'Cancelled'
-        ? 'Are you sure you want to cancel this order?'
-        : 'Are you sure you want to refund this order?';
-
-    if (!window.confirm(confirmMessage)) {
+    // Show proper confirmation dialog instead of window.confirm
+    if (status === 'Cancelled') {
+      setPendingCancelStatus('Cancelled');
+      setCancelConfirmOpen(true);
       return;
     }
+  };
+
+  const handleConfirmCancel = async () => {
+    if (!selectedTransaction || !pendingCancelStatus) return;
+    setCancelConfirmOpen(false);
+    const status = pendingCancelStatus;
+    setPendingCancelStatus(null);
 
     setIsLoading(true);
     try {
@@ -171,8 +186,8 @@ export function TransactionHistory() {
       setRefreshKey(k => k + 1);
 
       toast({
-        title: 'Success',
-        description: `Sale ${status.toLowerCase()} successfully`,
+        title: 'সফল',
+        description: `অর্ডার সফলভাবে ${status === 'Cancelled' ? 'বাতিল' : 'রিফান্ড'} করা হয়েছে`,
       });
     } catch (error) {
       console.error('Failed to update sale status:', error);
@@ -301,7 +316,38 @@ export function TransactionHistory() {
           setRefreshKey(k => k + 1);
         }}
       />
+
+      {/* Cancel Order Confirmation Dialog */}
+      <Dialog open={cancelConfirmOpen} onOpenChange={setCancelConfirmOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>অর্ডার বাতিল নিশ্চিত করুন</DialogTitle>
+            <DialogDescription>
+              এই অর্ডারটি বাতিল করলে পূর্বাবস্থায় ফেরানো যাবে না।
+              {selectedTransaction && (
+                <span className="block mt-1 font-medium">
+                  ইনভয়েস: {selectedTransaction.invoiceNumber}
+                </span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => { setCancelConfirmOpen(false); setPendingCancelStatus(null); }}
+            >
+              না, রাখুন
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmCancel}
+              disabled={isLoading}
+            >
+              হ্যাঁ, বাতিল করুন
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
-

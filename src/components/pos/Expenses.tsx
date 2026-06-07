@@ -31,6 +31,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { useTranslations } from 'next-intl';
 import { exportToCSV, getExportDate } from '@/lib/export-utils';
+import { useSettingsStore } from '@/stores/settings-store';
 
 const CATEGORIES = ['Rent', 'Utilities', 'Salaries', 'Supplies', 'Maintenance', 'Other'] as const;
 
@@ -90,6 +91,7 @@ export function Expenses({ onReport }: ExpensesProps) {
   const [useCustomDate, setUseCustomDate] = useState(false);
   const [customDate, setCustomDate] = useState('');
   const { toast } = useToast();
+  const currency = useSettingsStore((s) => s.settings.currency_symbol || '৳');
 
   const today = format(new Date(), 'yyyy-MM-dd');
   const selectedDate = useCustomDate && customDate ? customDate : today;
@@ -516,9 +518,9 @@ export function Expenses({ onReport }: ExpensesProps) {
           </CardHeader>
           <CardContent className="space-y-3 px-4 pb-4">
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">{t('amount')} (৳)</label>
+              <label className="text-sm font-medium">{t('amount')} ({currency})</label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">৳</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">{currency}</span>
                 <Input
                   type="text"
                   value={amount}
@@ -711,9 +713,9 @@ export function Expenses({ onReport }: ExpensesProps) {
           </DialogHeader>
           <div className="space-y-3 py-3">
             <div className="space-y-1.5">
-              <label className="text-sm font-medium">{t('amount')} (৳)</label>
+              <label className="text-sm font-medium">{t('amount')} ({currency})</label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">৳</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">{currency}</span>
                 <Input
                   type="text"
                   value={editAmount}

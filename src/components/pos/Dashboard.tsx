@@ -864,12 +864,15 @@ export function Dashboard({ onNavigate }: DashboardProps) {
               <div className="space-y-2 max-h-64 overflow-y-auto">
                 {stats.recentTransactions.slice(0, 5).map((tx) => {
                   const isCompleted = Number(tx.amountPaid || 0) >= Number(tx.totalAmount || 0);
-                  const paymentIcon = tx.paymentMethod === 'নগদ'
+                  const pm = (tx.paymentMethod || '').toUpperCase();
+                  const paymentIcon = (pm === 'নগদ' || pm === 'CASH' || pm === 'CASH')
                     ? <Banknote className="h-3.5 w-3.5" />
-                    : tx.paymentMethod === 'ইউপিআই'
+                    : (pm === 'ইউপিআই' || pm === 'UPI')
                     ? <Smartphone className="h-3.5 w-3.5" />
-                    : tx.paymentMethod === 'মিশ্র'
+                    : (pm === 'মিশ্র' || pm === 'MIXED')
                     ? <CreditCard className="h-3.5 w-3.5" />
+                    : (pm === 'বাকি' || pm === 'DUE')
+                    ? <Clock className="h-3.5 w-3.5" />
                     : <Wallet className="h-3.5 w-3.5" />;
                   return (
                     <div
@@ -939,7 +942,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         transaction={selectedTransaction}
         isOpen={isDetailOpen}
         onOpenChange={setIsDetailOpen}
-        onUpdateStatus={fetchStats}
+        onUpdateStatus={(_status) => { fetchStats(); }}
       />
     </div>
   );

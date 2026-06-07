@@ -191,7 +191,7 @@ export default function PurchaseOrderManagement() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          supplierId: formSupplierId || null,
+          supplierId: (formSupplierId && formSupplierId !== 'none') ? formSupplierId : null,
           items: formItems.map((i) => ({ productId: i.productId, quantity: i.quantity, unitPrice: i.unitPrice })),
           expectedDate: formExpectedDate || null,
           notes: formNotes || null,
@@ -480,7 +480,7 @@ export default function PurchaseOrderManagement() {
                       .filter((p) => p.isActive && !formItems.some((fi) => fi.productId === p.id))
                       .map((p) => (
                         <SelectItem key={p.id} value={p.id}>
-                          {p.nameBn || p.name} (৳{Number(p.buyingPrice)})
+                          {p.nameBn || p.name} ({formatPrice(Number(p.buyingPrice))})
                         </SelectItem>
                       ))}
                   </SelectContent>
@@ -652,7 +652,7 @@ export default function PurchaseOrderManagement() {
                             <TableRow key={item.id}>
                               <TableCell className="text-sm">{getProductName(item)}</TableCell>
                               <TableCell className="text-right">{item.quantity}</TableCell>
-                              <TableCell className="text-right">৳{item.unitPrice}</TableCell>
+                              <TableCell className="text-right">{formatPrice(item.unitPrice)}</TableCell>
                               <TableCell className="text-right font-medium">{formatPrice(item.totalPrice)}</TableCell>
                               {selectedOrder.status === 'প্রাপ্ত' && (
                                 <TableCell className="text-right text-green-600">{item.receivedQty}</TableCell>

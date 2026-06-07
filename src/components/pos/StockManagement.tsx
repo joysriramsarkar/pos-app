@@ -453,96 +453,94 @@ export function StockManagement({
 
   return (
     <>
-      <div className="flex-1 flex flex-col min-h-0 w-full space-y-4 p-4 md:p-6 animate-page-enter">
+      <div className="flex-1 flex flex-col min-h-0 w-full space-y-2 md:space-y-4 p-2 md:p-4 lg:p-6 animate-page-enter">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shrink-0">
+        <div className="flex items-center justify-between gap-2 shrink-0">
           <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              <Package className="w-6 h-6" />
+            <h1 className="text-lg md:text-2xl font-bold flex items-center gap-2">
+              <Package className="w-5 h-5" />
               {t('title')}
             </h1>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {filteredProducts.length} {t('items')}
             </p>
           </div>
-          <div className="flex gap-2 flex-wrap">
-            <Button variant="outline" size="sm" onClick={onStatistics} className="gap-1">
+          <div className="flex gap-1.5">
+            <Button variant="outline" size="sm" onClick={onStatistics} className="gap-1 h-8 px-2">
               <BarChart2 className="w-4 h-4" />
-              {t('statistics')}
+              <span className="hidden sm:inline text-xs">{t('statistics')}</span>
             </Button>
-            <Button variant="outline" size="sm" onClick={() => setIsBulkUpdateOpen(true)} className="gap-1">
+            <Button variant="outline" size="sm" onClick={() => setIsBulkUpdateOpen(true)} className="gap-1 h-8 px-2">
               <Upload className="w-4 h-4" />
-              {t('bulk_update')}
+              <span className="hidden sm:inline text-xs">{t('bulk_update')}</span>
             </Button>
-            <Button size="sm" onClick={onAddProduct} className="gap-1 bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600">
+            <Button size="sm" onClick={onAddProduct} className="gap-1 h-8 px-2 bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600">
               <Plus className="w-4 h-4" />
-              {t('add_item')}
+              <span className="hidden sm:inline text-xs">{t('add_item')}</span>
             </Button>
           </div>
         </div>
 
-        {/* Summary Value Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 shrink-0">
+        {/* Summary Value Cards — compact on mobile */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 shrink-0">
           <Card className="overflow-hidden border-green-200 dark:border-green-900/50">
-            <CardContent className="p-4 bg-gradient-to-br from-green-50/80 to-green-100/30 dark:from-green-950/40 dark:to-green-900/20">
-              <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-green-500/10">
-                  <DollarSign className="h-4 w-4 text-green-600 dark:text-green-400" />
+            <CardContent className="p-2.5 bg-gradient-to-br from-green-50/80 to-green-100/30 dark:from-green-950/40 dark:to-green-900/20">
+              <div className="flex items-center gap-1.5">
+                <div className="flex h-6 w-6 items-center justify-center rounded-md bg-green-500/10 shrink-0">
+                  <DollarSign className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
                 </div>
-                <span className="text-xs text-muted-foreground">{t('total_stock_value')}</span>
+                <span className="text-[10px] text-muted-foreground leading-tight">{t('total_stock_value')}</span>
               </div>
-              <p className="text-xl font-bold mt-2 text-green-700 dark:text-green-400 tabular-nums">
+              <p className="text-sm md:text-base font-bold mt-1 text-green-700 dark:text-green-400 tabular-nums">
                 {formatPrice(totalStockValue)}
               </p>
-              <p className="text-[10px] text-green-600/70 dark:text-green-500/70 mt-1">
+              <p className="text-[10px] text-green-600/70 dark:text-green-500/70">
                 {activeProducts.length} {t('items')}
               </p>
             </CardContent>
           </Card>
           <Card className="overflow-hidden border-emerald-200 dark:border-emerald-900/50">
-            <CardContent className="p-4 bg-gradient-to-br from-emerald-50/80 to-emerald-100/30 dark:from-emerald-950/40 dark:to-emerald-900/20">
-              <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10">
-                  <TrendingUp className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            <CardContent className="p-2.5 bg-gradient-to-br from-emerald-50/80 to-emerald-100/30 dark:from-emerald-950/40 dark:to-emerald-900/20">
+              <div className="flex items-center gap-1.5">
+                <div className="flex h-6 w-6 items-center justify-center rounded-md bg-emerald-500/10 shrink-0">
+                  <TrendingUp className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
                 </div>
-                <span className="text-xs text-muted-foreground">{t('total_retail_value')}</span>
+                <span className="text-[10px] text-muted-foreground leading-tight">{t('total_retail_value')}</span>
               </div>
-              <p className="text-xl font-bold mt-2 text-emerald-700 dark:text-emerald-400 tabular-nums">
+              <p className="text-sm md:text-base font-bold mt-1 text-emerald-700 dark:text-emerald-400 tabular-nums">
                 {formatPrice(totalRetailValue)}
               </p>
-              <p className="text-[10px] text-emerald-600/70 dark:text-emerald-500/70 mt-1">
-                {t('selling')}
-              </p>
+              <p className="text-[10px] text-emerald-600/70 dark:text-emerald-500/70">{t('selling')}</p>
             </CardContent>
           </Card>
           <Card className="overflow-hidden border-teal-200 dark:border-teal-900/50">
-            <CardContent className="p-4 bg-gradient-to-br from-teal-50/80 to-teal-100/30 dark:from-teal-950/40 dark:to-teal-900/20">
-              <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-500/10">
-                  <TrendingUp className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+            <CardContent className="p-2.5 bg-gradient-to-br from-teal-50/80 to-teal-100/30 dark:from-teal-950/40 dark:to-teal-900/20">
+              <div className="flex items-center gap-1.5">
+                <div className="flex h-6 w-6 items-center justify-center rounded-md bg-teal-500/10 shrink-0">
+                  <TrendingUp className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400" />
                 </div>
-                <span className="text-xs text-muted-foreground">{t('potential_profit')}</span>
+                <span className="text-[10px] text-muted-foreground leading-tight">{t('potential_profit')}</span>
               </div>
-              <p className="text-xl font-bold mt-2 text-teal-700 dark:text-teal-400 tabular-nums">
+              <p className="text-sm md:text-base font-bold mt-1 text-teal-700 dark:text-teal-400 tabular-nums">
                 {formatPrice(potentialProfit)}
               </p>
-              <p className="text-[10px] text-teal-600/70 dark:text-teal-500/70 mt-1">
+              <p className="text-[10px] text-teal-600/70 dark:text-teal-500/70">
                 {totalRetailValue > 0 ? ((potentialProfit / totalRetailValue) * 100).toFixed(1) : '0'}% {t('profit_margin')}
               </p>
             </CardContent>
           </Card>
           <Card className="overflow-hidden border-red-200 dark:border-red-900/50">
-            <CardContent className="p-4 bg-gradient-to-br from-red-50/80 to-red-100/30 dark:from-red-950/40 dark:to-red-900/20">
-              <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-500/10">
-                  <X className="h-4 w-4 text-red-500 dark:text-red-400" />
+            <CardContent className="p-2.5 bg-gradient-to-br from-red-50/80 to-red-100/30 dark:from-red-950/40 dark:to-red-900/20">
+              <div className="flex items-center gap-1.5">
+                <div className="flex h-6 w-6 items-center justify-center rounded-md bg-red-500/10 shrink-0">
+                  <X className="h-3.5 w-3.5 text-red-500 dark:text-red-400" />
                 </div>
-                <span className="text-xs text-muted-foreground">{t('out_of_stock')}</span>
+                <span className="text-[10px] text-muted-foreground leading-tight">{t('out_of_stock')}</span>
               </div>
-              <p className="text-xl font-bold mt-2 text-red-600 dark:text-red-400 tabular-nums">
+              <p className="text-sm md:text-base font-bold mt-1 text-red-600 dark:text-red-400 tabular-nums">
                 {outOfStockCount}
               </p>
-              <p className="text-[10px] text-red-500/70 dark:text-red-400/70 mt-1">
+              <p className="text-[10px] text-red-500/70 dark:text-red-400/70">
                 {lowStockCount} {t('low_stock')}
               </p>
             </CardContent>
@@ -550,7 +548,7 @@ export function StockManagement({
         </div>
 
         {/* Filters */}
-        <div className="space-y-3 shrink-0">
+        <div className="space-y-2 shrink-0">
           <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
             {/* Search */}
             <div className="relative flex-1 w-full">

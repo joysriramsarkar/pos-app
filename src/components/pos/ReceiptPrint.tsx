@@ -21,6 +21,7 @@ export interface ReceiptPrintProps {
     invoiceNumber: string;
     createdAt: string;
     customerName: string | null;
+    cashierName?: string;
     items: Array<{
       productName: string;
       quantity: number;
@@ -116,12 +117,12 @@ export default function ReceiptPrint({ open, onOpenChange, saleData }: ReceiptPr
     <div id="receipt-content" className="receipt-thermal bg-white text-black p-4 font-mono text-xs leading-relaxed max-w-[80mm] mx-auto">
       {/* Header */}
       <div className="text-center space-y-0.5">
-        <h2 className="text-lg font-bold">{settings.store_name_bn || 'লক্ষ্মণ ভাণ্ডার'}</h2>
+        <h2 className="text-lg font-bold">{settings.store_name_bn || settings.store_name || 'লক্ষ্মণ ভাণ্ডার'}</h2>
         {settings.store_address && (
           <p className="text-[10px]">{settings.store_address}</p>
         )}
         {settings.store_phone && (
-          <p className="text-[10px]">{t('cashier')}: {settings.store_phone}</p>
+          <p className="text-[10px]">📞 {settings.store_phone}</p>
         )}
         {settings.store_gst && (
           <p className="text-[10px]">GST: {settings.store_gst}</p>
@@ -148,7 +149,7 @@ export default function ReceiptPrint({ open, onOpenChange, saleData }: ReceiptPr
         )}
         <div className="flex justify-between">
           <span>{t('cashier')}:</span>
-          <span>অ্যাডমিন</span>
+          <span>{saleData.cashierName || 'অ্যাডমিন'}</span>
         </div>
       </div>
 
@@ -247,12 +248,12 @@ export default function ReceiptPrint({ open, onOpenChange, saleData }: ReceiptPr
     <div id="receipt-content" className="receipt-a4 bg-white text-black p-8 max-w-[210mm] mx-auto">
       {/* Header */}
       <div className="text-center border-b-2 border-black pb-3 mb-4">
-        <h2 className="text-2xl font-bold">{settings.store_name_bn || 'লক্ষ্মণ ভাণ্ডার'}</h2>
+        <h2 className="text-2xl font-bold">{settings.store_name_bn || settings.store_name || 'লক্ষ্মণ ভাণ্ডার'}</h2>
         {settings.store_address && (
           <p className="text-sm text-gray-700">{settings.store_address}</p>
         )}
         {settings.store_phone && (
-          <p className="text-sm text-gray-700">{t('cashier')}: {settings.store_phone}</p>
+          <p className="text-sm text-gray-700">📞 {settings.store_phone}</p>
         )}
         {settings.store_gst && (
           <p className="text-sm text-gray-700">GST: {settings.store_gst}</p>
@@ -267,7 +268,7 @@ export default function ReceiptPrint({ open, onOpenChange, saleData }: ReceiptPr
         </div>
         <div className="text-right">
           <p><span className="text-gray-600">{t('date_time')}:</span> {formatBengaliDate(saleData.createdAt)}</p>
-          <p><span className="text-gray-600">{t('cashier')}:</span> অ্যাডমিন</p>
+          <p><span className="text-gray-600">{t('cashier')}:</span> {saleData.cashierName || 'অ্যাডমিন'}</p>
         </div>
       </div>
 

@@ -70,6 +70,7 @@ import {
   Languages,
   Sun,
   Moon,
+  Truck,
 } from 'lucide-react';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useCartStore, useProductsStore, useSyncStore, useUIStore, useCustomersStore, useSalesStore, useQuantityUsageStore } from '@/stores/pos-store';
@@ -104,14 +105,14 @@ const navItems: { id: Exclude<PageType, 'menu' | 'stock-statistics' | 'expenses-
   { id: 'users', label: 'Users', icon: <UserCog className="w-5 h-5" /> },
   { id: 'settings', label: 'Settings', icon: <Settings className="w-5 h-5" /> },
   { id: 'audit', label: 'Audit Logs', icon: <ClipboardList className="w-5 h-5" /> },
-  { id: 'purchase-orders', label: 'Purchase Orders', icon: <ShoppingCart className="w-5 h-5" /> },
+  { id: 'purchase-orders', label: 'Purchase Orders', icon: <Truck className="w-5 h-5" /> },
 ];
 
-const mobileBottomNavItems: { id: PageType | 'cart' | 'more'; label: string; icon: React.ReactNode }[] = [
+const mobileBottomNavItems: { id: PageType | 'more'; label: string; icon: React.ReactNode }[] = [
   { id: 'dashboard', label: 'Home', icon: <LayoutDashboard className="w-6 h-6 md:w-5 md:h-5" /> },
   { id: 'billing', label: 'Bill', icon: <ShoppingCart className="w-6 h-6 md:w-5 md:h-5" /> },
   { id: 'stock', label: 'Stock', icon: <Package className="w-6 h-6 md:w-5 md:h-5" /> },
-  { id: 'cart', label: 'Cart', icon: <ShoppingCart className="w-6 h-6 md:w-5 md:h-5" /> },
+  { id: 'transactions', label: 'Transactions', icon: <History className="w-6 h-6 md:w-5 md:h-5" /> },
   { id: 'more', label: 'More', icon: <Menu className="w-6 h-6 md:w-5 md:h-5" /> },
 ];
 
@@ -263,7 +264,9 @@ function POSDashboard() {
   }, [userRole, authStatus]);
 
   const filteredMoreMenuItems = useMemo(() => {
-    return filteredNavItems.filter(item => item.id !== 'dashboard' && item.id !== 'billing' && item.id !== 'stock');
+    // Exclude pages that are direct bottom-nav items — they should not appear in 'More'
+    const directNavIds = new Set(['dashboard', 'billing', 'stock', 'transactions']);
+    return filteredNavItems.filter(item => !directNavIds.has(item.id));
   }, [filteredNavItems]);
 
   // Mobile product search - server-side with offline fallback
@@ -1336,19 +1339,16 @@ function POSDashboard() {
       )}>
         <div className="flex items-center justify-between gap-1">
           {mobileBottomNavItems.map((item) => {
-            const isActive = item.id === 'cart' 
-              ? (currentPage === 'billing' && cartItemCount > 0)
-              : item.id === 'more'
-                ? filteredMoreMenuItems.some(nav => nav.id === currentPage)
-                : currentPage === item.id;
+            // Direct bottom-nav items always take priority over 'more'
+            const directNavIds = new Set(mobileBottomNavItems.filter(i => i.id !== 'more').map(i => i.id));
+            const isActive = item.id === 'more'
+              ? filteredMoreMenuItems.some(nav => nav.id === currentPage) && !directNavIds.has(currentPage)
+              : currentPage === item.id;
             return (
               <button
                 key={item.id}
                 onClick={() => {
-                  if (item.id === 'cart') {
-                    if (cartItemCount > 0) setMobileCartOpen(true);
-                    else setCurrentPage('billing');
-                  } else if (item.id === 'more') {
+                  if (item.id === 'more') {
                     setMoreMenuOpen(true);
                   } else {
                     setCurrentPage(item.id as PageType);
@@ -1362,9 +1362,10 @@ function POSDashboard() {
               >
                 <div className="relative">
                   {item.icon}
-                  {item.id === 'cart' && cartItemCount > 0 && (
-                    <Badge className="absolute -top-1.5 -right-2 h-4 min-w-4 p-0 flex items-center justify-center text-[8px] text-white bg-red-500 border border-white dark:border-card animate-pulse">
-                      {cartItemCount}
+                  {/* Cart item count badge on the billing button */}
+                  {item.id === 'billing' && cartItemCount > 0 && (
+                    <Badge className="absolute -top-1.5 -right-2 h-4 min-w-4 p-0 flex items-center justify-center text-[8px] text-white bg-red-500 border border-white dark:border-card">
+                      {cartItemCount > 9 ? '9+' : cartItemCount}
                     </Badge>
                   )}
                 </div>
@@ -1375,7 +1376,7 @@ function POSDashboard() {
         </div>
       </nav>
 
-      {/* Mobile Cart Sheet */}
+      {/* Mobile Cart Sheet — used when accessing cart from billing page header */}
       <Sheet open={mobileCartOpen} onOpenChange={setMobileCartOpen}>
         <SheetContent side="bottom" className="h-[85vh] rounded-t-2xl p-0 overflow-hidden">
           <SheetHeader className="px-4 py-2 border-b">
