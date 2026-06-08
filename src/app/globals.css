@@ -415,7 +415,8 @@ body.barcode-scanner-active *:not(.barcode-scanner-overlay):not(.barcode-scanner
   visibility: hidden !important;
 }
 
-body.barcode-scanner-overlay,
-body.barcode-scanner-overlay * {
+.barcode-scanner-overlay,
+.barcode-scanner-overlay * {
   visibility: visible !important;
 }
+

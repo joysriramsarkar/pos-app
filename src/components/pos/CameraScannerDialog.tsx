@@ -98,46 +98,83 @@ export function CameraScannerDialog({
     onOpenChange(false);
   }, [isNativeApp, stopNativeScanner, startShutdown, onOpenChange]);
 
+  // Stable refs to prevent scanner from restarting on state updates/re-renders
+  const handleWebBarcodeRef = useRef(handleWebBarcode);
+  const onOpenChangeRef = useRef(onOpenChange);
+  const tBillingRef = useRef(tBilling);
+  const stopNativeScannerRef = useRef(stopNativeScanner);
+
+  useEffect(() => {
+    handleWebBarcodeRef.current = handleWebBarcode;
+  }, [handleWebBarcode]);
+
+  useEffect(() => {
+    onOpenChangeRef.current = onOpenChange;
+  }, [onOpenChange]);
+
+  useEffect(() => {
+    tBillingRef.current = tBilling;
+  }, [tBilling]);
+
+  useEffect(() => {
+    stopNativeScannerRef.current = stopNativeScanner;
+  }, [stopNativeScanner]);
+
   useEffect(() => {
     if (!open || !isNativeApp) return;
 
+    let isScanningActive = true;
+
     const startScanner = async () => {
-      const { camera } = await BarcodeScanner.requestPermissions();
-      if (camera !== 'granted') {
-        setLocalError(tBilling('camera_permission_required'));
-        return;
-      }
+      try {
+        const { camera } = await BarcodeScanner.requestPermissions();
+        if (!isScanningActive) return;
 
-      setLocalError(null);
-
-      listenerRef.current = await BarcodeScanner.addListener(
-        'barcodesScanned',
-        (event) => {
-          const barcode = event.barcodes?.[0];
-          if (!barcode?.rawValue) return;
-          handleWebBarcode(barcode.rawValue);
-          if (singleScan) stopNativeScanner().then(() => onOpenChange(false));
+        if (camera !== 'granted') {
+          setLocalError(tBillingRef.current('camera_permission_required'));
+          return;
         }
-      );
 
-      document.querySelector('body')?.classList.add('barcode-scanner-active');
+        setLocalError(null);
 
-      await BarcodeScanner.startScan({
-        formats: [
-          BarcodeFormat.Ean13,
-          BarcodeFormat.Ean8,
-          BarcodeFormat.UpcA,
-          BarcodeFormat.UpcE,
-          BarcodeFormat.Code128,
-          BarcodeFormat.Code39,
-        ],
-      });
+        listenerRef.current = await BarcodeScanner.addListener(
+          'barcodesScanned',
+          (event) => {
+            const barcode = event.barcodes?.[0];
+            if (!barcode?.rawValue) return;
+            handleWebBarcodeRef.current(barcode.rawValue);
+            if (singleScan) {
+              stopNativeScannerRef.current().then(() => onOpenChangeRef.current(false));
+            }
+          }
+        );
+
+        document.querySelector('body')?.classList.add('barcode-scanner-active');
+
+        await BarcodeScanner.startScan({
+          formats: [
+            BarcodeFormat.Ean13,
+            BarcodeFormat.Ean8,
+            BarcodeFormat.UpcA,
+            BarcodeFormat.UpcE,
+            BarcodeFormat.Code128,
+            BarcodeFormat.Code39,
+          ],
+        });
+      } catch (err: any) {
+        if (isScanningActive) {
+          setLocalError(tBillingRef.current('scanner_error', { error: err?.message || '' }));
+        }
+      }
     };
 
-    startScanner().catch((err) => setLocalError(tBilling('scanner_error', { error: err?.message || '' })));
+    startScanner();
 
-    return () => { stopNativeScanner(); };
-  }, [open, tBilling, isNativeApp, handleWebBarcode, onOpenChange, singleScan, stopNativeScanner]);
+    return () => {
+      isScanningActive = false;
+      stopNativeScannerRef.current();
+    };
+  }, [open, isNativeApp, singleScan]);
 
   useEffect(() => {
     if (!open) {
