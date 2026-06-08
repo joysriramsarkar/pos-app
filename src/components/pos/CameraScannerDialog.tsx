@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { BarcodeScanner, BarcodeFormat } from '@capacitor-mlkit/barcode-scanning';
 import { convertBengaliToEnglishNumerals, isValidEanUpcBarcode } from '@/lib/utils';
+import { useCameraBarcodeScanner } from '@/hooks/use-camera-barcode-scanner';
 import { Button } from '@/components/ui/button';
 import { CheckCircle2, X, AlertCircle } from 'lucide-react';
 import { useTranslations } from 'next-intl';
@@ -40,9 +41,40 @@ export function CameraScannerDialog({
   const lastScannedRef = useRef<string>('');
   const lastScannedTimeRef = useRef<number>(0);
 
-  const isAndroidApp = typeof Capacitor !== 'undefined' && Capacitor.isNativePlatform();
+  const isNativeApp = typeof Capacitor !== 'undefined' && Capacitor.isNativePlatform();
 
-  const stopScanner = useCallback(async () => {
+  const shutdownWebScannerRef = useRef<(() => Promise<void>) | null>(null);
+
+  const handleWebBarcode = useCallback(
+    (barcode: string) => {
+      const normalized = convertBengaliToEnglishNumerals(barcode.replace(/\s+/g, ''));
+      const now = Date.now();
+      if (normalized === lastScannedRef.current && now - lastScannedTimeRef.current < 1500) return;
+      lastScannedRef.current = normalized;
+      lastScannedTimeRef.current = now;
+
+      if (isValidEanUpcBarcode(normalized)) {
+        setLocalError(null);
+        onBarcodeScanned(normalized);
+        if (navigator?.vibrate) navigator.vibrate(50);
+        if (singleScan) shutdownWebScannerRef.current?.();
+      } else {
+        setLocalError(tBilling('invalid_barcode', { barcode: normalized }));
+      }
+    },
+    [onBarcodeScanned, singleScan, tBilling]
+  );
+
+  const { scannerId, isInitialized, startShutdown } = useCameraBarcodeScanner({
+    enabled: open && !isNativeApp,
+    onBarcodeDetected: handleWebBarcode,
+    onClose: () => onOpenChange(false),
+    onError: (error) => setLocalError(error),
+  });
+
+  shutdownWebScannerRef.current = startShutdown;
+
+  const stopNativeScanner = useCallback(async () => {
     document.querySelector('body')?.classList.remove('barcode-scanner-active');
     try {
       await listenerRef.current?.remove();
@@ -55,13 +87,17 @@ export function CameraScannerDialog({
   }, []);
 
   const handleClose = useCallback(async () => {
-    await stopScanner();
+    if (isNativeApp) {
+      await stopNativeScanner();
+    } else {
+      await startShutdown();
+    }
     setLocalError(null);
     onOpenChange(false);
-  }, [stopScanner, onOpenChange]);
+  }, [isNativeApp, stopNativeScanner, startShutdown, onOpenChange]);
 
   useEffect(() => {
-    if (!open || !isAndroidApp) return;
+    if (!open || !isNativeApp) return;
 
     const startScanner = async () => {
       const { camera } = await BarcodeScanner.requestPermissions();
@@ -77,22 +113,8 @@ export function CameraScannerDialog({
         (event) => {
           const barcode = event.barcodes?.[0];
           if (!barcode?.rawValue) return;
-
-          const normalized = convertBengaliToEnglishNumerals(barcode.rawValue.replace(/\s+/g, ''));
-
-          const now = Date.now();
-          if (normalized === lastScannedRef.current && now - lastScannedTimeRef.current < 1500) return;
-          lastScannedRef.current = normalized;
-          lastScannedTimeRef.current = now;
-
-          if (isValidEanUpcBarcode(normalized)) {
-            setLocalError(null);
-            onBarcodeScanned(normalized);
-            if (navigator?.vibrate) navigator.vibrate(50);
-            if (singleScan) stopScanner().then(() => onOpenChange(false));
-          } else {
-            setLocalError(tBilling('invalid_barcode', { barcode: normalized }));
-          }
+          handleWebBarcode(barcode.rawValue);
+          if (singleScan) stopNativeScanner().then(() => onOpenChange(false));
         }
       );
 
@@ -112,15 +134,35 @@ export function CameraScannerDialog({
 
     startScanner().catch((err) => setLocalError(tBilling('scanner_error', { error: err?.message || '' })));
 
-    return () => { stopScanner(); };
-  }, [open, tBilling, isAndroidApp, onBarcodeScanned, onOpenChange, singleScan, stopScanner]);
+    return () => { stopNativeScanner(); };
+  }, [open, tBilling, isNativeApp, handleWebBarcode, onOpenChange, singleScan, stopNativeScanner]);
 
-  if (!open || !isAndroidApp) return null;
+  useEffect(() => {
+    if (!open) {
+      setLocalError(null);
+      lastScannedRef.current = '';
+      lastScannedTimeRef.current = 0;
+    }
+  }, [open]);
+
+  if (!open) return null;
 
   return (
-    <div className="barcode-scanner-overlay fixed inset-0 z-50 flex flex-col">
+    <div className="barcode-scanner-overlay fixed inset-0 z-[100] flex flex-col bg-black">
+      {/* Web camera feed */}
+      {!isNativeApp && (
+        <div className="absolute inset-0">
+          <div id={scannerId} className="h-full w-full [&_video]:h-full [&_video]:w-full [&_video]:object-cover" />
+          {!isInitialized && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/80">
+              <p className="text-white text-sm">{tBilling('camera_starting')}</p>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Scanning frame */}
-      <div className="flex-1 flex items-center justify-center">
+      <div className="relative flex-1 flex items-center justify-center pointer-events-none">
         <div className="border-2 border-white/80 rounded-lg w-72 h-40 relative">
           <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-white rounded-tl-lg" />
           <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-white rounded-tr-lg" />
@@ -130,7 +172,7 @@ export function CameraScannerDialog({
       </div>
 
       {/* Bottom panel */}
-      <div className="bg-black/70 p-5 flex flex-col gap-3">
+      <div className="relative bg-black/70 p-5 flex flex-col gap-3">
         {displayError ? (
           <div className="flex items-center justify-center gap-2 bg-red-500/20 p-2 rounded text-red-400 text-sm animate-pulse">
             <AlertCircle className="w-4 h-4 shrink-0" />
@@ -141,7 +183,7 @@ export function CameraScannerDialog({
         )}
 
         {!singleScan && scannedItems.length > 0 && (
-          <div className="flex flex-col gap-1 max-h-28 overflow-y-auto">
+          <div className="flex flex-col gap-1 max-h-28 overflow-y-auto overscroll-contain">
             {scannedItems.map((item, i) => (
               <div key={i} className="flex items-center justify-between gap-2 text-green-400 text-sm bg-white/5 p-1 rounded">
                 <div className="flex items-center gap-2 truncate">

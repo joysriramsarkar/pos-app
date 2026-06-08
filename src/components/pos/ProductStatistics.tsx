@@ -150,7 +150,7 @@ function ProductDetailView({ productId, days, onBack }: { productId: string; day
           <span>•</span>
           <span>{t('selling_price')}: <strong className="text-foreground">{formatPrice(product.sellingPrice)}</strong></span>
           <span>•</span>
-          <span>{t('current_stock')}: <strong className={product.currentStock <= product.minStockLevel ? 'text-red-600' : 'text-foreground'}>{formatStringNumbers(product.currentStock)} {product.unit}</strong></span>
+          <span>{t('current_stock')}: <strong className={Number(product.currentStock) <= Number(product.minStockLevel) ? 'text-red-600' : 'text-foreground'}>{formatStringNumbers(product.currentStock)} {product.unit}</strong></span>
           {peakHour.qty > 0 && <><span>•</span><span>{t('peak_sales')}: <strong className="text-foreground">{formatStringNumbers(peakHour.hour)}:00–{formatStringNumbers(peakHour.hour + 1)}:00</strong></span></>}
         </div>
 

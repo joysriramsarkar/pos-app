@@ -129,8 +129,16 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const peakHour = hourlyPattern.reduce((a, b) => b.qty > a.qty ? b : a, hourlyPattern[0]);
     const peakDay = weeklyPattern.reduce((a, b) => b.qty > a.qty ? b : a, weeklyPattern[0]);
 
+    const parsedProduct = product ? {
+      ...product,
+      buyingPrice: Number(product.buyingPrice),
+      sellingPrice: Number(product.sellingPrice),
+      currentStock: Number(product.currentStock),
+      minStockLevel: Number(product.minStockLevel),
+    } : null;
+
     return NextResponse.json({
-      product,
+      product: parsedProduct,
       summary: { totalQty, totalRevenue, totalProfit, profitMargin, totalOrders, avgOrderQty, peakHour: peakHour.hour, peakDay: peakDay.day },
       dailyTrend,
       hourlyPattern,

@@ -140,10 +140,10 @@ export async function POST(
         id: item.id,
         purchaseOrderId: result.id,
         productId: item.productId,
-        quantity: item.quantity,
+        quantity: Number(item.quantity),
         unitPrice: Number(item.buyingPrice),
         totalPrice: Number(item.totalPrice),
-        receivedQty: item.quantity,
+        receivedQty: Number(item.quantity),
         product: item.product ? {
           id: item.product.id,
           name: item.product.name,

@@ -16,6 +16,7 @@ import { useTranslations } from 'next-intl';
 
 const cleanSearchQuery = (q: string) => q.replace(/rs\.?|₹/gi, '').trim();
 import { useToast } from '@/hooks/use-toast';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 type ViewMode = 'grid' | 'compact';
 
@@ -67,7 +68,9 @@ export function ProductGrid({
   const setSearchQuery = useUIStore((state) => state.setSearchQuery);
   const setSelectedCategoryId = useUIStore((state) => state.setSelectedCategoryId);
 
-  const isAndroidApp = typeof Capacitor !== 'undefined' && Capacitor.isNativePlatform();
+  const isNativeApp = typeof Capacitor !== 'undefined' && Capacitor.isNativePlatform();
+  const isMobile = useIsMobile();
+  const showCameraScan = isNativeApp || isMobile;
 
   const { toast } = useToast();
   const addItem = useCartStore((state) => state.addItem);
@@ -255,7 +258,7 @@ export function ProductGrid({
                 </Button>
               )}
             </div>
-            {isAndroidApp && (
+            {showCameraScan && (
               <Button
                 size="sm"
                 variant="outline"

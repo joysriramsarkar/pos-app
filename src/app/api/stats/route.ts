@@ -95,7 +95,7 @@ export async function GET(request: NextRequest) {
         minStockLevel: true,
       },
     });
-    const lowStockProducts = allActiveProducts.filter(p => p.currentStock <= p.minStockLevel);
+    const lowStockProducts = allActiveProducts.filter(p => Number(p.currentStock) <= Number(p.minStockLevel));
 
     // Recent transactions (last 10)
     const recentSales = await db.sale.findMany({
@@ -251,8 +251,8 @@ export async function GET(request: NextRequest) {
           id: p.id,
           name: p.name,
           nameBn: p.nameBn || p.name,
-          currentStock: p.currentStock,
-          minStockLevel: p.minStockLevel,
+          currentStock: Number(p.currentStock),
+          minStockLevel: Number(p.minStockLevel),
         })),
         recentTransactions,
         paymentBreakdown,

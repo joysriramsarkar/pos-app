@@ -82,6 +82,7 @@ import { ProductsDB, SalesDB, SyncQueueDB, CustomersDB, saveSaleWithSyncQueue, u
 import { STORE_CONFIG } from '@/types/pos';
 import type { Product, Sale, SyncQueueItem } from '@/types/pos';
 import { cn } from '@/lib/utils';
+import { refreshProductsFromServer } from '@/lib/products-sync';
 import { convertBengaliToEnglishNumerals } from '@/lib/utils';
 import { toMoneyNumber } from '@/lib/money';
 import Decimal from 'decimal.js';
@@ -411,6 +412,38 @@ function POSDashboard() {
     };
 
     loadProducts();
+  }, [session?.user?.requiresPasswordChange]);
+
+  // Refresh products when tab becomes visible or after offline sync completes
+  useEffect(() => {
+    if (session?.user?.requiresPasswordChange) return;
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && navigator.onLine) {
+        refreshProductsFromServer().catch(console.error);
+      }
+    };
+
+    const handleSyncComplete = () => {
+      if (navigator.onLine) {
+        refreshProductsFromServer().catch(console.error);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('offlineSyncComplete', handleSyncComplete);
+
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === 'visible' && navigator.onLine) {
+        refreshProductsFromServer().catch(console.error);
+      }
+    }, 60_000);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('offlineSyncComplete', handleSyncComplete);
+      window.clearInterval(intervalId);
+    };
   }, [session?.user?.requiresPasswordChange]);
 
   // Monitor online status - check both navigator.onLine AND actual API connectivity
@@ -813,7 +846,8 @@ function POSDashboard() {
   // Handle product save
   const handleProductSave = useCallback(async (data: ProductFormData) => {
     try {
-      if (!isOnline) {
+      const canReachServer = typeof navigator !== 'undefined' && navigator.onLine;
+      if (!canReachServer) {
         // offline: store locally and queue a sync entry
         if (data.id) {
           const updatedProductData: Partial<Product> = {
@@ -923,11 +957,14 @@ function POSDashboard() {
 
         const { data: newProduct } = await response.json();
         addProduct(newProduct);
-        // ✅ FIX: Persist new product to IndexedDB for offline access after page reload
         await ProductsDB.upsert(newProduct);
         toast({ title: 'প্রোডাক্ট যোগ হয়েছে', description: `"${newProduct.name}" ইনভেন্টরিতে যোগ করা হয়েছে।` });
+        refreshProductsFromServer().catch(console.error);
         return newProduct;
       }
+
+      toast({ title: 'প্রোডাক্ট সংরক্ষিত', description: 'পরিবর্তন সফলভাবে সংরক্ষণ হয়েছে।' });
+      refreshProductsFromServer().catch(console.error);
     } catch (error) {
       console.error("Failed to save product:", error);
       toast({
@@ -936,7 +973,7 @@ function POSDashboard() {
         variant: 'destructive'
       });
     }
-  }, [updateProduct, addProduct, isOnline, toast, products]);
+  }, [updateProduct, addProduct, toast, products]);
 
   // Handle navigation
   const handleNavigate = useCallback((page: string) => {

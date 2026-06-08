@@ -247,8 +247,12 @@ export function PartiesManagement() {
       const res = await fetch(`/api/customers?id=${customer.id}`);
       if (res.ok) {
         const { data } = await res.json();
-        // server returns the customer including ledgerEntries when id supplied
-        setLedgerEntries(data.ledgerEntries || []);
+        const parsedLedger = (data.ledgerEntries || []).map((entry: any) => ({
+          ...entry,
+          amount: Number(entry.amount) || 0,
+          balanceAfter: Number(entry.balanceAfter) || 0,
+        }));
+        setLedgerEntries(parsedLedger);
       } else {
         console.error('Failed to load ledger entries');
         setLedgerEntries([]);

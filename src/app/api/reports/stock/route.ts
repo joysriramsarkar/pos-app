@@ -41,8 +41,14 @@ export async function GET(request: NextRequest) {
       }),
     ]);
 
+    const parsedItems = lowStockItems.map((item) => ({
+      ...item,
+      currentStock: Number(item.currentStock),
+      minStockLevel: Number(item.minStockLevel),
+    }));
+
     return NextResponse.json({
-      lowStockItems,
+      lowStockItems: parsedItems,
       totalCount,
       page,
       limit,
@@ -73,8 +79,14 @@ export async function GET(request: NextRequest) {
       ]);
 
       const totalCount = Number(countResult[0]?.count ?? 0);
+      const parsedItems = lowStockItems.map((item) => ({
+        ...item,
+        currentStock: Number(item.currentStock),
+        minStockLevel: Number(item.minStockLevel),
+      }));
+
       return NextResponse.json({
-        lowStockItems,
+        lowStockItems: parsedItems,
         totalCount,
         page,
         limit,

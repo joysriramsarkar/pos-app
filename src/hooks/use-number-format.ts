@@ -18,7 +18,9 @@ export function makeFormatters(isBn: boolean, currencySymbol: string = '₹') {
     return isBn ? convertEnglishToBengaliNumerals(formatted) : formatted;
   };
 
-  const formatPrice = (price: number | null | undefined): string => {
+  const formatPrice = (price: number | string | null | undefined): string => {
+    const parsed = typeof price === 'string' ? parseFloat(price) : price;
+    const finalPrice = parsed === null || parsed === undefined || isNaN(parsed as number) ? 0 : (parsed as number);
     const isStandard = ['INR', 'BDT', 'USD', 'EUR', 'GBP'].includes(currencyCode);
     
     if (isStandard) {
@@ -26,13 +28,13 @@ export function makeFormatters(isBn: boolean, currencySymbol: string = '₹') {
         style: 'currency',
         currency: currencyCode,
         minimumFractionDigits: 0,
-      }).format(price ?? 0);
+      }).format(finalPrice);
       return isBn ? convertEnglishToBengaliNumerals(formatted) : formatted;
     } else {
       const numFormatted = new Intl.NumberFormat(intlLocale, {
         minimumFractionDigits: 0,
         maximumFractionDigits: 2,
-      }).format(price ?? 0);
+      }).format(finalPrice);
       const digitFormatted = isBn ? convertEnglishToBengaliNumerals(numFormatted) : numFormatted;
       return `${currencySymbol}${digitFormatted}`;
     }

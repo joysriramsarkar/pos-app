@@ -9,15 +9,17 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   const [messages, setMessages] = useState<any>(null);
 
   useEffect(() => {
-    // Dynamic import based on language
-    import(`../../../messages/${settings.app_language}.json`)
-      .then((mod) => {
-        setMessages(mod.default);
-      })
+    const loaders: Record<string, () => Promise<{ default: Record<string, unknown> }>> = {
+      bn: () => import('../../../messages/bn.json'),
+      en: () => import('../../../messages/en.json'),
+    };
+
+    const loader = loaders[settings.app_language] ?? loaders.en;
+    loader()
+      .then((mod) => setMessages(mod.default))
       .catch((err) => {
         console.error('Failed to load translations', err);
-        // Fallback to English if fails
-        import('../../../messages/en.json').then((mod) => setMessages(mod.default));
+        loaders.en().then((mod) => setMessages(mod.default));
       });
   }, [settings.app_language]);
 
@@ -27,7 +29,14 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <NextIntlClientProvider locale={settings.app_language} messages={messages}>
+    <NextIntlClientProvider
+      locale={settings.app_language}
+      messages={messages}
+      onError={(error) => {
+        if (error.code === 'MISSING_MESSAGE') return;
+        console.error(error);
+      }}
+    >
       {children}
     </NextIntlClientProvider>
   );

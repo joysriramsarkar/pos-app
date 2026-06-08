@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { useProductsStore } from '@/stores/pos-store';
 import { useNumberFormat } from '@/hooks/use-number-format';
@@ -12,19 +12,20 @@ import { Card, CardContent } from '@/components/ui/card';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { cn, convertBengaliToEnglishNumerals } from '@/lib/utils';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import {
   Plus, Package, Clock, Truck, CheckCircle, XCircle, Loader2, Trash2, ShoppingCart,
+  Check, ChevronsUpDown,
 } from 'lucide-react';
 
 interface PurchaseOrderItem {
@@ -69,6 +70,7 @@ const STATUS_CONFIG: Record<string, { color: string; icon: any }> = {
 
 export default function PurchaseOrderManagement() {
   const t = useTranslations('PurchaseOrders');
+  const tb = useTranslations('Billing');
   const tc = useTranslations('Common');
   const { formatPrice, formatDate } = useNumberFormat();
 
@@ -89,17 +91,36 @@ export default function PurchaseOrderManagement() {
 
   // Create form state
   const [formSupplierId, setFormSupplierId] = useState('');
+  const [formSupplierName, setFormSupplierName] = useState('');
   const [formItems, setFormItems] = useState<FormItem[]>([]);
   const [formExpectedDate, setFormExpectedDate] = useState('');
   const [formNotes, setFormNotes] = useState('');
   const [formProductId, setFormProductId] = useState('');
+  const [formProductName, setFormProductName] = useState('');
+  const [productSearch, setProductSearch] = useState('');
+  const [productOpen, setProductOpen] = useState(false);
+  const [supplierSearch, setSupplierSearch] = useState('');
+  const [supplierOpen, setSupplierOpen] = useState(false);
 
   // Receive form state
   const [receiveItems, setReceiveItems] = useState<{ id: string; receivedQty: number; maxQty: number; productName: string }[]>([]);
 
-  const fetchSuppliers = useCallback(async () => {
+  const fetchSuppliers = useCallback(async (query = '') => {
+    const applyCachedFilter = (cached: Supplier[]) => {
+      const q = query.trim().toLowerCase();
+      if (!q) return cached;
+      return cached.filter(
+        (s) =>
+          s.name.toLowerCase().includes(q) ||
+          (s.phone && s.phone.includes(query.trim()))
+      );
+    };
+
     try {
-      const res = await fetch('/api/suppliers');
+      const params = new URLSearchParams();
+      params.set('pageSize', '100');
+      if (query.trim()) params.set('search', query.trim());
+      const res = await fetch(`/api/suppliers?${params.toString()}`);
       if (res.ok) {
         const result = await res.json();
         if (result.success) {
@@ -109,13 +130,13 @@ export default function PurchaseOrderManagement() {
       }
       const { SuppliersDB } = await import('@/lib/offline/indexeddb');
       const cached = await SuppliersDB.getAll();
-      setSuppliers(cached || []);
+      setSuppliers(applyCachedFilter(cached || []));
     } catch (error) {
       console.error('Failed to fetch suppliers:', error);
       try {
         const { SuppliersDB } = await import('@/lib/offline/indexeddb');
         const cached = await SuppliersDB.getAll();
-        setSuppliers(cached || []);
+        setSuppliers(applyCachedFilter(cached || []));
       } catch (dbErr) {
         console.error('Failed to load suppliers from cache:', dbErr);
       }
@@ -142,6 +163,32 @@ export default function PurchaseOrderManagement() {
     fetchOrders();
   }, [fetchSuppliers, fetchOrders]);
 
+  useEffect(() => {
+    if (!showCreateDialog) return;
+    const timer = window.setTimeout(() => fetchSuppliers(supplierSearch), 200);
+    return () => window.clearTimeout(timer);
+  }, [fetchSuppliers, supplierSearch, showCreateDialog]);
+
+  const availableProducts = useMemo(
+    () => products.filter((p) => p.isActive && !formItems.some((fi) => fi.productId === p.id)),
+    [products, formItems]
+  );
+
+  const filteredProducts = useMemo(() => {
+    const q = productSearch.trim();
+    if (!q) return availableProducts;
+    const lowerQuery = q.toLowerCase();
+    const normalizedQuery = convertBengaliToEnglishNumerals(q);
+    return availableProducts.filter(
+      (p) =>
+        p.name.toLowerCase().includes(lowerQuery) ||
+        p.nameBn?.includes(q) ||
+        p.barcode?.includes(q) ||
+        convertBengaliToEnglishNumerals(p.barcode || '').includes(normalizedQuery) ||
+        p.category.toLowerCase().includes(lowerQuery)
+    );
+  }, [availableProducts, productSearch]);
+
   const totalOrders = orders.length;
   const pendingCount = orders.filter((o) => o.status === 'পেন্ডিং').length;
   const receivedCount = orders.filter((o) => o.status === 'প্রাপ্ত').length;
@@ -160,6 +207,9 @@ export default function PurchaseOrderManagement() {
     }
     setFormItems([...formItems, { productId: formProductId, quantity: 1, unitPrice: Number(product.buyingPrice) }]);
     setFormProductId('');
+    setFormProductName('');
+    setProductSearch('');
+    setProductOpen(false);
   };
 
   const removeFormItem = (productId: string) => {
@@ -174,10 +224,16 @@ export default function PurchaseOrderManagement() {
 
   const resetForm = () => {
     setFormSupplierId('');
+    setFormSupplierName('');
     setFormItems([]);
     setFormExpectedDate('');
     setFormNotes('');
     setFormProductId('');
+    setFormProductName('');
+    setProductSearch('');
+    setProductOpen(false);
+    setSupplierSearch('');
+    setSupplierOpen(false);
   };
 
   const handleCreateOrder = async () => {
@@ -293,6 +349,22 @@ export default function PurchaseOrderManagement() {
       const data = await res.json();
       if (data.success) {
         toast.success(t('order_received'), { description: t('stock_updated') });
+        
+        // Update local stock in Zustand store and IndexedDB database
+        try {
+          const productsStore = useProductsStore.getState();
+          const { ProductsDB } = await import('@/lib/offline/indexeddb');
+          for (const item of validItems) {
+            const orderItem = selectedOrder.items.find((i) => i.id === item.id);
+            if (orderItem) {
+              productsStore.updateProductStock(orderItem.productId, item.receivedQty);
+              await ProductsDB.updateStock(orderItem.productId, item.receivedQty);
+            }
+          }
+        } catch (dbError) {
+          console.error('Failed to update local stock cache:', dbError);
+        }
+
         setShowReceiveDialog(false);
         setShowDetailDialog(false);
         fetchOrders();
@@ -454,38 +526,137 @@ export default function PurchaseOrderManagement() {
             {/* Supplier */}
             <div>
               <Label>{t('supplier')}</Label>
-              <Select value={formSupplierId} onValueChange={setFormSupplierId}>
-                <SelectTrigger>
-                  <SelectValue placeholder={t('select_supplier')} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">{t('no_supplier')}</SelectItem>
-                  {suppliers.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Popover open={supplierOpen} onOpenChange={setSupplierOpen} modal={false}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={supplierOpen}
+                    className="w-full justify-between font-normal"
+                  >
+                    <span className="truncate">
+                      {formSupplierId === 'none'
+                        ? t('no_supplier')
+                        : formSupplierId
+                          ? formSupplierName || suppliers.find((s) => s.id === formSupplierId)?.name
+                          : t('select_supplier')}
+                    </span>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
+                  <Command>
+                    <CommandInput
+                      value={supplierSearch}
+                      onValueChange={setSupplierSearch}
+                      placeholder={t('search_supplier')}
+                    />
+                    <CommandList>
+                      <CommandEmpty>{t('no_supplier_found')}</CommandEmpty>
+                      <CommandGroup>
+                        <CommandItem
+                          value="none"
+                          onSelect={() => {
+                            setFormSupplierId('none');
+                            setFormSupplierName('');
+                            setSupplierOpen(false);
+                          }}
+                        >
+                          <Check
+                            className={cn(
+                              'mr-2 h-4 w-4',
+                              formSupplierId === 'none' ? 'opacity-100' : 'opacity-0'
+                            )}
+                          />
+                          {t('no_supplier')}
+                        </CommandItem>
+                        {suppliers.map((supplier) => (
+                          <CommandItem
+                            key={supplier.id}
+                            value={`${supplier.name} ${supplier.phone ?? ''}`}
+                            onSelect={() => {
+                              setFormSupplierId(supplier.id);
+                              setFormSupplierName(supplier.name);
+                              setSupplierOpen(false);
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                'mr-2 h-4 w-4',
+                                formSupplierId === supplier.id ? 'opacity-100' : 'opacity-0'
+                              )}
+                            />
+                            <span className="truncate">{supplier.name}</span>
+                            {supplier.phone && (
+                              <span className="ml-auto text-xs text-muted-foreground">{supplier.phone}</span>
+                            )}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             </div>
 
             {/* Add Products */}
             <div>
               <Label>{t('add_products')}</Label>
               <div className="flex gap-2 mt-1">
-                <Select value={formProductId} onValueChange={setFormProductId}>
-                  <SelectTrigger className="flex-1">
-                    <SelectValue placeholder={t('select_product')} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {products
-                      .filter((p) => p.isActive && !formItems.some((fi) => fi.productId === p.id))
-                      .map((p) => (
-                        <SelectItem key={p.id} value={p.id}>
-                          {p.nameBn || p.name} ({formatPrice(Number(p.buyingPrice))})
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-                <Button onClick={addFormItem} variant="outline" size="icon">
+                <Popover open={productOpen} onOpenChange={setProductOpen} modal={false}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={productOpen}
+                      className="flex-1 justify-between font-normal"
+                    >
+                      <span className="truncate">
+                        {formProductId
+                          ? formProductName || availableProducts.find((p) => p.id === formProductId)?.nameBn || availableProducts.find((p) => p.id === formProductId)?.name
+                          : t('select_product')}
+                      </span>
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
+                    <Command shouldFilter={false}>
+                      <CommandInput
+                        value={productSearch}
+                        onValueChange={setProductSearch}
+                        placeholder={tb('search_products')}
+                      />
+                      <CommandList>
+                        <CommandEmpty>{tb('no_products')}</CommandEmpty>
+                        <CommandGroup>
+                          {filteredProducts.map((product) => (
+                            <CommandItem
+                              key={product.id}
+                              value={product.id}
+                              onSelect={() => {
+                                setFormProductId(product.id);
+                                setFormProductName(product.nameBn || product.name);
+                                setProductOpen(false);
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  'mr-2 h-4 w-4',
+                                  formProductId === product.id ? 'opacity-100' : 'opacity-0'
+                                )}
+                              />
+                              <span className="truncate">{product.nameBn || product.name}</span>
+                              <span className="ml-auto text-xs text-muted-foreground shrink-0">
+                                {formatPrice(Number(product.buyingPrice))}
+                              </span>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+                <Button onClick={addFormItem} variant="outline" size="icon" disabled={!formProductId}>
                   <Plus className="h-4 w-4" />
                 </Button>
               </div>
