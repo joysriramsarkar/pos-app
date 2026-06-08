@@ -235,10 +235,7 @@ export function useCameraBarcodeScanner(config: CameraBarcodeScannerConfig) {
       const handleScanSuccess = (decodedText: string) => {
         const normalizedText = convertBengaliToEnglishNumerals(decodedText);
         const now = Date.now();
-        if (
-          normalizedText === lastScannedRef.current &&
-          now - lastScannedTimeRef.current < 1500
-        ) {
+        if (now - lastScannedTimeRef.current < 1500) {
           return; // Debounce duplicate scans
         }
         lastScannedRef.current = normalizedText;

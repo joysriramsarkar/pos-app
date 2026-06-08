@@ -65,6 +65,9 @@ export function useBarcodeScanner(config: BarcodeScannerConfig) {
     isScanning: false,
   });
 
+  // Cooldown to prevent multi-triggering within 1500ms
+  const lastScanTimeRef = useRef<number>(0);
+
   // Track if we're currently typing in an input field
   const isInputFocused = useRef(false);
 
@@ -106,17 +109,33 @@ export function useBarcodeScanner(config: BarcodeScannerConfig) {
       if (endChars.includes(event.key)) {
         const rawBarcode = state.buffer.join('');
         const barcode = normalizeBarcode(rawBarcode);
-        if (isValidEanUpcBarcode(barcode)) {
-          debug(`Barcode detected: ${barcode} (raw: ${rawBarcode})`);
-          onBarcodeDetected(barcode);
-        } else {
-          debug(`Invalid barcode on enter: ${barcode} (raw: ${rawBarcode})`);
-        }
+        const isBarcodeValid = isValidEanUpcBarcode(barcode);
 
         state.buffer = [];
         state.isScanning = false;
         state.lastKeyTime = 0;
-        event.preventDefault(); // Prevent form submission
+
+        if (isBarcodeValid) {
+          const now = Date.now();
+          if (now - lastScanTimeRef.current < 1500) {
+            debug(`Duplicate scan ignored due to cooldown: ${barcode}`);
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+            return;
+          }
+          lastScanTimeRef.current = now;
+          debug(`Barcode detected: ${barcode} (raw: ${rawBarcode})`);
+          onBarcodeDetected(barcode);
+          event.preventDefault();
+          event.stopPropagation();
+          event.stopImmediatePropagation();
+        } else if (rawBarcode.length > 0) {
+          debug(`Invalid barcode on enter: ${barcode} (raw: ${rawBarcode})`);
+          event.preventDefault();
+          event.stopPropagation();
+          event.stopImmediatePropagation();
+        }
         return;
       }
 
@@ -130,6 +149,13 @@ export function useBarcodeScanner(config: BarcodeScannerConfig) {
 
       const isScannerSpeed = state.lastKeyTime > 0 && timeSinceLastKey <= maxInterKeyTime;
       const shouldAppend = state.buffer.length === 0 || isScannerSpeed;
+
+      // Consume the event if it's scanner speed or we have a buffer to prevent native button click/selection triggers
+      if (isScannerSpeed || state.buffer.length > 0) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+      }
 
       if (!shouldAppend && timeSinceLastKey > maxInterKeyTime) {
         state.buffer = [event.key];
@@ -166,13 +192,13 @@ export function useBarcodeScanner(config: BarcodeScannerConfig) {
   // Set up event listeners
   useEffect(() => {
     // Add keydown listener
-    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown, true); // Use capture phase to intercept early
 
     // Set up timeout to clear partial barcodes
     const timeoutId = setInterval(clearBuffer, 1000);
 
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keydown', handleKeyDown, true);
       clearInterval(timeoutId);
     };
   }, [handleKeyDown, clearBuffer]);
@@ -200,6 +226,7 @@ export function useSimpleBarcodeScanner({
   const bufferRef = useRef<string[]>([]);
   const lastKeyTimeRef = useRef<number | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastScanTimeRef = useRef<number>(0);
 
   useEffect(() => {
     if (!enabled) return;
@@ -227,11 +254,27 @@ export function useSimpleBarcodeScanner({
       if (event.key === 'Enter' || event.key === 'NumpadEnter') {
         const rawBarcode = bufferRef.current.join('');
         const barcode = normalizeBarcode(rawBarcode);
+        const isBarcodeValid = isValidEanUpcBarcode(barcode);
         flushBuffer();
 
-        if (isValidEanUpcBarcode(barcode)) {
+        if (isBarcodeValid) {
+          const now = Date.now();
+          if (now - lastScanTimeRef.current < 1500) {
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+            return;
+          }
+          lastScanTimeRef.current = now;
           onBarcodeDetected(barcode);
           event.preventDefault();
+          event.stopPropagation();
+          event.stopImmediatePropagation();
+        } else if (rawBarcode.length > 0) {
+          // Consume invalid scanning Enter keys
+          event.preventDefault();
+          event.stopPropagation();
+          event.stopImmediatePropagation();
         }
         return;
       }
@@ -244,6 +287,14 @@ export function useSimpleBarcodeScanner({
       const currentTime = Date.now();
       const lastTime = lastKeyTimeRef.current;
       const interKeyTime = lastTime ? currentTime - lastTime : 0;
+
+      // Consume the digit key if we are in scanner speed or have buffer
+      const isScannerSpeed = lastTime && interKeyTime <= MAX_INTER_KEY_TIME;
+      if (isScannerSpeed || bufferRef.current.length > 0) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+      }
 
       if (lastTime && interKeyTime > MAX_INTER_KEY_TIME) {
         bufferRef.current = [event.key];
@@ -264,10 +315,11 @@ export function useSimpleBarcodeScanner({
       }, 400);
     };
 
-    window.addEventListener('keydown', handleKeyDown);
+    // Use capture phase (true) to intercept keyboard inputs before any page-level controls/buttons can trigger
+    window.addEventListener('keydown', handleKeyDown, true);
 
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keydown', handleKeyDown, true);
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
       }

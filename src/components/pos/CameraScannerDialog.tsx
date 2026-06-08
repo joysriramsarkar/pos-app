@@ -49,7 +49,7 @@ export function CameraScannerDialog({
     (barcode: string) => {
       const normalized = convertBengaliToEnglishNumerals(barcode.replace(/\s+/g, ''));
       const now = Date.now();
-      if (normalized === lastScannedRef.current && now - lastScannedTimeRef.current < 1500) return;
+      if (now - lastScannedTimeRef.current < 1500) return;
       lastScannedRef.current = normalized;
       lastScannedTimeRef.current = now;
 
