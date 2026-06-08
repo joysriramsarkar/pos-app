@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { BarcodeScanner, BarcodeFormat } from '@capacitor-mlkit/barcode-scanning';
-import { convertBengaliToEnglishNumerals, isValidEanUpcBarcode } from '@/lib/utils';
+import { convertBengaliToEnglishNumerals, isValidEanUpcBarcode, cn } from '@/lib/utils';
 import { useCameraBarcodeScanner } from '@/hooks/use-camera-barcode-scanner';
 import { Button } from '@/components/ui/button';
 import { CheckCircle2, X, AlertCircle } from 'lucide-react';
@@ -150,7 +150,7 @@ export function CameraScannerDialog({
   if (!open) return null;
 
   return (
-    <div className="barcode-scanner-overlay fixed inset-0 z-[100] flex flex-col bg-black">
+    <div className={cn("barcode-scanner-overlay fixed inset-0 z-[100] flex flex-col", isNativeApp ? "bg-transparent" : "bg-black")}>
       {/* Web camera feed */}
       {!isNativeApp && (
         <div className="absolute inset-0">

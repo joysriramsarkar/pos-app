@@ -402,3 +402,20 @@
     display: none !important;
   }
 }
+
+/* Barcode Scanner Transparency for Native Capacitor App */
+html:has(body.barcode-scanner-active),
+body.barcode-scanner-active {
+  background: transparent !important;
+  background-color: transparent !important;
+  --background: transparent !important;
+}
+
+body.barcode-scanner-active *:not(.barcode-scanner-overlay):not(.barcode-scanner-overlay *) {
+  visibility: hidden !important;
+}
+
+body.barcode-scanner-overlay,
+body.barcode-scanner-overlay * {
+  visibility: visible !important;
+}
