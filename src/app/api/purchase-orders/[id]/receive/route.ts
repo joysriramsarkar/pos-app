@@ -2,6 +2,10 @@ export const dynamic = 'force-dynamic';
 
 import { db } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
+import { getAuthenticatedUser } from "@/lib/api-middleware";
+import { logAudit } from "@/lib/audit";
+
+const getIp = (req: NextRequest) => req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || undefined;
 
 // POST /api/purchase-orders/[id]/receive - Mark order as received and update stock
 export async function POST(
@@ -117,6 +121,20 @@ export async function POST(
       });
 
       return updatedOrder;
+    });
+
+    const user = await getAuthenticatedUser(request);
+    await logAudit({
+      userId: user?.id,
+      action: 'RECEIVE_PURCHASE_ORDER',
+      entityType: 'Purchase',
+      entityId: result.id,
+      details: {
+        orderNumber: result.invoiceNumber,
+        totalAmount: Number(result.totalAmount),
+        receivedItemsCount: receivedItems.length,
+      },
+      ipAddress: getIp(request)
     });
 
     // Map output to expected frontend format

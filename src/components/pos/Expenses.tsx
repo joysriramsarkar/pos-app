@@ -33,7 +33,7 @@ import { useTranslations } from 'next-intl';
 import { exportToCSV, getExportDate } from '@/lib/export-utils';
 import { useSettingsStore } from '@/stores/settings-store';
 
-const CATEGORIES = ['Rent', 'Utilities', 'Salaries', 'Supplies', 'Maintenance', 'Other'] as const;
+const CATEGORIES = ['Rent', 'Utilities', 'Salaries', 'Maintenance', 'Other'] as const;
 
 const CATEGORY_CONFIG: Record<string, { icon: typeof Wallet; color: string; bgColor: string; gradient: string }> = {
   Rent: { icon: Building2, color: 'text-purple-600', bgColor: 'bg-purple-100', gradient: 'from-purple-500/10 to-purple-500/5' },
@@ -69,7 +69,7 @@ export function Expenses({ onReport }: ExpensesProps) {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [amount, setAmount] = useState('');
-  const [category, setCategory] = useState<string>('Supplies');
+  const [category, setCategory] = useState<string>('Other');
   const [notes, setNotes] = useState('');
   const [supplierId, setSupplierId] = useState<string>('');
   const [supplierOpen, setSupplierOpen] = useState(false);
@@ -78,7 +78,7 @@ export function Expenses({ onReport }: ExpensesProps) {
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editExpense, setEditExpense] = useState<Expense | null>(null);
   const [editAmount, setEditAmount] = useState('');
-  const [editCategory, setEditCategory] = useState<string>('Supplies');
+  const [editCategory, setEditCategory] = useState<string>('Other');
   const [editNotes, setEditNotes] = useState('');
   const [editSupplierId, setEditSupplierId] = useState<string>('');
   const [editDate, setEditDate] = useState('');

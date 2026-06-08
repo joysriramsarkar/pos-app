@@ -72,7 +72,9 @@ export function CameraScannerDialog({
     onError: (error) => setLocalError(error),
   });
 
-  shutdownWebScannerRef.current = startShutdown;
+  useEffect(() => {
+    shutdownWebScannerRef.current = startShutdown;
+  }, [startShutdown]);
 
   const stopNativeScanner = useCallback(async () => {
     document.querySelector('body')?.classList.remove('barcode-scanner-active');

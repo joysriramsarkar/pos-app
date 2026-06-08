@@ -1,7 +1,7 @@
 import { describe, it, expect, mock, beforeEach } from 'bun:test';
 
 // Mock next-auth/react BEFORE importing the module under test
-const mockUseSession = mock(() => ({ data: null }));
+const mockUseSession = mock(() => ({ data: null as any }));
 
 mock.module('next-auth/react', () => ({
   useSession: mockUseSession,

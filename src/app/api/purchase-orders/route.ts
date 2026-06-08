@@ -2,6 +2,10 @@ export const dynamic = 'force-dynamic';
 
 import { db } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
+import { getAuthenticatedUser } from "@/lib/api-middleware";
+import { logAudit } from "@/lib/audit";
+
+const getIp = (req: NextRequest) => req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || undefined;
 
 // GET /api/purchase-orders - List purchase orders
 export async function GET(request: NextRequest) {
@@ -171,6 +175,21 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    const user = await getAuthenticatedUser(request);
+    await logAudit({
+      userId: user?.id,
+      action: 'CREATE_PURCHASE_ORDER',
+      entityType: 'Purchase',
+      entityId: purchase.id,
+      details: {
+        orderNumber: purchase.invoiceNumber,
+        totalAmount: Number(purchase.totalAmount),
+        supplierId: purchase.supplierId,
+        itemCount: purchase.items.length,
+      },
+      ipAddress: getIp(request)
+    });
+
     const mappedOrder = {
       id: purchase.id,
       orderNumber: purchase.invoiceNumber,
@@ -264,6 +283,20 @@ export async function PUT(request: NextRequest) {
           },
         },
       },
+    });
+
+    const user = await getAuthenticatedUser(request);
+    await logAudit({
+      userId: user?.id,
+      action: 'UPDATE_PURCHASE_ORDER_STATUS',
+      entityType: 'Purchase',
+      entityId: updated.id,
+      details: {
+        orderNumber: updated.invoiceNumber,
+        oldStatus: order.paymentStatus,
+        newStatus: updated.paymentStatus,
+      },
+      ipAddress: getIp(request)
     });
 
     let mappedStatus = 'পেন্ডিং';
