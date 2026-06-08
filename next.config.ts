@@ -15,6 +15,7 @@ const withBundleAnalyzer = bundleAnalyzer({
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  output: 'standalone',
   allowedDevOrigins: ["192.168.1.11"],
   experimental: {
     optimizePackageImports: [

@@ -129,3 +129,27 @@ export async function getAuthenticatedUser(request: NextRequest) {
   }
   return session.user;
 }
+
+type RouteHandler = (request: NextRequest, ctx: any) => Promise<NextResponse>;
+
+export function withAuthMiddleware(
+  handler: RouteHandler,
+  options?: { permissionCode?: string; allowedRoles?: string[] }
+): RouteHandler {
+  return async (request: NextRequest, ctx: any) => {
+    const authResult = await requireAuth(request);
+    if (!authResult.authorized) return authResult.response!;
+
+    if (options?.allowedRoles) {
+      const roleError = await requireRole(request, options.allowedRoles);
+      if (roleError) return roleError;
+    }
+
+    if (options?.permissionCode) {
+      const permissionError = await requirePermission(request, options.permissionCode);
+      if (permissionError) return permissionError;
+    }
+
+    return handler(request, ctx);
+  };
+}

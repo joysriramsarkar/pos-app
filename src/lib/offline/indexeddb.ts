@@ -182,8 +182,19 @@ async function batchTransaction<T>(
 async function getAllFromStore<T>(storeName: string): Promise<T[]> {
   const store = await getStore(storeName);
   return new Promise((resolve, reject) => {
-    const request = store.getAll();
-    request.onsuccess = () => resolve(request.result);
+    const results: T[] = [];
+    const request = store.openCursor();
+
+    request.onsuccess = (event) => {
+      const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result;
+      if (cursor) {
+        results.push(cursor.value);
+        cursor.continue();
+      } else {
+        resolve(results);
+      }
+    };
+
     request.onerror = () => reject(request.error);
   });
 }
@@ -567,31 +578,66 @@ export async function saveSaleWithSyncQueue(
   const db = await initDatabase();
   const transaction = db.transaction([STORES.SALES, STORES.SYNC_QUEUE], 'readwrite');
   
+  // Capture existing state for potential rollback
+  let originalSale: Sale | undefined;
+  let originalSyncQueueItem: SyncQueueItem | undefined;
+
   return new Promise((resolve, reject) => {
-    transaction.onerror = () => {
+    const salesStore = transaction.objectStore(STORES.SALES);
+    const syncStore = transaction.objectStore(STORES.SYNC_QUEUE);
+
+    const getSaleRequest = salesStore.get(sale.id);
+    const getSyncRequest = syncStore.get(syncQueueItem.id);
+
+    let getCount = 0;
+    const onGetComplete = () => {
+      getCount++;
+      if (getCount === 2) {
+        originalSale = getSaleRequest.result;
+        originalSyncQueueItem = getSyncRequest.result;
+
+        const saleRequest = salesStore.put(sale);
+        const syncRequest = syncStore.put(syncQueueItem);
+
+        saleRequest.onerror = () => {
+          console.error('Failed to save sale:', saleRequest.error);
+          transaction.abort();
+        };
+
+        syncRequest.onerror = () => {
+          console.error('Failed to save sync queue item:', syncRequest.error);
+          transaction.abort();
+        };
+      }
+    };
+
+    getSaleRequest.onsuccess = onGetComplete;
+    getSyncRequest.onsuccess = onGetComplete;
+
+    transaction.onerror = async () => {
       console.error('Save sale transaction error:', transaction.error);
+
+      // Rollback logic
+      try {
+         const rollbackTx = db.transaction([STORES.SALES, STORES.SYNC_QUEUE], 'readwrite');
+         const rsSales = rollbackTx.objectStore(STORES.SALES);
+         const rsSync = rollbackTx.objectStore(STORES.SYNC_QUEUE);
+
+         if (originalSale) rsSales.put(originalSale);
+         else rsSales.delete(sale.id);
+
+         if (originalSyncQueueItem) rsSync.put(originalSyncQueueItem);
+         else rsSync.delete(syncQueueItem.id);
+      } catch(e) {
+         console.error('Rollback failed:', e);
+      }
+
       reject(transaction.error);
     };
     
-    transaction.onabort = () => {
+    transaction.onabort = async () => {
       console.error('Save sale transaction aborted');
       reject(new Error('Save sale transaction was aborted'));
-    };
-    
-    const salesStore = transaction.objectStore(STORES.SALES);
-    const syncStore = transaction.objectStore(STORES.SYNC_QUEUE);
-    
-    const saleRequest = salesStore.put(sale);
-    const syncRequest = syncStore.put(syncQueueItem);
-    
-    saleRequest.onerror = () => {
-      console.error('Failed to save sale:', saleRequest.error);
-      transaction.abort();
-    };
-    
-    syncRequest.onerror = () => {
-      console.error('Failed to save sync queue item:', syncRequest.error);
-      transaction.abort();
     };
     
     transaction.oncomplete = () => {

@@ -61,7 +61,7 @@ export async function GET() {
         id: `low-stock-${product.id}`,
         type: 'low_stock',
         title: 'কম স্টক সতর্কতা',
-        message: `${name} এর স্টক কম (${toBnNum(product.currentStock)} ${product.unit} বাকি)`,
+        message: `${name} এর স্টক কম (${toBnNum(Number(product.currentStock))} ${product.unit} বাকি)`,
         icon: 'alert',
         createdAt: product.updatedAt.toISOString(),
         read: false,

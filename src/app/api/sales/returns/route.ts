@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
       });
 
       const alreadyReturnedMap = existingReturns.reduce<Record<string, number>>((acc, r) => {
-        acc[r.saleItemId] = (acc[r.saleItemId] || 0) + r.quantity;
+        acc[r.saleItemId] = (acc[r.saleItemId] || 0) + Number(r.quantity);
         return acc;
       }, {});
 
@@ -125,7 +125,7 @@ export async function POST(request: NextRequest) {
 
       // Restore stock for returned products
       const productReturnMap = returnItemsData.reduce<Record<string, number>>((acc, item) => {
-        acc[item.productId] = (acc[item.productId] || 0) + item.quantity;
+        acc[item.productId] = (acc[item.productId] || 0) + Number(item.quantity);
         return acc;
       }, {});
 
@@ -159,12 +159,12 @@ export async function POST(request: NextRequest) {
       });
 
       const totalReturnedMap = allReturns.reduce<Record<string, number>>((acc, r) => {
-        acc[r.saleItemId] = (acc[r.saleItemId] || 0) + r.quantity;
+        acc[r.saleItemId] = (acc[r.saleItemId] || 0) + Number(r.quantity);
         return acc;
       }, {});
 
       const allItemsFullyReturned = sale.items.every(
-        (item) => (totalReturnedMap[item.id] || 0) >= item.quantity,
+        (item) => (totalReturnedMap[item.id] || 0) >= Number(item.quantity),
       );
 
       await tx.sale.update({
@@ -177,7 +177,7 @@ export async function POST(request: NextRequest) {
         const customer = await tx.customer.findUnique({ where: { id: sale.customerId } });
         if (!customer) throw new Error("Customer not found");
 
-        const newPrepaid = addMoney(customer.prepaidBalance, refundAmount);
+        const newPrepaid = addMoney(Number(customer.prepaidBalance), refundAmount);
         await tx.customer.update({
           where: { id: sale.customerId },
           data: { prepaidBalance: newPrepaid },
@@ -188,7 +188,7 @@ export async function POST(request: NextRequest) {
             customerId: sale.customerId,
             entryType: "debit",
             amount: refundAmount,
-            balanceAfter: customer.totalDue,
+            balanceAfter: Number(customer.totalDue),
             description: `Partial return refund (prepaid): ${sale.invoiceNumber}`,
             referenceId: newReturn.id,
           },

@@ -25,6 +25,7 @@ const RATE_LIMIT_RULES: Record<string, { max: number; windowMs: number }> = {
   "/api/auth/callback/credentials": { max: 10, windowMs: 60_000 },
   "/api/auth/signin":               { max: 10, windowMs: 60_000 },
   "/api/auth/change-password":      { max: 5,  windowMs: 60_000 },
+  "/api/auth":                      { max: 5,  windowMs: 60_000 },
 };
 
 // --- Redis path (Upstash) ---

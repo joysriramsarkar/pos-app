@@ -39,6 +39,8 @@ export function ProductGrid({
   const t = useTranslations('Billing');
   const tc = useTranslations('Common');
 
+
+
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [localSearchQuery, setLocalSearchQuery] = useState('');
   const [isCameraScannerOpen, setIsCameraScannerOpen] = useState(false);
@@ -58,6 +60,8 @@ export function ProductGrid({
   const hasMore = useProductsStore((state) => state.hasMore);
   const nextCursor = useProductsStore((state) => state.nextCursor);
   const appendProducts = useProductsStore((state) => state.appendProducts);
+
+
   const storeSearchQuery = useUIStore((state) => state.searchQuery);
   const selectedCategoryId = useUIStore((state) => state.selectedCategoryId);
   const setSearchQuery = useUIStore((state) => state.setSearchQuery);
@@ -95,7 +99,10 @@ export function ProductGrid({
         const cleaned = cleanSearchQuery(searchQuery);
         const lowerQuery = cleaned.toLowerCase();
         const normalizedQuery = convertBengaliToEnglishNumerals(cleaned);
-        return (
+
+
+
+  return (
           product.name.toLowerCase().includes(lowerQuery) ||
           product.nameBn?.includes(cleaned) ||
           product.barcode?.includes(cleaned) ||
@@ -165,11 +172,28 @@ export function ProductGrid({
     setSelectedCategoryId(null);
   }, [clearSearch, setSelectedCategoryId]);
 
+
+  const observerTarget = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !isLoadingMore) {
+          loadMoreProducts();
+        }
+      },
+      { threshold: 0.5 }
+    );
+    if (observerTarget.current) {
+      observer.observe(observerTarget.current);
+    }
+    return () => observer.disconnect();
+  }, [hasMore, isLoadingMore]);
+
   const loadMoreProducts = useCallback(async () => {
     if (isLoadingMore || !hasMore || !nextCursor || externalProducts) return;
     setIsLoadingMore(true);
     try {
-      const res = await fetch(`/api/products?limit=10000&cursor=${nextCursor}`);
+      const res = await fetch(`/api/products?limit=50&cursor=${nextCursor}`);
       if (res.ok) {
         const { data, nextCursor: newNextCursor } = await res.json();
         appendProducts(data, !!newNextCursor, newNextCursor);
@@ -180,6 +204,8 @@ export function ProductGrid({
       setIsLoadingMore(false);
     }
   }, [isLoadingMore, hasMore, nextCursor, externalProducts, appendProducts]);
+
+
 
   return (
     <div className="flex flex-col h-full bg-slate-50/50 dark:bg-background/50">
@@ -270,7 +296,12 @@ export function ProductGrid({
                   </Badge>
                 ))}
               </div>
-            </ScrollArea>
+          {hasMore && (
+            <div ref={observerTarget} className="h-10 flex items-center justify-center py-4 text-muted-foreground">
+               {isLoadingMore ? 'লোডিং...' : ''}
+            </div>
+          )}
+        </ScrollArea>
           )}
 
           <div className="flex items-center justify-between pt-1">

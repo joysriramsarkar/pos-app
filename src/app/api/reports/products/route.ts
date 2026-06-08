@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
         const details = productsMap.get(p.productId);
         const revenue = Number(p._sum.totalPrice || 0);
         const quantity = p._sum.quantity || 0;
-        const profit = revenue - Number(details?.buyingPrice || 0) * quantity;
+        const profit = revenue - Number(details?.buyingPrice || 0) * Number(quantity);
         return {
           id: p.productId,
           name: details?.name || "Unknown Product",

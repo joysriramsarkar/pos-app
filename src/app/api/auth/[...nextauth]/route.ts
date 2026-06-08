@@ -109,7 +109,7 @@ export const authOptions: NextAuthOptions = {
     signIn: "/login",
   },
   secret: process.env.NEXTAUTH_SECRET,
-  debug: true,
+  debug: process.env.NODE_ENV === 'development',
 };
 
 if (!authOptions.secret && process.env.NEXT_PHASE !== 'phase-production-build') {
