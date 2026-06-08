@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Progress } from '@/components/ui/progress';
 import { Card, CardContent } from '@/components/ui/card';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+
 import { Label } from '@/components/ui/label';
 import {
   Table,
@@ -36,6 +36,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '@/components/ui/dropdown-menu';
 import { BulkStockUpdateDialog } from './BulkStockUpdateDialog';
 import { StockAdjustmentDialog } from './StockAdjustmentDialog';
 import {
@@ -54,7 +60,6 @@ import {
   DollarSign,
   Ban,
   PackagePlus,
-  ChevronUp,
   ChevronDown,
   Loader2,
 } from 'lucide-react';
@@ -103,8 +108,7 @@ export function StockManagement({
   const [showBatchDeleteDialog, setShowBatchDeleteDialog] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // Collapsible category filter on mobile
-  const [categoriesOpen, setCategoriesOpen] = useState(false);
+
 
   // Server-side search state
   const [searchResults, setSearchResults] = useState<Product[] | null>(null);
@@ -205,7 +209,14 @@ export function StockManagement({
           const res = await fetch(`/api/products?search=${encodeURIComponent(query)}`);
           if (res.ok) {
             const { data } = await res.json();
-            setSearchResults(data);
+            const parsedData = data.map((p: any) => ({
+              ...p,
+              currentStock: Number(p.currentStock) || 0,
+              minStockLevel: Number(p.minStockLevel) || 0,
+              buyingPrice: Number(p.buyingPrice) || 0,
+              sellingPrice: Number(p.sellingPrice) || 0,
+            }));
+            setSearchResults(parsedData);
           }
         } catch {
           // keep local results if network fails
@@ -453,111 +464,139 @@ export function StockManagement({
 
   return (
     <>
-      <div className="flex-1 flex flex-col min-h-0 w-full space-y-2 md:space-y-4 p-2 md:p-4 lg:p-6 animate-page-enter">
-        {/* Header */}
-        <div className="flex items-center justify-between gap-2 shrink-0">
-          <div>
-            <h1 className="text-lg md:text-2xl font-bold flex items-center gap-2">
-              <Package className="w-5 h-5" />
-              {t('title')}
-            </h1>
-            <p className="text-xs text-muted-foreground">
-              {filteredProducts.length} {t('items')}
-            </p>
-          </div>
-          <div className="flex gap-1.5">
-            <Button variant="outline" size="sm" onClick={onStatistics} className="gap-1 h-8 px-2">
-              <BarChart2 className="w-4 h-4" />
-              <span className="hidden sm:inline text-xs">{t('statistics')}</span>
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setIsBulkUpdateOpen(true)} className="gap-1 h-8 px-2">
-              <Upload className="w-4 h-4" />
-              <span className="hidden sm:inline text-xs">{t('bulk_update')}</span>
-            </Button>
-            <Button size="sm" onClick={onAddProduct} className="gap-1 h-8 px-2 bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600">
-              <Plus className="w-4 h-4" />
-              <span className="hidden sm:inline text-xs">{t('add_item')}</span>
-            </Button>
-          </div>
-        </div>
+      <div className="flex flex-col h-[calc(100vh-4rem)] md:h-screen w-full gap-2 md:gap-4 p-2 md:p-4 animate-page-enter">
+        <div className="flex flex-col gap-2 shrink-0">
+          {/* Header */}
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <h1 className="text-lg md:text-2xl font-bold flex items-center gap-2">
+                <Package className="w-5 h-5" />
+                {t('title')}
+              </h1>
+              <p className="text-xs text-muted-foreground">
+                {filteredProducts.length} {t('items')}
+              </p>
+            </div>
+            
+            {/* Desktop Actions */}
+            <div className="hidden sm:flex gap-1.5">
+              <Button variant="outline" size="sm" onClick={onStatistics} className="gap-1 h-8 px-2">
+                <BarChart2 className="w-4 h-4" />
+                <span className="text-xs">{t('statistics')}</span>
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setIsBulkUpdateOpen(true)} className="gap-1 h-8 px-2">
+                <Upload className="w-4 h-4" />
+                <span className="text-xs">{t('bulk_update')}</span>
+              </Button>
+              <Button size="sm" onClick={onAddProduct} className="gap-1 h-8 px-2 bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600">
+                <Plus className="w-4 h-4" />
+                <span className="text-xs">{t('add_item')}</span>
+              </Button>
+            </div>
 
-        {/* Summary Value Cards — compact on mobile */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 shrink-0">
-          <Card className="overflow-hidden border-green-200 dark:border-green-900/50">
-            <CardContent className="p-2.5 bg-gradient-to-br from-green-50/80 to-green-100/30 dark:from-green-950/40 dark:to-green-900/20">
-              <div className="flex items-center gap-1.5">
-                <div className="flex h-6 w-6 items-center justify-center rounded-md bg-green-500/10 shrink-0">
-                  <DollarSign className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
-                </div>
-                <span className="text-[10px] text-muted-foreground leading-tight">{t('total_stock_value')}</span>
-              </div>
-              <p className="text-sm md:text-base font-bold mt-1 text-green-700 dark:text-green-400 tabular-nums">
-                {formatPrice(totalStockValue)}
-              </p>
-              <p className="text-[10px] text-green-600/70 dark:text-green-500/70">
-                {activeProducts.length} {t('items')}
-              </p>
-            </CardContent>
-          </Card>
-          <Card className="overflow-hidden border-emerald-200 dark:border-emerald-900/50">
-            <CardContent className="p-2.5 bg-gradient-to-br from-emerald-50/80 to-emerald-100/30 dark:from-emerald-950/40 dark:to-emerald-900/20">
-              <div className="flex items-center gap-1.5">
-                <div className="flex h-6 w-6 items-center justify-center rounded-md bg-emerald-500/10 shrink-0">
-                  <TrendingUp className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                </div>
-                <span className="text-[10px] text-muted-foreground leading-tight">{t('total_retail_value')}</span>
-              </div>
-              <p className="text-sm md:text-base font-bold mt-1 text-emerald-700 dark:text-emerald-400 tabular-nums">
-                {formatPrice(totalRetailValue)}
-              </p>
-              <p className="text-[10px] text-emerald-600/70 dark:text-emerald-500/70">{t('selling')}</p>
-            </CardContent>
-          </Card>
-          <Card className="overflow-hidden border-teal-200 dark:border-teal-900/50">
-            <CardContent className="p-2.5 bg-gradient-to-br from-teal-50/80 to-teal-100/30 dark:from-teal-950/40 dark:to-teal-900/20">
-              <div className="flex items-center gap-1.5">
-                <div className="flex h-6 w-6 items-center justify-center rounded-md bg-teal-500/10 shrink-0">
-                  <TrendingUp className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400" />
-                </div>
-                <span className="text-[10px] text-muted-foreground leading-tight">{t('potential_profit')}</span>
-              </div>
-              <p className="text-sm md:text-base font-bold mt-1 text-teal-700 dark:text-teal-400 tabular-nums">
-                {formatPrice(potentialProfit)}
-              </p>
-              <p className="text-[10px] text-teal-600/70 dark:text-teal-500/70">
-                {totalRetailValue > 0 ? ((potentialProfit / totalRetailValue) * 100).toFixed(1) : '0'}% {t('profit_margin')}
-              </p>
-            </CardContent>
-          </Card>
-          <Card className="overflow-hidden border-red-200 dark:border-red-900/50">
-            <CardContent className="p-2.5 bg-gradient-to-br from-red-50/80 to-red-100/30 dark:from-red-950/40 dark:to-red-900/20">
-              <div className="flex items-center gap-1.5">
-                <div className="flex h-6 w-6 items-center justify-center rounded-md bg-red-500/10 shrink-0">
-                  <X className="h-3.5 w-3.5 text-red-500 dark:text-red-400" />
-                </div>
-                <span className="text-[10px] text-muted-foreground leading-tight">{t('out_of_stock')}</span>
-              </div>
-              <p className="text-sm md:text-base font-bold mt-1 text-red-600 dark:text-red-400 tabular-nums">
-                {outOfStockCount}
-              </p>
-              <p className="text-[10px] text-red-500/70 dark:text-red-400/70">
-                {lowStockCount} {t('low_stock')}
-              </p>
-            </CardContent>
-          </Card>
-        </div>
+            {/* Mobile Actions Dropdown */}
+            <div className="sm:hidden">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm" className="h-8 px-2.5 bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600 flex items-center gap-1.5 text-xs font-semibold">
+                    <span>{tc('actions') || 'Actions'}</span>
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={onAddProduct} className="gap-2">
+                    <Plus className="w-4 h-4 text-emerald-600 dark:text-emerald-500" />
+                    <span>{t('add_item')}</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setIsBulkUpdateOpen(true)} className="gap-2">
+                    <Upload className="w-4 h-4" />
+                    <span>{t('bulk_update')}</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={onStatistics} className="gap-2">
+                    <BarChart2 className="w-4 h-4" />
+                    <span>{t('statistics')}</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
 
-        {/* Filters */}
-        <div className="space-y-2 shrink-0">
-          <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+          {/* Summary Value Cards — compact/scrollable on mobile */}
+          <div className="flex overflow-x-auto snap-x gap-2 no-scrollbar scrollbar-none pb-1 md:grid md:grid-cols-2 lg:grid-cols-4 shrink-0">
+            <Card className="min-w-[140px] shrink-0 snap-start md:min-w-0 md:shrink overflow-hidden border-green-200 dark:border-green-900/50">
+              <CardContent className="p-2 bg-gradient-to-br from-green-50/80 to-green-100/30 dark:from-green-950/40 dark:to-green-900/20">
+                <div className="flex items-center gap-1.5">
+                  <div className="flex h-5 w-5 md:h-6 md:w-6 items-center justify-center rounded-md bg-green-500/10 shrink-0">
+                    <DollarSign className="h-4 w-4 text-green-600 dark:text-green-400" />
+                  </div>
+                  <span className="text-xs md:text-[10px] text-muted-foreground leading-tight">{t('total_stock_value')}</span>
+                </div>
+                <p className="text-lg md:text-sm lg:text-base font-bold mt-1 text-green-700 dark:text-green-400 tabular-nums">
+                  {formatPrice(totalStockValue)}
+                </p>
+                <p className="text-[10px] text-green-600/70 dark:text-green-500/70">
+                  {activeProducts.length} {t('items')}
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="min-w-[140px] shrink-0 snap-start md:min-w-0 md:shrink overflow-hidden border-emerald-200 dark:border-emerald-900/50">
+              <CardContent className="p-2 bg-gradient-to-br from-emerald-50/80 to-emerald-100/30 dark:from-emerald-950/40 dark:to-emerald-900/20">
+                <div className="flex items-center gap-1.5">
+                  <div className="flex h-5 w-5 md:h-6 md:w-6 items-center justify-center rounded-md bg-emerald-500/10 shrink-0">
+                    <TrendingUp className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  </div>
+                  <span className="text-xs md:text-[10px] text-muted-foreground leading-tight">{t('total_retail_value')}</span>
+                </div>
+                <p className="text-lg md:text-sm lg:text-base font-bold mt-1 text-emerald-700 dark:text-emerald-400 tabular-nums">
+                  {formatPrice(totalRetailValue)}
+                </p>
+                <p className="text-[10px] text-emerald-600/70 dark:text-emerald-500/70">{t('selling')}</p>
+              </CardContent>
+            </Card>
+            <Card className="min-w-[140px] shrink-0 snap-start md:min-w-0 md:shrink overflow-hidden border-teal-200 dark:border-teal-900/50">
+              <CardContent className="p-2 bg-gradient-to-br from-teal-50/80 to-teal-100/30 dark:from-teal-950/40 dark:to-teal-900/20">
+                <div className="flex items-center gap-1.5">
+                  <div className="flex h-5 w-5 md:h-6 md:w-6 items-center justify-center rounded-md bg-teal-500/10 shrink-0">
+                    <TrendingUp className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+                  </div>
+                  <span className="text-xs md:text-[10px] text-muted-foreground leading-tight">{t('potential_profit')}</span>
+                </div>
+                <p className="text-lg md:text-sm lg:text-base font-bold mt-1 text-teal-700 dark:text-teal-400 tabular-nums">
+                  {formatPrice(potentialProfit)}
+                </p>
+                <p className="text-[10px] text-teal-600/70 dark:text-teal-500/70">
+                  {totalRetailValue > 0 ? ((potentialProfit / totalRetailValue) * 100).toFixed(1) : '0'}% {t('profit_margin')}
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="min-w-[140px] shrink-0 snap-start md:min-w-0 md:shrink overflow-hidden border-red-200 dark:border-red-900/50">
+              <CardContent className="p-2 bg-gradient-to-br from-red-50/80 to-red-100/30 dark:from-red-950/40 dark:to-red-900/20">
+                <div className="flex items-center gap-1.5">
+                  <div className="flex h-5 w-5 md:h-6 md:w-6 items-center justify-center rounded-md bg-red-500/10 shrink-0">
+                    <X className="h-4 w-4 text-red-500 dark:text-red-400" />
+                  </div>
+                  <span className="text-xs md:text-[10px] text-muted-foreground leading-tight">{t('out_of_stock')}</span>
+                </div>
+                <p className="text-lg md:text-sm lg:text-base font-bold mt-1 text-red-600 dark:text-red-400 tabular-nums">
+                  {outOfStockCount}
+                </p>
+                <p className="text-[10px] text-red-500/70 dark:text-red-400/70">
+                  {lowStockCount} {t('low_stock')}
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Search & Filters */}
+          <div className="flex flex-row w-full gap-2 items-center shrink-0">
             {/* Search */}
-            <div className="relative flex-1 w-full">
+            <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 placeholder={t('search_placeholder')}
                 value={searchQuery}
                 onChange={(e) => handleSearchChange(convertBengaliToEnglishNumerals(e.target.value))}
-                className="pl-9 h-9"
+                className="pl-9 h-9 w-full"
               />
               {searchQuery && (
                 <Button
@@ -574,27 +613,30 @@ export function StockManagement({
               )}
             </div>
 
-            <div className="flex gap-2 items-center w-full sm:w-auto">
-              <Select value={stockFilter} onValueChange={(v: 'all' | 'low' | 'out' | 'inactive') => setStockFilter(v)}>
-                <SelectTrigger className="w-[140px] h-9">
+            {/* Stock Filter */}
+            <Select value={stockFilter} onValueChange={(v: 'all' | 'low' | 'out' | 'inactive') => setStockFilter(v)}>
+              <SelectTrigger className="w-9 h-9 p-0 justify-center sm:w-[140px] sm:h-9 sm:px-3 sm:justify-between shrink-0 [&>span:last-child]:hidden sm:[&>span:last-child]:inline-flex">
+                <span className="hidden sm:inline">
                   <SelectValue placeholder={t('stock_status')} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{t('all_items')}</SelectItem>
-                  <SelectItem value="low">{t('low_stock')}</SelectItem>
-                  <SelectItem value="out">{t('out_of_stock')}</SelectItem>
-                  <SelectItem value="inactive">{t('inactive')}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+                </span>
+                <Filter className="h-4 w-4 sm:hidden" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t('all_items')}</SelectItem>
+                <SelectItem value="low">{t('low_stock')}</SelectItem>
+                <SelectItem value="out">{t('out_of_stock')}</SelectItem>
+                <SelectItem value="inactive">{t('inactive')}</SelectItem>
+              </SelectContent>
+            </Select>
 
-          {/* Desktop Categories Filter */}
-          <div className="hidden sm:block">
+            {/* Category Filter */}
             <Select value={categoryFilter} onValueChange={setCategoryFilter} disabled={stockFilter === 'inactive'}>
-              <SelectTrigger className="w-[200px] h-9">
-                <Filter className="w-4 h-4 mr-2" />
-                <SelectValue placeholder={t('all_categories')} />
+              <SelectTrigger className="w-9 h-9 p-0 justify-center sm:w-[200px] sm:h-9 sm:px-3 sm:justify-between shrink-0 [&>span:last-child]:hidden sm:[&>span:last-child]:inline-flex">
+                <span className="hidden sm:inline flex items-center gap-2">
+                  <Filter className="w-4 h-4 mr-2" />
+                  <SelectValue placeholder={t('all_categories')} />
+                </span>
+                <Package className="h-4 w-4 sm:hidden" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">{t('all_categories')}</SelectItem>
@@ -605,49 +647,35 @@ export function StockManagement({
                 ))}
               </SelectContent>
             </Select>
-          </div>
 
-          {/* Mobile Categories Collapsible Filter */}
-          <div className="sm:hidden">
-            <Collapsible open={categoriesOpen} onOpenChange={setCategoriesOpen}>
-              <CollapsibleTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-1 w-full justify-between h-9">
-                  <span className="flex items-center gap-1 text-xs">
-                    <Package className="h-3.5 w-3.5" />
-                    {categoryFilter === 'all' ? t('all_categories') : categoryFilter}
-                  </span>
-                  {categoriesOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="mt-2">
-                <div className="flex flex-wrap gap-1.5 p-1 max-h-36 overflow-y-auto border rounded-lg bg-card">
-                  <Button
-                    variant={categoryFilter === 'all' ? 'default' : 'outline'}
-                    size="sm"
-                    className="text-xs h-7 px-2.5"
-                    onClick={() => setCategoryFilter('all')}
-                  >
-                    {t('all_categories')}
-                  </Button>
-                  {categories.map((cat) => (
-                    <Button
-                      key={cat}
-                      variant={categoryFilter === cat ? 'default' : 'outline'}
-                      size="sm"
-                      className="text-xs h-7 px-2.5"
-                      onClick={() => setCategoryFilter(cat)}
-                    >
-                      {cat}
-                    </Button>
-                  ))}
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
+            {/* Mobile-only Sort Button */}
+            <Select
+              value={`${sortField}-${sortOrder}`}
+              onValueChange={(value) => {
+                const [field, order] = value.split('-') as [SortField, SortOrder];
+                setSortField(field);
+                setSortOrder(order);
+              }}
+            >
+              <SelectTrigger className="w-9 h-9 p-0 justify-center sm:hidden shrink-0 [&>span:last-child]:hidden">
+                <ArrowUpDown className="h-4 w-4" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="name-asc">{t('item_name')} (A-Z)</SelectItem>
+                <SelectItem value="name-desc">{t('item_name')} (Z-A)</SelectItem>
+                <SelectItem value="stock-asc">{t('stock_level')} (L-H)</SelectItem>
+                <SelectItem value="stock-desc">{t('stock_level')} (H-L)</SelectItem>
+                <SelectItem value="price-asc">{t('sell_price')} (L-H)</SelectItem>
+                <SelectItem value="price-desc">{t('sell_price')} (H-L)</SelectItem>
+                <SelectItem value="category-asc">{tc('category')} (A-Z)</SelectItem>
+                <SelectItem value="category-desc">{tc('category')} (Z-A)</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
         {/* Product List */}
-        <div className="flex-1 min-h-0 overflow-y-auto border rounded-lg bg-card">
+        <div className="flex-1 min-h-0 overflow-y-auto bg-background rounded-md border pb-24">
           {isSearching && filteredProducts.length === 0 ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -942,11 +970,10 @@ export function StockManagement({
               </div>
             </>
           )}
-        </div>
-
-        {/* Infinite scroll sentinel */}
-        <div ref={sentinelRef} className="py-2 text-center text-sm text-muted-foreground shrink-0">
-          {isLoadingMore && t('loading_more')}
+          {/* Infinite scroll sentinel */}
+          <div ref={sentinelRef} className="py-2 text-center text-sm text-muted-foreground shrink-0">
+            {isLoadingMore && t('loading_more')}
+          </div>
         </div>
 
         {/* Summary Footer */}

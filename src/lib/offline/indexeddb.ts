@@ -273,7 +273,14 @@ export const ProductsDB = {
   },
 
   async upsert(product: Product): Promise<void> {
-    await putToStore(STORES.PRODUCTS, product);
+    const parsed = {
+      ...product,
+      currentStock: Number(product.currentStock) || 0,
+      minStockLevel: Number(product.minStockLevel) || 0,
+      buyingPrice: Number(product.buyingPrice) || 0,
+      sellingPrice: Number(product.sellingPrice) || 0,
+    };
+    await putToStore(STORES.PRODUCTS, parsed);
   },
 
   async upsertMany(products: Product[]): Promise<void> {
@@ -282,7 +289,14 @@ export const ProductsDB = {
     const store = transaction.objectStore(STORES.PRODUCTS);
 
     for (const product of products) {
-      store.put(product);
+      const parsed = {
+        ...product,
+        currentStock: Number(product.currentStock) || 0,
+        minStockLevel: Number(product.minStockLevel) || 0,
+        buyingPrice: Number(product.buyingPrice) || 0,
+        sellingPrice: Number(product.sellingPrice) || 0,
+      };
+      store.put(parsed);
     }
 
     return new Promise((resolve, reject) => {
@@ -302,7 +316,7 @@ export const ProductsDB = {
   async updateStock(productId: string, quantityChange: number): Promise<void> {
     const product = await this.getById(productId);
     if (product) {
-      product.currentStock = Math.max(0, product.currentStock + quantityChange);
+      product.currentStock = Math.max(0, Number(product.currentStock) + quantityChange);
       await putToStore(STORES.PRODUCTS, product);
     }
   },
@@ -335,7 +349,13 @@ export const CustomersDB = {
   },
 
   async upsert(customer: Customer): Promise<void> {
-    await putToStore(STORES.CUSTOMERS, customer);
+    const parsed = {
+      ...customer,
+      totalDue: Number(customer.totalDue) || 0,
+      totalPaid: Number(customer.totalPaid) || 0,
+      prepaidBalance: Number(customer.prepaidBalance) || 0,
+    };
+    await putToStore(STORES.CUSTOMERS, parsed);
   },
 
   async upsertMany(customers: Customer[]): Promise<void> {
@@ -344,7 +364,13 @@ export const CustomersDB = {
     const store = transaction.objectStore(STORES.CUSTOMERS);
 
     for (const customer of customers) {
-      store.put(customer);
+      const parsed = {
+        ...customer,
+        totalDue: Number(customer.totalDue) || 0,
+        totalPaid: Number(customer.totalPaid) || 0,
+        prepaidBalance: Number(customer.prepaidBalance) || 0,
+      };
+      store.put(parsed);
     }
 
     return new Promise((resolve, reject) => {
@@ -356,7 +382,7 @@ export const CustomersDB = {
   async updateDue(customerId: string, amountChange: number): Promise<void> {
     const customer = await this.getById(customerId);
     if (customer) {
-        customer.totalDue = toMoneyNumber(new Decimal(customer.totalDue).plus(amountChange));
+      customer.totalDue = toMoneyNumber(new Decimal(customer.totalDue).plus(amountChange));
       await putToStore(STORES.CUSTOMERS, customer);
     }
   },
@@ -364,7 +390,7 @@ export const CustomersDB = {
   async updatePrepaid(customerId: string, amountChange: number): Promise<void> {
     const customer = await this.getById(customerId);
     if (customer) {
-      customer.prepaidBalance = Math.max(0, (customer.prepaidBalance || 0) + amountChange);
+      customer.prepaidBalance = Math.max(0, toMoneyNumber(new Decimal(customer.prepaidBalance).plus(amountChange)));
       await putToStore(STORES.CUSTOMERS, customer);
     }
   },

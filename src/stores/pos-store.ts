@@ -366,6 +366,14 @@ interface ProductsActions {
   reset: () => void;
 }
 
+const parseProduct = (p: any): Product => ({
+  ...p,
+  currentStock: Number(p.currentStock) || 0,
+  minStockLevel: Number(p.minStockLevel) || 0,
+  buyingPrice: Number(p.buyingPrice) || 0,
+  sellingPrice: Number(p.sellingPrice) || 0,
+});
+
 export const useProductsStore = create<ProductsState & ProductsActions>((set, get) => ({
   products: [],
   categories: [],
@@ -375,15 +383,17 @@ export const useProductsStore = create<ProductsState & ProductsActions>((set, ge
   nextCursor: null,
 
   setProducts: (products, hasMore = false, nextCursor = null) => {
-    const categories = [...new Set(products.map((p) => p.category))].sort();
-    set({ products, categories, lastUpdated: Date.now(), isLoading: false, hasMore, nextCursor });
+    const parsedProducts = products.map(parseProduct);
+    const categories = [...new Set(parsedProducts.map((p) => p.category))].sort();
+    set({ products: parsedProducts, categories, lastUpdated: Date.now(), isLoading: false, hasMore, nextCursor });
   },
 
   appendProducts: (newProducts, hasMore, nextCursor) => {
     set((state) => {
+      const parsedNew = newProducts.map(parseProduct);
       // Filter out products that might already exist to avoid duplicates
       const existingIds = new Set(state.products.map(p => p.id));
-      const filteredNew = newProducts.filter(p => !existingIds.has(p.id));
+      const filteredNew = parsedNew.filter(p => !existingIds.has(p.id));
       const combinedProducts = [...state.products, ...filteredNew];
       const categories = [...new Set(combinedProducts.map((p) => p.category))].sort();
       return {
@@ -402,7 +412,7 @@ export const useProductsStore = create<ProductsState & ProductsActions>((set, ge
   updateProductStock: (productId, quantityChange) => {
     set((state) => ({
       products: state.products.map((p) =>
-        p.id === productId ? { ...p, currentStock: p.currentStock + quantityChange } : p
+        p.id === productId ? { ...p, currentStock: Number(p.currentStock) + quantityChange } : p
       ),
     }));
   },
@@ -410,7 +420,14 @@ export const useProductsStore = create<ProductsState & ProductsActions>((set, ge
   updateProduct: (id, data) => {
     set((state) => ({
       products: state.products.map((p) =>
-        p.id === id ? { ...p, ...data } : p
+        p.id === id ? {
+          ...p,
+          ...data,
+          currentStock: data.currentStock !== undefined ? Number(data.currentStock) : Number(p.currentStock),
+          minStockLevel: data.minStockLevel !== undefined ? Number(data.minStockLevel) : Number(p.minStockLevel),
+          buyingPrice: data.buyingPrice !== undefined ? Number(data.buyingPrice) : Number(p.buyingPrice),
+          sellingPrice: data.sellingPrice !== undefined ? Number(data.sellingPrice) : Number(p.sellingPrice),
+        } : p
       ),
       categories: data.category
         ? [...new Set([...state.categories, data.category])].sort()
@@ -419,9 +436,10 @@ export const useProductsStore = create<ProductsState & ProductsActions>((set, ge
   },
 
   addProduct: (product) => {
+    const parsedProduct = parseProduct(product);
     set((state) => ({
-      products: [...state.products, product],
-      categories: [...new Set([...state.categories, product.category])].sort(),
+      products: [...state.products, parsedProduct],
+      categories: [...new Set([...state.categories, parsedProduct.category])].sort(),
     }));
   },
 
@@ -481,30 +499,45 @@ interface CustomersActions {
   reset: () => void;
 }
 
+const parseCustomer = (c: any): Customer => ({
+  ...c,
+  totalDue: Number(c.totalDue) || 0,
+  totalPaid: Number(c.totalPaid) || 0,
+  prepaidBalance: Number(c.prepaidBalance) || 0,
+});
+
 export const useCustomersStore = create<CustomersState & CustomersActions>((set, get) => ({
   customers: [],
   isLoading: false,
-
+ 
   setLoading: (loading) => set({ isLoading: loading }),
-
+ 
   setCustomers: (customers) => {
-    set({ customers, isLoading: false });
+    const parsed = customers.map(parseCustomer);
+    set({ customers: parsed, isLoading: false });
   },
-
+ 
   addCustomer: (customer) => {
+    const parsed = parseCustomer(customer);
     set((state) => ({
-      customers: [...state.customers, customer],
+      customers: [...state.customers, parsed],
     }));
   },
-
+ 
   updateCustomer: (id, data) => {
     set((state) => ({
       customers: state.customers.map((c) =>
-        c.id === id ? { ...c, ...data } : c
+        c.id === id ? {
+          ...c,
+          ...data,
+          totalDue: data.totalDue !== undefined ? Number(data.totalDue) : Number(c.totalDue),
+          totalPaid: data.totalPaid !== undefined ? Number(data.totalPaid) : Number(c.totalPaid),
+          prepaidBalance: data.prepaidBalance !== undefined ? Number(data.prepaidBalance) : Number(c.prepaidBalance),
+        } : c
       ),
     }));
   },
-
+ 
   updateCustomerDue: (id, amount) => {
     set((state) => ({
       customers: state.customers.map((c) =>
@@ -514,7 +547,7 @@ export const useCustomersStore = create<CustomersState & CustomersActions>((set,
       ),
     }));
   },
-
+ 
   updateCustomerPrepaid: (id, amount) => {
     set((state) => ({
       customers: state.customers.map((c) =>
@@ -524,7 +557,7 @@ export const useCustomersStore = create<CustomersState & CustomersActions>((set,
       ),
     }));
   },
-
+ 
   reset: () => set({
     customers: [],
     isLoading: false,
