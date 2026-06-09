@@ -15,7 +15,7 @@ export async function POST(
   try {
     const { id } = await context.params;
     const body = await request.json();
-    const { receivedItems } = body; // Array of { id: itemId, receivedQty: number }
+    const { receivedItems, amountPaid } = body; // Array of { id: itemId, receivedQty: number }, amountPaid: number
 
     if (!receivedItems || receivedItems.length === 0) {
       return NextResponse.json(
@@ -106,10 +106,21 @@ export async function POST(
         });
       }
 
-      // Update purchase status to received (Paid)
+      // Calculate receivedTotalAmount
+      let receivedTotalAmount = 0;
+      for (const receivedItem of receivedItems) {
+        const orderItem = order.items.find((i) => i.id === receivedItem.id);
+        if (orderItem) {
+          receivedTotalAmount += receivedItem.receivedQty * Number(orderItem.buyingPrice);
+        }
+      }
+
+      const actualAmountPaid = amountPaid !== undefined ? amountPaid : receivedTotalAmount;
+
+      // Update purchase status to received (Paid) and set totalAmount based on received quantities
       const updatedOrder = await tx.purchase.update({
         where: { id },
-        data: { paymentStatus: 'Paid' },
+        data: { paymentStatus: 'Paid', totalAmount: receivedTotalAmount },
         include: {
           supplier: true,
           items: {
@@ -120,8 +131,24 @@ export async function POST(
         },
       });
 
+      // Create Expense record for payment if actualAmountPaid > 0
+      if (actualAmountPaid > 0 && order.supplierId && order.supplier) {
+        await tx.expense.create({
+          data: {
+            amount: actualAmountPaid,
+            category: 'Supplier Payment',
+            notes: `Paid for purchase order: ${order.invoiceNumber}`,
+            date: new Date(),
+            supplierId: order.supplierId,
+            supplierName: order.supplier.name,
+          },
+        });
+      }
+
       return updatedOrder;
     });
+
+
 
     const user = await getAuthenticatedUser(request);
     await logAudit({

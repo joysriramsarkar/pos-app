@@ -22,10 +22,94 @@ export async function GET(request: NextRequest) {
     if (id) {
       const supplier = await db.supplier.findUnique({
         where: { id },
-        include: { purchases: { take: 10, orderBy: { createdAt: 'desc' } } },
+        include: {
+          purchases: {
+            where: { paymentStatus: 'Paid' },
+            orderBy: { createdAt: 'desc' }
+          },
+          expenses: {
+            where: {
+              isActive: true,
+              category: { in: ['Supplier Payment', 'Supplies'] }
+            },
+            orderBy: { date: 'desc' }
+          }
+        },
       });
+
       if (!supplier) return NextResponse.json({ success: false, error: 'Supplier not found' }, { status: 404 });
-      return NextResponse.json({ success: true, data: supplier });
+
+      // Compile ledger
+      const creditEntries = [];
+
+      // Purchases from the Purchase model (received POs)
+      for (const p of supplier.purchases) {
+        creditEntries.push({
+          id: p.id,
+          entryType: 'credit' as const,
+          amount: Number(p.totalAmount),
+          referenceId: p.invoiceNumber || `PUR-${p.id.substring(0, 8)}`,
+          description: p.notes || `স্টক ক্রয়: ${p.invoiceNumber || 'রসিদ ছাড়া'}`,
+          createdAt: p.createdAt,
+        });
+      }
+
+      // Supplies expenses also count as credit (purchase of goods)
+      for (const e of supplier.expenses) {
+        if (e.category === 'Supplies') {
+          creditEntries.push({
+            id: `purchase-${e.id}`,
+            entryType: 'credit' as const,
+            amount: Number(e.amount),
+            referenceId: `EXP-${e.id.substring(0, 8)}`,
+            description: e.notes || 'মালামাল ক্রয়',
+            createdAt: e.date,
+          });
+        }
+      }
+
+      const debitEntries = supplier.expenses.map(e => ({
+        id: e.id,
+        entryType: 'debit' as const,
+        amount: Number(e.amount),
+        referenceId: `EXP-${e.id.substring(0, 8)}`,
+        description: e.notes || `টাকা পরিশোধ (${e.category === 'Supplies' ? 'মালামাল ক্রয়' : 'পেমেন্ট'})`,
+        createdAt: e.date,
+      }));
+
+      const combined = [...creditEntries, ...debitEntries]
+        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+      let balance = 0;
+      const ledgerEntries = combined.map(entry => {
+        if (entry.entryType === 'credit') {
+          balance += entry.amount;
+        } else {
+          balance -= entry.amount;
+        }
+        return {
+          ...entry,
+          balanceAfter: balance,
+        };
+      }).reverse();
+
+      const totalPurchases = supplier.purchases.reduce((sum, p) => sum + Number(p.totalAmount), 0) + 
+                            supplier.expenses.filter(e => e.category === 'Supplies').reduce((sum, e) => sum + Number(e.amount), 0);
+      const totalPaid = supplier.expenses.reduce((sum, e) => sum + Number(e.amount), 0);
+      const totalDue = Math.max(0, totalPurchases - totalPaid);
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          ...supplier,
+          purchases: undefined,
+          expenses: undefined,
+          totalPurchases,
+          totalPaid,
+          totalDue,
+          ledgerEntries,
+        }
+      });
     }
 
     const where: Record<string, unknown> = {};
@@ -42,12 +126,41 @@ export async function GET(request: NextRequest) {
       db.supplier.findMany({
         where,
         orderBy: [{ name: 'asc' }],
+        include: {
+          purchases: {
+            where: { paymentStatus: 'Paid' },
+            select: { totalAmount: true }
+          },
+          expenses: {
+            where: {
+              isActive: true,
+              category: { in: ['Supplier Payment', 'Supplies'] }
+            },
+            select: { amount: true, category: true }
+          }
+        },
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
     ]);
 
-    return NextResponse.json({ success: true, data: suppliers, total, page, pageSize });
+    const mappedSuppliers = suppliers.map((supplier) => {
+      const totalPurchases = supplier.purchases.reduce((sum, p) => sum + Number(p.totalAmount), 0) + 
+                            supplier.expenses.filter(e => e.category === 'Supplies').reduce((sum, e) => sum + Number(e.amount), 0);
+      const totalPaid = supplier.expenses.reduce((sum, e) => sum + Number(e.amount), 0);
+      const totalDue = Math.max(0, totalPurchases - totalPaid);
+
+      return {
+        ...supplier,
+        purchases: undefined,
+        expenses: undefined,
+        totalPurchases,
+        totalPaid,
+        totalDue,
+      };
+    });
+
+    return NextResponse.json({ success: true, data: mappedSuppliers, total, page, pageSize });
   } catch (error: unknown) {
     console.error('Error fetching suppliers:', error);
     return NextResponse.json({ success: false, error: 'Failed to fetch suppliers' }, { status: 500 });

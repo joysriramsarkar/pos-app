@@ -25,8 +25,9 @@ import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import {
   Plus, Package, Clock, Truck, CheckCircle, XCircle, Loader2, Trash2, ShoppingCart,
-  Check, ChevronsUpDown,
+  Check, ChevronsUpDown, Calendar, BarChart2,
 } from 'lucide-react';
+import PurchaseStatistics from './PurchaseStatistics';
 
 interface PurchaseOrderItem {
   id: string;
@@ -81,6 +82,10 @@ export default function PurchaseOrderManagement() {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('সব');
   const [saving, setSaving] = useState(false);
+  const [viewMode, setViewMode] = useState<'list' | 'statistics'>('list');
+  const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'weekly' | 'monthly' | 'custom'>('all');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
 
   // Dialogs
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -95,6 +100,7 @@ export default function PurchaseOrderManagement() {
   const [formItems, setFormItems] = useState<FormItem[]>([]);
   const [formExpectedDate, setFormExpectedDate] = useState('');
   const [formNotes, setFormNotes] = useState('');
+  const [formAmountPaid, setFormAmountPaid] = useState('');
   const [formProductId, setFormProductId] = useState('');
   const [formProductName, setFormProductName] = useState('');
   const [productSearch, setProductSearch] = useState('');
@@ -104,6 +110,15 @@ export default function PurchaseOrderManagement() {
 
   // Receive form state
   const [receiveItems, setReceiveItems] = useState<{ id: string; receivedQty: number; maxQty: number; productName: string }[]>([]);
+  const [receiveAmountPaid, setReceiveAmountPaid] = useState<string>('');
+
+  const receiveTotal = useMemo(() => {
+    if (!selectedOrder) return 0;
+    return receiveItems.reduce((sum, item) => {
+      const orderItem = selectedOrder.items.find((i) => i.id === item.id);
+      return sum + item.receivedQty * (orderItem?.unitPrice || 0);
+    }, 0);
+  }, [receiveItems, selectedOrder]);
 
   const fetchSuppliers = useCallback(async (query = '') => {
     const applyCachedFilter = (cached: Supplier[]) => {
@@ -189,10 +204,38 @@ export default function PurchaseOrderManagement() {
     );
   }, [availableProducts, productSearch]);
 
-  const totalOrders = orders.length;
-  const pendingCount = orders.filter((o) => o.status === 'পেন্ডিং').length;
-  const receivedCount = orders.filter((o) => o.status === 'প্রাপ্ত').length;
-  const totalValue = orders.reduce((sum, o) => sum + o.totalAmount, 0);
+  const filteredOrders = useMemo(() => {
+    let result = orders;
+    const now = new Date();
+    
+    if (dateFilter === 'today') {
+      const todayStr = now.toISOString().split('T')[0];
+      result = result.filter((o) => o.createdAt.startsWith(todayStr));
+    } else if (dateFilter === 'weekly') {
+      const oneWeekAgo = new Date();
+      oneWeekAgo.setDate(now.getDate() - 7);
+      result = result.filter((o) => new Date(o.createdAt) >= oneWeekAgo);
+    } else if (dateFilter === 'monthly') {
+      const oneMonthAgo = new Date();
+      oneMonthAgo.setMonth(now.getMonth() - 1);
+      result = result.filter((o) => new Date(o.createdAt) >= oneMonthAgo);
+    } else if (dateFilter === 'custom' && customFrom && customTo) {
+      const fromDate = new Date(customFrom);
+      fromDate.setHours(0, 0, 0, 0);
+      const toDate = new Date(customTo);
+      toDate.setHours(23, 59, 59, 999);
+      result = result.filter((o) => {
+        const d = new Date(o.createdAt);
+        return d >= fromDate && d <= toDate;
+      });
+    }
+    return result;
+  }, [orders, dateFilter, customFrom, customTo]);
+
+  const totalOrders = filteredOrders.length;
+  const pendingCount = filteredOrders.filter((o) => o.status === 'পেন্ডিং').length;
+  const receivedCount = filteredOrders.filter((o) => o.status === 'প্রাপ্ত').length;
+  const totalValue = filteredOrders.reduce((sum, o) => sum + o.totalAmount, 0);
 
   const addFormItem = () => {
     if (!formProductId) {
@@ -228,6 +271,7 @@ export default function PurchaseOrderManagement() {
     setFormItems([]);
     setFormExpectedDate('');
     setFormNotes('');
+    setFormAmountPaid('');
     setFormProductId('');
     setFormProductName('');
     setProductSearch('');
@@ -236,7 +280,7 @@ export default function PurchaseOrderManagement() {
     setSupplierOpen(false);
   };
 
-  const handleCreateOrder = async () => {
+  const handleCreateOrder = async (directReceive = false) => {
     if (formItems.length === 0) {
       toast.error(t('add_products'));
       return;
@@ -251,11 +295,28 @@ export default function PurchaseOrderManagement() {
           items: formItems.map((i) => ({ productId: i.productId, quantity: i.quantity, unitPrice: i.unitPrice })),
           expectedDate: formExpectedDate || null,
           notes: formNotes || null,
+          directReceive,
+          amountPaid: (directReceive && formAmountPaid) ? parseFloat(formAmountPaid) : undefined,
         }),
       });
       const data = await res.json();
       if (data.success) {
-        toast.success(t('order_created'));
+        if (directReceive) {
+          toast.success('ক্রয় সফল হয়েছে এবং স্টক আপডেট হয়েছে');
+          // Update local stock in Zustand store and IndexedDB database
+          try {
+            const productsStore = useProductsStore.getState();
+            const { ProductsDB } = await import('@/lib/offline/indexeddb');
+            for (const item of formItems) {
+              productsStore.updateProductStock(item.productId, item.quantity);
+              await ProductsDB.updateStock(item.productId, item.quantity);
+            }
+          } catch (dbError) {
+            console.error('Failed to update local stock cache:', dbError);
+          }
+        } else {
+          toast.success(t('order_created'));
+        }
         setShowCreateDialog(false);
         resetForm();
         fetchOrders();
@@ -326,6 +387,7 @@ export default function PurchaseOrderManagement() {
         productName: item.product?.nameBn || item.product?.name || item.productId,
       }))
     );
+    setReceiveAmountPaid('');
     setSelectedOrder(order);
     setShowReceiveDialog(true);
   };
@@ -344,6 +406,7 @@ export default function PurchaseOrderManagement() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           receivedItems: validItems.map((i) => ({ id: i.id, receivedQty: i.receivedQty })),
+          amountPaid: receiveAmountPaid ? parseFloat(receiveAmountPaid) : undefined,
         }),
       });
       const data = await res.json();
@@ -398,18 +461,32 @@ export default function PurchaseOrderManagement() {
     return item.product?.nameBn || item.product?.name || item.productId;
   };
 
+  if (viewMode === 'statistics') {
+    return <PurchaseStatistics onBack={() => setViewMode('list')} />;
+  }
+
   return (
-    <div className="space-y-4 p-4 md:p-6">
+    <div className="h-full overflow-y-auto space-y-4 p-4 md:p-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">{t('title')}</h1>
           <p className="text-sm text-muted-foreground">{t('subtitle')}</p>
         </div>
-        <Button onClick={() => { resetForm(); setShowCreateDialog(true); }} className="gap-2">
-          <Plus className="h-4 w-4" />
-          {t('new_order')}
-        </Button>
+        <div className="flex gap-2 shrink-0">
+          <Button
+            variant="outline"
+            onClick={() => setViewMode('statistics')}
+            className="gap-2 border-indigo-200 text-indigo-600 hover:bg-indigo-50 dark:border-indigo-800 dark:text-indigo-400"
+          >
+            <BarChart2 className="h-4 w-4" />
+            রিপোর্ট
+          </Button>
+          <Button onClick={() => { resetForm(); setShowCreateDialog(true); }} className="gap-2">
+            <Plus className="h-4 w-4" />
+            {t('new_order')}
+          </Button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -452,20 +529,75 @@ export default function PurchaseOrderManagement() {
         </Card>
       </div>
 
-      {/* Filter */}
-      <div className="flex items-center gap-2">
-        <span className="text-sm text-muted-foreground">{tc('filter')}:</span>
-        <div className="flex gap-1 flex-wrap">
-          {['সব', 'পেন্ডিং', 'অর্ডার করা', 'প্রাপ্ত', 'বাতিল'].map((status) => (
-            <Button
-              key={status}
-              variant={statusFilter === status ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setStatusFilter(status)}
-            >
-              {status}
-            </Button>
-          ))}
+      {/* Filters */}
+      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 p-3 bg-muted/40 rounded-xl border border-border/40">
+        <div className="flex flex-col gap-2 flex-1 w-full">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold text-muted-foreground">তারিখ ফিল্টার:</span>
+            <div className="flex gap-1 flex-wrap">
+              {[
+                { value: 'all', label: 'সব সময়' },
+                { value: 'today', label: 'আজ' },
+                { value: 'weekly', label: 'সাপ্তাহিক' },
+                { value: 'monthly', label: 'মাসিক' },
+                { value: 'custom', label: 'কাস্টম' },
+              ].map((d) => (
+                <Button
+                  key={d.value}
+                  variant={dateFilter === d.value ? 'default' : 'outline'}
+                  size="sm"
+                  className="h-8 text-xs"
+                  onClick={() => setDateFilter(d.value as any)}
+                >
+                  {d.label}
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          {dateFilter === 'custom' && (
+            <div className="flex flex-wrap items-center gap-2 mt-1.5 border-t pt-1.5 border-dashed border-border/60">
+              <div className="flex items-center gap-1.5">
+                <Label className="text-xs text-muted-foreground">থেকে:</Label>
+                <Input
+                  type="date"
+                  value={customFrom}
+                  onChange={(e) => setCustomFrom(e.target.value)}
+                  className="h-8 text-xs w-[140px]"
+                />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Label className="text-xs text-muted-foreground">পর্যন্ত:</Label>
+                <Input
+                  type="date"
+                  value={customTo}
+                  onChange={(e) => setCustomTo(e.target.value)}
+                  className="h-8 text-xs w-[140px]"
+                  max={new Date().toISOString().split('T')[0]}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Vertical divider on desktop */}
+        <div className="hidden md:block self-stretch w-px bg-border/60" />
+
+        <div className="flex flex-wrap items-center gap-2 md:pl-2 shrink-0">
+          <span className="text-xs font-semibold text-muted-foreground">অবস্থা ফিল্টার:</span>
+          <div className="flex gap-1 flex-wrap">
+            {['সব', 'পেন্ডিং', 'অর্ডার করা', 'প্রাপ্ত', 'বাতিল'].map((status) => (
+              <Button
+                key={status}
+                variant={statusFilter === status ? 'default' : 'outline'}
+                size="sm"
+                className="h-8 text-xs"
+                onClick={() => setStatusFilter(status)}
+              >
+                {status}
+              </Button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -475,14 +607,14 @@ export default function PurchaseOrderManagement() {
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           <span className="ml-2 text-muted-foreground">{tc('loading')}</span>
         </div>
-      ) : orders.length === 0 ? (
+      ) : filteredOrders.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
           <Package className="h-12 w-12 mb-2 opacity-50" />
           <p>{t('no_orders')}</p>
         </div>
       ) : (
         <div className="grid gap-3">
-          {orders.map((order) => (
+          {filteredOrders.map((order) => (
             <Card key={order.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => openDetailDialog(order)}>
               <CardContent className="p-4">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
@@ -744,12 +876,33 @@ export default function PurchaseOrderManagement() {
                 placeholder="অতিরিক্ত নোট..."
               />
             </div>
+
+            {/* Amount Paid (Optional) */}
+            <div className="border-t pt-3 border-border/40">
+              <Label className="font-semibold text-slate-800 dark:text-slate-200">পরিশোধিত টাকা (ঐচ্ছিক)</Label>
+              <p className="text-xs text-muted-foreground mb-1">সরাসরি ক্রয়ের ক্ষেত্রে প্রযোজ্য। ফাঁকা রাখলে পুরো টাকা পরিশোধ ধরা হবে। আংশিক পরিশোধ হলে এখানে লিখুন।</p>
+              <div className="relative mt-1">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">৳</span>
+                <Input
+                  type="number"
+                  value={formAmountPaid}
+                  onChange={(e) => setFormAmountPaid(convertBengaliToEnglishNumerals(e.target.value))}
+                  placeholder={formTotal.toString()}
+                  className="pl-8"
+                  min={0}
+                />
+              </div>
+            </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="gap-2 flex-wrap sm:justify-end">
             <Button variant="outline" onClick={() => setShowCreateDialog(false)}>{tc('cancel')}</Button>
-            <Button onClick={handleCreateOrder} disabled={saving || formItems.length === 0}>
+            <Button variant="secondary" onClick={() => handleCreateOrder(false)} disabled={saving || formItems.length === 0}>
               {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              {t('create_order')}
+              খসড়া অর্ডার তৈরি
+            </Button>
+            <Button onClick={() => handleCreateOrder(true)} disabled={saving || formItems.length === 0} className="bg-green-600 text-white hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600">
+              {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              সরাসরি ক্রয় ও স্টক আপডেট
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -919,6 +1072,38 @@ export default function PurchaseOrderManagement() {
                   </div>
                 </CardContent>
               </Card>
+
+              {/* Running Total & Amount Paid for Receive Dialog */}
+              {receiveTotal > 0 && (
+                <div className="space-y-3 p-3 bg-muted rounded-lg">
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-muted-foreground">প্রাপ্ত মালপত্রের মোট মূল্য:</span>
+                    <span className="font-bold">{formatPrice(receiveTotal)}</span>
+                  </div>
+                  {selectedOrder.supplierId && (
+                    <div className="space-y-1.5 border-t pt-2.5">
+                      <Label htmlFor="receive-amount-paid" className="text-xs">পরিশোধিত টাকা (ঐচ্ছিক)</Label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">৳</span>
+                        <Input
+                          id="receive-amount-paid"
+                          type="number"
+                          value={receiveAmountPaid}
+                          onChange={(e) => setReceiveAmountPaid(convertBengaliToEnglishNumerals(e.target.value))}
+                          placeholder="সম্পূর্ণ পরিশোধিত হলে ফাঁকা রাখুন"
+                          min="0"
+                          max={receiveTotal}
+                          step="0.01"
+                          className="pl-9 h-8 text-sm bg-background"
+                        />
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">
+                        বাকি রাখতে চাইলে পরিশোধের পরিমাণ লিখুন। ফাঁকা রাখলে সম্পূর্ণ পরিশোধিত ধরা হবে।
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
           <DialogFooter>

@@ -35,6 +35,7 @@ import { cn, convertBengaliToEnglishNumerals } from '@/lib/utils';
 import { toMoneyNumber } from '@/lib/money';
 import { DebtRepaymentDialog } from './DebtRepaymentDialog';
 import ReceiptPrint from './ReceiptPrint';
+import { useNumberFormat } from '@/hooks/use-number-format';
 
 interface CheckoutDialogProps {
   open?: boolean;
@@ -85,6 +86,7 @@ export function CheckoutDialog({
 
   const t = useTranslations('Checkout');
   const tc = useTranslations('Common');
+  const { formatPrice } = useNumberFormat();
   const currencySymbol = useSettingsStore((state) => state.settings.currency_symbol);
   const { data: session } = useSession();
   const cashierName = (session?.user as any)?.name || (session?.user as any)?.username || 'অ্যাডমিন';
@@ -179,14 +181,7 @@ export function CheckoutDialog({
     return parsedAmount >= remainingTotal;
   }, [paymentMethod, parsedAmount, remainingTotal, customerId]);
 
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
-    }).format(price);
-  };
+
 
   // Reset form when dialog opens (using ref to avoid stale closures)
   useEffect(() => {

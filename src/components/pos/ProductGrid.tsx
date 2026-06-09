@@ -17,6 +17,7 @@ import { useTranslations } from 'next-intl';
 const cleanSearchQuery = (q: string) => q.replace(/rs\.?|₹/gi, '').trim();
 import { useToast } from '@/hooks/use-toast';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useNumberFormat } from '@/hooks/use-number-format';
 
 type ViewMode = 'grid' | 'compact';
 
@@ -423,8 +424,7 @@ function CompactProductCard({ product, onSelect }: CompactProductCardProps) {
     }
   };
 
-  const formatPrice = (price: number) =>
-    new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0 }).format(price);
+  const { formatPrice } = useNumberFormat();
 
   return (
     <button

@@ -199,6 +199,8 @@
     "title": "দৈনিক সারাংশ",
     "end_of_day": "দিনের শেষে রিপোর্ট",
     "sales_summary": "বিক্রয় সারাংশ",
+    "purchases_summary": "ক্রয় ও স্টক এন্ট্রি সারাংশ",
+    "total_purchases": "মোট ক্রয়",
     "payment_details": "পেমেন্ট বিবরণ",
     "expense_details": "খরচ বিবরণ",
     "profit_section": "মুনাফা",
@@ -390,6 +392,7 @@
       "salaries": "বেতন",
       "supplies": "সামগ্রী",
       "maintenance": "রক্ষণাবেক্ষণ",
+      "supplier payment": "সাপ্লায়ার পেমেন্ট",
       "other": "অন্যান্য"
     },
     "failed_add": "খরচ যোগ করতে ব্যর্থ।",
@@ -424,6 +427,7 @@
       "Salaries": "বেতন",
       "Supplies": "সামগ্রী",
       "Maintenance": "রক্ষণাবেক্ষণ",
+      "Supplier Payment": "সাপ্লায়ার পেমেন্ট",
       "Other": "অন্যান্য"
     }
   },

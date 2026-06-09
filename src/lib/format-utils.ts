@@ -14,31 +14,19 @@ export function formatPriceGlobal(price: number | null | undefined): string {
   
   // Get active currency symbol from settings store
   const currencySymbol = useSettingsStore.getState().settings.currency_symbol || '₹';
-  let currencyCode = 'INR';
-  if (currencySymbol === '৳') currencyCode = 'BDT';
-  else if (currencySymbol === '$') currencyCode = 'USD';
-  else if (currencySymbol === '€') currencyCode = 'EUR';
-  else if (currencySymbol === '£') currencyCode = 'GBP';
-
-  const isStandard = ['INR', 'BDT', 'USD', 'EUR', 'GBP'].includes(currencyCode);
   const intlLocale = isBn ? 'bn-BD' : 'en-IN';
 
-  if (isStandard) {
-    const formatted = new Intl.NumberFormat(intlLocale, {
-      style: 'currency',
-      currency: currencyCode,
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
-    }).format(Number(price));
-    return isBn ? convertEnglishToBengaliNumerals(formatted) : formatted;
-  } else {
-    const formattedNum = new Intl.NumberFormat(intlLocale, {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
-    }).format(Number(price));
-    const digitFormatted = isBn ? convertEnglishToBengaliNumerals(formattedNum) : formattedNum;
-    return `${currencySymbol}${digitFormatted}`;
-  }
+  const finalPrice = Number(price);
+  const isNegative = finalPrice < 0;
+  const absPrice = Math.abs(finalPrice);
+
+  const formattedNum = new Intl.NumberFormat(intlLocale, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(absPrice);
+
+  const digitFormatted = isBn ? convertEnglishToBengaliNumerals(formattedNum) : formattedNum;
+  return `${isNegative ? '-' : ''}${currencySymbol}${digitFormatted}`;
 }
 
 export function formatDateGlobal(date: Date | string | number | null | undefined, options?: Intl.DateTimeFormatOptions): string {

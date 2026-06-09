@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { productId, quantity, purchasePrice, date, supplierId, notes } = result.data;
+    const { productId, quantity, purchasePrice, date, supplierId, amountPaid, notes } = result.data;
 
     // Update stock in transaction
     const transactionResult = await db.$transaction(async (tx) => {
@@ -99,12 +99,16 @@ export async function POST(request: NextRequest) {
         });
 
         if (supplier) {
+          const totalAmount = multiplyMoney(quantity, purchasePrice);
+          const actualAmountPaid = amountPaid !== undefined ? amountPaid : totalAmount;
+          const paymentStatus = 'Paid';
+
           const purchase = await tx.purchase.create({
             data: {
               supplierId,
               invoiceNumber: `PUR-${Date.now()}`,
-              totalAmount: multiplyMoney(quantity, purchasePrice),
-              paymentStatus: 'Paid',
+              totalAmount,
+              paymentStatus,
               notes,
               items: {
                 create: {
@@ -112,7 +116,7 @@ export async function POST(request: NextRequest) {
                   productName: product.name,
                   quantity,
                   buyingPrice: purchasePrice,
-                  totalPrice: multiplyMoney(quantity, purchasePrice),
+                  totalPrice: totalAmount,
                 },
               },
             },
@@ -128,6 +132,20 @@ export async function POST(request: NextRequest) {
               referenceId: purchase.id,
             },
           });
+
+          // Create Expense record for payment if amountPaid > 0
+          if (actualAmountPaid > 0) {
+            await tx.expense.create({
+              data: {
+                amount: actualAmountPaid,
+                category: 'Supplier Payment',
+                notes: notes || `Paid for stock: ${quantity} units of ${product.name}`,
+                date: date ? new Date(date) : new Date(),
+                supplierId,
+                supplierName: supplier.name,
+              },
+            });
+          }
         }
         // If supplier doesn't exist, just skip purchase creation and only update stock
       }

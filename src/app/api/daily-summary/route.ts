@@ -73,6 +73,15 @@ export async function GET() {
       }
     }
 
+    // ---- PURCHASES ----
+    const todayPurchases = await db.purchase.findMany({
+      where: {
+        createdAt: { gte: startOfDay, lt: endOfDay },
+        paymentStatus: 'Paid',
+      },
+    });
+    const totalPurchasesAmount = todayPurchases.reduce((sum, p) => sum + Number(p.totalAmount), 0);
+
     // ---- EXPENSES ----
     const todayExpenses = await db.expense.findMany({
       where: {
@@ -219,6 +228,7 @@ export async function GET() {
         avgOrderValue,
         paymentBreakdown,
         totalExpenses,
+        totalPurchasesAmount,
         expenseByCategory,
         costOfGoodsSold,
         grossProfit,

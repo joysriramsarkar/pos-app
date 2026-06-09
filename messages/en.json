@@ -215,6 +215,8 @@
     "to": "To",
     "end_of_day": "End Of Day",
     "sales_summary": "Sales Summary",
+    "purchases_summary": "Purchases Summary",
+    "total_purchases": "Total Purchases",
     "payment_details": "Payment Details",
     "expense_details": "Expense Details",
     "profit_section": "Profit Section",
@@ -408,7 +410,15 @@
     "deleted": "Deleted",
     "from": "From",
     "to": "To",
-    "categories": "Categories",
+    "categories": {
+      "rent": "Rent",
+      "utilities": "Utilities",
+      "salaries": "Salaries",
+      "supplies": "Supplies",
+      "maintenance": "Maintenance",
+      "supplier payment": "Supplier Payment",
+      "other": "Other"
+    },
     "failed_add": "Failed Add",
     "failed_update": "Failed Update",
     "report_title": "Report Title",
@@ -441,6 +451,7 @@
       "Salaries": "Salaries",
       "Supplies": "Supplies",
       "Maintenance": "Maintenance",
+      "Supplier Payment": "Supplier Payment",
       "Other": "Other"
     }
   },

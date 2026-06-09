@@ -41,6 +41,7 @@ export interface StockEntryData {
   purchasePrice: number;
   date: Date;
   supplierId?: string;
+  amountPaid?: number;
   notes?: string;
 }
 
@@ -67,6 +68,7 @@ export function AddStockDialog({
   const [purchasePrice, setPurchasePrice] = useState<string>('');
   const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [supplierId, setSupplierId] = useState<string>('');
+  const [amountPaid, setAmountPaid] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [liveSupplers, setLiveSuppliers] = useState<Supplier[]>(suppliers);
@@ -107,6 +109,7 @@ export function AddStockDialog({
       setPurchasePrice('');
       setDate(new Date().toISOString().split('T')[0]);
       setSupplierId('');
+      setAmountPaid('');
       setNotes('');
     }
   }, [open, initialProduct]);
@@ -126,6 +129,7 @@ export function AddStockDialog({
         purchasePrice: parseFloat(purchasePrice),
         date: new Date(date),
         supplierId: supplierId || undefined,
+        amountPaid: amountPaid ? parseFloat(amountPaid) : undefined,
         notes: notes || undefined,
       };
 
@@ -274,6 +278,30 @@ export function AddStockDialog({
               </SelectContent>
             </Select>
           </div>
+
+          {/* Amount Paid */}
+          {supplierId && (
+            <div className="space-y-2">
+              <Label htmlFor="add-stock-amount-paid">পরিশোধিত টাকা (ঐচ্ছিক)</Label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">৳</span>
+                <Input
+                  id="add-stock-amount-paid"
+                  type="number"
+                  value={amountPaid}
+                  onChange={(e) => setAmountPaid(convertBengaliToEnglishNumerals(e.target.value))}
+                  placeholder="সম্পূর্ণ পরিশোধিত হলে ফাঁকা রাখুন"
+                  min="0"
+                  max={total}
+                  step="0.01"
+                  className="pl-9"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                বাকি রাখতে চাইলে পরিশোধের পরিমাণ লিখুন। ফাঁকা রাখলে সম্পূর্ণ পরিশোধিত ধরা হবে।
+              </p>
+            </div>
+          )}
 
           {/* Notes */}
           <div className="space-y-2">

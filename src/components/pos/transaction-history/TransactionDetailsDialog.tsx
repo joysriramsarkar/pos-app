@@ -16,7 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
 import { Share2, X } from "lucide-react";
-import { formatPrice, getPaymentStatusColor } from "./utils";
+import { getPaymentStatusColor } from "./utils";
 import { Transaction, TransactionItem } from "./types";
 import { useState } from "react";
 import { shareInvoiceAsPdf } from "@/lib/invoicePdf";
@@ -24,6 +24,7 @@ import { useSettingsStore } from "@/stores/settings-store";
 import { useIsAdmin } from "@/hooks/use-permissions";
 import { useToast } from '@/hooks/use-toast';
 import { useTranslations } from 'next-intl';
+import { useNumberFormat } from "@/hooks/use-number-format";
 
 interface TransactionDetailsDialogProps {
   transaction: Transaction | null;
@@ -44,6 +45,7 @@ export function TransactionDetailsDialog({
   const { toast } = useToast();
   const { settings } = useSettingsStore();
   const isAdmin = useIsAdmin();
+  const { formatPrice } = useNumberFormat();
 
   const t = useTranslations('TransactionDetails');
   const tc = useTranslations('Common');

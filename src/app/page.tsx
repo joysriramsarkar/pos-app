@@ -8,7 +8,8 @@ import { useProductCRUD } from '@/hooks/useProductCRUD';
 import { useTranslations, useLocale } from 'next-intl';
 import type { Product as ProductType } from '@/types/pos';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useTheme } from 'next-themes';
+import { useTheme } from '@/components/providers/ThemeProvider';
+import { useLogout } from '@/hooks/use-logout';
 
 // Lazy load page components
 const ProductGrid = dynamic(() => import('@/components/pos/ProductGrid').then(m => ({ default: m.ProductGrid })), { ssr: false });
@@ -132,7 +133,8 @@ function POSDashboard() {
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
   // isProcessingPayment is now per-tab via UIStore
 
-  const { theme, setTheme } = useTheme();
+  const { theme, resolvedTheme, setTheme } = useTheme();
+  const logout = useLogout();
   
   const toggleLanguage = useCallback(() => {
     const { settings, updateSetting } = useSettingsStore.getState();
@@ -140,8 +142,8 @@ function POSDashboard() {
   }, []);
   
   const toggleTheme = useCallback(() => {
-    setTheme(theme === 'dark' ? 'light' : 'dark');
-  }, [theme, setTheme]);
+    setTheme(resolvedTheme === 'dark' ? 'light' : 'dark');
+  }, [resolvedTheme, setTheme]);
 
   // Auth
   const { data: session, status: authStatus } = useSession();
@@ -777,7 +779,6 @@ function POSDashboard() {
     setCheckoutOpen(true);
   }, [setCheckoutOpen]);
 
-  // Handle stock entry
   const handleStockEntry = useCallback(async (data: StockEntryData) => {
     try {
       if (isOnline) {
@@ -791,6 +792,7 @@ function POSDashboard() {
             purchasePrice: data.purchasePrice,
             date: data.date,
             supplierId: data.supplierId,
+            amountPaid: data.amountPaid,
             notes: data.notes,
           }),
         });
@@ -825,7 +827,7 @@ function POSDashboard() {
           entityType: 'Product',
           entityId: data.productId,
           action: 'update',
-          payload: JSON.stringify({ productId: data.productId, quantityChange: data.quantity }),
+          payload: JSON.stringify({ productId: data.productId, quantityChange: data.quantity, amountPaid: data.amountPaid, supplierId: data.supplierId, purchasePrice: data.purchasePrice }),
           synced: false,
           retryCount: 0,
           createdAt: new Date(),
@@ -1066,6 +1068,55 @@ function POSDashboard() {
             )}
           </motion.button>
         ))}
+      </div>
+
+      {/* Desktop Toggles and Logout */}
+      <div className="p-3 border-t bg-slate-100/50 dark:bg-slate-900/30 space-y-3">
+        {session?.user && (
+          <div className="flex items-center gap-3 px-2">
+            <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center text-blue-700 dark:text-blue-300 font-bold shrink-0 text-sm">
+              {(session.user.name || session.user.email || 'U')[0].toUpperCase()}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-semibold truncate leading-none mb-1">{session.user.name || session.user.email}</p>
+              <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 uppercase font-bold tracking-wider text-muted-foreground">
+                {userRole}
+              </Badge>
+            </div>
+          </div>
+        )}
+
+        <div className="flex items-center justify-between gap-1 px-1">
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleTheme}
+              className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-slate-200 dark:hover:bg-slate-800"
+              title="Toggle Theme"
+            >
+              {resolvedTheme === 'dark' ? <Sun className="h-4 w-4 text-amber-500" /> : <Moon className="h-4 w-4" />}
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleLanguage}
+              className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-slate-200 dark:hover:bg-slate-800"
+              title="Toggle Language"
+            >
+              <Languages className="h-4 w-4" />
+            </Button>
+          </div>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={logout}
+            className="h-8 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/20 gap-1.5"
+          >
+            <span className="text-xs font-semibold">লগআউট</span>
+          </Button>
+        </div>
       </div>
 
       <div className="p-4 border-t">
@@ -1311,7 +1362,7 @@ function POSDashboard() {
             {/* Page indicator & Bell for non-billing pages */}
             <div className="flex items-center gap-2">
               <Button variant="ghost" size="icon" onClick={toggleTheme} className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-primary/10">
-                {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                {resolvedTheme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               </Button>
               <Button variant="ghost" size="icon" onClick={toggleLanguage} className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-primary/10">
                 <Languages className="h-4 w-4" />
@@ -1435,7 +1486,7 @@ function POSDashboard() {
           <SheetHeader className="px-4 pt-4 pb-2 border-b">
             <SheetTitle className="text-base font-semibold">{t('more')}</SheetTitle>
           </SheetHeader>
-          <div className="p-4 overflow-y-auto max-h-[55vh]">
+          <div className="p-4 overflow-y-auto max-h-[55vh] space-y-4">
             <div className="grid grid-cols-4 gap-3">
               {filteredMoreMenuItems.map((item) => {
                 const isActive = currentPage === item.id;
@@ -1465,6 +1516,34 @@ function POSDashboard() {
                   </button>
                 );
               })}
+            </div>
+            
+            <Separator />
+            
+            <div className="flex flex-col gap-3 pt-1 pb-4">
+              {session?.user && (
+                <div className="flex items-center gap-3 px-2 mb-1">
+                  <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center text-blue-700 dark:text-blue-300 font-bold shrink-0">
+                    {(session.user.name || session.user.email || 'U')[0].toUpperCase()}
+                  </div>
+                  <div>
+                    <p className="font-semibold text-sm leading-none mb-1">{session.user.name || session.user.email}</p>
+                    <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 uppercase font-bold tracking-wider text-muted-foreground">
+                      {userRole}
+                    </Badge>
+                  </div>
+                </div>
+              )}
+              <Button
+                variant="destructive"
+                className="w-full gap-2 h-10 rounded-xl font-medium"
+                onClick={() => {
+                  setMoreMenuOpen(false);
+                  logout();
+                }}
+              >
+                Logout (লগআউট)
+              </Button>
             </div>
           </div>
         </SheetContent>

@@ -80,6 +80,7 @@ export const StockEntryInputSchema = z.object({
   purchasePrice: money().pipe(z.number().nonnegative('Purchase price must be non-negative')),
   date: z.string().optional(),
   supplierId: z.string().optional(),
+  amountPaid: money().pipe(z.number().nonnegative('Amount paid must be non-negative')).optional(),
   notes: z.string().optional(),
 });
 

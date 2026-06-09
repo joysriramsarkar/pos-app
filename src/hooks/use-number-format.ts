@@ -21,23 +21,17 @@ export function makeFormatters(isBn: boolean, currencySymbol: string = '₹') {
   const formatPrice = (price: number | string | null | undefined): string => {
     const parsed = typeof price === 'string' ? parseFloat(price) : price;
     const finalPrice = parsed === null || parsed === undefined || isNaN(parsed as number) ? 0 : (parsed as number);
-    const isStandard = ['INR', 'BDT', 'USD', 'EUR', 'GBP'].includes(currencyCode);
     
-    if (isStandard) {
-      const formatted = new Intl.NumberFormat(intlLocale, {
-        style: 'currency',
-        currency: currencyCode,
-        minimumFractionDigits: 0,
-      }).format(finalPrice);
-      return isBn ? convertEnglishToBengaliNumerals(formatted) : formatted;
-    } else {
-      const numFormatted = new Intl.NumberFormat(intlLocale, {
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 2,
-      }).format(finalPrice);
-      const digitFormatted = isBn ? convertEnglishToBengaliNumerals(numFormatted) : numFormatted;
-      return `${currencySymbol}${digitFormatted}`;
-    }
+    const isNegative = finalPrice < 0;
+    const absPrice = Math.abs(finalPrice);
+    
+    const formattedNum = new Intl.NumberFormat(intlLocale, {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    }).format(absPrice);
+    
+    const digitFormatted = isBn ? convertEnglishToBengaliNumerals(formattedNum) : formattedNum;
+    return `${isNegative ? '-' : ''}${currencySymbol}${digitFormatted}`;
   };
 
   const formatDate = (date: Date | string, options?: Intl.DateTimeFormatOptions): string => {

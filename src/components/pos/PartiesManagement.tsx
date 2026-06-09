@@ -50,6 +50,7 @@ import { useToast } from '@/hooks/use-toast';
 import { toMoneyNumber } from '@/lib/money';
 import Decimal from 'decimal.js';
 import { useTranslations } from 'next-intl';
+import { useNumberFormat } from '@/hooks/use-number-format';
 
 
 
@@ -84,21 +85,14 @@ export function PartiesManagement() {
   const setCustomers = useCustomersStore((state) => state.setCustomers);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [ledgerEntries, setLedgerEntries] = useState<LedgerEntry[]>([]);
+  const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
+  const [showSupplierLedger, setShowSupplierLedger] = useState(false);
+  const [showSupplierPaymentDialog, setShowSupplierPaymentDialog] = useState(false);
+  const [supplierPaymentAmount, setSupplierPaymentAmount] = useState('');
+  const [supplierLedgerEntries, setSupplierLedgerEntries] = useState<any[]>([]);
   const { toast } = useToast();
 
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 0,
-    }).format(price);
-  };
-
-  const formatDate = (date: Date | string) => {
-    const d = typeof date === 'string' ? new Date(date) : date;
-    if (isNaN(d.getTime())) return '-';
-    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-  };
+  const { formatPrice, formatDate } = useNumberFormat();
 
   // Fetch customers and suppliers on component mount
   useEffect(() => {
@@ -241,6 +235,9 @@ export function PartiesManagement() {
   const totalDue = customers.reduce((sum, c) => sum + toMoneyNumber(c.totalDue), 0);
   const customersWithDue = customers.filter(c => toMoneyNumber(c.totalDue) > 0).length;
 
+  const totalSupplierDue = suppliers.reduce((sum, s) => sum + toMoneyNumber((s as any).totalDue || 0), 0);
+  const suppliersWithDue = suppliers.filter(s => toMoneyNumber((s as any).totalDue || 0) > 0).length;
+
   const handleViewLedger = async (customer: Customer) => {
     setSelectedCustomer(customer);
     try {
@@ -262,6 +259,81 @@ export function PartiesManagement() {
       setLedgerEntries([]);
     }
     setShowLedger(true);
+  };
+
+  const handleViewSupplierLedger = async (supplier: Supplier) => {
+    setSelectedSupplier(supplier);
+    try {
+      const res = await fetch(`/api/suppliers?id=${supplier.id}`);
+      if (res.ok) {
+        const { data } = await res.json();
+        setSupplierLedgerEntries(data.ledgerEntries || []);
+      } else {
+        console.error('Failed to load supplier ledger');
+        setSupplierLedgerEntries([]);
+      }
+    } catch (err) {
+      console.error('Error fetching supplier ledger', err);
+      setSupplierLedgerEntries([]);
+    }
+    setShowSupplierLedger(true);
+  };
+
+  const handleRecordSupplierPayment = (supplier: Supplier) => {
+    setSelectedSupplier(supplier);
+    setSupplierPaymentAmount('');
+    setShowSupplierPaymentDialog(true);
+  };
+
+  const handleSupplierPaymentSubmit = async () => {
+    if (!selectedSupplier || !supplierPaymentAmount) return;
+
+    const amount = parseFloat(supplierPaymentAmount);
+    if (amount <= 0) {
+      toast({ title: 'Invalid Amount', description: 'Please enter a positive amount.', variant: 'destructive' });
+      return;
+    }
+
+    const totalDue = toMoneyNumber((selectedSupplier as any).totalDue || 0);
+    if (totalDue <= 0) {
+      toast({ title: 'পরিশোধ করা সম্ভব নয়', description: 'এই সাপ্লায়ারের কোনো বকেয়া নেই।', variant: 'destructive' });
+      return;
+    }
+    if (amount > totalDue) {
+      toast({ title: 'ভুল পরিমাণ', description: `পরিশোধের পরিমাণ বকেয়া পরিমাণের (৳${totalDue}) চেয়ে বেশি হতে পারবে না।`, variant: 'destructive' });
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/expenses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount,
+          category: 'Supplier Payment',
+          notes: `Paid supplier: ${selectedSupplier.name}`,
+          supplierId: selectedSupplier.id,
+          supplierName: selectedSupplier.name,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to record supplier payment.');
+      }
+
+      // Refresh suppliers list to update dues
+      const suppliersRes = await fetch('/api/suppliers');
+      if (suppliersRes.ok) {
+        const { data } = await suppliersRes.json();
+        setSuppliers(data);
+      }
+
+      setShowSupplierPaymentDialog(false);
+      toast({ title: 'Payment Recorded', description: `Recorded payment to ${selectedSupplier.name}.` });
+    } catch (error) {
+      console.error("Failed to record supplier payment:", error);
+      toast({ title: 'Payment Failed', description: error instanceof Error ? error.message : 'An unexpected error occurred.', variant: 'destructive' });
+    }
   };
 
   const handleRecordPayment = (customer: Customer) => {
@@ -536,20 +608,20 @@ export function PartiesManagement() {
         <div className="grid grid-cols-3 gap-3 mb-4">
           <Card className="bg-muted/50">
             <CardContent className="p-3">
-              <p className="text-xs text-muted-foreground">{t('total_due')}</p>
-              <p className="text-lg font-bold text-red-600">{formatPrice(totalDue)}</p>
+              <p className="text-xs text-muted-foreground">{activeTab === 'customer' ? t('total_due') : 'মোট বকেয়া (সাপ্লায়ার)'}</p>
+              <p className="text-lg font-bold text-red-600">{formatPrice(activeTab === 'customer' ? totalDue : totalSupplierDue)}</p>
             </CardContent>
           </Card>
           <Card className="bg-muted/50">
             <CardContent className="p-3">
-              <p className="text-xs text-muted-foreground">{t('customers_with_due')}</p>
-              <p className="text-lg font-bold">{customersWithDue}</p>
+              <p className="text-xs text-muted-foreground">{activeTab === 'customer' ? t('customers_with_due') : 'বকেয়া আছে এমন সাপ্লায়ার'}</p>
+              <p className="text-lg font-bold">{activeTab === 'customer' ? customersWithDue : suppliersWithDue}</p>
             </CardContent>
           </Card>
           <Card className="bg-muted/50">
             <CardContent className="p-3">
-              <p className="text-xs text-muted-foreground">{t('total_customers')}</p>
-              <p className="text-lg font-bold">{customers.filter(c => c.isActive).length}</p>
+              <p className="text-xs text-muted-foreground">{activeTab === 'customer' ? t('total_customers') : 'মোট সাপ্লায়ার'}</p>
+              <p className="text-lg font-bold">{activeTab === 'customer' ? customers.filter(c => c.isActive).length : suppliers.filter(s => s.isActive).length}</p>
             </CardContent>
           </Card>
         </div>
@@ -714,14 +786,16 @@ export function PartiesManagement() {
               <TableRow>
                 <TableHead>{t('name_col')}</TableHead>
                 <TableHead>{t('contact_col')}</TableHead>
-                <TableHead>{t('address_col')}</TableHead>
+                <TableHead className="text-right">মোট ক্রয়</TableHead>
+                <TableHead className="text-right">মোট পরিশোধ</TableHead>
+                <TableHead className="text-right">বকেয়া</TableHead>
                 <TableHead className="text-right">{t('actions_col')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredSuppliers.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center py-12">
+                  <TableCell colSpan={6} className="text-center py-12">
                     <Users className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
                     <p className="text-muted-foreground">{t('no_suppliers')}</p>
                   </TableCell>
@@ -729,7 +803,17 @@ export function PartiesManagement() {
               ) : (
                 filteredSuppliers.map((supplier) => (
                   <TableRow key={supplier.id} className="group">
-                    <TableCell className="font-medium">{supplier.name}</TableCell>
+                    <TableCell>
+                      <div>
+                        <p className="font-medium">{supplier.name}</p>
+                        {supplier.address && (
+                          <p className="text-xs text-muted-foreground flex items-center gap-1">
+                            <MapPin className="w-3 h-3" />
+                            {supplier.address}
+                          </p>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell>
                       {supplier.phone && (
                         <p className="text-sm flex items-center gap-1">
@@ -738,12 +822,17 @@ export function PartiesManagement() {
                         </p>
                       )}
                     </TableCell>
-                    <TableCell>
-                      {supplier.address && (
-                        <p className="text-sm text-muted-foreground flex items-center gap-1">
-                          <MapPin className="w-3 h-3" />
-                          {supplier.address}
-                        </p>
+                    <TableCell className="text-right font-medium">
+                      {formatPrice((supplier as any).totalPurchases || 0)}
+                    </TableCell>
+                    <TableCell className="text-right text-green-600">
+                      {formatPrice((supplier as any).totalPaid || 0)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {toMoneyNumber((supplier as any).totalDue || 0) > 0 ? (
+                        <Badge variant="destructive">{formatPrice((supplier as any).totalDue)}</Badge>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
                       )}
                     </TableCell>
                     <TableCell className="text-right">
@@ -757,6 +846,26 @@ export function PartiesManagement() {
                           <Edit className="w-4 h-4 md:mr-1" />
                           <span className="hidden md:inline">{t('edit')}</span>
                         </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8"
+                          onClick={() => handleViewSupplierLedger(supplier)}
+                        >
+                          <FileText className="w-4 h-4 md:mr-1" />
+                          <span className="hidden md:inline">লেজার</span>
+                        </Button>
+                        {toMoneyNumber((supplier as any).totalDue || 0) > 0 && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 text-green-600 hover:bg-green-100 hover:text-green-700"
+                            onClick={() => handleRecordSupplierPayment(supplier)}
+                          >
+                            <IndianRupee className="w-4 h-4 md:mr-1" />
+                            <span className="hidden md:inline">পরিশোধ</span>
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -1174,6 +1283,161 @@ export function PartiesManagement() {
             </Button>
             <Button onClick={handleAddParty} disabled={!newParty.name} className="bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600">
               Add {activeTab === 'customer' ? 'Customer' : 'Supplier'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Supplier Ledger Dialog */}
+      <Dialog open={showSupplierLedger} onOpenChange={setShowSupplierLedger}>
+        <DialogContent className="sm:max-w-lg w-[95vw] max-h-[90dvh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="w-5 h-5" />
+              লেজার খাতা - {selectedSupplier?.name}
+            </DialogTitle>
+            <DialogDescription>
+              সাপ্লায়ারের লেনদেনের ইতিহাস ও বকেয়া খতিয়ান
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Current Balance */}
+            <Card className="bg-muted/50">
+              <CardContent className="p-4">
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground font-medium">বর্তমান বকেয়া</span>
+                  <span className="text-2xl font-bold text-red-600">
+                    {formatPrice((selectedSupplier as any)?.totalDue || 0)}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center mt-2 pt-2 border-t border-border/40 text-sm">
+                  <span className="text-muted-foreground">মোট ক্রয়: {formatPrice((selectedSupplier as any)?.totalPurchases || 0)}</span>
+                  <span className="text-muted-foreground">মোট পরিশোধ: {formatPrice((selectedSupplier as any)?.totalPaid || 0)}</span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Ledger Entries */}
+            <ScrollArea className="h-75">
+              <div className="space-y-2 pr-2">
+                {supplierLedgerEntries.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-8">কোনো লেনদেন পাওয়া যায়নি</p>
+                ) : (
+                  supplierLedgerEntries.map((entry) => (
+                    <div
+                      key={entry.id}
+                      className={cn(
+                        "flex items-center justify-between p-3 rounded-lg border",
+                        entry.entryType === 'credit' ? 'bg-red-50 border-red-100 dark:bg-red-950/20 dark:border-red-900/30' : 'bg-green-50 border-green-100 dark:bg-green-950/20 dark:border-green-900/30'
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={cn(
+                          "w-8 h-8 rounded-full flex items-center justify-center shrink-0",
+                          entry.entryType === 'credit' ? 'bg-red-100 dark:bg-red-900/30' : 'bg-green-100 dark:bg-green-900/30'
+                        )}>
+                          {entry.entryType === 'credit' ? (
+                            <ArrowUpRight className="w-4 h-4 text-red-600" />
+                          ) : (
+                            <ArrowDownRight className="w-4 h-4 text-green-600" />
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-medium text-sm truncate">{entry.description}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatDate(entry.createdAt)} • {entry.referenceId}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className={cn(
+                          "font-semibold",
+                          entry.entryType === 'credit' ? 'text-red-600' : 'text-green-600'
+                        )}>
+                          {entry.entryType === 'credit' ? '+' : '-'}{formatPrice(entry.amount)}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Bal: {formatPrice(entry.balanceAfter)}
+                        </p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </ScrollArea>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Supplier Payment Dialog */}
+      <Dialog open={showSupplierPaymentDialog} onOpenChange={setShowSupplierPaymentDialog}>
+        <DialogContent className="sm:max-w-sm w-[95vw] max-h-[90dvh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>টাকা পরিশোধ করুন</DialogTitle>
+            <DialogDescription>
+              {selectedSupplier?.name} এর বকেয়া পরিশোধের পেমেন্ট রেকর্ড
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="p-3 bg-muted rounded-lg">
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-muted-foreground">বর্তমান বকেয়া</span>
+                <span className="font-bold text-red-600">
+                  {formatPrice((selectedSupplier as any)?.totalDue || 0)}
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="supplier-payment-dialog-amount">পরিশোধের পরিমাণ</Label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">৳</span>
+                <Input
+                  id="supplier-payment-dialog-amount"
+                  type="number"
+                  value={supplierPaymentAmount}
+                  onChange={(e) => setSupplierPaymentAmount(convertBengaliToEnglishNumerals(e.target.value))}
+                  placeholder="0"
+                  className="pl-9"
+                  max={(selectedSupplier as any)?.totalDue}
+                />
+              </div>
+            </div>
+
+            {/* Quick Amounts */}
+            <div className="flex flex-wrap gap-2">
+              {[500, 1000, 2000, 5000].map((amount) => (
+                <Button
+                  key={amount}
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSupplierPaymentAmount(amount.toString())}
+                >
+                  ৳{amount}
+                </Button>
+              ))}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSupplierPaymentAmount(((selectedSupplier as any)?.totalDue || 0).toString())}
+              >
+                সম্পূর্ণ বকেয়া
+              </Button>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setShowSupplierPaymentDialog(false)}>
+              বাতিল
+            </Button>
+            <Button
+              onClick={handleSupplierPaymentSubmit}
+              disabled={!supplierPaymentAmount || parseFloat(supplierPaymentAmount) <= 0}
+              className="bg-green-600 text-white hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600"
+            >
+              পেমেন্ট রেকর্ড করুন
             </Button>
           </DialogFooter>
         </DialogContent>

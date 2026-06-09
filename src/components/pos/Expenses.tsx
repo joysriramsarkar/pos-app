@@ -41,6 +41,7 @@ const CATEGORY_CONFIG: Record<string, { icon: typeof Wallet; color: string; bgCo
   Salaries: { icon: Briefcase, color: 'text-green-600', bgColor: 'bg-green-100', gradient: 'from-green-500/10 to-green-500/5' },
   Supplies: { icon: Box, color: 'text-amber-600', bgColor: 'bg-amber-100', gradient: 'from-amber-500/10 to-amber-500/5' },
   Maintenance: { icon: Wrench, color: 'text-orange-600', bgColor: 'bg-orange-100', gradient: 'from-orange-500/10 to-orange-500/5' },
+  'Supplier Payment': { icon: Truck, color: 'text-rose-600', bgColor: 'bg-rose-100', gradient: 'from-rose-500/10 to-rose-500/5' },
   Other: { icon: MoreHorizontal, color: 'text-gray-600', bgColor: 'bg-gray-100', gradient: 'from-gray-500/10 to-gray-500/5' },
 };
 

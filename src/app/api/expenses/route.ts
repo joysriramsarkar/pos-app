@@ -117,8 +117,8 @@ export async function PUT(request: NextRequest) {
       amount: parsed.data.amount,
       category: parsed.data.category,
       notes: parsed.data.notes ?? null,
-      supplierId: parsed.data.category === 'Supplies' ? parsed.data.supplierId ?? null : null,
-      supplierName: parsed.data.category === 'Supplies' ? parsed.data.supplierName ?? null : null,
+      supplierId: (parsed.data.category === 'Supplies' || parsed.data.category === 'Supplier Payment') ? parsed.data.supplierId ?? null : null,
+      supplierName: (parsed.data.category === 'Supplies' || parsed.data.category === 'Supplier Payment') ? parsed.data.supplierName ?? null : null,
     };
 
     const parsedDate = parseExpenseDate(parsed.data.date);

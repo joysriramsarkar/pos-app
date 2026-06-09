@@ -26,11 +26,8 @@ export const getStatusColor = (status: string | null | undefined) => {
   }
 };
 
+import { formatPriceGlobal } from "@/lib/format-utils";
+
 export const formatPrice = (price: number | null | undefined) => {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  }).format(price ?? 0);
+  return formatPriceGlobal(price);
 };

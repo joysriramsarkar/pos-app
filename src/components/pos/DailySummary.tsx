@@ -87,6 +87,7 @@ interface DailySummaryData {
   closingBalance: number;
   todayCashTotal: number;
   todayUpiTotal: number;
+  totalPurchasesAmount: number;
 }
 
 export default function DailySummary({ open, onOpenChange }: DailySummaryProps) {
@@ -181,6 +182,19 @@ export default function DailySummary({ open, onOpenChange }: DailySummaryProps) 
                     <MetricItem label={t('total_sales')} value={formatTaka(data.totalSalesAmount)} color="text-green-600 dark:text-green-400" />
                     <MetricItem label={t('total_orders')} value={formatNumber(data.totalSalesCount) + ' ' + t('count')} color="text-green-600 dark:text-green-400" />
                     <MetricItem label={t('avg_order')} value={formatTaka(data.avgOrderValue)} color="text-green-600 dark:text-green-400" />
+                  </div>
+                </SectionCard>
+
+                {/* Purchases Summary Section */}
+                <SectionCard
+                  icon={<Package className="h-4 w-4 text-orange-600 dark:text-orange-400" />}
+                  iconBg="bg-orange-100 dark:bg-orange-900/30"
+                  title={t('purchases_summary')}
+                  gradient="from-orange-50/50 to-transparent dark:from-orange-950/20 dark:to-transparent"
+                  delay={1}
+                >
+                  <div className="grid grid-cols-1">
+                    <MetricItem label={t('total_purchases')} value={formatTaka(data.totalPurchasesAmount || 0)} color="text-orange-600 dark:text-orange-400" />
                   </div>
                 </SectionCard>
 

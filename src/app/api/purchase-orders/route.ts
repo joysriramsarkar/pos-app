@@ -95,7 +95,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { supplierId, items, expectedDate, notes } = body;
+    const { supplierId, items, expectedDate, notes, directReceive, amountPaid } = body;
 
     if (!items || items.length === 0) {
       return NextResponse.json(
@@ -143,42 +143,121 @@ export async function POST(request: NextRequest) {
       0
     );
 
-    const purchase = await db.purchase.create({
-      data: {
-        invoiceNumber: orderNumber,
-        supplierId: (supplierId && supplierId !== 'none') ? supplierId : null,
-        totalAmount,
-        paymentStatus: 'Pending',
-        notes: notes || null,
-        items: {
-          create: await Promise.all(items.map(async (item: { productId: string; quantity: number; unitPrice: number }) => {
-            const product = await db.product.findUnique({ where: { id: item.productId } });
-            return {
-              productId: item.productId,
-              productName: product?.name || 'Unknown',
-              quantity: item.quantity,
-              buyingPrice: item.unitPrice,
-              totalPrice: item.quantity * item.unitPrice,
-            };
-          })),
-        },
-      },
-      include: {
-        supplier: true,
-        items: {
+    let purchase;
+    if (directReceive) {
+      // Create and receive in one transaction
+      purchase = await db.$transaction(async (tx) => {
+        const p = await tx.purchase.create({
+          data: {
+            invoiceNumber: orderNumber,
+            supplierId: (supplierId && supplierId !== 'none') ? supplierId : null,
+            totalAmount,
+            paymentStatus: 'Paid',
+            notes: notes || null,
+            items: {
+              create: await Promise.all(items.map(async (item: { productId: string; quantity: number; unitPrice: number }) => {
+                const product = await tx.product.findUnique({ where: { id: item.productId } });
+                return {
+                  productId: item.productId,
+                  productName: product?.name || 'Unknown',
+                  quantity: item.quantity,
+                  buyingPrice: item.unitPrice,
+                  totalPrice: item.quantity * item.unitPrice,
+                };
+              })),
+            },
+          },
           include: {
-            product: {
-              select: { id: true, name: true, nameBn: true, unit: true },
+            supplier: true,
+            items: {
+              include: {
+                product: {
+                  select: { id: true, name: true, nameBn: true, unit: true },
+                },
+              },
+            },
+          },
+        });
+
+        // Update product stock and create stock history
+        for (const item of p.items) {
+          const qty = Number(item.quantity);
+          const unitPrice = Number(item.buyingPrice);
+          await tx.product.update({
+            where: { id: item.productId },
+            data: {
+              currentStock: { increment: qty },
+              ...(unitPrice > 0 ? { buyingPrice: unitPrice } : {}),
+            },
+          });
+
+          await tx.stockHistory.create({
+            data: {
+              productId: item.productId,
+              changeType: 'purchase',
+              quantity: qty,
+              reason: `Direct Purchase: ${p.invoiceNumber}`,
+              referenceId: p.id,
+            },
+          });
+        }
+
+        // Create Supplier Payment expense if amountPaid is not 0 (defaults to totalAmount)
+        const actualAmountPaid = amountPaid !== undefined ? amountPaid : totalAmount;
+        if (actualAmountPaid > 0 && p.supplierId && p.supplier) {
+          await tx.expense.create({
+            data: {
+              amount: actualAmountPaid,
+              category: 'Supplier Payment',
+              notes: `Paid for direct purchase: ${p.invoiceNumber}`,
+              date: new Date(),
+              supplierId: p.supplierId,
+              supplierName: p.supplier.name,
+            },
+          });
+        }
+
+        return p;
+      });
+    } else {
+      // Normal flow (Pending status)
+      purchase = await db.purchase.create({
+        data: {
+          invoiceNumber: orderNumber,
+          supplierId: (supplierId && supplierId !== 'none') ? supplierId : null,
+          totalAmount,
+          paymentStatus: 'Pending',
+          notes: notes || null,
+          items: {
+            create: await Promise.all(items.map(async (item: { productId: string; quantity: number; unitPrice: number }) => {
+              const product = await db.product.findUnique({ where: { id: item.productId } });
+              return {
+                productId: item.productId,
+                productName: product?.name || 'Unknown',
+                quantity: item.quantity,
+                buyingPrice: item.unitPrice,
+                totalPrice: item.quantity * item.unitPrice,
+              };
+            })),
+          },
+        },
+        include: {
+          supplier: true,
+          items: {
+            include: {
+              product: {
+                select: { id: true, name: true, nameBn: true, unit: true },
+              },
             },
           },
         },
-      },
-    });
+      });
+    }
 
     const user = await getAuthenticatedUser(request);
     await logAudit({
       userId: user?.id,
-      action: 'CREATE_PURCHASE_ORDER',
+      action: directReceive ? 'RECEIVE_PURCHASE_ORDER' : 'CREATE_PURCHASE_ORDER',
       entityType: 'Purchase',
       entityId: purchase.id,
       details: {
@@ -186,17 +265,20 @@ export async function POST(request: NextRequest) {
         totalAmount: Number(purchase.totalAmount),
         supplierId: purchase.supplierId,
         itemCount: purchase.items.length,
+        direct: directReceive,
       },
       ipAddress: getIp(request)
     });
+
+    const isPaid = purchase.paymentStatus === 'Paid';
 
     const mappedOrder = {
       id: purchase.id,
       orderNumber: purchase.invoiceNumber,
       supplierId: purchase.supplierId,
-      status: 'পেন্ডিং',
+      status: isPaid ? 'প্রাপ্ত' : 'পেন্ডিং',
       totalAmount: Number(purchase.totalAmount),
-      paidAmount: 0,
+      paidAmount: isPaid ? Number(purchase.totalAmount) : 0,
       notes: purchase.notes,
       expectedDate: expectedDate || null,
       createdAt: purchase.createdAt.toISOString(),
@@ -213,7 +295,7 @@ export async function POST(request: NextRequest) {
         quantity: Number(item.quantity),
         unitPrice: Number(item.buyingPrice),
         totalPrice: Number(item.totalPrice),
-        receivedQty: 0,
+        receivedQty: isPaid ? Number(item.quantity) : 0,
         product: item.product ? {
           id: item.product.id,
           name: item.product.name,
@@ -224,7 +306,7 @@ export async function POST(request: NextRequest) {
     };
 
     return NextResponse.json(
-      { success: true, data: mappedOrder, message: 'ক্রয় অর্ডার তৈরি হয়েছে' },
+      { success: true, data: mappedOrder, message: isPaid ? 'ক্রয় সফল হয়েছে এবং স্টক আপডেট হয়েছে' : 'ক্রয় অর্ডার তৈরি হয়েছে' },
       { status: 201 }
     );
   } catch (error) {
