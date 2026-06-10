@@ -25,6 +25,8 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
+    // Clear any cached session when on the login page
+    localStorage.removeItem("pos-app-session-user");
     if (searchParams.get("passwordChanged") === "1") {
       toast({ title: "✅ পাসওয়ার্ড পরিবর্তন সফল হয়েছে!", description: "নতুন পাসওয়ার্ড দিয়ে লগইন করুন।" });
     }

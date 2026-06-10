@@ -2,6 +2,7 @@
 
 import dynamic from 'next/dynamic';
 import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState, useMemo, useRef } from 'react';
 import { useBarcodeScanner } from '@/hooks/useBarcodeScanner';
 import { useProductCRUD } from '@/hooks/useProductCRUD';
@@ -122,6 +123,7 @@ const mobileBottomNavItems: { id: PageType | 'more'; label: string; icon: React.
 
 function POSDashboard() {
   const t = useTranslations('Navigation');
+  const router = useRouter();
   const locale = useLocale();
   const [currentPage, setCurrentPage] = useState<PageType>('billing');
   const [isTransactionsPageMounted, setIsTransactionsPageMounted] = useState(false);
@@ -178,6 +180,21 @@ function POSDashboard() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [completedCheckoutSale, setCompletedCheckoutSale] = useState<Sale | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
+
+  const activeUser = useMemo(() => {
+    return session?.user || readStoredSessionUser();
+  }, [session]);
+
+  // Redirect to login if unauthenticated and online, or offline with no cached session
+  useEffect(() => {
+    if (isHydrated && authStatus === 'unauthenticated') {
+      const storedUser = readStoredSessionUser();
+      const isActuallyOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+      if (!isActuallyOffline || !storedUser) {
+        router.push('/login');
+      }
+    }
+  }, [authStatus, isHydrated, router]);
   const [isMobileScannerOpen, setIsMobileScannerOpen] = useState(false);
   const [scannedItems, setScannedItems] = useState<{ name: string; qty: number }[]>([]);
   const [liveScanError, setLiveScanError] = useState<string | null>(null);
@@ -326,7 +343,7 @@ function POSDashboard() {
 
   // Load customers on mount
   useEffect(() => {
-    if (session?.user?.requiresPasswordChange) return;
+    if (activeUser?.requiresPasswordChange) return;
     const loadCustomers = async () => {
       const { setCustomers, setLoading: setCustomersLoading } = useCustomersStore.getState();
       setCustomersLoading(true);
@@ -357,11 +374,11 @@ function POSDashboard() {
       }
     };
     loadCustomers();
-  }, [customers.length, session?.user?.requiresPasswordChange]);
+  }, [customers.length, activeUser?.requiresPasswordChange]);
 
   // Load products on mount
   useEffect(() => {
-    if (session?.user?.requiresPasswordChange) return;
+    if (activeUser?.requiresPasswordChange) return;
     const loadProducts = async () => {
       const { setProducts, setLoading } = useProductsStore.getState();
       const setOnline = useSyncStore.getState().setOnline;
@@ -414,11 +431,11 @@ function POSDashboard() {
     };
 
     loadProducts();
-  }, [session?.user?.requiresPasswordChange]);
+  }, [activeUser?.requiresPasswordChange]);
 
   // Refresh products when tab becomes visible or after offline sync completes
   useEffect(() => {
-    if (session?.user?.requiresPasswordChange) return;
+    if (activeUser?.requiresPasswordChange) return;
 
     const handleVisibility = () => {
       if (document.visibilityState === 'visible' && navigator.onLine) {
@@ -446,7 +463,7 @@ function POSDashboard() {
       window.removeEventListener('offlineSyncComplete', handleSyncComplete);
       window.clearInterval(intervalId);
     };
-  }, [session?.user?.requiresPasswordChange]);
+  }, [activeUser?.requiresPasswordChange]);
 
   // Monitor online status - check both navigator.onLine AND actual API connectivity
   useEffect(() => {
@@ -604,8 +621,6 @@ function POSDashboard() {
     if (toMoneyNumber(paymentData.amountPaid) === 0) paymentStatus = 'Due';
     else if (toMoneyNumber(paymentData.amountPaid) > 0 && toMoneyNumber(paymentData.amountPaid) < toMoneyNumber(paymentData.total)) paymentStatus = 'Partial';
 
-    const storedUser = readStoredSessionUser();
-    const activeUser = session?.user || storedUser;
     const sale: Sale = {
       id: uuidv4(),
       invoiceNumber: generateInvoiceNumber(),
@@ -736,7 +751,7 @@ function POSDashboard() {
     useSalesStore.setState({ sales: [sale, ...useSalesStore.getState().sales] });
     
     return sale; // Return sale so handleCheckoutComplete can use it
-  }, [cartItems, session, updateProductStock, updateCustomerDue, setCurrentSale, setCompletedCheckoutSale, clearCart]);
+  }, [cartItems, activeUser, updateProductStock, updateCustomerDue, setCurrentSale, setCompletedCheckoutSale, clearCart]);
 
   const handleCheckoutComplete = useCallback(async (paymentData: PaymentData) => {
     const tabId = activeTabId;
@@ -1072,13 +1087,13 @@ function POSDashboard() {
 
       {/* Desktop Toggles and Logout */}
       <div className="p-3 border-t bg-slate-100/50 dark:bg-slate-900/30 space-y-3">
-        {session?.user && (
+        {activeUser && (
           <div className="flex items-center gap-3 px-2">
             <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center text-blue-700 dark:text-blue-300 font-bold shrink-0 text-sm">
-              {(session.user.name || session.user.email || 'U')[0].toUpperCase()}
+              {(activeUser.name || activeUser.email || 'U')[0].toUpperCase()}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-semibold truncate leading-none mb-1">{session.user.name || session.user.email}</p>
+              <p className="text-xs font-semibold truncate leading-none mb-1">{activeUser.name || activeUser.email}</p>
               <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 uppercase font-bold tracking-wider text-muted-foreground">
                 {userRole}
               </Badge>
@@ -1521,13 +1536,13 @@ function POSDashboard() {
             <Separator />
             
             <div className="flex flex-col gap-3 pt-1 pb-4">
-              {session?.user && (
+              {activeUser && (
                 <div className="flex items-center gap-3 px-2 mb-1">
                   <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center text-blue-700 dark:text-blue-300 font-bold shrink-0">
-                    {(session.user.name || session.user.email || 'U')[0].toUpperCase()}
+                    {(activeUser.name || activeUser.email || 'U')[0].toUpperCase()}
                   </div>
                   <div>
-                    <p className="font-semibold text-sm leading-none mb-1">{session.user.name || session.user.email}</p>
+                    <p className="font-semibold text-sm leading-none mb-1">{activeUser.name || activeUser.email}</p>
                     <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 uppercase font-bold tracking-wider text-muted-foreground">
                       {userRole}
                     </Badge>

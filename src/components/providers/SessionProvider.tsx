@@ -5,11 +5,15 @@ import { SessionProvider as NextAuthSessionProvider, useSession } from "next-aut
 import { writeStoredSessionUser } from "@/lib/session-utils";
 
 function SessionStateSync() {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
 
   useEffect(() => {
+    if (status === "loading") return;
+
     if (!session?.user) {
-      writeStoredSessionUser(null);
+      if (typeof navigator !== 'undefined' && navigator.onLine) {
+        writeStoredSessionUser(null);
+      }
       return;
     }
 
@@ -21,7 +25,7 @@ function SessionStateSync() {
       role: (session.user as any).role,
       requiresPasswordChange: session.user.requiresPasswordChange as boolean | undefined,
     });
-  }, [session]);
+  }, [session, status]);
 
   return null;
 }
