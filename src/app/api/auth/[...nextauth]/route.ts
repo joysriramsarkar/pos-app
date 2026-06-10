@@ -112,7 +112,7 @@ export const authOptions: NextAuthOptions = {
   debug: process.env.NODE_ENV === 'development',
 };
 
-if (!authOptions.secret && process.env.NEXT_PHASE !== 'phase-production-build') {
+if (!authOptions.secret && process.env.NEXT_PHASE !== 'phase-production-build' && process.env.NODE_ENV !== 'test') {
   throw new Error("NEXTAUTH_SECRET is not defined. Please set it in your environment variables.");
 }
 
