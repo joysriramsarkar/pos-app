@@ -9,14 +9,13 @@ export function isBengali(): boolean {
 }
 
 export function formatPriceGlobal(price: number | null | undefined): string {
-  if (price === null || price === undefined || isNaN(Number(price))) return '';
+  const finalPrice = price === null || price === undefined || isNaN(Number(price)) ? 0 : Number(price);
   const isBn = isBengali();
   
   // Get active currency symbol from settings store
   const currencySymbol = useSettingsStore.getState().settings.currency_symbol || '₹';
   const intlLocale = isBn ? 'bn-BD' : 'en-IN';
 
-  const finalPrice = Number(price);
   const isNegative = finalPrice < 0;
   const absPrice = Math.abs(finalPrice);
 

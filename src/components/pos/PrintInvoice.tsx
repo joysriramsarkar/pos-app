@@ -98,7 +98,7 @@ function ThermalInvoice({
 
   return (
     <div
-      className={`thermal-invoice thermal-${width} ${therminalWidth} p-0 bg-white text-black font-mono overflow-hidden wrap-break-word`}
+      className={`thermal-invoice thermal-${width} ${therminalWidth} p-0 bg-white text-black font-mono overflow-hidden break-words`}
       style={containerStyle}
     >
       {/* Header */}
@@ -362,10 +362,10 @@ function StandardInvoice({
             <span>Grand Total</span>
             <span>{formatCurrency(sale.totalAmount)}</span>
           </div>
-          {(sale.amountPaid ?? 0) < (sale.totalAmount ?? 0) && (
+          {toMoneyNumber(sale.amountPaid ?? 0) < toMoneyNumber(sale.totalAmount ?? 0) && (
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 10px', background: '#fee2e2', color: '#b91c1c', fontWeight: 700, fontSize: 12, marginTop: 2, borderRadius: 2 }}>
               <span>Due</span>
-              <span>{formatCurrency((sale.totalAmount ?? 0) - (sale.amountPaid ?? 0))}</span>
+              <span>{formatCurrency(toMoneyNumber(new Decimal(sale.totalAmount ?? 0).minus(sale.amountPaid ?? 0)))}</span>
             </div>
           )}
         </div>

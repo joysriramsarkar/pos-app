@@ -177,31 +177,31 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
         const res = await fetch('/api/reports/stock');
         if (!res.ok) throw new Error('Failed to load Stock data');
         const j = await res.json();
-        setStockData(j.lowStockItems);
+        setStockData(j.lowStockItems || []);
         setReportCache(buildReportCacheKey(tab, params), j);
       } else if (tab === 'dues') {
         const res = await fetch('/api/reports/dues');
         if (!res.ok) throw new Error('Failed to load Dues data');
         const j = await res.json();
-        setDueData(j.customersWithDues);
+        setDueData(j.customersWithDues || []);
         setReportCache(buildReportCacheKey(tab, params), j);
       } else if (tab === 'products') {
         const res = await fetch(`/api/reports/products?${params}`);
         if (!res.ok) throw new Error('Failed to load Products data');
         const j = await res.json();
-        setTopProducts(j.topProducts);
+        setTopProducts(j.topProducts || []);
         setReportCache(buildReportCacheKey(tab, params), j);
       } else if (tab === 'categories') {
         const res = await fetch(`/api/reports/categories?${params}`);
         if (!res.ok) throw new Error('Failed to load Categories data');
         const j = await res.json();
-        setCategoryData(j.categories);
+        setCategoryData(j.categories || []);
         setReportCache(buildReportCacheKey(tab, params), j);
       } else if (tab === 'customers') {
         const res = await fetch(`/api/reports/customers?${params}`);
         if (!res.ok) throw new Error('Failed to load Customers data');
         const j = await res.json();
-        setTopCustomers(j.topCustomers);
+        setTopCustomers(j.topCustomers || []);
         setReportCache(buildReportCacheKey(tab, params), j);
       }
     } catch (err) {
