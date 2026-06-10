@@ -25,7 +25,7 @@ function createPrismaClient(): PrismaClient {
   // Use dummy connection string if building to prevent throw
   const pool = new Pool({
     connectionString: connectionString || "postgresql://dummy:dummy@localhost:5432/dummy",
-    max: 5,
+    max: process.env.DATABASE_POOL_SIZE ? parseInt(process.env.DATABASE_POOL_SIZE, 10) : 20,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 10000,
     allowExitOnIdle: true,

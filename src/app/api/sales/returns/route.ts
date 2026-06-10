@@ -7,6 +7,7 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { requirePermission, getAuthenticatedUser } from "@/lib/api-middleware";
 import { logAudit } from "@/lib/audit";
 import { addMoney, subtractMoney } from "@/lib/money";
+import Decimal from "decimal.js";
 
 const getIp = (req: NextRequest) =>
   req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || undefined;
@@ -73,7 +74,7 @@ export async function POST(request: NextRequest) {
       }, {});
 
       const saleItemMap = new Map(sale.items.map((i) => [i.id, i]));
-      let refundAmount = 0;
+      let refundAmount = new Decimal(0);
       const returnItemsData: {
         saleItemId: string;
         productId: string;
@@ -92,7 +93,7 @@ export async function POST(request: NextRequest) {
         const alreadyReturned = alreadyReturnedMap[saleItemId] || 0;
         const maxReturnable = subtractMoney(saleItem.quantity, alreadyReturned);
 
-        if (quantity > maxReturnable) {
+        if (new Decimal(quantity).gt(maxReturnable)) {
           throw new Error(
             `Cannot return ${quantity} of "${saleItem.productName}". Max returnable: ${maxReturnable}`,
           );
@@ -149,6 +150,7 @@ export async function POST(request: NextRequest) {
           quantity: quantities[i],
           reason: `Partial return: ${sale.invoiceNumber}`,
           referenceId: newReturn.id,
+          saleReturnId: newReturn.id,
         })),
       });
 
@@ -174,10 +176,16 @@ export async function POST(request: NextRequest) {
 
       // Handle customer ledger if refund goes to prepaid balance
       if (sale.customerId && refundMethod === "Prepaid") {
-        const customer = await tx.customer.findUnique({ where: { id: sale.customerId } });
+        const customerRaw = await tx.$queryRaw<any[]>`
+          SELECT id, "total_due" as "totalDue", "prepaid_balance" as "prepaidBalance"
+          FROM customers
+          WHERE id = ${sale.customerId}
+          FOR UPDATE
+        `;
+        const customer = customerRaw[0];
         if (!customer) throw new Error("Customer not found");
 
-        const newPrepaid = addMoney(Number(customer.prepaidBalance), refundAmount);
+        const newPrepaid = addMoney(customer.prepaidBalance, refundAmount);
         await tx.customer.update({
           where: { id: sale.customerId },
           data: { prepaidBalance: newPrepaid },
@@ -188,7 +196,7 @@ export async function POST(request: NextRequest) {
             customerId: sale.customerId,
             entryType: "debit",
             amount: refundAmount,
-            balanceAfter: Number(customer.totalDue),
+            balanceAfter: customer.totalDue,
             description: `Partial return refund (prepaid): ${sale.invoiceNumber}`,
             referenceId: newReturn.id,
           },

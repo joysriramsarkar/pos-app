@@ -31,7 +31,7 @@ export function findSaleItemTotalMismatch(
   >[],
 ): string | null {
   for (const item of items) {
-    const expectedTotal = multiplyMoney(item.quantity, item.unitPrice);
+    const expectedTotal = multiplyMoney(item.quantity, item.unitPrice).toNumber();
     const submittedTotal = toMoneyNumber(item.totalPrice);
 
     if (submittedTotal !== expectedTotal) {

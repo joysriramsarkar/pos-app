@@ -35,6 +35,31 @@ const prepaymentSchema = z.object({
  *         description: Successfully added prepayment. Returns the updated customer object.
  *         content:
  *           application/json:
+
+/**
+ * @swagger
+ * /api/prepayment:
+ *   post:
+ *     summary: Add a prepaid balance to a customer's account
+ *     description: Adds a specified amount to a customer's prepaid balance and creates a corresponding ledger entry.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               customerId:
+ *                 type: string
+ *                 description: The unique identifier for the customer.
+ *               amount:
+ *                 type: number
+ *                 description: The positive amount to add to the prepaid balance.
+ *     responses:
+ *       200:
+ *         description: Successfully added prepayment. Returns the updated customer object.
+ *         content:
+ *           application/json:
  *             schema:
  *               type: object
  *               properties:
@@ -64,9 +89,13 @@ export async function POST(req: NextRequest) {
         const { customerId, amount } = validation.data;
 
         const updatedCustomer = await db.$transaction(async (tx) => {
-            const customer = await tx.customer.findUnique({
-                where: { id: customerId },
-            });
+            const customerRaw = await tx.$queryRaw<any[]>`
+              SELECT id, "total_due" as "totalDue", "prepaid_balance" as "prepaidBalance"
+              FROM customers
+              WHERE id = ${customerId}
+              FOR UPDATE
+            `;
+            const customer = customerRaw[0];
 
             if (!customer) {
                 throw new Error('Customer not found');

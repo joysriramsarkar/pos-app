@@ -2,6 +2,8 @@ import NextAuth, { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
+import { headers } from "next/headers";
+import { ipLoginLimiter, usernameLoginLimiter, checkLocalRateLimit } from "@/lib/rate-limit";
 
 
 export const authOptions: NextAuthOptions = {
@@ -17,6 +19,39 @@ export const authOptions: NextAuthOptions = {
         if (!credentials?.username || !credentials?.password) {
           console.log("[NextAuth] missing credentials");
           return null;
+        }
+
+        const reqHeaders = await headers();
+        const ip = reqHeaders.get("x-real-ip")?.trim() || reqHeaders.get("x-forwarded-for")?.split(",")[0].trim() || "127.0.0.1";
+
+        // Rate limit by IP
+        if (ipLoginLimiter) {
+          const { success } = await ipLoginLimiter.limit(ip);
+          if (!success) {
+            console.log("[NextAuth] rate limit exceeded for IP:", ip);
+            throw new Error("Too many login attempts from this IP. Please try again in a minute.");
+          }
+        } else {
+          const { success } = await checkLocalRateLimit(`login:ip:${ip}`, 10, 60000);
+          if (!success) {
+            console.log("[NextAuth] rate limit exceeded (local) for IP:", ip);
+            throw new Error("Too many login attempts. Please try again in a minute.");
+          }
+        }
+
+        // Rate limit by username
+        if (usernameLoginLimiter) {
+          const { success } = await usernameLoginLimiter.limit(credentials.username);
+          if (!success) {
+            console.log("[NextAuth] rate limit exceeded for username:", credentials.username);
+            throw new Error("Too many login attempts for this account. Please try again in a minute.");
+          }
+        } else {
+          const { success } = await checkLocalRateLimit(`login:username:${credentials.username}`, 5, 60000);
+          if (!success) {
+            console.log("[NextAuth] rate limit exceeded (local) for username:", credentials.username);
+            throw new Error("Too many login attempts for this account. Please try again in a minute.");
+          }
         }
 
         const user = await db.user.findUnique({
