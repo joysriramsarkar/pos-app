@@ -518,14 +518,60 @@ export default function DueCollection() {
         </div>
       ) : (
         <ScrollArea className="max-h-[calc(100vh-360px)]">
-          <div className="space-y-2">
+          <div className="grid grid-cols-1 md:flex md:flex-col gap-3 md:gap-2">
+            {/* Mobile Card Layout */}
+            {filteredCustomers.map((customer) => (
+              <div
+                key={customer.id}
+                className="block md:hidden p-3 rounded-xl border border-border/60 bg-card hover:shadow-md transition-all duration-200"
+              >
+                <div className="flex items-start gap-2.5">
+                  <div className="h-9 w-9 rounded-lg bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center shrink-0">
+                    <User className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold text-sm truncate">{customer.name}</h3>
+                    {customer.phone ? (
+                      <p className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5">
+                        <Phone className="h-3 w-3 shrink-0" />
+                        <span>{customer.phone}</span>
+                      </p>
+                    ) : (
+                      <p className="text-[10px] text-slate-400 dark:text-slate-500 italic mt-0.5">কোনো ফোন নেই</p>
+                    )}
+                    {customer.lastPaymentDate && (
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        সর্বশেষ পেমেন্ট: {formatDate(new Date(customer.lastPaymentDate))}
+                      </p>
+                    )}
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-bold mb-0.5">বকেয়া</p>
+                    <Badge variant="destructive" className="text-xs font-bold px-2 py-0.5 h-6">
+                      {formatTaka(customer.dueAmount)}
+                    </Badge>
+                  </div>
+                </div>
+                <div className="mt-3 pt-2.5 border-t border-border/40">
+                  <Button
+                    size="sm"
+                    className="w-full h-8 text-xs font-medium bg-orange-600 hover:bg-orange-700 text-white dark:bg-orange-500 dark:hover:bg-orange-600"
+                    onClick={() => handleSelectCustomer(customer)}
+                  >
+                    বকেয়া আদায়
+                  </Button>
+                </div>
+              </div>
+            ))}
+
+            {/* Desktop Row Layout */}
             {filteredCustomers.map((customer) => (
               <button
                 key={customer.id}
-                className="w-full text-left p-4 rounded-xl border bg-card hover:bg-muted/50 hover:shadow-md transition-all duration-200 touch-feedback group"
+                className="hidden md:flex w-full text-left p-4 rounded-xl border bg-card hover:bg-muted/50 hover:shadow-md transition-all duration-200 touch-feedback group"
                 onClick={() => handleSelectCustomer(customer)}
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 w-full">
                   <div className="h-11 w-11 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center shrink-0 group-hover:bg-orange-200 dark:group-hover:bg-orange-900/50 transition-colors">
                     <User className="h-5 w-5 text-orange-600 dark:text-orange-400" />
                   </div>

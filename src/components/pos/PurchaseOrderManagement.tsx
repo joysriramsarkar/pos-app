@@ -647,9 +647,8 @@ export default function PurchaseOrderManagement() {
         </div>
       )}
 
-      {/* Create Order Dialog */}
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{t('new_order')}</DialogTitle>
             <DialogDescription>{t('subtitle')}</DialogDescription>
@@ -908,9 +907,8 @@ export default function PurchaseOrderManagement() {
         </DialogContent>
       </Dialog>
 
-      {/* Order Detail Dialog */}
       <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{t('order_details')}</DialogTitle>
             <DialogDescription>{selectedOrder?.orderNumber}</DialogDescription>
@@ -1022,9 +1020,8 @@ export default function PurchaseOrderManagement() {
         </DialogContent>
       </Dialog>
 
-      {/* Receive Order Dialog */}
       <Dialog open={showReceiveDialog} onOpenChange={setShowReceiveDialog}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{t('receive_order')}</DialogTitle>
             <DialogDescription>{selectedOrder?.orderNumber}</DialogDescription>

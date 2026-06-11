@@ -16,7 +16,7 @@ import { useTranslations } from 'next-intl';
 import { useNumberFormat } from '@/hooks/use-number-format';
 import { useSettingsStore } from '@/stores/settings-store';
 
-const CATEGORIES = ['Rent', 'Utilities', 'Salaries', 'Supplies', 'Maintenance', 'Other'] as const;
+const CATEGORIES = ['Rent', 'Utilities', 'Salaries', 'Supplies', 'Maintenance', 'Supplier Payment', 'Other'] as const;
 
 const CATEGORY_COLORS: Record<string, string> = {
   Rent: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
@@ -167,7 +167,7 @@ export function ExpensesReport({ onBack }: ExpensesReportProps) {
   const chartColor = viewMode === 'daily' ? '#ef4444' : viewMode === 'weekly' ? '#f59e0b' : '#8b5cf6';
   const tableColor = viewMode === 'daily' ? 'text-red-600' : viewMode === 'weekly' ? 'text-amber-600' : 'text-purple-600';
   return (
-    <div className="flex flex-col gap-4 p-4 md:p-6 bg-slate-50/50 min-h-screen">
+    <div className="flex-1 flex flex-col gap-4 p-4 md:p-6 bg-slate-50/50 overflow-y-auto min-h-0 pb-24 animate-page-enter">
       {/* Header */}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={onBack} className="h-9 w-9 shrink-0">

@@ -56,6 +56,21 @@ import { useNumberFormat } from '@/hooks/use-number-format';
 
 type PartyType = 'customer' | 'supplier';
 
+const getInitialsBg = (name: string) => {
+  const colors = [
+    'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+    'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400',
+    'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
+    'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400',
+    'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400',
+  ];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return colors[Math.abs(hash) % colors.length];
+};
+
 export function PartiesManagement() {
   const t = useTranslations('Parties');
   const [activeTab, setActiveTab] = useState<PartyType>('customer');
@@ -668,211 +683,228 @@ export function PartiesManagement() {
       {/* Content */}
       <div className="flex-1 min-h-0 overflow-y-auto">
         {activeTab === 'customer' ? (
-          <Table>
-            <TableHeader className="sticky top-0 bg-background z-10">
-              <TableRow>
-                <TableHead>{t('name_col')}</TableHead>
-                <TableHead>{t('contact_col')}</TableHead>
-                <TableHead className="text-right">{t('balance_col')}</TableHead>
-                <TableHead className="text-right">{t('due_col')}</TableHead>
-                <TableHead className="text-right">{t('actions_col')}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredCustomers.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center py-12">
-                    <Users className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                    <p className="text-muted-foreground">{t('no_customers')}</p>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredCustomers.map((customer) => (
-                  <TableRow key={customer.id} className="group">
-                    <TableCell>
-                      <div>
-                        <p className="font-medium">{customer.name}</p>
-                        {customer.address && (
-                          <p className="text-xs text-muted-foreground flex items-center gap-1">
-                            <MapPin className="w-3 h-3" />
-                            {customer.address}
-                          </p>
-                        )}
+          filteredCustomers.length === 0 ? (
+            <div className="text-center py-12">
+              <Users className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+              <p className="text-muted-foreground">{t('no_customers')}</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 p-4">
+              {filteredCustomers.map((customer) => {
+                const initials = customer.name.charAt(0).toUpperCase();
+                const avatarColor = getInitialsBg(customer.name);
+                const isDue = toMoneyNumber(customer.totalDue) > 0;
+                const isPrepaid = toMoneyNumber(customer.prepaidBalance) > 0;
+
+                return (
+                  <Card key={customer.id} className="overflow-hidden border border-border/60 hover:shadow-sm transition-all duration-300">
+                    <CardContent className="p-3 md:p-4 space-y-3 md:space-y-4">
+                      {/* Top row: Avatar & details */}
+                      <div className="flex items-start gap-2.5 md:gap-3">
+                        <div className={cn("w-8 h-8 md:w-10 md:h-10 rounded-lg md:rounded-xl flex items-center justify-center font-bold text-sm md:text-base shrink-0 shadow-sm", avatarColor)}>
+                          {initials}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <h3 className="font-bold text-sm md:text-base text-slate-800 dark:text-slate-200 truncate" title={customer.name}>{customer.name}</h3>
+                          {customer.phone ? (
+                            <p className="text-[11px] md:text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                              <Phone className="w-3 h-3 shrink-0" />
+                              <span>{customer.phone}</span>
+                            </p>
+                          ) : (
+                            <p className="text-[10px] md:text-[11px] text-slate-400 dark:text-slate-500 italic mt-0.5">{t('no_phone')}</p>
+                          )}
+                          {customer.address && (
+                            <p className="text-[11px] md:text-xs text-muted-foreground flex items-center gap-1 mt-0.5 truncate" title={customer.address}>
+                              <MapPin className="w-3 h-3 shrink-0" />
+                              <span className="truncate">{customer.address}</span>
+                            </p>
+                          )}
+                        </div>
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      {customer.phone && (
-                        <p className="text-sm flex items-center gap-1">
-                          <Phone className="w-3 h-3" />
-                          {customer.phone}
-                        </p>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {toMoneyNumber(customer.prepaidBalance) > 0 ? (
-                        <Badge variant="secondary" className="text-green-600">{formatPrice(customer.prepaidBalance)}</Badge>
-                      ) : (
-                        <span className="text-muted-foreground">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {toMoneyNumber(customer.totalDue) > 0 ? (
-                        <Badge variant="destructive">{formatPrice(customer.totalDue)}</Badge>
-                      ) : (
-                        <span className="text-muted-foreground">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
+
+                      {/* Middle row: Financial status */}
+                      <div className="grid grid-cols-2 gap-1.5 md:gap-2 bg-slate-50 dark:bg-slate-900/40 p-2 md:p-2.5 rounded-lg md:rounded-xl border border-slate-100 dark:border-slate-800/60 text-center">
+                        <div>
+                          <p className="text-[9px] md:text-[10px] text-muted-foreground uppercase tracking-wider font-bold mb-0.5">{t('balance_col')}</p>
+                          {isPrepaid ? (
+                            <Badge variant="outline" className="bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900/40 font-bold text-[10px] md:text-xs px-1 md:px-1.5 py-0 h-5 md:h-6">
+                              {formatPrice(customer.prepaidBalance)}
+                            </Badge>
+                          ) : (
+                            <span className="text-[11px] md:text-xs text-muted-foreground font-medium">-</span>
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-[9px] md:text-[10px] text-muted-foreground uppercase tracking-wider font-bold mb-0.5">{t('due_col')}</p>
+                          {isDue ? (
+                            <Badge variant="destructive" className="font-bold text-[10px] md:text-xs px-1 md:px-1.5 py-0 h-5 md:h-6">
+                              {formatPrice(customer.totalDue)}
+                            </Badge>
+                          ) : (
+                            <span className="text-[11px] md:text-xs text-muted-foreground font-medium">-</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Bottom row: Action buttons */}
+                      <div className="flex flex-wrap items-center justify-end gap-1 md:gap-1.5 pt-2 border-t border-border/40">
                         <Button
-                          variant="ghost"
+                          variant="outline"
                           size="sm"
-                          className="h-8"
+                          className="h-7 md:h-8 text-[11px] md:text-xs gap-1 px-2 md:px-3 hover:bg-slate-100 dark:hover:bg-slate-850"
                           onClick={() => handleEditParty(customer)}
                         >
-                          <Edit className="w-4 h-4 md:mr-1" />
-                          <span className="hidden md:inline">{t('edit')}</span>
+                          <Edit className="w-3 h-3 md:w-3.5 md:h-3.5" />
+                          <span>{t('edit')}</span>
                         </Button>
                         <Button
-                          variant="ghost"
+                          variant="outline"
                           size="sm"
-                          className="h-8"
+                          className="h-7 md:h-8 text-[11px] md:text-xs gap-1 px-2 md:px-3 hover:bg-slate-100 dark:hover:bg-slate-850"
                           onClick={() => handleViewLedger(customer)}
                         >
-                          <FileText className="w-4 h-4 md:mr-1" />
-                          <span className="hidden md:inline">{t('ledger')}</span>
+                          <FileText className="w-3 h-3 md:w-3.5 md:h-3.5" />
+                          <span>{t('ledger')}</span>
                         </Button>
                         <Button
-                          variant="ghost"
+                          variant="outline"
                           size="sm"
-                          className="h-8 text-blue-600 hover:bg-blue-100 hover:text-blue-700"
+                          className="h-7 md:h-8 text-[11px] md:text-xs gap-1 px-2 md:px-3 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/20 dark:text-blue-400 border-blue-100 dark:border-blue-900/30"
                           onClick={() => handleRecordPrepayment(customer)}
                         >
-                          <PlusCircle className="w-4 h-4 md:mr-1" />
-                          <span className="hidden md:inline">{t('prepayment')}</span>
+                          <PlusCircle className="w-3 h-3 md:w-3.5 md:h-3.5" />
+                          <span>{t('prepayment')}</span>
                         </Button>
-                        {toMoneyNumber(customer.prepaidBalance) > 0 && (
+                        {isPrepaid && (
                           <Button
-                            variant="ghost"
+                            variant="outline"
                             size="sm"
-                            className="h-8 text-orange-600 hover:bg-orange-100 hover:text-orange-700"
+                            className="h-7 md:h-8 text-[11px] md:text-xs gap-1 px-2 md:px-3 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950/20 dark:text-orange-400 border-orange-100 dark:border-orange-900/30"
                             onClick={() => handleWithdraw(customer)}
                           >
-                            <ArrowUpFromLine className="w-4 h-4 md:mr-1" />
-                            <span className="hidden md:inline">{t('withdraw')}</span>
+                            <ArrowUpFromLine className="w-3 h-3 md:w-3.5 md:h-3.5" />
+                            <span>{t('withdraw')}</span>
                           </Button>
                         )}
-                        {toMoneyNumber(customer.totalDue) > 0 && (
+                        {isDue && (
                           <Button
-                            variant="ghost"
+                            variant="outline"
                             size="sm"
-                          className="h-8 text-green-600 hover:bg-green-100 hover:text-green-700"
+                            className="h-7 md:h-8 text-[11px] md:text-xs gap-1 px-2 md:px-3 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 dark:text-emerald-400 border-emerald-100 dark:border-emerald-900/30"
                             onClick={() => handleRecordPayment(customer)}
                           >
-                            <IndianRupee className="w-4 h-4 md:mr-1" />
-                            <span className="hidden md:inline">{t('payment')}</span>
+                            <IndianRupee className="w-3 h-3 md:w-3.5 md:h-3.5" />
+                            <span>{t('payment')}</span>
                           </Button>
                         )}
                       </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )
         ) : (
-          <Table>
-            <TableHeader className="sticky top-0 bg-background z-10">
-              <TableRow>
-                <TableHead>{t('name_col')}</TableHead>
-                <TableHead>{t('contact_col')}</TableHead>
-                <TableHead className="text-right">মোট ক্রয়</TableHead>
-                <TableHead className="text-right">মোট পরিশোধ</TableHead>
-                <TableHead className="text-right">বকেয়া</TableHead>
-                <TableHead className="text-right">{t('actions_col')}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredSuppliers.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-12">
-                    <Users className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                    <p className="text-muted-foreground">{t('no_suppliers')}</p>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredSuppliers.map((supplier) => (
-                  <TableRow key={supplier.id} className="group">
-                    <TableCell>
-                      <div>
-                        <p className="font-medium">{supplier.name}</p>
-                        {supplier.address && (
-                          <p className="text-xs text-muted-foreground flex items-center gap-1">
-                            <MapPin className="w-3 h-3" />
-                            {supplier.address}
-                          </p>
-                        )}
+          filteredSuppliers.length === 0 ? (
+            <div className="text-center py-12">
+              <Users className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+              <p className="text-muted-foreground">{t('no_suppliers')}</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 p-4">
+              {filteredSuppliers.map((supplier) => {
+                const initials = supplier.name.charAt(0).toUpperCase();
+                const avatarColor = getInitialsBg(supplier.name);
+                const isDue = toMoneyNumber((supplier as any).totalDue || 0) > 0;
+
+                return (
+                  <Card key={supplier.id} className="overflow-hidden border border-border/60 hover:shadow-md transition-all duration-300">
+                    <CardContent className="p-3 md:p-4 space-y-3 md:space-y-4">
+                      {/* Top row: Avatar & details */}
+                      <div className="flex items-start gap-2.5 md:gap-3">
+                        <div className={cn("w-8 h-8 md:w-10 md:h-10 rounded-lg md:rounded-xl flex items-center justify-center font-bold text-sm md:text-base shrink-0 shadow-sm", avatarColor)}>
+                          {initials}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <h3 className="font-bold text-sm md:text-base text-slate-800 dark:text-slate-200 truncate" title={supplier.name}>{supplier.name}</h3>
+                          {supplier.phone ? (
+                            <p className="text-[11px] md:text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                              <Phone className="w-3 h-3 shrink-0" />
+                              <span>{supplier.phone}</span>
+                            </p>
+                          ) : (
+                            <p className="text-[10px] md:text-[11px] text-slate-400 dark:text-slate-500 italic mt-0.5">{t('no_phone')}</p>
+                          )}
+                          {supplier.address && (
+                            <p className="text-[11px] md:text-xs text-muted-foreground flex items-center gap-1 mt-0.5 truncate" title={supplier.address}>
+                              <MapPin className="w-3 h-3 shrink-0" />
+                              <span className="truncate">{supplier.address}</span>
+                            </p>
+                          )}
+                        </div>
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      {supplier.phone && (
-                        <p className="text-sm flex items-center gap-1">
-                          <Phone className="w-3 h-3" />
-                          {supplier.phone}
-                        </p>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right font-medium">
-                      {formatPrice((supplier as any).totalPurchases || 0)}
-                    </TableCell>
-                    <TableCell className="text-right text-green-600">
-                      {formatPrice((supplier as any).totalPaid || 0)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {toMoneyNumber((supplier as any).totalDue || 0) > 0 ? (
-                        <Badge variant="destructive">{formatPrice((supplier as any).totalDue)}</Badge>
-                      ) : (
-                        <span className="text-muted-foreground">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
+
+                      {/* Middle row: Financial status */}
+                      <div className="grid grid-cols-3 gap-1.5 md:gap-2 bg-slate-50 dark:bg-slate-900/40 p-2 md:p-2.5 rounded-lg md:rounded-xl border border-slate-100 dark:border-slate-800/60 text-center text-xs">
+                        <div>
+                          <p className="text-[9px] md:text-[10px] text-muted-foreground uppercase tracking-wider font-bold mb-0.5">মোট ক্রয়</p>
+                          <span className="font-semibold text-[11px] md:text-xs text-slate-700 dark:text-slate-355">{formatPrice((supplier as any).totalPurchases || 0)}</span>
+                        </div>
+                        <div>
+                          <p className="text-[9px] md:text-[10px] text-muted-foreground uppercase tracking-wider font-bold mb-0.5">পরিশোধ</p>
+                          <span className="font-semibold text-[11px] md:text-xs text-emerald-600 dark:text-emerald-400">{formatPrice((supplier as any).totalPaid || 0)}</span>
+                        </div>
+                        <div>
+                          <p className="text-[9px] md:text-[10px] text-muted-foreground uppercase tracking-wider font-bold mb-0.5">বকেয়া</p>
+                          {isDue ? (
+                            <Badge variant="destructive" className="font-bold text-[10px] md:text-xs px-1 md:px-1.5 py-0 h-5 md:h-6">
+                              {formatPrice((supplier as any).totalDue)}
+                            </Badge>
+                          ) : (
+                            <span className="text-[11px] md:text-xs text-muted-foreground font-medium">-</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Bottom row: Action buttons */}
+                      <div className="flex flex-wrap items-center justify-end gap-1 md:gap-1.5 pt-2 border-t border-border/40">
                         <Button
-                          variant="ghost"
+                          variant="outline"
                           size="sm"
-                          className="h-8"
+                          className="h-7 md:h-8 text-[11px] md:text-xs gap-1 px-2 md:px-3 hover:bg-slate-100 dark:hover:bg-slate-850"
                           onClick={() => handleEditParty(supplier)}
                         >
-                          <Edit className="w-4 h-4 md:mr-1" />
-                          <span className="hidden md:inline">{t('edit')}</span>
+                          <Edit className="w-3 h-3 md:w-3.5 md:h-3.5" />
+                          <span>{t('edit')}</span>
                         </Button>
                         <Button
-                          variant="ghost"
+                          variant="outline"
                           size="sm"
-                          className="h-8"
+                          className="h-7 md:h-8 text-[11px] md:text-xs gap-1 px-2 md:px-3 hover:bg-slate-100 dark:hover:bg-slate-850"
                           onClick={() => handleViewSupplierLedger(supplier)}
                         >
-                          <FileText className="w-4 h-4 md:mr-1" />
-                          <span className="hidden md:inline">লেজার</span>
+                          <FileText className="w-3 h-3 md:w-3.5 md:h-3.5" />
+                          <span>লেজার</span>
                         </Button>
-                        {toMoneyNumber((supplier as any).totalDue || 0) > 0 && (
+                        {isDue && (
                           <Button
-                            variant="ghost"
+                            variant="outline"
                             size="sm"
-                            className="h-8 text-green-600 hover:bg-green-100 hover:text-green-700"
+                            className="h-7 md:h-8 text-[11px] md:text-xs gap-1 px-2 md:px-3 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/20 dark:text-emerald-400 border-emerald-100 dark:border-emerald-900/30"
                             onClick={() => handleRecordSupplierPayment(supplier)}
                           >
-                            <IndianRupee className="w-4 h-4 md:mr-1" />
-                            <span className="hidden md:inline">পরিশোধ</span>
+                            <IndianRupee className="w-3 h-3 md:w-3.5 md:h-3.5" />
+                            <span>পরিশোধ</span>
                           </Button>
                         )}
                       </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )
         )}
       </div>
 

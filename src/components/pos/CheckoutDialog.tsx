@@ -34,7 +34,7 @@ import { useTranslations } from 'next-intl';
 import { cn, convertBengaliToEnglishNumerals } from '@/lib/utils';
 import { toMoneyNumber } from '@/lib/money';
 import { DebtRepaymentDialog } from './DebtRepaymentDialog';
-import ReceiptPrint from './ReceiptPrint';
+import PrintDialog from './PrintDialog';
 import { useNumberFormat } from '@/hooks/use-number-format';
 
 interface CheckoutDialogProps {
@@ -372,6 +372,22 @@ export function CheckoutDialog({
     ? Math.max(0, (Number(lastSale.amountPaid || 0) - Number(lastSale.totalAmount || 0)))
     : change;
 
+  const saleForPrint = lastSale ? {
+    ...lastSale,
+    customer: lastSale.customer || customer ? {
+      id: customerId || lastSale.customerId || '',
+      name: customer?.name || activeTab.customerName || lastSale.customer?.name || '',
+      phone: customer?.phone || lastSale.customer?.phone || '',
+      address: customer?.address || lastSale.customer?.address || '',
+      totalDue: customer?.totalDue || 0,
+      totalPaid: customer?.totalPaid || 0,
+      prepaidBalance: customer?.prepaidBalance || 0,
+      isActive: customer?.isActive ?? true,
+      createdAt: customer?.createdAt || new Date(),
+      updatedAt: customer?.updatedAt || new Date()
+    } : undefined
+  } : null;
+
   return (
     <>
       <Dialog open={isOpen} onOpenChange={isCurrentlyProcessing ? () => {} : handleOpenChange}>
@@ -592,30 +608,11 @@ export function CheckoutDialog({
           </>)}
         </DialogContent>
       </Dialog>
-      {lastSale && (
-        <ReceiptPrint
+      {saleForPrint && (
+        <PrintDialog
           open={showReceiptPrint}
           onOpenChange={setShowReceiptPrint}
-          saleData={{
-            invoiceNumber: lastSale.invoiceNumber,
-            createdAt: lastSale.createdAt instanceof Date ? lastSale.createdAt.toISOString() : String(lastSale.createdAt),
-            customerName: displayedCustomerName || null,
-            cashierName,
-            items: lastSale.items.map(item => ({
-              productName: item.productName,
-              quantity: Number(item.quantity ?? 0),
-              unitPrice: Number(item.unitPrice),
-              totalPrice: Number(item.totalPrice),
-              unit: String((item as any).unit || 'piece'),
-            })),
-            subtotal: Number(lastSale.subtotal),
-            discount: Number(lastSale.discount),
-            tax: Number(lastSale.tax),
-            totalAmount: Number(lastSale.totalAmount),
-            amountPaid: Number(lastSale.amountPaid),
-            paymentMethod: lastSale.paymentMethod,
-            paymentStatus: lastSale.paymentStatus,
-          }}
+          sale={saleForPrint}
         />
       )}
     </>

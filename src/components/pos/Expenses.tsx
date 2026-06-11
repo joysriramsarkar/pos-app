@@ -33,7 +33,7 @@ import { useTranslations } from 'next-intl';
 import { exportToCSV, getExportDate } from '@/lib/export-utils';
 import { useSettingsStore } from '@/stores/settings-store';
 
-const CATEGORIES = ['Rent', 'Utilities', 'Salaries', 'Maintenance', 'Other'] as const;
+const CATEGORIES = ['Rent', 'Utilities', 'Salaries', 'Supplies', 'Maintenance', 'Supplier Payment', 'Other'] as const;
 
 const CATEGORY_CONFIG: Record<string, { icon: typeof Wallet; color: string; bgColor: string; gradient: string }> = {
   Rent: { icon: Building2, color: 'text-purple-600', bgColor: 'bg-purple-100', gradient: 'from-purple-500/10 to-purple-500/5' },
@@ -232,7 +232,7 @@ export function Expenses({ onReport }: ExpensesProps) {
           category,
           notes,
           date: selectedDate,
-          supplierId: category === 'Supplies' && supplierId && supplierId !== 'none' ? supplierId : null,
+          supplierId: (category === 'Supplies' || category === 'Supplier Payment') && supplierId && supplierId !== 'none' ? supplierId : null,
         }),
       });
       if (res.ok) {
@@ -300,7 +300,7 @@ export function Expenses({ onReport }: ExpensesProps) {
           category: editCategory,
           notes: editNotes,
           date: editDate,
-          supplierId: editCategory === 'Supplies' && editSupplierId && editSupplierId !== 'none' ? editSupplierId : null,
+          supplierId: (editCategory === 'Supplies' || editCategory === 'Supplier Payment') && editSupplierId && editSupplierId !== 'none' ? editSupplierId : null,
         }),
       });
       if (res.ok) {
@@ -541,7 +541,7 @@ export function Expenses({ onReport }: ExpensesProps) {
                 </SelectContent>
               </Select>
             </div>
-            {category === 'Supplies' && (
+            {(category === 'Supplies' || category === 'Supplier Payment') && (
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <label className="text-sm font-medium flex items-center gap-1.5">
@@ -629,7 +629,7 @@ export function Expenses({ onReport }: ExpensesProps) {
         </Card>
 
         {/* Expense List */}
-        <Card className="col-span-1 lg:col-span-2 rounded-2xl shadow-sm border border-border/50 flex flex-col min-h-0">
+        <Card className="col-span-1 lg:col-span-2 rounded-2xl shadow-sm border border-border/50 flex flex-col min-h-[350px] lg:min-h-0">
           <CardHeader className="pb-3 pt-4 px-4 shrink-0 border-b">
             <CardTitle className="text-base flex items-center gap-2">
               <Receipt className="w-4 h-4 text-red-500" /> {useCustomDate && customDate ? t('expense_list') : t('today_expense_list')}
@@ -735,7 +735,7 @@ export function Expenses({ onReport }: ExpensesProps) {
                 </SelectContent>
               </Select>
             </div>
-            {editCategory === 'Supplies' && (
+            {(editCategory === 'Supplies' || editCategory === 'Supplier Payment') && (
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <label className="text-sm font-medium flex items-center gap-1.5">

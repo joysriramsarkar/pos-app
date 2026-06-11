@@ -27,3 +27,12 @@ export { PrintInvoice, InvoicePreview } from './PrintInvoice';
 export { PrintDialog } from './PrintDialog';
 
 export { default as Reports } from './Reports';
+export { SalesReport } from './SalesReport';
+export { PaymentReport } from './PaymentReport';
+export { StockReport } from './StockReport';
+export { DuesReport } from './DuesReport';
+export { ProductsReport } from './ProductsReport';
+export { CategoriesReport } from './CategoriesReport';
+export { CustomersReport } from './CustomersReport';
+export { SupplierReport } from './SupplierReport';
+

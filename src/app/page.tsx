@@ -33,6 +33,16 @@ const KeyboardShortcuts = dynamic(() => import('@/components/pos/KeyboardShortcu
 const DueCollection = dynamic(() => import('@/components/pos/DueCollection'), { ssr: false });
 const PurchaseOrderManagement = dynamic(() => import('@/components/pos/PurchaseOrderManagement'), { ssr: false });
 
+const SalesReport = dynamic(() => import('@/components/pos/SalesReport').then(m => ({ default: m.SalesReport })), { ssr: false });
+const PaymentReport = dynamic(() => import('@/components/pos/PaymentReport').then(m => ({ default: m.PaymentReport })), { ssr: false });
+const StockReport = dynamic(() => import('@/components/pos/StockReport').then(m => ({ default: m.StockReport })), { ssr: false });
+const DuesReport = dynamic(() => import('@/components/pos/DuesReport').then(m => ({ default: m.DuesReport })), { ssr: false });
+const ProductsReport = dynamic(() => import('@/components/pos/ProductsReport').then(m => ({ default: m.ProductsReport })), { ssr: false });
+const CategoriesReport = dynamic(() => import('@/components/pos/CategoriesReport').then(m => ({ default: m.CategoriesReport })), { ssr: false });
+const CustomersReport = dynamic(() => import('@/components/pos/CustomersReport').then(m => ({ default: m.CustomersReport })), { ssr: false });
+const SupplierReport = dynamic(() => import('@/components/pos/SupplierReport').then(m => ({ default: m.SupplierReport })), { ssr: false });
+
+
 import { AddStockDialog, type StockEntryData } from '@/components/pos/AddStockDialog';
 import { ProductDialog, type ProductFormData } from '@/components/pos/ProductDialog';
 import { CameraScannerDialog } from '@/components/pos/CameraScannerDialog';
@@ -96,9 +106,9 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning';
 
 
-type PageType = 'dashboard' | 'billing' | 'stock' | 'stock-statistics' | 'parties' | 'reports' | 'transactions' | 'expenses' | 'expenses-report' | 'settings' | 'users' | 'menu' | 'audit' | 'due-collection' | 'purchase-orders';
+type PageType = 'dashboard' | 'billing' | 'stock' | 'stock-statistics' | 'parties' | 'reports' | 'transactions' | 'expenses' | 'expenses-report' | 'settings' | 'users' | 'menu' | 'audit' | 'due-collection' | 'purchase-orders' | 'sales-report' | 'payment-report' | 'stock-report' | 'dues-report' | 'products-report' | 'categories-report' | 'customers-report' | 'supplier-report';
 
-const navItems: { id: Exclude<PageType, 'menu' | 'stock-statistics' | 'expenses-report'>; label: string; icon: React.ReactNode }[] = [
+const navItems: { id: Exclude<PageType, 'menu' | 'stock-statistics' | 'expenses-report' | 'sales-report' | 'payment-report' | 'stock-report' | 'dues-report' | 'products-report' | 'categories-report' | 'customers-report' | 'supplier-report'>; label: string; icon: React.ReactNode }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
   { id: 'billing', label: 'Billing', icon: <ShoppingCart className="w-5 h-5" /> },
   { id: 'stock', label: 'Inventory Management', icon: <Package className="w-5 h-5" /> },
@@ -1129,7 +1139,7 @@ function POSDashboard() {
             onClick={logout}
             className="h-8 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/20 gap-1.5"
           >
-            <span className="text-xs font-semibold">লগআউট</span>
+            <span className="text-xs font-semibold">{t('logout')}</span>
           </Button>
         </div>
       </div>
@@ -1296,6 +1306,23 @@ function POSDashboard() {
         return <PurchaseOrderManagement />;
       case 'reports':
         return <Reports onNavigate={handleNavigate} />;
+      case 'sales-report':
+        return <SalesReport onBack={() => setCurrentPage('reports')} />;
+      case 'payment-report':
+        return <PaymentReport onBack={() => setCurrentPage('reports')} />;
+      case 'stock-report':
+        return <StockReport onBack={() => setCurrentPage('reports')} />;
+      case 'dues-report':
+        return <DuesReport onBack={() => setCurrentPage('reports')} onNavigate={handleNavigate} />;
+      case 'products-report':
+        return <ProductsReport onBack={() => setCurrentPage('reports')} />;
+      case 'categories-report':
+        return <CategoriesReport onBack={() => setCurrentPage('reports')} />;
+      case 'customers-report':
+        return <CustomersReport onBack={() => setCurrentPage('reports')} />;
+      case 'supplier-report':
+        return <SupplierReport onBack={() => setCurrentPage('reports')} />;
+
       case 'transactions':
         return null;
       case 'expenses':
@@ -1557,7 +1584,7 @@ function POSDashboard() {
                   logout();
                 }}
               >
-                Logout (লগআউট)
+                {t('logout')}
               </Button>
             </div>
           </div>

@@ -15,7 +15,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
-import { Share2, X } from "lucide-react";
+import { Share2, X, Printer } from "lucide-react";
 import { getPaymentStatusColor } from "./utils";
 import { Transaction, TransactionItem } from "./types";
 import { useState } from "react";
@@ -25,6 +25,7 @@ import { useIsAdmin } from "@/hooks/use-permissions";
 import { useToast } from '@/hooks/use-toast';
 import { useTranslations } from 'next-intl';
 import { useNumberFormat } from "@/hooks/use-number-format";
+import { PrintDialog } from "../PrintDialog";
 
 interface TransactionDetailsDialogProps {
   transaction: Transaction | null;
@@ -42,6 +43,7 @@ export function TransactionDetailsDialog({
   const [isSharing, setIsSharing] = useState(false);
   const [preparedFile, setPreparedFile] = useState<File | null>(null);
   const [isPreparing, setIsPreparing] = useState(false);
+  const [isPrintOpen, setIsPrintOpen] = useState(false);
   const { toast } = useToast();
   const { settings } = useSettingsStore();
   const isAdmin = useIsAdmin();
@@ -215,196 +217,253 @@ export function TransactionDetailsDialog({
     }
   };
 
+  const saleMapped = transaction ? {
+    id: transaction.id,
+    invoiceNumber: transaction.invoiceNumber,
+    customerId: transaction.customer?.id,
+    userId: transaction.user?.id,
+    subtotal: Number(transaction.totalAmount ?? 0) + Number(transaction.discount ?? 0) - Number(transaction.tax ?? 0),
+    discount: Number(transaction.discount ?? 0),
+    tax: Number(transaction.tax ?? 0),
+    totalAmount: Number(transaction.totalAmount ?? 0),
+    amountPaid: Number(transaction.amountPaid ?? 0),
+    paymentMethod: transaction.paymentMethod as any,
+    paymentStatus: transaction.paymentStatus as any,
+    status: transaction.status as any,
+    offlineSynced: true,
+    createdAt: new Date(transaction.createdAt),
+    updatedAt: new Date(transaction.createdAt),
+    customer: transaction.customer ? {
+      id: transaction.customer.id,
+      name: transaction.customer.name,
+      phone: transaction.customer.phone || "",
+      address: "",
+      totalDue: 0,
+      totalPaid: 0,
+      prepaidBalance: 0,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    } : undefined,
+    user: transaction.user,
+    items: transaction.items.map(item => ({
+      id: item.id,
+      saleId: transaction.id,
+      productId: item.productId,
+      productName: item.productName,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      totalPrice: item.totalPrice,
+      unit: item.unit || "",
+      createdAt: new Date(transaction.createdAt)
+    }))
+  } : null;
+
   return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent showCloseButton={false} className="max-w-2xl w-[95vw] md:w-full p-0 overflow-hidden flex flex-col max-h-[85vh]">
-        {/* Sticky header */}
-        <div className="sticky top-0 z-10 bg-background border-b px-4 py-3 md:px-6 md:py-4 flex items-start justify-between gap-3 shrink-0">
-          <div className="min-w-0">
-            <h2 className="text-lg md:text-xl font-semibold leading-tight">
-              {t('title', { invoice: transaction.invoiceNumber })}
-            </h2>
-            <p className="text-xs md:text-sm text-muted-foreground mt-0.5">
-              {format(transaction.createdAt, "dd MMMM yyyy HH:mm:ss")}
-            </p>
-          </div>
-          <DialogClose className="shrink-0 rounded-sm opacity-70 hover:opacity-100 transition-opacity mt-0.5">
-            <X className="w-5 h-5" />
-            <span className="sr-only">Close</span>
-          </DialogClose>
-        </div>
-
-        {/* Scrollable body */}
-        <div className="overflow-y-auto flex-1 min-h-0 p-4 md:p-6">
-          <div className="space-y-4 md:space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
-            <Card className="bg-muted/30">
-              <CardContent className="p-3 md:pt-4 md:p-6 pb-3 md:pb-4">
-                <div className="text-xs md:text-sm text-muted-foreground">
-                  {t('customer')}
-                </div>
-                <div className="font-semibold text-base md:text-lg mt-1">
-                  {transaction.customer?.name || t('walk_in')}
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="bg-muted/30">
-              <CardContent className="p-3 md:pt-4 md:p-6 pb-3 md:pb-4">
-                <div className="text-xs md:text-sm text-muted-foreground">
-                  {t('created_by')}
-                </div>
-                <div className="font-semibold text-base md:text-lg mt-1">
-                  {transaction.user?.name || transaction.user?.username || t('unknown')}
-                </div>
-              </CardContent>
-            </Card>
+    <>
+      <Dialog open={isOpen} onOpenChange={onOpenChange}>
+        <DialogContent showCloseButton={false} className="max-w-2xl w-[95vw] md:w-full p-0 overflow-hidden flex flex-col max-h-[85vh]">
+          {/* Sticky header */}
+          <div className="sticky top-0 z-10 bg-background border-b px-4 py-3 md:px-6 md:py-4 flex items-start justify-between gap-3 shrink-0">
+            <div className="min-w-0">
+              <h2 className="text-lg md:text-xl font-semibold leading-tight">
+                {t('title', { invoice: transaction.invoiceNumber })}
+              </h2>
+              <p className="text-xs md:text-sm text-muted-foreground mt-0.5">
+                {format(transaction.createdAt, "dd MMMM yyyy HH:mm:ss")}
+              </p>
+            </div>
+            <DialogClose className="shrink-0 rounded-sm opacity-70 hover:opacity-100 transition-opacity mt-0.5">
+              <X className="w-5 h-5" />
+              <span className="sr-only">Close</span>
+            </DialogClose>
           </div>
 
-          <div className="space-y-2">
-            <h3 className="font-semibold">{t('items')}</h3>
-            <Table>
-              <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <TableHead>{t('product')}</TableHead>
-                  <TableHead className="text-right">{t('qty')}</TableHead>
-                  <TableHead className="text-right">{t('unit_price')}</TableHead>
-                  <TableHead className="text-right">{t('total')}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {transaction.items.map((item: TransactionItem, idx: number) => (
-                  <TableRow key={idx}>
-                    <TableCell>{item.productName}</TableCell>
-                    <TableCell className="text-right">
-                      {item.quantity}{(item as any).unit || (item as any).product?.unit ? ` ${(item as any).unit || (item as any).product?.unit}` : ''}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {formatPrice(item.unitPrice)}
-                    </TableCell>
-                    <TableCell className="text-right font-semibold">
-                      {formatPrice(item.totalPrice)}
-                    </TableCell>
+          {/* Scrollable body */}
+          <div className="overflow-y-auto flex-1 min-h-0 p-4 md:p-6">
+            <div className="space-y-4 md:space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
+              <Card className="bg-muted/30">
+                <CardContent className="p-3 md:pt-4 md:p-6 pb-3 md:pb-4">
+                  <div className="text-xs md:text-sm text-muted-foreground">
+                    {t('customer')}
+                  </div>
+                  <div className="font-semibold text-base md:text-lg mt-1">
+                    {transaction.customer?.name || t('walk_in')}
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="bg-muted/30">
+                <CardContent className="p-3 md:pt-4 md:p-6 pb-3 md:pb-4">
+                  <div className="text-xs md:text-sm text-muted-foreground">
+                    {t('created_by')}
+                  </div>
+                  <div className="font-semibold text-base md:text-lg mt-1">
+                    {transaction.user?.name || transaction.user?.username || t('unknown')}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="font-semibold">{t('items')}</h3>
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead>{t('product')}</TableHead>
+                    <TableHead className="text-right">{t('qty')}</TableHead>
+                    <TableHead className="text-right">{t('unit_price')}</TableHead>
+                    <TableHead className="text-right">{t('total')}</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+                </TableHeader>
+                <TableBody>
+                  {transaction.items.map((item: TransactionItem, idx: number) => (
+                    <TableRow key={idx}>
+                      <TableCell>{item.productName}</TableCell>
+                      <TableCell className="text-right">
+                        {item.quantity}{(item as any).unit || (item as any).product?.unit ? ` ${(item as any).unit || (item as any).product?.unit}` : ''}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatPrice(item.unitPrice)}
+                      </TableCell>
+                      <TableCell className="text-right font-semibold">
+                        {formatPrice(item.totalPrice)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
 
-          <div className="space-y-1.5 md:space-y-2 border-t pt-3 md:pt-4 text-sm md:text-base">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">{t('subtotal')}:</span>
-              <span>
-                {formatPrice(
-                  Number(transaction.totalAmount ?? 0) +
-                    Number(transaction.discount ?? 0) -
-                    Number(transaction.tax ?? 0),
-                )}
-              </span>
-            </div>
-            {(Number(transaction.discount ?? 0)) > 0 && (
-              <div className="flex justify-between text-red-600">
-                <span>{t('discount')}:</span>
-                <span>-{formatPrice(Number(transaction.discount ?? 0))}</span>
-              </div>
-            )}
-            {(Number(transaction.tax ?? 0)) > 0 && (
+            <div className="space-y-1.5 md:space-y-2 border-t pt-3 md:pt-4 text-sm md:text-base">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">{t('tax')}:</span>
-                <span>{formatPrice(Number(transaction.tax ?? 0))}</span>
-              </div>
-            )}
-            <div className="flex justify-between font-semibold text-base md:text-lg border-t pt-2 mt-2">
-              <span>{t('total_amount')}:</span>
-              <span>{formatPrice(Number(transaction.totalAmount ?? 0))}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">{t('amount_paid')}:</span>
-              <span className="font-semibold">
-                {formatPrice(Number(transaction.amountPaid ?? 0))}
-              </span>
-            </div>
-            {(Number(transaction.totalAmount ?? 0) - Number(transaction.amountPaid ?? 0)) > 0 && (
-              <div className="flex justify-between text-red-600 font-semibold">
-                <span>{t('due')}:</span>
+                <span className="text-muted-foreground">{t('subtotal')}:</span>
                 <span>
                   {formatPrice(
-                    Number(transaction.totalAmount ?? 0) - Number(transaction.amountPaid ?? 0),
+                    Number(transaction.totalAmount ?? 0) +
+                      Number(transaction.discount ?? 0) -
+                      Number(transaction.tax ?? 0),
                   )}
                 </span>
               </div>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
-            <Card className="bg-muted/30">
-              <CardContent className="p-3 md:pt-4 md:p-6 pb-3 md:pb-4">
-                <div className="text-xs md:text-sm text-muted-foreground">
-                  {t('payment_method')}
+              {(Number(transaction.discount ?? 0)) > 0 && (
+                <div className="flex justify-between text-red-600">
+                  <span>{t('discount')}:</span>
+                  <span>-{formatPrice(Number(transaction.discount ?? 0))}</span>
                 </div>
-                <Badge variant="outline" className="mt-2">
-                  {getPaymentMethodText(transaction.paymentMethod)}
-                </Badge>
-              </CardContent>
-            </Card>
-            <Card className="bg-muted/30">
-              <CardContent className="p-3 md:pt-4 md:p-6 pb-3 md:pb-4">
-                <div className="text-xs md:text-sm text-muted-foreground">
-                  {t('payment_status')}
+              )}
+              {(Number(transaction.tax ?? 0)) > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">{t('tax')}:</span>
+                  <span>{formatPrice(Number(transaction.tax ?? 0))}</span>
                 </div>
-                <Badge
-                  className={`mt-2 ${getPaymentStatusColor(transaction.paymentStatus)}`}
-                >
-                  {getPaymentStatusText(transaction.paymentStatus)}
-                </Badge>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="flex items-center justify-between border rounded-lg px-4 py-3 bg-muted/30">
-            <span className="text-sm text-muted-foreground">{t('order_status')}</span>
-            <Badge
-              variant={transaction.status === 'Completed' ? 'default' : 'destructive'}
-              className={transaction.status === 'Cancelled' ? 'bg-red-100 text-red-700 border-red-300 dark:bg-red-900/30 dark:text-red-400' : transaction.status === 'Refunded' ? 'bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-900/30 dark:text-amber-400' : ''}
-            >
-              {getStatusText(transaction.status)}
-            </Badge>
-          </div>
-
-          <div className="flex flex-col gap-3 mt-4">
-            <div className="text-sm font-medium">{t('actions')}</div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant="outline"
-                onClick={preparedFile ? performPreparedShare : handleShare}
-                disabled={isSharing}
-                className="h-10 gap-2 border-green-500 text-green-600 hover:bg-green-50"
-              >
-                <Share2 className="w-4 h-4" />
-                {isPreparing ? t('preparing') : preparedFile ? (isSharing ? t('sharing') : t('tap_to_share')) : (isSharing ? t('sharing') : t('share_whatsapp'))}
-              </Button>
-              {isAdmin && transaction.status === "Completed" && (
-                <>
-                  <Button
-                    variant="destructive"
-                    onClick={() => onUpdateStatus("Cancelled")}
-                    className="h-10"
-                  >
-                    {t('cancel_order')}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => onUpdateStatus("Refunded")}
-                    className="h-10"
-                  >
-                    {t('refund_order')}
-                  </Button>
-                </>
+              )}
+              <div className="flex justify-between font-semibold text-base md:text-lg border-t pt-2 mt-2">
+                <span>{t('total_amount')}:</span>
+                <span>{formatPrice(Number(transaction.totalAmount ?? 0))}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">{t('amount_paid')}:</span>
+                <span className="font-semibold">
+                  {formatPrice(Number(transaction.amountPaid ?? 0))}
+                </span>
+              </div>
+              {(Number(transaction.totalAmount ?? 0) - Number(transaction.amountPaid ?? 0)) > 0 && (
+                <div className="flex justify-between text-red-600 font-semibold">
+                  <span>{t('due')}:</span>
+                  <span>
+                    {formatPrice(
+                      Number(transaction.totalAmount ?? 0) - Number(transaction.amountPaid ?? 0),
+                    )}
+                  </span>
+                </div>
               )}
             </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
+              <Card className="bg-muted/30">
+                <CardContent className="p-3 md:pt-4 md:p-6 pb-3 md:pb-4">
+                  <div className="text-xs md:text-sm text-muted-foreground">
+                    {t('payment_method')}
+                  </div>
+                  <Badge variant="outline" className="mt-2">
+                    {getPaymentMethodText(transaction.paymentMethod)}
+                  </Badge>
+                </CardContent>
+              </Card>
+              <Card className="bg-muted/30">
+                <CardContent className="p-3 md:pt-4 md:p-6 pb-3 md:pb-4">
+                  <div className="text-xs md:text-sm text-muted-foreground">
+                    {t('payment_status')}
+                  </div>
+                  <Badge
+                    className={`mt-2 ${getPaymentStatusColor(transaction.paymentStatus)}`}
+                  >
+                    {getPaymentStatusText(transaction.paymentStatus)}
+                  </Badge>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="flex items-center justify-between border rounded-lg px-4 py-3 bg-muted/30">
+              <span className="text-sm text-muted-foreground">{t('order_status')}</span>
+              <Badge
+                variant={transaction.status === 'Completed' ? 'default' : 'destructive'}
+                className={transaction.status === 'Cancelled' ? 'bg-red-100 text-red-700 border-red-300 dark:bg-red-900/30 dark:text-red-400' : transaction.status === 'Refunded' ? 'bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-900/30 dark:text-amber-400' : ''}
+              >
+                {getStatusText(transaction.status)}
+              </Badge>
+            </div>
+
+            <div className="flex flex-col gap-3 mt-4">
+              <div className="text-sm font-medium">{t('actions')}</div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setIsPrintOpen(true)}
+                  className="h-10 gap-2 border-blue-500 text-blue-600 hover:bg-blue-50"
+                >
+                  <Printer className="w-4 h-4" />
+                  {tc('print') || 'Print'}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={preparedFile ? performPreparedShare : handleShare}
+                  disabled={isSharing}
+                  className="h-10 gap-2 border-green-500 text-green-600 hover:bg-green-50"
+                >
+                  <Share2 className="w-4 h-4" />
+                  {isPreparing ? t('preparing') : preparedFile ? (isSharing ? t('sharing') : t('tap_to_share')) : (isSharing ? t('sharing') : t('share_whatsapp'))}
+                </Button>
+                {isAdmin && transaction.status === "Completed" && (
+                  <>
+                    <Button
+                      variant="destructive"
+                      onClick={() => onUpdateStatus("Cancelled")}
+                      className="h-10"
+                    >
+                      {t('cancel_order')}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => onUpdateStatus("Refunded")}
+                      className="h-10"
+                    >
+                      {t('refund_order')}
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+            </div>
           </div>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+      <PrintDialog
+        open={isPrintOpen}
+        onOpenChange={setIsPrintOpen}
+        sale={saleMapped}
+      />
+    </>
   );
 }

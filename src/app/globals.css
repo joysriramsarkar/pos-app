@@ -391,11 +391,35 @@
     margin: 0;
   }
 
-  /* Remove all decorative elements */
+  /* Remove all decorative elements, except dialogs containing receipt content */
   [data-radix-overlay],
-  [data-radix-popper-content-wrapper],
+  [data-radix-popper-content-wrapper] {
+    display: none !important;
+  }
+
   [role="dialog"] {
     display: none !important;
+  }
+
+  [role="dialog"]:has(#receipt-content) {
+    display: block !important;
+    visibility: visible !important;
+    position: static !important;
+    transform: none !important;
+    max-height: none !important;
+    height: auto !important;
+    overflow: visible !important;
+    background: white !important;
+    box-shadow: none !important;
+    border: none !important;
+    width: 100% !important;
+  }
+
+  /* Reset layout constraints on all wrappers inside the print dialog to prevent scroll/height clipping */
+  [role="dialog"]:has(#receipt-content) * {
+    max-height: none !important;
+    height: auto !important;
+    overflow: visible !important;
   }
 }
 
