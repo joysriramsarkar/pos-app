@@ -100,8 +100,8 @@ export function AuditLogs() {
                         <TableCell className="text-xs text-muted-foreground">
                           {log.ipAddress || '-'}
                         </TableCell>
-                        <TableCell className="max-w-xs truncate text-xs" title={log.details}>
-                          {log.details || '-'}
+                        <TableCell className="max-w-xs truncate text-xs" title={typeof log.details === 'object' ? JSON.stringify(log.details) : log.details}>
+                          {typeof log.details === 'object' ? JSON.stringify(log.details) : (log.details || '-')}
                         </TableCell>
                       </TableRow>
                     ))

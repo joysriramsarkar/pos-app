@@ -9,6 +9,7 @@ import { StockEntryInputSchema } from '@/schemas';
 import { requirePermission, getAuthenticatedUser } from '@/lib/api-middleware';
 import { multiplyMoney, toMoneyNumber } from '@/lib/money';
 import { logAudit } from '@/lib/audit';
+import Decimal from 'decimal.js';
 
 const getIp = (req: NextRequest) => req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || undefined;
 
@@ -100,7 +101,7 @@ export async function POST(request: NextRequest) {
 
         if (supplier) {
           const totalAmount = multiplyMoney(quantity, purchasePrice);
-          const actualAmountPaid = amountPaid !== undefined ? amountPaid : totalAmount;
+          const actualAmountPaid = amountPaid !== undefined ? new Decimal(amountPaid) : totalAmount;
           const paymentStatus = 'Paid';
 
           const purchase = await tx.purchase.create({
@@ -130,11 +131,12 @@ export async function POST(request: NextRequest) {
             },
             data: {
               referenceId: purchase.id,
+              purchaseId: purchase.id,
             },
           });
 
           // Create Expense record for payment if amountPaid > 0
-          if (actualAmountPaid > 0) {
+          if (actualAmountPaid.gt(0)) {
             await tx.expense.create({
               data: {
                 amount: actualAmountPaid,

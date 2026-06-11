@@ -134,6 +134,19 @@ export const printToIframe = (options: PrintOptions): void => {
             overflow: visible !important;
           }
 
+          /* Ensure iframe contents are visible during printing, overriding cloned main document print styles */
+          body > *,
+          body > * * {
+            visibility: visible !important;
+          }
+
+          /* Explicitly support hiding elements marked as no-print */
+          .no-print,
+          .no-print * {
+            display: none !important;
+            visibility: hidden !important;
+          }
+
           /* ============================================================
              PAGE RULES: Zero margins for clean print
              ============================================================ */

@@ -52,15 +52,21 @@ model Category {
 }
 
 model StockHistory {
-  id          String   @id @default(cuid())
-  productId   String   @map("product_id")
-  changeType  String // "purchase", "sale", "adjustment", "return"
-  quantity    Decimal // Positive for addition, negative for deduction
-  reason      String?
-  referenceId String?  @map("reference_id") // Sale ID or Purchase ID
-  createdAt   DateTime @default(now()) @map("created_at")
+  id           String      @id @default(cuid())
+  productId    String      @map("product_id")
+  changeType   String // "purchase", "sale", "adjustment", "return"
+  quantity     Decimal // Positive for addition, negative for deduction
+  reason       String?
+  referenceId  String?     @map("reference_id") // Sale ID, Purchase ID, or Return ID
+  saleId       String?     @map("sale_id")
+  purchaseId   String?     @map("purchase_id")
+  saleReturnId String?     @map("sale_return_id")
+  createdAt    DateTime    @default(now()) @map("created_at")
 
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product    Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sale       Sale?       @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  purchase   Purchase?   @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  saleReturn SaleReturn? @relation(fields: [saleReturnId], references: [id], onDelete: Cascade)
 
   @@index([productId])
   @@index([createdAt])
@@ -139,6 +145,7 @@ model Sale {
   user     User?        @relation(fields: [userId], references: [id])
   items    SaleItem[]
   returns  SaleReturn[]
+  stockHistory StockHistory[]
 
   @@index([customerId])
   @@index([userId])
@@ -182,6 +189,7 @@ model SaleReturn {
   sale  Sale             @relation(fields: [saleId], references: [id], onDelete: Cascade)
   user  User?            @relation(fields: [userId], references: [id])
   items SaleReturnItem[]
+  stockHistory StockHistory[]
 
   @@index([saleId])
   @@index([createdAt])
@@ -241,6 +249,7 @@ model Purchase {
 
   supplier Supplier?      @relation(fields: [supplierId], references: [id])
   items    PurchaseItem[]
+  stockHistory StockHistory[]
 
   @@index([supplierId])
   @@index([createdAt])
@@ -275,8 +284,8 @@ model SyncQueue {
   entityType     String    @map("entity_type") // sale:create, customer:update, etc.
   entityId       String?   @map("entity_id")
   action         String // sync action type
-  payload        String // JSON stringified data
-  result         String? // JSON stringified result (for idempotency cache)
+  payload        Json // JSON payload
+  result         Json? // JSON result (for idempotency cache)
   synced         Boolean   @default(false)
   syncedAt       DateTime? @map("synced_at")
   retryCount     Int       @default(0) @map("retry_count")
@@ -399,7 +408,7 @@ model AuditLog {
   action     String // e.g., "CREATE_PRODUCT", "DELETE_SALE", "UPDATE_CUSTOMER", "LOGIN"
   entityType String // e.g., "Product", "Sale", "Customer", "User"
   entityId   String?  @map("entity_id")
-  details    String? // JSON stringified details of the change
+  details    Json? // JSON details of the change
   ipAddress  String?  @map("ip_address")
   userAgent  String?  @map("user_agent")
   createdAt  DateTime @default(now()) @map("created_at")

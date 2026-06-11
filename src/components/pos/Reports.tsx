@@ -93,6 +93,8 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
   const [activeTab, setActiveTab] = useState('sales');
   const [expensesData, setExpensesData] = useState<any[]>([]);
   const [expensesLoading, setExpensesLoading] = useState(false);
+  const [purchasesData, setPurchasesData] = useState<any>(null);
+
 
   const REPORTS_CACHE_TTL = 30 * 60 * 1000;
 
@@ -133,6 +135,8 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
       setTopCustomers(cachedData.topCustomers ?? []);
     } else if (tab === 'expenses') {
       setExpensesData(cachedData ?? []);
+    } else if (tab === 'suppliers') {
+      setPurchasesData(cachedData);
     }
   };
 
@@ -202,6 +206,12 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
         if (!res.ok) throw new Error('Failed to load Customers data');
         const j = await res.json();
         setTopCustomers(j.topCustomers || []);
+        setReportCache(buildReportCacheKey(tab, params), j);
+      } else if (tab === 'suppliers') {
+        const res = await fetch(`/api/reports/purchases?${params}`);
+        if (!res.ok) throw new Error('Failed to load Suppliers data');
+        const j = await res.json();
+        setPurchasesData(j);
         setReportCache(buildReportCacheKey(tab, params), j);
       }
     } catch (err) {
@@ -449,6 +459,8 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
               <TabsTrigger className="flex-1 sm:flex-none" value="categories">{t('tab_categories')}</TabsTrigger>
               <TabsTrigger className="flex-1 sm:flex-none" value="customers">{t('tab_customers')}</TabsTrigger>
               <TabsTrigger className="flex-1 sm:flex-none" value="expenses">{t('tab_expenses')}</TabsTrigger>
+              <TabsTrigger className="flex-1 sm:flex-none" value="suppliers">{t('tab_suppliers') || 'Suppliers'}</TabsTrigger>
+
             </TabsList>
           </div>
 
@@ -475,6 +487,11 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
                   }}>
                     <Lightbulb className="w-4 h-4" /><span className="hidden sm:inline">{t('ask_ai')}</span>
                   </Button>
+                  {onNavigate && (
+                    <Button variant="outline" size="sm" className="gap-1.5 min-h-9 border-blue-200 text-blue-600 hover:bg-blue-50" onClick={() => onNavigate('sales-report')}>
+                      <ExternalLink className="w-3.5 h-3.5" /> {t('detailed_report') || 'Detailed'}
+                    </Button>
+                  )}
                   <Button variant="outline" size="sm" className="gap-1 min-h-9" onClick={handleExportCSV}>
                     <Download className="w-4 h-4" /> CSV
                   </Button>
@@ -525,7 +542,14 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
 
           {/* Payment Breakdown Tab */}
           <TabsContent value="payment">
-            <div className="flex flex-wrap gap-2 mb-3">{DateFilter}</div>
+            <div className="flex flex-wrap gap-2 mb-3 justify-between items-center w-full">
+              <div className="flex flex-wrap gap-2">{DateFilter}</div>
+              {onNavigate && (
+                <Button variant="outline" size="sm" className="gap-1.5 min-h-9 border-indigo-200 text-indigo-600 hover:bg-indigo-50" onClick={() => onNavigate('payment-report')}>
+                  <ExternalLink className="w-3.5 h-3.5" /> {t('detailed_report') || 'Detailed'}
+                </Button>
+              )}
+            </div>
             {CustomDateInputs}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Card className="rounded-xl">
@@ -601,24 +625,31 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
           {/* Stock Alerts / Auto Restock Tab */}
           <TabsContent value="stock">
             <Card className="rounded-xl">
-              <CardHeader className="flex flex-row items-center justify-between">
+              <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
                 <div>
                   <CardTitle>{t('auto_restock')}</CardTitle>
                   <CardDescription>{t('low_stock_desc')}</CardDescription>
                 </div>
-                <Button variant="outline" size="sm" onClick={() => {
-                  const itemsText = stockData.map(i => `${i.name} - Stock: ${i.currentStock}`).join('\n');
-                  const blob = new Blob([itemsText], { type: 'text/plain' });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.href = url;
-                  a.download = `restock-list-${format(new Date(), 'yyyy-MM-dd')}.txt`;
-                  a.click();
-                  URL.revokeObjectURL(url);
-                }}>
-                  <Download className="w-4 h-4 mr-2" />
-                  {t('download_list')}
-                </Button>
+                <div className="flex gap-2">
+                  {onNavigate && (
+                    <Button variant="outline" size="sm" className="gap-1.5 border-indigo-200 text-indigo-600 hover:bg-indigo-50" onClick={() => onNavigate('stock-report')}>
+                      <ExternalLink className="w-3.5 h-3.5" /> {t('detailed_report') || 'Detailed'}
+                    </Button>
+                  )}
+                  <Button variant="outline" size="sm" onClick={() => {
+                    const itemsText = stockData.map(i => `${i.name} - Stock: ${i.currentStock}`).join('\n');
+                    const blob = new Blob([itemsText], { type: 'text/plain' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `restock-list-${format(new Date(), 'yyyy-MM-dd')}.txt`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }}>
+                    <Download className="w-4 h-4 mr-2" />
+                    {t('download_list')}
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="overflow-x-auto">
@@ -673,10 +704,17 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
                   <CardTitle>{t('outstanding_dues')}</CardTitle>
                   <CardDescription>{t('pending_payments')} {formatPrice(Number(outstandingDues))}</CardDescription>
                 </div>
-                <Button variant="outline" size="sm" className="gap-1" onClick={() => downloadCSV(
-                  [['Customer','Phone','Total Due','Last Purchase'], ...dueData.map(c => [c.name, c.phone||'', Number(c.totalDue).toFixed(2), new Date(c.updatedAt).toLocaleDateString()])],
-                  'dues'
-                )}><Download className="w-4 h-4" /> CSV</Button>
+                <div className="flex gap-2">
+                  {onNavigate && (
+                    <Button variant="outline" size="sm" className="gap-1.5 border-amber-200 text-amber-700 hover:bg-amber-50" onClick={() => onNavigate('dues-report')}>
+                      <ExternalLink className="w-3.5 h-3.5" /> {t('detailed_report') || 'Detailed'}
+                    </Button>
+                  )}
+                  <Button variant="outline" size="sm" className="gap-1" onClick={() => downloadCSV(
+                    [['Customer','Phone','Total Due','Last Purchase'], ...dueData.map(c => [c.name, c.phone||'', Number(c.totalDue).toFixed(2), new Date(c.updatedAt).toLocaleDateString()])],
+                    'dues'
+                  )}><Download className="w-4 h-4" /> CSV</Button>
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="overflow-x-auto">
@@ -731,6 +769,11 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
                 </div>
                 <div className="flex flex-wrap gap-2 items-center">
                   {DateFilter}
+                  {onNavigate && (
+                    <Button variant="outline" size="sm" className="gap-1.5 border-indigo-200 text-indigo-600 hover:bg-indigo-50" onClick={() => onNavigate('products-report')}>
+                      <ExternalLink className="w-3.5 h-3.5" /> {t('detailed_report') || 'Detailed'}
+                    </Button>
+                  )}
                   <Button variant="outline" size="sm" className="gap-1" onClick={() => downloadCSV(
                     [['#','Product','Qty Sold','Revenue','Profit'], ...topProducts.map((p,i) => [i+1, p.name, p.quantity, p.revenue.toFixed(2), p.profit.toFixed(2)])],
                     'top-products'
@@ -784,7 +827,14 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
           </TabsContent>
           {/* Categories Tab */}
           <TabsContent value="categories">
-            <div className="flex flex-wrap gap-2 mb-3">{DateFilter}</div>
+            <div className="flex flex-wrap gap-2 mb-3 justify-between items-center w-full">
+              <div className="flex flex-wrap gap-2">{DateFilter}</div>
+              {onNavigate && (
+                <Button variant="outline" size="sm" className="gap-1.5 border-indigo-200 text-indigo-600 hover:bg-indigo-50" onClick={() => onNavigate('categories-report')}>
+                  <ExternalLink className="w-3.5 h-3.5" /> {t('detailed_report') || 'Detailed'}
+                </Button>
+              )}
+            </div>
             {CustomDateInputs}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Card className="rounded-xl">
@@ -882,6 +932,11 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
                 </div>
                 <div className="flex flex-wrap gap-2 items-center">
                   {DateFilter}
+                  {onNavigate && (
+                    <Button variant="outline" size="sm" className="gap-1.5 border-indigo-200 text-indigo-600 hover:bg-indigo-50" onClick={() => onNavigate('customers-report')}>
+                      <ExternalLink className="w-3.5 h-3.5" /> {t('detailed_report') || 'Detailed'}
+                    </Button>
+                  )}
                   <Button variant="outline" size="sm" className="gap-1" onClick={() => downloadCSV(
                     [['#','Customer','Phone','Spent','Orders','AOV'], ...topCustomers.map((c,i) => [i+1, c.name, c.phone||'', c.totalSpent.toFixed(2), c.orderCount, c.aov.toFixed(2)])],
                     'top-customers'
@@ -922,6 +977,65 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
                         <TableRow>
                           <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
                             {t('no_customer_data')}
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Suppliers Tab */}
+          <TabsContent value="suppliers">
+            {CustomDateInputs && <div className="mb-3">{CustomDateInputs}</div>}
+            <Card className="rounded-xl">
+              <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
+                <div>
+                  <CardTitle>Supplier Purchases</CardTitle>
+                  <CardDescription>Valuation and ordering from suppliers</CardDescription>
+                </div>
+                <div className="flex flex-wrap gap-2 items-center">
+                  {DateFilter}
+                  {onNavigate && (
+                    <Button variant="outline" size="sm" className="gap-1.5 border-indigo-200 text-indigo-600 hover:bg-indigo-50" onClick={() => onNavigate('supplier-report')}>
+                      <ExternalLink className="w-3.5 h-3.5" /> {t('detailed_report') || 'Detailed'}
+                    </Button>
+                  )}
+                  <Button variant="outline" size="sm" className="gap-1" onClick={() => downloadCSV(
+                    [['#','Supplier Name','Orders','Spent Amount'], ...(purchasesData?.topSuppliers || []).map((s: any,i: number) => [i+1, s.name, s.orderCount, s.totalAmount.toFixed(2)])],
+                    'suppliers-summary'
+                  )}><Download className="w-4 h-4" /> CSV</Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>#</TableHead>
+                        <TableHead>Supplier Name</TableHead>
+                        <TableHead className="text-right">Orders</TableHead>
+                        <TableHead className="text-right">Spent Amount</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {tabLoading['suppliers'] ? (
+                        <TableRow><TableCell colSpan={4} className="text-center py-6 text-muted-foreground">{t('loading')}</TableCell></TableRow>
+                      ) : tabError['suppliers'] ? (
+                        <TableRow><TableCell colSpan={4} className="text-center py-6 text-destructive">{tabError['suppliers']}</TableCell></TableRow>
+                      ) : (purchasesData?.topSuppliers || []).length > 0 ? (purchasesData.topSuppliers.map((s: any, i: number) => (
+                        <TableRow key={s.id || i}>
+                          <TableCell className="text-muted-foreground text-sm">{i + 1}</TableCell>
+                          <TableCell className="font-medium">{s.name}</TableCell>
+                          <TableCell className="text-right"><Badge variant="outline">{s.orderCount}</Badge></TableCell>
+                          <TableCell className="text-right font-medium">{formatPrice(s.totalAmount)}</TableCell>
+                        </TableRow>
+                      ))) : (
+                        <TableRow>
+                          <TableCell colSpan={4} className="text-center py-6 text-muted-foreground">
+                            No suppliers purchase data.
                           </TableCell>
                         </TableRow>
                       )}
@@ -1279,7 +1393,7 @@ function ExpensesTabContent({ expenses, dateParams, onNavigate, isLoading }: {
       ]),
       ['', '', '', 'Total', total],
     ];
-    const csv = rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
+    const csv = rows.map((r: any[]) => r.map((v: any) => `"${v}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -1289,7 +1403,7 @@ function ExpensesTabContent({ expenses, dateParams, onNavigate, isLoading }: {
     URL.revokeObjectURL(url);
   };
 
-  if (isLoading) return <div className="py-16 text-center text-muted-foreground">Loading expenses...</div>;
+  if (isLoading) return <div className="py-16 text-center text-muted-foreground">{t('loading')}</div>;
 
   return (
     <div className="space-y-4">

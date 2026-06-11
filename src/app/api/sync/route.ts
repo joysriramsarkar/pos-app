@@ -10,7 +10,8 @@ import { Prisma } from '@prisma/client';
 import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
 import { ProductInputSchema, SaleInputSchema, CustomerInputSchema } from '@/schemas';
-import { addMoney, subtractMoney, toMoneyNumber } from '@/lib/money';
+import { addMoney, subtractMoney, toMoneyNumber, toMoneyDecimal } from '@/lib/money';
+import Decimal from 'decimal.js';
 import {
   aggregateSaleItemQuantities,
   findSaleItemTotalMismatch,
@@ -116,7 +117,7 @@ export async function POST(request: NextRequest) {
       if (existingSync && existingSync.synced) {
         return {
           cached: true,
-          data: JSON.parse(existingSync.result as string),
+          data: existingSync.result,
         };
       }
 
@@ -222,7 +223,7 @@ export async function POST(request: NextRequest) {
         update: {
           synced: true,
           syncedAt: new Date(),
-          result: JSON.stringify(operationResult),
+          result: operationResult as any,
           entityId, // Update entity_id on retry
         },
         create: {
@@ -231,11 +232,11 @@ export async function POST(request: NextRequest) {
           entityType: actionType,
           entityId, // Set entity_id to track which entity this syncs
           action: "sync",
-          payload: JSON.stringify(payload),
+          payload: payload as any,
           synced: true,
           syncedAt: new Date(),
           retryCount: 0,
-          result: JSON.stringify(operationResult),
+          result: operationResult as any,
         },
       });
 
@@ -348,28 +349,26 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
 
     if ((saleData.totalAmount || 0) < 0) {
       throw new Error("Total amount cannot be negative");
-    }
-
-    const totalAmount = toMoneyNumber(saleData.totalAmount || 0);
-    const amountReceived = Math.max(0, toMoneyNumber(saleData.amountReceived || 0));
-    const amountPaid = Math.max(0, toMoneyNumber(saleData.amountPaid || 0));
-    const prepaidToUse = Math.max(0, toMoneyNumber(saleData.prepaidAmountUsed || 0));
-    const changeAsPrepayment = Math.max(0, toMoneyNumber(saleData.changeAsPrepayment || 0));
+    }    const totalAmount = toMoneyDecimal(saleData.totalAmount || 0);
+    const amountReceived = toMoneyDecimal(saleData.amountReceived || 0);
+    const amountPaid = toMoneyDecimal(saleData.amountPaid || 0);
+    const prepaidToUse = toMoneyDecimal(saleData.prepaidAmountUsed || 0);
+    const changeAsPrepayment = toMoneyDecimal(saleData.changeAsPrepayment || 0);
     const externalPaidAmount = subtractMoney(amountPaid, prepaidToUse);
 
-    if (amountPaid > totalAmount) {
-      throw new Error(`Amount paid (${amountPaid}) cannot exceed sale total (${totalAmount})`);
+    if (amountPaid.gt(totalAmount)) {
+      throw new Error(`Amount paid (${amountPaid.toString()}) cannot exceed sale total (${totalAmount.toString()})`);
     }
 
-    if (prepaidToUse > amountPaid) {
+    if (prepaidToUse.gt(amountPaid)) {
       throw new Error("Prepaid amount cannot exceed total amount paid");
     }
 
-    if (!saleData.customerId && (prepaidToUse > 0 || changeAsPrepayment > 0)) {
+    if (!saleData.customerId && (prepaidToUse.gt(0) || changeAsPrepayment.gt(0))) {
       throw new Error("Prepaid balance can only be used with a selected customer");
     }
 
-    if (changeAsPrepayment > 0 && amountReceived < addMoney(externalPaidAmount, changeAsPrepayment)) {
+    if (changeAsPrepayment.gt(0) && amountReceived.lt(addMoney(externalPaidAmount, changeAsPrepayment))) {
       throw new Error("Received amount does not cover sale payment and prepaid change");
     }
 
@@ -401,10 +400,10 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
         },
       },
       include: { items: true },
-    });
-
-      // Update stock for all products
+    });      // Update stock for all products
       if (stockDeductions.length > 0) {
+        // Sort stockDeductions by productId to guarantee consistent lock ordering and prevent deadlocks
+        stockDeductions.sort((a, b) => a.productId.localeCompare(b.productId));
         const productIds = stockDeductions.map((i) => i.productId);
         const quantities = stockDeductions.map((i) => i.quantity);
 
@@ -423,36 +422,39 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
           quantity: -item.quantity,
           reason: `Offline sync sale: ${saleData.invoiceNumber}`,
           referenceId: sale.id,
+          saleId: sale.id,
         }));
 
 
       await tx.stockHistory.createMany({
         data: historyData,
       });
-    }
-
-    // Update customer due/prepaid if applicable
-    if (saleData.customerId && (amountPaid < totalAmount || prepaidToUse > 0 || changeAsPrepayment > 0)) {
+    }    // Update customer due/prepaid if applicable
+    if (saleData.customerId && (amountPaid.lt(totalAmount) || prepaidToUse.gt(0) || changeAsPrepayment.gt(0))) {
       const dueAmount = subtractMoney(totalAmount, amountPaid);
 
-      // Fetch customer BEFORE updating for correct balance calculation
-      const customer = await tx.customer.findUnique({
-        where: { id: saleData.customerId },
-      });
+      // Fetch customer BEFORE updating with raw SELECT FOR UPDATE for concurrency safety
+      const customerRaw = await tx.$queryRaw<any[]>`
+        SELECT id, "total_due" as "totalDue", "prepaid_balance" as "prepaidBalance"
+        FROM customers
+        WHERE id = ${saleData.customerId}
+        FOR UPDATE
+      `;
+      const customer = customerRaw[0];
 
       if (customer) {
-        const currentTotalDue = Number(customer.totalDue) || 0;
-        const currentPrepaidBalance = Number(customer.prepaidBalance) || 0;
+        const currentTotalDue = toMoneyDecimal(customer.totalDue);
+        const currentPrepaidBalance = toMoneyDecimal(customer.prepaidBalance);
 
-        if (toMoneyNumber(prepaidToUse) > 0) {
-            if (currentPrepaidBalance < toMoneyNumber(prepaidToUse)) {
+        if (prepaidToUse.gt(0)) {
+            if (currentPrepaidBalance.lt(prepaidToUse)) {
               throw new Error(`Insufficient prepaid balance. Available: ${currentPrepaidBalance}, Tried to use: ${prepaidToUse}`);
             }
             await tx.ledgerEntry.create({
               data: {
                 customerId: saleData.customerId,
                 entryType: "prepayment-used",
-                amount: toMoneyNumber(prepaidToUse),
+                amount: prepaidToUse,
                 balanceAfter: currentTotalDue,
                 description: `Prepaid used for offline sale: ${saleData.invoiceNumber}`,
                 referenceId: sale.id,
@@ -460,21 +462,20 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
             });
           }
 
-          const dueAmount = subtractMoney(totalAmount, amountPaid);
-
-          let totalDueIncrement = 0;
-          let totalDueDecrement = 0;
-          let prepaidBalanceIncrement = changeAsPrepayment || 0;
-          let prepaidBalanceDecrement = toMoneyNumber(prepaidToUse) || 0;
+          let totalDueIncrement = new Decimal(0);
+          let totalDueDecrement = new Decimal(0);
+          let prepaidBalanceIncrement = changeAsPrepayment;
+          let prepaidBalanceDecrement = prepaidToUse;
           let balanceAfterPayment = currentTotalDue;
 
-          if (dueAmount > 0) {
-            const creditAmount = subtractMoney(totalAmount, toMoneyNumber(prepaidToUse || 0));
+          if (dueAmount.gt(0)) {
+            const creditAmount = subtractMoney(totalAmount, prepaidToUse);
             totalDueIncrement = creditAmount;
             totalDueDecrement = externalPaidAmount;
 
             const creditBalanceAfter = addMoney(currentTotalDue, creditAmount);
-            balanceAfterPayment = Math.max(0, subtractMoney(creditBalanceAfter, externalPaidAmount));
+            const subAmt = subtractMoney(creditBalanceAfter, externalPaidAmount);
+            balanceAfterPayment = subAmt.gt(0) ? subAmt : new Decimal(0);
 
             await tx.ledgerEntry.create({
               data: {
@@ -486,7 +487,7 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
                 referenceId: sale.id,
               },
             });
-            if (externalPaidAmount > 0) {
+            if (externalPaidAmount.gt(0)) {
               await tx.ledgerEntry.create({
                 data: {
                   customerId: saleData.customerId,
@@ -498,10 +499,11 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
                 },
               });
             }
-          } else if (externalPaidAmount > 0 && currentTotalDue > 0) {
+          } else if (externalPaidAmount.gt(0) && currentTotalDue.gt(0)) {
             // Full payment or overpayment with existing due
             totalDueDecrement = externalPaidAmount;
-            balanceAfterPayment = Math.max(0, subtractMoney(currentTotalDue, externalPaidAmount));
+            const subAmt = subtractMoney(currentTotalDue, externalPaidAmount);
+            balanceAfterPayment = subAmt.gt(0) ? subAmt : new Decimal(0);
 
             await tx.ledgerEntry.create({
               data: {
@@ -515,7 +517,7 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
             });
           }
 
-          if (changeAsPrepayment > 0) {
+          if (changeAsPrepayment.gt(0)) {
             await tx.ledgerEntry.create({
               data: {
                 customerId: saleData.customerId,
@@ -528,20 +530,20 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
             });
           }
 
-          if (totalDueIncrement > 0 || totalDueDecrement > 0 || prepaidBalanceIncrement > 0 || prepaidBalanceDecrement > 0) {
+          if (totalDueIncrement.gt(0) || totalDueDecrement.gt(0) || prepaidBalanceIncrement.gt(0) || prepaidBalanceDecrement.gt(0)) {
              const dataUpdate: any = { updatedAt: new Date() };
-             if (totalDueIncrement > 0 || totalDueDecrement > 0) {
-               if (totalDueIncrement > totalDueDecrement) {
-                 dataUpdate.totalDue = { increment: totalDueIncrement - totalDueDecrement };
+             if (totalDueIncrement.gt(0) || totalDueDecrement.gt(0)) {
+               if (totalDueIncrement.gt(totalDueDecrement)) {
+                 dataUpdate.totalDue = { increment: totalDueIncrement.minus(totalDueDecrement) };
                } else {
-                 dataUpdate.totalDue = { decrement: totalDueDecrement - totalDueIncrement };
+                 dataUpdate.totalDue = { decrement: totalDueDecrement.minus(totalDueIncrement) };
                }
              }
-             if (prepaidBalanceIncrement > 0 || prepaidBalanceDecrement > 0) {
-               if (prepaidBalanceIncrement > prepaidBalanceDecrement) {
-                 dataUpdate.prepaidBalance = { increment: prepaidBalanceIncrement - prepaidBalanceDecrement };
+             if (prepaidBalanceIncrement.gt(0) || prepaidBalanceDecrement.gt(0)) {
+               if (prepaidBalanceIncrement.gt(prepaidBalanceDecrement)) {
+                 dataUpdate.prepaidBalance = { increment: prepaidBalanceIncrement.minus(prepaidBalanceDecrement) };
                } else {
-                 dataUpdate.prepaidBalance = { decrement: prepaidBalanceDecrement - prepaidBalanceIncrement };
+                 dataUpdate.prepaidBalance = { decrement: prepaidBalanceDecrement.minus(prepaidBalanceIncrement) };
                }
              }
 
@@ -550,20 +552,24 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
                 data: dataUpdate
              });
           }
+        }
       }
+
+      return sale;
     }
 
-    return sale;
-  }
-
-  throw new Error(`Unknown action: ${action}`);
+    throw new Error(`Unknown action: ${action}`);
 }
 
 // Sync prepayment from offline
 async function syncPrepayment(tx: Prisma.TransactionClient, prepaymentData: { customerId: string; amount: number }) {
-  const customer = await tx.customer.findUnique({
-    where: { id: prepaymentData.customerId },
-  });
+  const customerRaw = await tx.$queryRaw<any[]>`
+    SELECT id, "total_due" as "totalDue", "prepaid_balance" as "prepaidBalance"
+    FROM customers
+    WHERE id = ${prepaymentData.customerId}
+    FOR UPDATE
+  `;
+  const customer = customerRaw[0];
 
   if (!customer) {
     throw new Error(`Customer ${prepaymentData.customerId} not found during sync validation`);
@@ -640,8 +646,6 @@ async function syncCustomer(tx: Prisma.TransactionClient, customerData: z.infer<
 // Sync product updates (primarily stock changes) from offline
 async function syncProduct(tx: Prisma.TransactionClient, productData: z.infer<typeof ProductSyncPayloadSchema> | z.infer<typeof ProductInputSchema>, action: string) {
   if (action === 'create') {
-
-    // Create a new product from full product data
     if (
       "name" in productData &&
       "category" in productData &&

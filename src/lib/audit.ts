@@ -18,7 +18,7 @@ export async function logAudit(params: CreateAuditLogParams) {
         action: params.action,
         entityType: params.entityType,
         entityId: params.entityId,
-        details: params.details ? JSON.stringify(params.details) : undefined,
+        details: (params.details as any) || undefined,
         ipAddress: params.ipAddress,
         userAgent: params.userAgent,
       },

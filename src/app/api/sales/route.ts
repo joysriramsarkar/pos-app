@@ -14,7 +14,8 @@ interface SaleItemWithProduct extends SaleItem {
 import { generateServerInvoiceNumber } from "@/lib/invoice";
 import { v4 as uuidv4 } from "uuid";
 import { SaleInputSchema } from "@/schemas";
-import { addMoney, subtractMoney, toMoneyNumber } from "@/lib/money";
+import { addMoney, subtractMoney, toMoneyNumber, toMoneyDecimal } from "@/lib/money";
+import Decimal from "decimal.js";
 import {
   aggregateSaleItemQuantities,
   findSaleItemTotalMismatch,
@@ -185,35 +186,35 @@ async function handlePost(request: NextRequest) {
     }
 
     const subtotal = addMoney(...validatedItems.map((item) => item.totalPrice));
-    const discountAmount = Math.max(0, toMoneyNumber(validatedData.discount));
-    const taxAmount = Math.max(0, toMoneyNumber(validatedData.tax));
+    const discountAmount = toMoneyDecimal(validatedData.discount);
+    const taxAmount = toMoneyDecimal(validatedData.tax);
     const totalAmount = addMoney(subtractMoney(subtotal, discountAmount), taxAmount);
-    const amountReceived = Math.max(0, toMoneyNumber(validatedData.amountReceived || 0));
-    const amountPaidValue = Math.max(0, toMoneyNumber(validatedData.amountPaid));
-    const prepaidToUse = Math.max(0, toMoneyNumber(validatedData.prepaidAmountUsed || 0));
-    const changeAsPrepayment = Math.max(0, toMoneyNumber(validatedData.changeAsPrepayment || 0));
+    const amountReceived = toMoneyDecimal(validatedData.amountReceived || 0);
+    const amountPaidValue = toMoneyDecimal(validatedData.amountPaid);
+    const prepaidToUse = toMoneyDecimal(validatedData.prepaidAmountUsed || 0);
+    const changeAsPrepayment = toMoneyDecimal(validatedData.changeAsPrepayment || 0);
     const externalPaidAmount = subtractMoney(amountPaidValue, prepaidToUse);
 
-    if (amountPaidValue > totalAmount) {
+    if (amountPaidValue.gt(totalAmount)) {
       return NextResponse.json({ success: false, error: "Amount paid cannot exceed sale total" }, { status: 400 });
     }
-    if (prepaidToUse > amountPaidValue) {
+    if (prepaidToUse.gt(amountPaidValue)) {
       return NextResponse.json({ success: false, error: "Prepaid amount cannot exceed total amount paid" }, { status: 400 });
     }
-    if (!customerId && (prepaidToUse > 0 || changeAsPrepayment > 0)) {
+    if (!customerId && (prepaidToUse.gt(0) || changeAsPrepayment.gt(0))) {
       return NextResponse.json({ success: false, error: "Prepaid balance can only be used with a selected customer" }, { status: 400 });
     }
-    if (changeAsPrepayment > 0 && amountReceived < addMoney(externalPaidAmount, changeAsPrepayment)) {
+    if (changeAsPrepayment.gt(0) && amountReceived.lt(addMoney(externalPaidAmount, changeAsPrepayment))) {
       return NextResponse.json({ success: false, error: "Received amount does not cover sale payment and prepaid change" }, { status: 400 });
     }
 
     let paymentStatus = "Paid";
     if (customerId) {
-      if (amountPaidValue === 0) paymentStatus = "Due";
-      else if (amountPaidValue < totalAmount) paymentStatus = "Partial";
+      if (amountPaidValue.isZero()) paymentStatus = "Due";
+      else if (amountPaidValue.lt(totalAmount)) paymentStatus = "Partial";
     } else {
       // Walk-in customers must pay full amount
-      if (amountPaidValue < totalAmount) {
+      if (amountPaidValue.lt(totalAmount)) {
         return NextResponse.json({ success: false, error: "Walk-in customers must pay the full amount" }, { status: 400 });
       }
       // Walk-in customers are always "Paid" if they pay full amount
@@ -267,6 +268,8 @@ async function handlePost(request: NextRequest) {
         (newSale as Prisma.SaleGetPayload<{include: {items: {include: {product: {select: {unit: true}}}}}}>).items = newSale.items.map((item) => ({ ...item, unit: (item as unknown as SaleItemWithProduct).product?.unit ?? '' }));
 
         const stockDeductions = aggregateSaleItemQuantities(validatedItems);
+        // Sort stockDeductions by productId to guarantee consistent lock ordering and prevent deadlocks
+        stockDeductions.sort((a, b) => a.productId.localeCompare(b.productId));
 
         if (stockDeductions.length > 0) {
           const itemProductIds = stockDeductions.map((item) => item.productId);
@@ -293,26 +296,33 @@ async function handlePost(request: NextRequest) {
             quantity: -item.quantity,
             reason: `Sale: ${newSale.invoiceNumber}`,
             referenceId: newSale.id,
+            saleId: newSale.id,
           })),
         });
 
         if (customerId) {
-          const customer = await tx.customer.findUnique({ where: { id: customerId } });
+          const customerRaw = await tx.$queryRaw<any[]>`
+            SELECT id, "total_due" as "totalDue", "prepaid_balance" as "prepaidBalance"
+            FROM customers
+            WHERE id = ${customerId}
+            FOR UPDATE
+          `;
+          const customer = customerRaw[0];
           if (!customer) throw new Error(`Customer ${customerId} not found`);
 
-          const currentTotalDue = Number(customer.totalDue) || 0;
-          const currentPrepaidBalance = Number(customer.prepaidBalance) || 0;
+          const currentTotalDue = toMoneyDecimal(customer.totalDue);
+          const currentPrepaidBalance = toMoneyDecimal(customer.prepaidBalance);
 
           const dueAmount = subtractMoney(totalAmount, amountPaidValue);
 
-          let totalDueIncrement = 0;
-          let totalDueDecrement = 0;
-          let prepaidBalanceIncrement = changeAsPrepayment || 0;
-          let prepaidBalanceDecrement = prepaidToUse || 0;
+          let totalDueIncrement = new Decimal(0);
+          let totalDueDecrement = new Decimal(0);
+          let prepaidBalanceIncrement = changeAsPrepayment;
+          let prepaidBalanceDecrement = prepaidToUse;
           let balanceAfterPayment = currentTotalDue;
 
-          if (prepaidToUse > 0) {
-            if (currentPrepaidBalance < prepaidToUse) {
+          if (prepaidToUse.gt(0)) {
+            if (currentPrepaidBalance.lt(prepaidToUse)) {
               throw new Error(`Insufficient prepaid balance. Available: ${currentPrepaidBalance}, Tried to use: ${prepaidToUse}`);
             }
             await tx.ledgerEntry.create({
@@ -327,13 +337,14 @@ async function handlePost(request: NextRequest) {
             });
           }
 
-          if (dueAmount > 0) {
+          if (dueAmount.gt(0)) {
             const creditAmount = subtractMoney(totalAmount, prepaidToUse);
             totalDueIncrement = creditAmount;
             totalDueDecrement = externalPaidAmount;
 
             const creditBalanceAfter = addMoney(currentTotalDue, creditAmount);
-            balanceAfterPayment = Math.max(0, subtractMoney(creditBalanceAfter, externalPaidAmount));
+            const subAmt = subtractMoney(creditBalanceAfter, externalPaidAmount);
+            balanceAfterPayment = subAmt.gt(0) ? subAmt : new Decimal(0);
 
             await tx.ledgerEntry.create({
               data: {
@@ -345,7 +356,7 @@ async function handlePost(request: NextRequest) {
                 referenceId: newSale.id,
               },
             });
-            if (externalPaidAmount > 0) {
+            if (externalPaidAmount.gt(0)) {
               await tx.ledgerEntry.create({
                 data: {
                   customerId,
@@ -357,10 +368,11 @@ async function handlePost(request: NextRequest) {
                 },
               });
             }
-          } else if (externalPaidAmount > 0 && currentTotalDue > 0) {
+          } else if (externalPaidAmount.gt(0) && currentTotalDue.gt(0)) {
             // Full payment or overpayment with existing due
             totalDueDecrement = externalPaidAmount;
-            balanceAfterPayment = Math.max(0, subtractMoney(currentTotalDue, externalPaidAmount));
+            const subAmt = subtractMoney(currentTotalDue, externalPaidAmount);
+            balanceAfterPayment = subAmt.gt(0) ? subAmt : new Decimal(0);
 
             await tx.ledgerEntry.create({
               data: {
@@ -374,7 +386,7 @@ async function handlePost(request: NextRequest) {
             });
           }
 
-          if (changeAsPrepayment > 0) {
+          if (changeAsPrepayment.gt(0)) {
             await tx.ledgerEntry.create({
               data: {
                 customerId,
@@ -387,20 +399,20 @@ async function handlePost(request: NextRequest) {
             });
           }
 
-          if (totalDueIncrement > 0 || totalDueDecrement > 0 || prepaidBalanceIncrement > 0 || prepaidBalanceDecrement > 0) {
+          if (totalDueIncrement.gt(0) || totalDueDecrement.gt(0) || prepaidBalanceIncrement.gt(0) || prepaidBalanceDecrement.gt(0)) {
              const dataUpdate: any = { updatedAt: new Date() };
-             if (totalDueIncrement > 0 || totalDueDecrement > 0) {
-               if (totalDueIncrement > totalDueDecrement) {
-                 dataUpdate.totalDue = { increment: totalDueIncrement - totalDueDecrement };
+             if (totalDueIncrement.gt(0) || totalDueDecrement.gt(0)) {
+               if (totalDueIncrement.gt(totalDueDecrement)) {
+                 dataUpdate.totalDue = { increment: totalDueIncrement.minus(totalDueDecrement) };
                } else {
-                 dataUpdate.totalDue = { decrement: totalDueDecrement - totalDueIncrement };
+                 dataUpdate.totalDue = { decrement: totalDueDecrement.minus(totalDueIncrement) };
                }
              }
-             if (prepaidBalanceIncrement > 0 || prepaidBalanceDecrement > 0) {
-               if (prepaidBalanceIncrement > prepaidBalanceDecrement) {
-                 dataUpdate.prepaidBalance = { increment: prepaidBalanceIncrement - prepaidBalanceDecrement };
+             if (prepaidBalanceIncrement.gt(0) || prepaidBalanceDecrement.gt(0)) {
+               if (prepaidBalanceIncrement.gt(prepaidBalanceDecrement)) {
+                 dataUpdate.prepaidBalance = { increment: prepaidBalanceIncrement.minus(prepaidBalanceDecrement) };
                } else {
-                 dataUpdate.prepaidBalance = { decrement: prepaidBalanceDecrement - prepaidBalanceIncrement };
+                 dataUpdate.prepaidBalance = { decrement: prepaidBalanceDecrement.minus(prepaidBalanceIncrement) };
                }
              }
 
@@ -514,19 +526,26 @@ async function handlePut(request: NextRequest) {
             quantity: quantities[index],
             reason: `${status}: ${existingSale.invoiceNumber}`,
             referenceId: existingSale.id,
+            saleId: existingSale.id,
           })),
         });
       }
 
       if (existingSale.customerId) {
-        const [relatedLedgerEntries, customer] = await Promise.all([
+        const [relatedLedgerEntries, customerRaw] = await Promise.all([
           tx.ledgerEntry.findMany({
             where: { customerId: existingSale.customerId, referenceId: existingSale.id },
             select: { entryType: true, amount: true, description: true },
           }),
-          tx.customer.findUnique({ where: { id: existingSale.customerId } }),
+          tx.$queryRaw<any[]>`
+            SELECT id, "total_due" as "totalDue", "prepaid_balance" as "prepaidBalance"
+            FROM customers
+            WHERE id = ${existingSale.customerId}
+            FOR UPDATE
+          `
         ]);
 
+        const customer = customerRaw[0];
         if (!customer) throw new Error(`Customer ${existingSale.customerId} not found`);
 
         const prepaidUsedAmount = addMoney(
@@ -535,25 +554,30 @@ async function handlePut(request: NextRequest) {
         const changePrepaymentAmount = addMoney(
           ...relatedLedgerEntries.filter((e) => e.description?.startsWith("Change added as prepaid:")).map((e) => e.amount),
         );
-        const dueAmount = Math.max(0, subtractMoney(existingSale.totalAmount, existingSale.amountPaid));
+        const subDue = subtractMoney(existingSale.totalAmount, existingSale.amountPaid);
+        const dueAmount = subDue.gt(0) ? subDue : new Decimal(0);
 
-        const newTotalDue = dueAmount > 0 ? Math.max(0, subtractMoney(customer.totalDue, dueAmount)) : customer.totalDue;
+        const currentTotalDue = toMoneyDecimal(customer.totalDue);
+        const currentPrepaidBalance = toMoneyDecimal(customer.prepaidBalance);
+
+        const newTotalDue = dueAmount.gt(0) ? (currentTotalDue.minus(dueAmount).gt(0) ? currentTotalDue.minus(dueAmount) : new Decimal(0)) : currentTotalDue;
         const prepaidBalanceAdjustment = subtractMoney(prepaidUsedAmount, changePrepaymentAmount);
-        const newPrepaidBalance = Math.max(0, addMoney(customer.prepaidBalance, prepaidBalanceAdjustment));
+        const addPrepaid = currentPrepaidBalance.plus(prepaidBalanceAdjustment);
+        const newPrepaidBalance = addPrepaid.gt(0) ? addPrepaid : new Decimal(0);
 
         const customerUpdateData: any = { updatedAt: new Date() };
-        if (dueAmount > 0) customerUpdateData.totalDue = { decrement: dueAmount };
-        if (prepaidBalanceAdjustment > 0) {
+        if (dueAmount.gt(0)) customerUpdateData.totalDue = { decrement: dueAmount };
+        if (prepaidBalanceAdjustment.gt(0)) {
            customerUpdateData.prepaidBalance = { increment: prepaidBalanceAdjustment };
-        } else if (prepaidBalanceAdjustment < 0) {
-           customerUpdateData.prepaidBalance = { decrement: Math.abs(prepaidBalanceAdjustment) };
+        } else if (prepaidBalanceAdjustment.lt(0)) {
+           customerUpdateData.prepaidBalance = { decrement: prepaidBalanceAdjustment.abs() };
         }
 
-        if (dueAmount > 0 || prepaidBalanceAdjustment !== 0) {
+        if (dueAmount.gt(0) || !prepaidBalanceAdjustment.isZero()) {
           await tx.customer.update({ where: { id: existingSale.customerId }, data: customerUpdateData });
         }
 
-        if (dueAmount > 0) {
+        if (dueAmount.gt(0)) {
           await tx.ledgerEntry.create({
             data: {
               customerId: existingSale.customerId,
@@ -565,7 +589,7 @@ async function handlePut(request: NextRequest) {
             },
           });
         }
-        if (prepaidUsedAmount > 0) {
+        if (prepaidUsedAmount.gt(0)) {
           await tx.ledgerEntry.create({
             data: {
               customerId: existingSale.customerId,
@@ -577,7 +601,7 @@ async function handlePut(request: NextRequest) {
             },
           });
         }
-        if (changePrepaymentAmount > 0) {
+        if (changePrepaymentAmount.gt(0)) {
           await tx.ledgerEntry.create({
             data: {
               customerId: existingSale.customerId,
