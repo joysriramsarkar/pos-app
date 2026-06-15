@@ -148,13 +148,14 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
   const isToday = preset === '1';
 
   const dateParams = useMemo(() => {
+    const tz = new Date().getTimezoneOffset();
     if (preset !== 'custom') {
       const days = parseInt(preset);
       const from = days === 1 ? format(new Date(), 'yyyy-MM-dd') : format(subDays(new Date(), days - 1), 'yyyy-MM-dd');
-      const base = `from=${from}&to=${format(new Date(), 'yyyy-MM-dd')}`;
+      const base = `from=${from}&to=${format(new Date(), 'yyyy-MM-dd')}&tzOffset=${tz}`;
       return days === 1 ? base + '&hourly=true' : base;
     }
-    return `from=${customFrom}&to=${customTo}`;
+    return `from=${customFrom}&to=${customTo}&tzOffset=${tz}`;
   }, [preset, customFrom, customTo]);
 
   const fetchTab = useCallback(async (tab: string, params: string, skipLoading = false) => {

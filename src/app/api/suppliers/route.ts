@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
         where: { id },
         include: {
           purchases: {
-            where: { paymentStatus: 'Paid' },
+            where: { deliveryStatus: { in: ['Received', 'PartiallyReceived'] } },
             orderBy: { createdAt: 'desc' }
           },
           expenses: {
@@ -128,7 +128,7 @@ export async function GET(request: NextRequest) {
         orderBy: [{ name: 'asc' }],
         include: {
           purchases: {
-            where: { paymentStatus: 'Paid' },
+            where: { deliveryStatus: { in: ['Received', 'PartiallyReceived'] } },
             select: { totalAmount: true }
           },
           expenses: {

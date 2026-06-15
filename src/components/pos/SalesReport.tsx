@@ -47,7 +47,7 @@ export function SalesReport({ onBack }: SalesReportProps) {
   useEffect(() => {
     setLoading(true);
     const hourlyParam = viewMode === 'daily' ? '&hourly=true' : '';
-    const url = `/api/reports/sales?from=${fetchFrom}&to=${fetchTo}${hourlyParam}`;
+    const url = `/api/reports/sales?from=${fetchFrom}&to=${fetchTo}${hourlyParam}&tzOffset=${new Date().getTimezoneOffset()}`;
     
     const controller = new AbortController();
     fetch(url, { signal: controller.signal })
@@ -121,7 +121,7 @@ export function SalesReport({ onBack }: SalesReportProps) {
         profit,
         count
       }));
-  }, [data, viewMode]);
+  }, [data, viewMode, t]);
 
   const totalRevenue = useMemo(() => {
     return processedChartData.reduce((s, e) => s + (e.revenue || 0), 0);

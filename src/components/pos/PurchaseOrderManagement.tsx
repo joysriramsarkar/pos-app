@@ -58,7 +58,7 @@ interface PurchaseOrder {
 interface FormItem {
   productId: string;
   quantity: number;
-  unitPrice: number;
+  unitPrice: number | string;
 }
 
 
@@ -83,7 +83,7 @@ export default function PurchaseOrderManagement() {
   const [statusFilter, setStatusFilter] = useState('সব');
   const [saving, setSaving] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'statistics'>('list');
-  const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'weekly' | 'monthly' | 'custom'>('all');
+  const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'weekly' | 'monthly' | 'custom'>('today');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
 
@@ -259,11 +259,11 @@ export default function PurchaseOrderManagement() {
     setFormItems(formItems.filter((i) => i.productId !== productId));
   };
 
-  const updateFormItem = (productId: string, field: 'quantity' | 'unitPrice', value: number) => {
+  const updateFormItem = (productId: string, field: 'quantity' | 'unitPrice', value: number | string) => {
     setFormItems(formItems.map((i) => (i.productId === productId ? { ...i, [field]: value } : i)));
   };
 
-  const formTotal = formItems.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0);
+  const formTotal = formItems.reduce((sum, i) => sum + i.quantity * (parseFloat(i.unitPrice as string) || 0), 0);
 
   const resetForm = () => {
     setFormSupplierId('');
@@ -292,7 +292,7 @@ export default function PurchaseOrderManagement() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           supplierId: (formSupplierId && formSupplierId !== 'none') ? formSupplierId : null,
-          items: formItems.map((i) => ({ productId: i.productId, quantity: i.quantity, unitPrice: i.unitPrice })),
+          items: formItems.map((i) => ({ productId: i.productId, quantity: i.quantity, unitPrice: parseFloat(i.unitPrice as string) || 0 })),
           expectedDate: formExpectedDate || null,
           notes: formNotes || null,
           directReceive,
@@ -816,23 +816,44 @@ export default function PurchaseOrderManagement() {
                               <TableCell className="text-sm">{product?.nameBn || product?.name}</TableCell>
                               <TableCell>
                                 <Input
-                                  type="number"
-                                  value={item.quantity}
-                                  onChange={(e) => updateFormItem(item.productId, 'quantity', parseInt(e.target.value) || 0)}
+                                  type="text"
+                                  value={item.quantity === 0 ? '' : item.quantity}
+                                  onChange={(e) => {
+                                    const val = convertBengaliToEnglishNumerals(e.target.value);
+                                    const cleaned = val.replace(/[^0-9]/g, '');
+                                    updateFormItem(item.productId, 'quantity', parseInt(cleaned) || 0);
+                                  }}
+                                  onBlur={() => {
+                                    if (item.quantity <= 0) {
+                                      updateFormItem(item.productId, 'quantity', 1);
+                                    }
+                                  }}
                                   className="h-8 w-20"
-                                  min={1}
                                 />
                               </TableCell>
                               <TableCell>
                                 <Input
-                                  type="number"
-                                  value={item.unitPrice}
-                                  onChange={(e) => updateFormItem(item.productId, 'unitPrice', parseFloat(e.target.value) || 0)}
+                                  type="text"
+                                  value={item.unitPrice === 0 ? '' : item.unitPrice}
+                                  onChange={(e) => {
+                                    const val = convertBengaliToEnglishNumerals(e.target.value);
+                                    const cleaned = val.replace(/[^0-9.]/g, '');
+                                    const dotCount = (cleaned.match(/\./g) || []).length;
+                                    if (dotCount > 1) return;
+                                    updateFormItem(item.productId, 'unitPrice', cleaned);
+                                  }}
+                                  onBlur={() => {
+                                    const parsedPrice = parseFloat(item.unitPrice as string) || 0;
+                                    if (parsedPrice < 0) {
+                                      updateFormItem(item.productId, 'unitPrice', 0);
+                                    } else {
+                                      updateFormItem(item.productId, 'unitPrice', parsedPrice);
+                                    }
+                                  }}
                                   className="h-8 w-24"
-                                  min={0}
                                 />
                               </TableCell>
-                              <TableCell className="font-medium">{formatPrice(item.quantity * item.unitPrice)}</TableCell>
+                              <TableCell className="font-medium">{formatPrice(item.quantity * (parseFloat(item.unitPrice as string) || 0))}</TableCell>
                               <TableCell>
                                 <Button variant="ghost" size="sm" onClick={() => removeFormItem(item.productId)}>
                                   <Trash2 className="h-3.5 w-3.5 text-red-500" />
@@ -883,12 +904,17 @@ export default function PurchaseOrderManagement() {
               <div className="relative mt-1">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">৳</span>
                 <Input
-                  type="number"
+                  type="text"
                   value={formAmountPaid}
-                  onChange={(e) => setFormAmountPaid(convertBengaliToEnglishNumerals(e.target.value))}
+                  onChange={(e) => {
+                    const val = convertBengaliToEnglishNumerals(e.target.value);
+                    const cleaned = val.replace(/[^0-9.]/g, '');
+                    const dotCount = (cleaned.match(/\./g) || []).length;
+                    if (dotCount > 1) return;
+                    setFormAmountPaid(cleaned);
+                  }}
                   placeholder={formTotal.toString()}
                   className="pl-8"
-                  min={0}
                 />
               </div>
             </div>
@@ -1049,17 +1075,25 @@ export default function PurchaseOrderManagement() {
                             <TableCell className="text-right">{item.maxQty}</TableCell>
                             <TableCell className="text-right">
                               <Input
-                                type="number"
-                                value={item.receivedQty}
+                                type="text"
+                                value={item.receivedQty === 0 ? '' : item.receivedQty}
                                 onChange={(e) => {
-                                  const val = Math.min(parseInt(e.target.value) || 0, item.maxQty);
+                                  const val = convertBengaliToEnglishNumerals(e.target.value);
+                                  const cleaned = val.replace(/[^0-9]/g, '');
+                                  const intVal = parseInt(cleaned) || 0;
+                                  const finalVal = Math.min(intVal, item.maxQty);
                                   const newItems = [...receiveItems];
-                                  newItems[idx] = { ...newItems[idx], receivedQty: val };
+                                  newItems[idx] = { ...newItems[idx], receivedQty: finalVal };
                                   setReceiveItems(newItems);
                                 }}
+                                onBlur={() => {
+                                  if (item.receivedQty < 0) {
+                                    const newItems = [...receiveItems];
+                                    newItems[idx] = { ...newItems[idx], receivedQty: 0 };
+                                    setReceiveItems(newItems);
+                                  }
+                                }}
                                 className="h-8 w-20 ml-auto"
-                                min={0}
-                                max={item.maxQty}
                               />
                             </TableCell>
                           </TableRow>
@@ -1084,13 +1118,16 @@ export default function PurchaseOrderManagement() {
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">৳</span>
                         <Input
                           id="receive-amount-paid"
-                          type="number"
+                          type="text"
                           value={receiveAmountPaid}
-                          onChange={(e) => setReceiveAmountPaid(convertBengaliToEnglishNumerals(e.target.value))}
+                          onChange={(e) => {
+                            const val = convertBengaliToEnglishNumerals(e.target.value);
+                            const cleaned = val.replace(/[^0-9.]/g, '');
+                            const dotCount = (cleaned.match(/\./g) || []).length;
+                            if (dotCount > 1) return;
+                            setReceiveAmountPaid(cleaned);
+                          }}
                           placeholder="সম্পূর্ণ পরিশোধিত হলে ফাঁকা রাখুন"
-                          min="0"
-                          max={receiveTotal}
-                          step="0.01"
                           className="pl-9 h-8 text-sm bg-background"
                         />
                       </div>

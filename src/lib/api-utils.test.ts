@@ -1,5 +1,17 @@
 import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
-import { safeJsonFetch } from './api-utils';
+import { safeJsonFetch, getErrorMessage } from './api-utils';
+
+describe('getErrorMessage', () => {
+  it('extracts message from Error instance', () => {
+    expect(getErrorMessage(new Error('Test error'))).toBe('Test error');
+  });
+
+  it('converts non-Error values to string', () => {
+    expect(getErrorMessage('Custom string error')).toBe('Custom string error');
+    expect(getErrorMessage(404)).toBe('404');
+    expect(getErrorMessage({ message: 'object' })).toBe('[object Object]');
+  });
+});
 
 describe('safeJsonFetch', () => {
   const originalFetch = global.fetch;

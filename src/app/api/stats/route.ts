@@ -70,6 +70,7 @@ export async function GET(request: NextRequest) {
           gte: yesterdayStart,
           lt: startOfDay,
         },
+        isActive: true,
       },
     });
     const yesterdayExpensesTotal = yesterdayExpenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
@@ -139,6 +140,7 @@ export async function GET(request: NextRequest) {
           gte: startOfDay,
           lt: endOfDay,
         },
+        isActive: true,
       },
     });
     const todayExpensesTotal = todayExpenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
@@ -216,6 +218,7 @@ export async function GET(request: NextRequest) {
             gte: dayStart,
             lt: dayEnd,
           },
+          isActive: true,
         },
         select: { amount: true },
       });

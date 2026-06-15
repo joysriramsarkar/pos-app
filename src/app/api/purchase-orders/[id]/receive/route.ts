@@ -2,8 +2,9 @@ export const dynamic = 'force-dynamic';
 
 import { db } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuthenticatedUser } from "@/lib/api-middleware";
+import { getAuthenticatedUser, requirePermission } from "@/lib/api-middleware";
 import { logAudit } from "@/lib/audit";
+import { toMoneyNumber } from '@/lib/money';
 
 const getIp = (req: NextRequest) => req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || undefined;
 
@@ -12,10 +13,16 @@ export async function POST(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
+  const authError = await requirePermission(request, 'suppliers.edit');
+  if (authError) return authError;
+
   try {
     const { id } = await context.params;
     const body = await request.json();
-    const { receivedItems, amountPaid } = body; // Array of { id: itemId, receivedQty: number }, amountPaid: number
+    const { receivedItems, amountPaid } = body as {
+      receivedItems: { id: string; receivedQty: number }[];
+      amountPaid?: number;
+    };
 
     if (!receivedItems || receivedItems.length === 0) {
       return NextResponse.json(
@@ -29,7 +36,7 @@ export async function POST(
       include: {
         items: {
           include: {
-            product: { select: { id: true, name: true, nameBn: true, unit: true, currentStock: true } },
+            product: { select: { id: true, name: true, nameBn: true, unit: true, currentStock: true, buyingPrice: true } },
           },
         },
         supplier: true,
@@ -43,9 +50,9 @@ export async function POST(
       );
     }
 
-    if (order.paymentStatus !== 'Pending' && order.paymentStatus !== 'Ordered') {
+    if (order.deliveryStatus === 'Received' || order.deliveryStatus === 'Cancelled') {
       return NextResponse.json(
-        { success: false, error: 'শুধুমাত্র পেন্ডিং বা অর্ডার করা অর্ডার প্রাপ্ত করা যাবে' },
+        { success: false, error: 'শুধুমাত্র পেন্ডিং বা অর্ডার করা বা আংশিক প্রাপ্ত অর্ডার প্রাপ্ত করা যাবে' },
         { status: 400 }
       );
     }
@@ -59,13 +66,24 @@ export async function POST(
           { status: 400 }
         );
       }
-      if (receivedItem.receivedQty < 0 || receivedItem.receivedQty > orderItem.quantity) {
+      if (receivedItem.receivedQty < 0 || receivedItem.receivedQty > Number(orderItem.quantity)) {
         return NextResponse.json(
           { success: false, error: `প্রাপ্ত পরিমাণ সঠিক নয়: ${orderItem.productName}` },
           { status: 400 }
         );
       }
     }
+
+    // Determine delivery status
+    let allFullyReceived = true;
+    for (const item of order.items) {
+      const receivedItem = receivedItems.find((ri) => ri.id === item.id);
+      const qty = receivedItem ? receivedItem.receivedQty : 0;
+      if (qty < Number(item.quantity)) {
+        allFullyReceived = false;
+      }
+    }
+    const nextDeliveryStatus = allFullyReceived ? 'Received' : 'PartiallyReceived';
 
     // Update stock and create stock entries in a transaction
     const result = await db.$transaction(async (tx) => {
@@ -77,21 +95,41 @@ export async function POST(
         const qty = receivedItem.receivedQty;
         if (qty <= 0) continue;
 
-        // Since we don't have receivedQty in schema, we can adjust quantity if they received less than ordered,
-        // or we just log and update the product stock. Let's adjust purchaseItem.quantity to actual received qty.
+        // Update receivedQty and totalPrice (receivedQty * buyingPrice)
+        const unitPrice = Number(orderItem.buyingPrice);
         await tx.purchaseItem.update({
           where: { id: receivedItem.id },
-          data: { quantity: qty },
+          data: {
+            receivedQty: qty,
+            totalPrice: qty * unitPrice
+          },
         });
 
-        // Update product stock and buying price
-        const unitPrice = Number(orderItem.buyingPrice);
+        // Update product stock and calculate WAC
+        const product = await tx.product.findUnique({
+          where: { id: orderItem.productId },
+        });
+
+        const updateData: any = {
+          currentStock: { increment: qty },
+          updatedAt: new Date(),
+        };
+
+        if (unitPrice > 0) {
+          const currentStock = Number(product?.currentStock) || 0;
+          const newStock = currentStock + qty;
+          if (newStock > 0) {
+            const currentPrice = Number(product?.buyingPrice) || unitPrice;
+            const wac = ((currentStock * currentPrice) + (qty * unitPrice)) / newStock;
+            updateData.buyingPrice = toMoneyNumber(wac);
+          } else {
+            updateData.buyingPrice = toMoneyNumber(unitPrice);
+          }
+        }
+
         await tx.product.update({
           where: { id: orderItem.productId },
-          data: {
-            currentStock: { increment: qty },
-            ...(unitPrice > 0 ? { buyingPrice: unitPrice } : {}),
-          },
+          data: updateData,
         });
 
         // Create stock entry history
@@ -102,6 +140,8 @@ export async function POST(
             quantity: qty,
             reason: `Purchase Order Received: ${order.invoiceNumber}`,
             referenceId: order.id,
+            purchaseId: order.id,
+            createdAt: order.createdAt,
           },
         });
       }
@@ -114,13 +154,22 @@ export async function POST(
           receivedTotalAmount += receivedItem.receivedQty * Number(orderItem.buyingPrice);
         }
       }
-
       const actualAmountPaid = amountPaid !== undefined ? amountPaid : receivedTotalAmount;
+      let paymentStatus = 'Paid';
+      if (actualAmountPaid === 0) {
+        paymentStatus = 'Pending';
+      } else if (actualAmountPaid < receivedTotalAmount) {
+        paymentStatus = 'Partial';
+      }
 
       // Update purchase status to received (Paid) and set totalAmount based on received quantities
       const updatedOrder = await tx.purchase.update({
         where: { id },
-        data: { paymentStatus: 'Paid', totalAmount: receivedTotalAmount },
+        data: {
+          paymentStatus,
+          deliveryStatus: nextDeliveryStatus,
+          totalAmount: receivedTotalAmount
+        },
         include: {
           supplier: true,
           items: {
@@ -138,7 +187,7 @@ export async function POST(
             amount: actualAmountPaid,
             category: 'Supplier Payment',
             notes: `Paid for purchase order: ${order.invoiceNumber}`,
-            date: new Date(),
+            date: order.createdAt,
             supplierId: order.supplierId,
             supplierName: order.supplier.name,
           },
@@ -147,8 +196,6 @@ export async function POST(
 
       return updatedOrder;
     });
-
-
 
     const user = await getAuthenticatedUser(request);
     await logAudit({
@@ -188,7 +235,7 @@ export async function POST(
         quantity: Number(item.quantity),
         unitPrice: Number(item.buyingPrice),
         totalPrice: Number(item.totalPrice),
-        receivedQty: Number(item.quantity),
+        receivedQty: Number(item.receivedQty || 0),
         product: item.product ? {
           id: item.product.id,
           name: item.product.name,

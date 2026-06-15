@@ -1,7 +1,26 @@
 import { describe, it, expect } from 'bun:test';
-import { convertBengaliToEnglishNumerals, isValidEanUpcBarcode } from './utils';
+import { convertBengaliToEnglishNumerals, isValidEanUpcBarcode, cn, convertEnglishToBengaliNumerals } from './utils';
 
 describe('utils', () => {
+  describe('cn', () => {
+    it('merges class names correctly', () => {
+      expect(cn('class1', 'class2')).toBe('class1 class2');
+      expect(cn('class1', { class2: true, class3: false })).toBe('class1 class2');
+      expect(cn('p-4', 'p-2')).toBe('p-2'); // tailwind-merge override
+    });
+  });
+
+  describe('convertEnglishToBengaliNumerals', () => {
+    it('should convert English numerals to Bengali numerals', () => {
+      expect(convertEnglishToBengaliNumerals('0123456789')).toBe('০১২৩৪৫৬৭৮৯');
+      expect(convertEnglishToBengaliNumerals(123)).toBe('১২৩');
+    });
+
+    it('should handle strings with no English numerals', () => {
+      expect(convertEnglishToBengaliNumerals('abcDEF!@#')).toBe('abcDEF!@#');
+    });
+  });
+
   describe('convertBengaliToEnglishNumerals', () => {
     it('should convert all Bengali numerals to English numerals', () => {
       expect(convertBengaliToEnglishNumerals('০১২৩৪৫৬৭৮৯')).toBe('0123456789');

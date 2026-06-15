@@ -41,9 +41,9 @@ export function ProductsReport({ onBack }: ProductsReportProps) {
 
   useEffect(() => {
     setLoading(true);
-    let url = `/api/reports/products?from=${dateFrom}&to=${dateTo}T23:59:59`;
+    let url = `/api/reports/products?from=${dateFrom}&to=${dateTo}T23:59:59&tzOffset=${new Date().getTimezoneOffset()}`;
     if (preset !== 'custom') {
-      url = `/api/reports/products?days=${preset}`;
+      url = `/api/reports/products?days=${preset}&tzOffset=${new Date().getTimezoneOffset()}`;
     }
     
     fetch(url)

@@ -44,7 +44,7 @@ export function SupplierReport({ onBack }: SupplierReportProps) {
   useEffect(() => {
     setLoading(true);
     const hourlyParam = viewMode === 'daily' ? '&hourly=true' : '';
-    const url = `/api/reports/purchases?from=${fetchFrom}&to=${fetchTo}${hourlyParam}`;
+    const url = `/api/reports/purchases?from=${fetchFrom}&to=${fetchTo}${hourlyParam}&tzOffset=${new Date().getTimezoneOffset()}`;
     
     const controller = new AbortController();
     fetch(url, { signal: controller.signal })

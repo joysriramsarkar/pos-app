@@ -11,16 +11,36 @@ export async function GET(request: NextRequest) {
   try {
     const sp = request.nextUrl.searchParams;
 
+    const tzOffset = parseInt(sp.get("tzOffset") || "-330");
+    const offsetMs = -tzOffset * 60 * 1000;
+
     let startDate: Date;
     let endDate: Date;
-
     if (sp.get("from") && sp.get("to")) {
-      startDate = startOfDay(parseISO(sp.get("from")!));
-      endDate = endOfDay(parseISO(sp.get("to")!));
+      const fromDate = parseISO(sp.get("from")!);
+      const toDate = parseISO(sp.get("to")!);
+
+      const startLocal = new Date(Date.UTC(
+        fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate(), 0, 0, 0, 0
+      ));
+      startDate = new Date(startLocal.getTime() - offsetMs);
+
+      const endLocal = new Date(Date.UTC(
+        toDate.getFullYear(), toDate.getMonth(), toDate.getDate(), 0, 0, 0, 0
+      ));
+      endDate = new Date(endLocal.getTime() - offsetMs + 24 * 60 * 60 * 1000 - 1);
     } else {
       const days = parseInt(sp.get("days") || "30");
-      startDate = startOfDay(subDays(new Date(), days - 1));
-      endDate = endOfDay(new Date());
+      const nowUtc = new Date();
+      const localNow = new Date(nowUtc.getTime() + offsetMs);
+
+      const endLocal = new Date(Date.UTC(
+        localNow.getUTCFullYear(), localNow.getUTCMonth(), localNow.getUTCDate(), 0, 0, 0, 0
+      ));
+      endDate = new Date(endLocal.getTime() - offsetMs + 24 * 60 * 60 * 1000 - 1);
+
+      const startLocal = new Date(endLocal.getTime() - (days - 1) * 24 * 60 * 60 * 1000);
+      startDate = new Date(startLocal.getTime() - offsetMs);
     }
 
     const topProducts = await prisma.saleItem.groupBy({

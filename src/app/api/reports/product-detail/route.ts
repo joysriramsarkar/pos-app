@@ -2,7 +2,8 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requirePermission } from '@/lib/api-middleware';
-import { startOfDay, endOfDay, subDays, format } from 'date-fns';
+import { format } from 'date-fns';
+import { toZonedTime } from 'date-fns-tz';
 
 export async function GET(request: NextRequest) {
   const authError = await requirePermission(request, 'reports.view');
@@ -13,8 +14,19 @@ export async function GET(request: NextRequest) {
   if (!productId) return NextResponse.json({ error: 'productId required' }, { status: 400 });
 
   const days = parseInt(sp.get('days') || '30');
-  const startDate = startOfDay(subDays(new Date(), days - 1));
-  const endDate = endOfDay(new Date());
+  const tzOffset = parseInt(sp.get('tzOffset') || '-330');
+  const offsetMs = -tzOffset * 60 * 1000;
+  const TZ = tzOffset === -360 ? "Asia/Dhaka" : "Asia/Kolkata";
+
+  const nowUtc = new Date();
+  const localNow = new Date(nowUtc.getTime() + offsetMs);
+  const endLocal = new Date(Date.UTC(
+    localNow.getUTCFullYear(), localNow.getUTCMonth(), localNow.getUTCDate(), 0, 0, 0, 0
+  ));
+  const endDate = new Date(endLocal.getTime() - offsetMs + 24 * 60 * 60 * 1000 - 1);
+
+  const startLocal = new Date(endLocal.getTime() - (days - 1) * 24 * 60 * 60 * 1000);
+  const startDate = new Date(startLocal.getTime() - offsetMs);
 
   try {
     const [product, stockHistory, saleItems] = await Promise.all([
@@ -55,17 +67,17 @@ export async function GET(request: NextRequest) {
     // Daily sales breakdown
     const dailySalesMap = new Map<string, { qty: number; revenue: number }>();
     for (const item of saleItems) {
-      const day = format(new Date(item.createdAt), 'yyyy-MM-dd');
+      const day = format(toZonedTime(new Date(item.createdAt), TZ), 'yyyy-MM-dd');
       const existing = dailySalesMap.get(day) ?? { qty: 0, revenue: 0 };
       dailySalesMap.set(day, {
         qty: existing.qty + Number(Number(item.quantity) ?? 0),
         revenue: existing.revenue + Number(item.totalPrice ?? 0),
       });
     }
-    // সব দিন দেখানোর জন্য — বিক্রি না থাকলেও 0 দিয়ে পূর্ণ করা
+    // Fill empty days
     const allDays = Array.from({ length: days }, (_, i) => {
-      const d = subDays(new Date(), days - 1 - i);
-      return format(d, 'yyyy-MM-dd');
+      const d = new Date(startDate.getTime() + i * 24 * 60 * 60 * 1000);
+      return format(toZonedTime(d, TZ), 'yyyy-MM-dd');
     });
     const dailySales = allDays.map(date => ({
       date,
@@ -75,7 +87,7 @@ export async function GET(request: NextRequest) {
     // Hourly sales breakdown
     const hourlySalesMap = new Map<number, number>();
     for (const item of saleItems) {
-      const hour = new Date(item.createdAt).getHours();
+      const hour = toZonedTime(new Date(item.createdAt), TZ).getHours();
       hourlySalesMap.set(hour, (hourlySalesMap.get(hour) ?? 0) + (Number(item.quantity) ?? 0));
     }
     const hourlySales = Array.from({ length: 24 }, (_, h) => ({

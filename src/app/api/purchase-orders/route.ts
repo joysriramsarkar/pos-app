@@ -2,13 +2,17 @@ export const dynamic = 'force-dynamic';
 
 import { db } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuthenticatedUser } from "@/lib/api-middleware";
+import { getAuthenticatedUser, requirePermission } from "@/lib/api-middleware";
 import { logAudit } from "@/lib/audit";
+import { toMoneyNumber } from '@/lib/money';
 
 const getIp = (req: NextRequest) => req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || undefined;
 
 // GET /api/purchase-orders - List purchase orders
 export async function GET(request: NextRequest) {
+  const authError = await requirePermission(request, 'suppliers.view');
+  if (authError) return authError;
+
   try {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
@@ -18,10 +22,10 @@ export async function GET(request: NextRequest) {
     if (supplierId) where.supplierId = supplierId;
 
     if (status && status !== 'সব') {
-      if (status === 'পেন্ডিং') where.paymentStatus = 'Pending';
-      else if (status === 'অর্ডার করা') where.paymentStatus = 'Ordered';
-      else if (status === 'প্রাপ্ত') where.paymentStatus = 'Paid';
-      else if (status === 'বাতিল') where.paymentStatus = 'Cancelled';
+      if (status === 'পেন্ডিং') where.deliveryStatus = 'Pending';
+      else if (status === 'অর্ডার করা') where.deliveryStatus = 'Ordered';
+      else if (status === 'প্রাপ্ত') where.deliveryStatus = { in: ['Received', 'PartiallyReceived'] };
+      else if (status === 'বাতিল') where.deliveryStatus = 'Cancelled';
     } else {
       where.invoiceNumber = { startsWith: 'PO-' };
     }
@@ -43,9 +47,9 @@ export async function GET(request: NextRequest) {
 
     const mappedOrders = purchases.map((p) => {
       let mappedStatus = 'পেন্ডিং';
-      if (p.paymentStatus === 'Ordered') mappedStatus = 'অর্ডার করা';
-      else if (p.paymentStatus === 'Paid') mappedStatus = 'প্রাপ্ত';
-      else if (p.paymentStatus === 'Cancelled') mappedStatus = 'বাতিল';
+      if (p.deliveryStatus === 'Ordered') mappedStatus = 'অর্ডার করা';
+      else if (p.deliveryStatus === 'Received' || p.deliveryStatus === 'PartiallyReceived') mappedStatus = 'প্রাপ্ত';
+      else if (p.deliveryStatus === 'Cancelled') mappedStatus = 'বাতিল';
 
       return {
         id: p.id,
@@ -70,7 +74,7 @@ export async function GET(request: NextRequest) {
           quantity: Number(item.quantity),
           unitPrice: Number(item.buyingPrice),
           totalPrice: Number(item.totalPrice),
-          receivedQty: p.paymentStatus === 'Paid' ? Number(item.quantity) : 0,
+          receivedQty: Number(item.receivedQty || 0),
           product: item.product ? {
             id: item.product.id,
             name: item.product.name,
@@ -93,6 +97,9 @@ export async function GET(request: NextRequest) {
 
 // POST /api/purchase-orders - Create new purchase order
 export async function POST(request: NextRequest) {
+  const authError = await requirePermission(request, 'suppliers.create');
+  if (authError) return authError;
+
   try {
     const body = await request.json();
     const { supplierId, items, expectedDate, notes, directReceive, amountPaid } = body;
@@ -124,134 +131,211 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Generate PO number
-    const now = new Date();
-    const dateStr = now.getFullYear().toString() +
-      String(now.getMonth() + 1).padStart(2, '0') +
-      String(now.getDate()).padStart(2, '0');
-
-    const todayOrders = await db.purchase.findMany({
-      where: {
-        invoiceNumber: { startsWith: `PO-${dateStr}` },
-      },
-    });
-    const seq = String(todayOrders.length + 1).padStart(4, '0');
-    const orderNumber = `PO-${dateStr}-${seq}`;
-
     const totalAmount = items.reduce(
       (sum: number, item: { quantity: number; unitPrice: number }) => sum + item.quantity * item.unitPrice,
       0
     );
 
+    let purchaseDate = new Date();
+    if (expectedDate) {
+      const parts = expectedDate.split('-');
+      if (parts.length === 3) {
+        const year = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1;
+        const day = parseInt(parts[2], 10);
+        purchaseDate = new Date(year, month, day, 12, 0, 0);
+      } else {
+        purchaseDate = new Date(expectedDate);
+      }
+    }
+    const dateStr = purchaseDate.getFullYear().toString() +
+      String(purchaseDate.getMonth() + 1).padStart(2, '0') +
+      String(purchaseDate.getDate()).padStart(2, '0');
+
     let purchase;
-    if (directReceive) {
-      // Create and receive in one transaction
-      purchase = await db.$transaction(async (tx) => {
-        const p = await tx.purchase.create({
-          data: {
-            invoiceNumber: orderNumber,
-            supplierId: (supplierId && supplierId !== 'none') ? supplierId : null,
-            totalAmount,
-            paymentStatus: 'Paid',
-            notes: notes || null,
-            items: {
-              create: await Promise.all(items.map(async (item: { productId: string; quantity: number; unitPrice: number }) => {
-                const product = await tx.product.findUnique({ where: { id: item.productId } });
-                return {
-                  productId: item.productId,
-                  productName: product?.name || 'Unknown',
-                  quantity: item.quantity,
-                  buyingPrice: item.unitPrice,
-                  totalPrice: item.quantity * item.unitPrice,
-                };
-              })),
+    let attempts = 0;
+    const maxAttempts = 5;
+
+    while (attempts < maxAttempts) {
+      try {
+        purchase = await db.$transaction(async (tx) => {
+          // Find the latest order number for today inside transaction to be serial and safe
+          const latestOrder = await tx.purchase.findFirst({
+            where: {
+              invoiceNumber: { startsWith: `PO-${dateStr}-` },
             },
-          },
-          include: {
-            supplier: true,
-            items: {
-              include: {
-                product: {
-                  select: { id: true, name: true, nameBn: true, unit: true },
+            orderBy: {
+              invoiceNumber: 'desc',
+            },
+          });
+
+          let nextSeq = 1;
+          if (latestOrder && latestOrder.invoiceNumber) {
+            const parts = latestOrder.invoiceNumber.split('-');
+            const lastSeqStr = parts[parts.length - 1];
+            const lastSeq = parseInt(lastSeqStr, 10);
+            if (!isNaN(lastSeq)) {
+              nextSeq = lastSeq + 1;
+            }
+          }
+          const seq = String(nextSeq).padStart(4, '0');
+          const orderNumber = `PO-${dateStr}-${seq}`;
+
+          if (directReceive) {
+            let paymentStatus = 'Paid';
+            const actualAmountPaid = amountPaid !== undefined ? amountPaid : totalAmount;
+            if (actualAmountPaid === 0) {
+              paymentStatus = 'Pending';
+            } else if (actualAmountPaid < totalAmount) {
+              paymentStatus = 'Partial';
+            }
+
+            // Create and receive in one transaction
+            const p = await tx.purchase.create({
+              data: {
+                invoiceNumber: orderNumber,
+                supplierId: (supplierId && supplierId !== 'none') ? supplierId : null,
+                totalAmount,
+                paymentStatus,
+                deliveryStatus: 'Received',
+                notes: notes || null,
+                createdAt: purchaseDate,
+                items: {
+                  create: await Promise.all(items.map(async (item: { productId: string; quantity: number; unitPrice: number }) => {
+                    const product = await tx.product.findUnique({ where: { id: item.productId } });
+                    return {
+                      productId: item.productId,
+                      productName: product?.name || 'Unknown',
+                      quantity: item.quantity,
+                      receivedQty: item.quantity,
+                      buyingPrice: item.unitPrice,
+                      totalPrice: item.quantity * item.unitPrice,
+                    };
+                  })),
                 },
               },
-            },
-          },
-        });
-
-        // Update product stock and create stock history
-        for (const item of p.items) {
-          const qty = Number(item.quantity);
-          const unitPrice = Number(item.buyingPrice);
-          await tx.product.update({
-            where: { id: item.productId },
-            data: {
-              currentStock: { increment: qty },
-              ...(unitPrice > 0 ? { buyingPrice: unitPrice } : {}),
-            },
-          });
-
-          await tx.stockHistory.create({
-            data: {
-              productId: item.productId,
-              changeType: 'purchase',
-              quantity: qty,
-              reason: `Direct Purchase: ${p.invoiceNumber}`,
-              referenceId: p.id,
-            },
-          });
-        }
-
-        // Create Supplier Payment expense if amountPaid is not 0 (defaults to totalAmount)
-        const actualAmountPaid = amountPaid !== undefined ? amountPaid : totalAmount;
-        if (actualAmountPaid > 0 && p.supplierId && p.supplier) {
-          await tx.expense.create({
-            data: {
-              amount: actualAmountPaid,
-              category: 'Supplier Payment',
-              notes: `Paid for direct purchase: ${p.invoiceNumber}`,
-              date: new Date(),
-              supplierId: p.supplierId,
-              supplierName: p.supplier.name,
-            },
-          });
-        }
-
-        return p;
-      });
-    } else {
-      // Normal flow (Pending status)
-      purchase = await db.purchase.create({
-        data: {
-          invoiceNumber: orderNumber,
-          supplierId: (supplierId && supplierId !== 'none') ? supplierId : null,
-          totalAmount,
-          paymentStatus: 'Pending',
-          notes: notes || null,
-          items: {
-            create: await Promise.all(items.map(async (item: { productId: string; quantity: number; unitPrice: number }) => {
-              const product = await db.product.findUnique({ where: { id: item.productId } });
-              return {
-                productId: item.productId,
-                productName: product?.name || 'Unknown',
-                quantity: item.quantity,
-                buyingPrice: item.unitPrice,
-                totalPrice: item.quantity * item.unitPrice,
-              };
-            })),
-          },
-        },
-        include: {
-          supplier: true,
-          items: {
-            include: {
-              product: {
-                select: { id: true, name: true, nameBn: true, unit: true },
+              include: {
+                supplier: true,
+                items: {
+                  include: {
+                    product: {
+                      select: { id: true, name: true, nameBn: true, unit: true, currentStock: true, buyingPrice: true },
+                    },
+                  },
+                },
               },
-            },
-          },
-        },
-      });
+            });
+
+            // Update product stock and WAC and create stock history
+            for (const item of p.items) {
+              const qty = Number(item.quantity);
+              const unitPrice = Number(item.buyingPrice);
+
+              const product = await tx.product.findUnique({
+                where: { id: item.productId }
+              });
+
+              const updateData: any = {
+                currentStock: { increment: qty },
+                updatedAt: new Date(),
+              };
+
+              if (unitPrice > 0) {
+                const currentStock = Number(product?.currentStock) || 0;
+                const newStock = currentStock + qty;
+                if (newStock > 0) {
+                  const currentPrice = Number(product?.buyingPrice) || unitPrice;
+                  const wac = ((currentStock * currentPrice) + (qty * unitPrice)) / newStock;
+                  updateData.buyingPrice = toMoneyNumber(wac);
+                } else {
+                  updateData.buyingPrice = toMoneyNumber(unitPrice);
+                }
+              }
+
+              await tx.product.update({
+                where: { id: item.productId },
+                data: updateData,
+              });
+
+              await tx.stockHistory.create({
+                data: {
+                  productId: item.productId,
+                  changeType: 'purchase',
+                  quantity: qty,
+                  reason: `Direct Purchase: ${p.invoiceNumber}`,
+                  referenceId: p.id,
+                  purchaseId: p.id,
+                  createdAt: purchaseDate,
+                },
+              });
+            }
+
+
+            if (actualAmountPaid > 0 && p.supplierId && p.supplier) {
+              await tx.expense.create({
+                data: {
+                  amount: actualAmountPaid,
+                  category: 'Supplier Payment',
+                  notes: `Paid for direct purchase: ${p.invoiceNumber}`,
+                  date: purchaseDate,
+                  supplierId: p.supplierId,
+                  supplierName: p.supplier.name,
+                },
+              });
+            }
+
+            return p;
+          } else {
+            // Normal flow (Pending status)
+            return await tx.purchase.create({
+              data: {
+                invoiceNumber: orderNumber,
+                supplierId: (supplierId && supplierId !== 'none') ? supplierId : null,
+                totalAmount,
+                paymentStatus: 'Pending',
+                deliveryStatus: 'Pending',
+                notes: notes || null,
+                createdAt: purchaseDate,
+                items: {
+                  create: await Promise.all(items.map(async (item: { productId: string; quantity: number; unitPrice: number }) => {
+                    const product = await tx.product.findUnique({ where: { id: item.productId } });
+                    return {
+                      productId: item.productId,
+                      productName: product?.name || 'Unknown',
+                      quantity: item.quantity,
+                      receivedQty: 0,
+                      buyingPrice: item.unitPrice,
+                      totalPrice: item.quantity * item.unitPrice,
+                    };
+                  })),
+                },
+              },
+              include: {
+                supplier: true,
+                items: {
+                  include: {
+                    product: {
+                      select: { id: true, name: true, nameBn: true, unit: true },
+                    },
+                  },
+                },
+              },
+            });
+          }
+        });
+        break; // break the retry loop on success
+      } catch (err: any) {
+        if (err.code === 'P2002' && attempts < maxAttempts - 1) {
+          attempts++;
+          await new Promise((resolve) => setTimeout(resolve, 50 + Math.random() * 150));
+          continue;
+        }
+        throw err;
+      }
+    }
+
+    if (!purchase) {
+      throw new Error('Failed to generate purchase order');
     }
 
     const user = await getAuthenticatedUser(request);
@@ -271,14 +355,18 @@ export async function POST(request: NextRequest) {
     });
 
     const isPaid = purchase.paymentStatus === 'Paid';
+    let mappedStatus = 'পেন্ডিং';
+    if (purchase.deliveryStatus === 'Ordered') mappedStatus = 'অর্ডার করা';
+    else if (purchase.deliveryStatus === 'Received' || purchase.deliveryStatus === 'PartiallyReceived') mappedStatus = 'প্রাপ্ত';
+    else if (purchase.deliveryStatus === 'Cancelled') mappedStatus = 'বাতিল';
 
     const mappedOrder = {
       id: purchase.id,
       orderNumber: purchase.invoiceNumber,
       supplierId: purchase.supplierId,
-      status: isPaid ? 'প্রাপ্ত' : 'পেন্ডিং',
+      status: mappedStatus,
       totalAmount: Number(purchase.totalAmount),
-      paidAmount: isPaid ? Number(purchase.totalAmount) : 0,
+      paidAmount: purchase.paymentStatus === 'Paid' ? Number(purchase.totalAmount) : 0,
       notes: purchase.notes,
       expectedDate: expectedDate || null,
       createdAt: purchase.createdAt.toISOString(),
@@ -295,7 +383,7 @@ export async function POST(request: NextRequest) {
         quantity: Number(item.quantity),
         unitPrice: Number(item.buyingPrice),
         totalPrice: Number(item.totalPrice),
-        receivedQty: isPaid ? Number(item.quantity) : 0,
+        receivedQty: Number(item.receivedQty || 0),
         product: item.product ? {
           id: item.product.id,
           name: item.product.name,
@@ -320,6 +408,9 @@ export async function POST(request: NextRequest) {
 
 // PUT /api/purchase-orders - Update purchase order (status change)
 export async function PUT(request: NextRequest) {
+  const authError = await requirePermission(request, 'suppliers.edit');
+  if (authError) return authError;
+
   try {
     const body = await request.json();
     const { id, status } = body;
@@ -342,11 +433,11 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    let nextPaymentStatus = 'Pending';
-    if (status === 'অর্ডার করা' && order.paymentStatus === 'Pending') {
-      nextPaymentStatus = 'Ordered';
-    } else if (status === 'বাতিল' && (order.paymentStatus === 'Pending' || order.paymentStatus === 'Ordered')) {
-      nextPaymentStatus = 'Cancelled';
+    let nextDeliveryStatus = 'Pending';
+    if (status === 'অর্ডার করা' && order.deliveryStatus === 'Pending') {
+      nextDeliveryStatus = 'Ordered';
+    } else if (status === 'বাতিল' && (order.deliveryStatus === 'Pending' || order.deliveryStatus === 'Ordered')) {
+      nextDeliveryStatus = 'Cancelled';
     } else {
       return NextResponse.json(
         { success: false, error: 'এই অবস্থা পরিবর্তন অনুমোদিত নয়' },
@@ -356,7 +447,7 @@ export async function PUT(request: NextRequest) {
 
     const updated = await db.purchase.update({
       where: { id },
-      data: { paymentStatus: nextPaymentStatus },
+      data: { deliveryStatus: nextDeliveryStatus },
       include: {
         supplier: true,
         items: {
@@ -375,15 +466,15 @@ export async function PUT(request: NextRequest) {
       entityId: updated.id,
       details: {
         orderNumber: updated.invoiceNumber,
-        oldStatus: order.paymentStatus,
-        newStatus: updated.paymentStatus,
+        oldStatus: order.deliveryStatus,
+        newStatus: updated.deliveryStatus,
       },
       ipAddress: getIp(request)
     });
 
     let mappedStatus = 'পেন্ডিং';
-    if (updated.paymentStatus === 'Ordered') mappedStatus = 'অর্ডার করা';
-    else if (updated.paymentStatus === 'Cancelled') mappedStatus = 'বাতিল';
+    if (updated.deliveryStatus === 'Ordered') mappedStatus = 'অর্ডার করা';
+    else if (updated.deliveryStatus === 'Cancelled') mappedStatus = 'বাতিল';
 
     const mappedOrder = {
       id: updated.id,
@@ -408,7 +499,7 @@ export async function PUT(request: NextRequest) {
         quantity: Number(item.quantity),
         unitPrice: Number(item.buyingPrice),
         totalPrice: Number(item.totalPrice),
-        receivedQty: 0,
+        receivedQty: Number(item.receivedQty || 0),
         product: item.product ? {
           id: item.product.id,
           name: item.product.name,

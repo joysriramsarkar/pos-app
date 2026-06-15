@@ -88,8 +88,8 @@ async function isRateLimited(ip: string, pathname: string): Promise<boolean> {
   return memoryRateLimit(ip, pathname);
 }
 
-export default withAuth(
-  async function middleware(request: NextRequest) {
+export const proxy = withAuth(
+  async function proxy(request: NextRequest) {
     const { pathname } = request.nextUrl;
 
     if (request.method === "OPTIONS" && pathname.startsWith("/api/")) {
@@ -117,6 +117,8 @@ export default withAuth(
     pages: { signIn: "/login" },
   }
 );
+
+export default proxy;
 
 export const config = {
   matcher: [

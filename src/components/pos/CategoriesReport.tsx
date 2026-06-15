@@ -33,9 +33,9 @@ export function CategoriesReport({ onBack }: CategoriesReportProps) {
 
   useEffect(() => {
     setLoading(true);
-    let url = `/api/reports/categories?from=${dateFrom}&to=${dateTo}T23:59:59`;
+    let url = `/api/reports/categories?from=${dateFrom}&to=${dateTo}T23:59:59&tzOffset=${new Date().getTimezoneOffset()}`;
     if (preset !== 'custom') {
-      url = `/api/reports/categories?days=${preset}`;
+      url = `/api/reports/categories?days=${preset}&tzOffset=${new Date().getTimezoneOffset()}`;
     }
     
     fetch(url)

@@ -41,9 +41,9 @@ export function CustomersReport({ onBack }: CustomersReportProps) {
 
   useEffect(() => {
     setLoading(true);
-    let url = `/api/reports/customers?from=${dateFrom}&to=${dateTo}T23:59:59`;
+    let url = `/api/reports/customers?from=${dateFrom}&to=${dateTo}T23:59:59&tzOffset=${new Date().getTimezoneOffset()}`;
     if (preset !== 'custom') {
-      url = `/api/reports/customers?days=${preset}`;
+      url = `/api/reports/customers?days=${preset}&tzOffset=${new Date().getTimezoneOffset()}`;
     }
     
     fetch(url)
@@ -62,9 +62,9 @@ export function CustomersReport({ onBack }: CustomersReportProps) {
     if (!selectedCustomerId) return;
     setDetailLoading(true);
     
-    let url = `/api/reports/customers?customerId=${selectedCustomerId}&from=${dateFrom}&to=${dateTo}T23:59:59`;
+    let url = `/api/reports/customers?customerId=${selectedCustomerId}&from=${dateFrom}&to=${dateTo}T23:59:59&tzOffset=${new Date().getTimezoneOffset()}`;
     if (preset !== 'custom') {
-      url = `/api/reports/customers?customerId=${selectedCustomerId}&days=${preset}`;
+      url = `/api/reports/customers?customerId=${selectedCustomerId}&days=${preset}&tzOffset=${new Date().getTimezoneOffset()}`;
     }
     
     fetch(url)

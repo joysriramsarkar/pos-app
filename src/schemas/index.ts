@@ -98,6 +98,7 @@ export const SupplierInputSchema = z.object({
 export type SupplierInput = z.infer<typeof SupplierInputSchema>;
 
 export const ExpenseInputSchema = z.object({
+  id: z.string().optional(),
   amount: money().pipe(z.number().positive('Amount must be positive')),
   category: z.string().min(1, 'Category is required'),
   notes: z.string().nullable().optional(),

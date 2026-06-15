@@ -23,6 +23,6 @@ export function subtractMoney(value: Decimal.Value | null | undefined, ...subtra
 }
 
 export function multiplyMoney(left: Decimal.Value | null | undefined, right: Decimal.Value | null | undefined): Decimal {
-  const result = toMoneyDecimal(left).times(toMoneyDecimal(right));
+  const result = new Decimal(left || 0).times(new Decimal(right || 0));
   return toMoneyDecimal(result);
 }
