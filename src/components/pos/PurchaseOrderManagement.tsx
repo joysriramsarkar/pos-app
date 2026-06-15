@@ -58,7 +58,7 @@ interface PurchaseOrder {
 interface FormItem {
   productId: string;
   quantity: number;
-  unitPrice: number;
+  unitPrice: number | string;
 }
 
 
@@ -259,11 +259,11 @@ export default function PurchaseOrderManagement() {
     setFormItems(formItems.filter((i) => i.productId !== productId));
   };
 
-  const updateFormItem = (productId: string, field: 'quantity' | 'unitPrice', value: number) => {
+  const updateFormItem = (productId: string, field: 'quantity' | 'unitPrice', value: number | string) => {
     setFormItems(formItems.map((i) => (i.productId === productId ? { ...i, [field]: value } : i)));
   };
 
-  const formTotal = formItems.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0);
+  const formTotal = formItems.reduce((sum, i) => sum + i.quantity * (parseFloat(i.unitPrice as string) || 0), 0);
 
   const resetForm = () => {
     setFormSupplierId('');
@@ -292,7 +292,7 @@ export default function PurchaseOrderManagement() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           supplierId: (formSupplierId && formSupplierId !== 'none') ? formSupplierId : null,
-          items: formItems.map((i) => ({ productId: i.productId, quantity: i.quantity, unitPrice: i.unitPrice })),
+          items: formItems.map((i) => ({ productId: i.productId, quantity: i.quantity, unitPrice: parseFloat(i.unitPrice as string) || 0 })),
           expectedDate: formExpectedDate || null,
           notes: formNotes || null,
           directReceive,
@@ -840,17 +840,20 @@ export default function PurchaseOrderManagement() {
                                     const cleaned = val.replace(/[^0-9.]/g, '');
                                     const dotCount = (cleaned.match(/\./g) || []).length;
                                     if (dotCount > 1) return;
-                                    updateFormItem(item.productId, 'unitPrice', parseFloat(cleaned) || 0);
+                                    updateFormItem(item.productId, 'unitPrice', cleaned);
                                   }}
                                   onBlur={() => {
-                                    if (item.unitPrice < 0) {
+                                    const parsedPrice = parseFloat(item.unitPrice as string) || 0;
+                                    if (parsedPrice < 0) {
                                       updateFormItem(item.productId, 'unitPrice', 0);
+                                    } else {
+                                      updateFormItem(item.productId, 'unitPrice', parsedPrice);
                                     }
                                   }}
                                   className="h-8 w-24"
                                 />
                               </TableCell>
-                              <TableCell className="font-medium">{formatPrice(item.quantity * item.unitPrice)}</TableCell>
+                              <TableCell className="font-medium">{formatPrice(item.quantity * (parseFloat(item.unitPrice as string) || 0))}</TableCell>
                               <TableCell>
                                 <Button variant="ghost" size="sm" onClick={() => removeFormItem(item.productId)}>
                                   <Trash2 className="h-3.5 w-3.5 text-red-500" />
