@@ -35,15 +35,33 @@ export async function GET(request: NextRequest) {
     const includeInactive = searchParams.get("includeInactive") === "true";
     const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10));
     const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get("pageSize") ?? "50", 10)));
+    const tzOffset = parseInt(searchParams.get("tzOffset") ?? "0", 10);
 
     const where: Record<string, unknown> = {};
     if (!includeInactive) where.isActive = true;
     if (dateFrom || dateTo) {
-      const toDate = dateTo ? new Date(dateTo) : undefined;
-      if (toDate && !dateTo?.includes('T')) toDate.setHours(23, 59, 59, 999);
+      let gteDate: Date | undefined;
+      let lteDate: Date | undefined;
+
+      if (dateFrom) {
+        const parts = dateFrom.split('T')[0].split('-');
+        const y = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10) - 1;
+        const d = parseInt(parts[2], 10);
+        gteDate = new Date(Date.UTC(y, m, d, 0, 0, 0, 0) + tzOffset * 60 * 1000);
+      }
+
+      if (dateTo) {
+        const parts = dateTo.split('T')[0].split('-');
+        const y = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10) - 1;
+        const d = parseInt(parts[2], 10);
+        lteDate = new Date(Date.UTC(y, m, d, 23, 59, 59, 999) + tzOffset * 60 * 1000);
+      }
+
       where.date = {
-        ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
-        ...(toDate ? { lte: toDate } : {}),
+        ...(gteDate ? { gte: gteDate } : {}),
+        ...(lteDate ? { lte: lteDate } : {}),
       };
     }
 
@@ -80,12 +98,36 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: parsed.error.issues[0].message }, { status: 400 });
     }
 
-    const { amount, category, notes, date, supplierId, supplierName } = parsed.data;
+    const { id, amount, category, notes, date, supplierId, supplierName } = parsed.data;
     const parsedDate = parseExpenseDate(date) ?? new Date();
 
-    const expense = await prisma.expense.create({
-      data: { amount, category, notes, date: parsedDate, supplierId: supplierId ?? null, supplierName: supplierName ?? null },
-    });
+    let expense;
+    if (id) {
+      expense = await prisma.expense.upsert({
+        where: { id },
+        update: {}, // Idempotency: return existing if it exists
+        create: {
+          id,
+          amount,
+          category,
+          notes,
+          date: parsedDate,
+          supplierId: supplierId ?? null,
+          supplierName: supplierName ?? null,
+        },
+      });
+    } else {
+      expense = await prisma.expense.create({
+        data: {
+          amount,
+          category,
+          notes,
+          date: parsedDate,
+          supplierId: supplierId ?? null,
+          supplierName: supplierName ?? null,
+        },
+      });
+    }
 
     const user = await getAuthenticatedUser(request);
     await logAudit({ userId: user?.id, action: 'CREATE_EXPENSE', entityType: 'Expense', entityId: expense.id, details: { amount: expense.amount, category: expense.category, notes: expense.notes ?? undefined }, ipAddress: getIp(request) });

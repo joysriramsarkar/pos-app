@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { useCustomersStore } from '@/stores/pos-store';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -73,6 +73,8 @@ const getInitialsBg = (name: string) => {
 
 export function PartiesManagement() {
   const t = useTranslations('Parties');
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  
   const [activeTab, setActiveTab] = useState<PartyType>('customer');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
@@ -108,6 +110,34 @@ export function PartiesManagement() {
   const { toast } = useToast();
 
   const { formatPrice, formatDate } = useNumberFormat();
+
+  useEffect(() => {
+    if (
+      !showLedger &&
+      !showPaymentDialog &&
+      !showPrepaymentDialog &&
+      !showWithdrawDialog &&
+      !showAddDialog &&
+      !showEditDialog &&
+      !showSupplierLedger &&
+      !showSupplierPaymentDialog
+    ) {
+      const timer = setTimeout(() => {
+        searchInputRef.current?.focus();
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [
+    showLedger,
+    showPaymentDialog,
+    showPrepaymentDialog,
+    showWithdrawDialog,
+    showAddDialog,
+    showEditDialog,
+    showSupplierLedger,
+    showSupplierPaymentDialog,
+    activeTab
+  ]);
 
   // Fetch customers and suppliers on component mount
   useEffect(() => {
@@ -324,6 +354,7 @@ export function PartiesManagement() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          id: uuidv4(),
           amount,
           category: 'Supplier Payment',
           notes: `Paid supplier: ${selectedSupplier.name}`,
@@ -648,10 +679,12 @@ export function PartiesManagement() {
           <Input
             id="parties-search"
             name="parties-search"
+            ref={searchInputRef}
             placeholder="Search by name or phone..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-9"
+            autoFocus
           />
           {searchQuery && (
             <Button
@@ -1014,12 +1047,17 @@ export function PartiesManagement() {
                 <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                   id="payment-dialog-amount"
-                  type="number"
+                  type="text"
                   value={paymentAmount}
-                  onChange={(e) => setPaymentAmount(convertBengaliToEnglishNumerals(e.target.value))}
+                  onChange={(e) => {
+                    const val = convertBengaliToEnglishNumerals(e.target.value);
+                    const cleaned = val.replace(/[^0-9.]/g, '');
+                    const dotCount = (cleaned.match(/\./g) || []).length;
+                    if (dotCount > 1) return;
+                    setPaymentAmount(cleaned);
+                  }}
                   placeholder="0"
                   className="pl-9"
-                  max={selectedCustomer?.totalDue}
                 />
               </div>
             </div>
@@ -1085,9 +1123,15 @@ export function PartiesManagement() {
                 <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                   id="prepayment-dialog-amount"
-                  type="number"
+                  type="text"
                   value={prepaymentAmount}
-                  onChange={(e) => setPrepaymentAmount(convertBengaliToEnglishNumerals(e.target.value))}
+                  onChange={(e) => {
+                    const val = convertBengaliToEnglishNumerals(e.target.value);
+                    const cleaned = val.replace(/[^0-9.]/g, '');
+                    const dotCount = (cleaned.match(/\./g) || []).length;
+                    if (dotCount > 1) return;
+                    setPrepaymentAmount(cleaned);
+                  }}
                   placeholder="0"
                   className="pl-9"
                 />
@@ -1145,12 +1189,17 @@ export function PartiesManagement() {
                 <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                   id="withdraw-amount"
-                  type="number"
+                  type="text"
                   value={withdrawAmount}
-                  onChange={(e) => setWithdrawAmount(convertBengaliToEnglishNumerals(e.target.value))}
+                  onChange={(e) => {
+                    const val = convertBengaliToEnglishNumerals(e.target.value);
+                    const cleaned = val.replace(/[^0-9.]/g, '');
+                    const dotCount = (cleaned.match(/\./g) || []).length;
+                    if (dotCount > 1) return;
+                    setWithdrawAmount(cleaned);
+                  }}
                   placeholder="0"
                   className="pl-9"
-                  max={selectedCustomer?.prepaidBalance}
                 />
               </div>
             </div>
@@ -1428,12 +1477,17 @@ export function PartiesManagement() {
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">৳</span>
                 <Input
                   id="supplier-payment-dialog-amount"
-                  type="number"
+                  type="text"
                   value={supplierPaymentAmount}
-                  onChange={(e) => setSupplierPaymentAmount(convertBengaliToEnglishNumerals(e.target.value))}
+                  onChange={(e) => {
+                    const val = convertBengaliToEnglishNumerals(e.target.value);
+                    const cleaned = val.replace(/[^0-9.]/g, '');
+                    const dotCount = (cleaned.match(/\./g) || []).length;
+                    if (dotCount > 1) return;
+                    setSupplierPaymentAmount(cleaned);
+                  }}
                   placeholder="0"
                   className="pl-9"
-                  max={(selectedSupplier as any)?.totalDue}
                 />
               </div>
             </div>

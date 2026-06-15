@@ -136,6 +136,14 @@ function POSDashboard() {
   const router = useRouter();
   const locale = useLocale();
   const [currentPage, setCurrentPage] = useState<PageType>('billing');
+  const [isDashboardMounted, setIsDashboardMounted] = useState(false);
+  const [isStockMounted, setIsStockMounted] = useState(false);
+  const [isPartiesMounted, setIsPartiesMounted] = useState(false);
+  const [isDueCollectionMounted, setIsDueCollectionMounted] = useState(false);
+  const [isPurchaseOrdersMounted, setIsPurchaseOrdersMounted] = useState(false);
+  const [isReportsMounted, setIsReportsMounted] = useState(false);
+  const [isExpensesMounted, setIsExpensesMounted] = useState(false);
+  const [isSettingsMounted, setIsSettingsMounted] = useState(false);
   const [isTransactionsPageMounted, setIsTransactionsPageMounted] = useState(false);
   const [isUsersPageMounted, setIsUsersPageMounted] = useState(false);
   const [isAuditPageMounted, setIsAuditPageMounted] = useState(false);
@@ -170,16 +178,31 @@ function POSDashboard() {
   }, [isOnlineContext]);
 
   useEffect(() => {
-    if (currentPage === 'transactions' && !isTransactionsPageMounted) {
-      setIsTransactionsPageMounted(true);
-    }
-    if (currentPage === 'users' && !isUsersPageMounted) {
-      setIsUsersPageMounted(true);
-    }
-    if (currentPage === 'audit' && !isAuditPageMounted) {
-      setIsAuditPageMounted(true);
-    }
-  }, [currentPage, isTransactionsPageMounted, isUsersPageMounted, isAuditPageMounted]);
+    if (currentPage === 'dashboard' && !isDashboardMounted) setIsDashboardMounted(true);
+    if (currentPage === 'stock' && !isStockMounted) setIsStockMounted(true);
+    if (currentPage === 'parties' && !isPartiesMounted) setIsPartiesMounted(true);
+    if (currentPage === 'due-collection' && !isDueCollectionMounted) setIsDueCollectionMounted(true);
+    if (currentPage === 'purchase-orders' && !isPurchaseOrdersMounted) setIsPurchaseOrdersMounted(true);
+    if (currentPage === 'reports' && !isReportsMounted) setIsReportsMounted(true);
+    if (currentPage === 'expenses' && !isExpensesMounted) setIsExpensesMounted(true);
+    if (currentPage === 'settings' && !isSettingsMounted) setIsSettingsMounted(true);
+    if (currentPage === 'transactions' && !isTransactionsPageMounted) setIsTransactionsPageMounted(true);
+    if (currentPage === 'users' && !isUsersPageMounted) setIsUsersPageMounted(true);
+    if (currentPage === 'audit' && !isAuditPageMounted) setIsAuditPageMounted(true);
+  }, [
+    currentPage,
+    isDashboardMounted,
+    isStockMounted,
+    isPartiesMounted,
+    isDueCollectionMounted,
+    isPurchaseOrdersMounted,
+    isReportsMounted,
+    isExpensesMounted,
+    isSettingsMounted,
+    isTransactionsPageMounted,
+    isUsersPageMounted,
+    isAuditPageMounted,
+  ]);
 
   // Settings store
   const { settings } = useSettingsStore();
@@ -233,7 +256,7 @@ function POSDashboard() {
   const cartItems = useCartStore((state) => state.tabs.find(t => t.id === state.activeTabId)?.items ?? state.tabs[0].items);
 
   const cartItemCount = useMemo(() => {
-    return cartItems.reduce((sum, item) => sum + item.quantity, 0);
+    return cartItems.length;
   }, [cartItems]);
 
   const cartTotal = useMemo(() => {
@@ -1421,20 +1444,228 @@ function POSDashboard() {
 
         {/* Page Content */}
         <main className="flex-1 flex flex-col min-h-0 overflow-hidden bg-background pb-[calc(4rem+env(safe-area-inset-bottom))] lg:pb-0 lg:rounded-tl-2xl lg:shadow-[-4px_0_24px_-12px_rgba(0,0,0,0.1)] lg:border-t lg:border-l lg:border-border/50">
-          <AnimatePresence mode="wait">
-            {!['transactions', 'users', 'audit'].includes(currentPage) && (
-              <motion.div
-                key={currentPage}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                transition={{ duration: 0.2, ease: 'easeInOut' }}
-                className="flex-1 flex flex-col min-h-0 min-w-0"
-              >
-                {renderPageContent()}
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {/* Dashboard Page */}
+          {(currentPage === 'dashboard' || isDashboardMounted) && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: currentPage === 'dashboard' ? 1 : 0, y: currentPage === 'dashboard' ? 0 : 8 }}
+              transition={{ duration: 0.2, ease: 'easeInOut' }}
+              className={cn("flex-1 min-h-0 min-w-0", currentPage !== 'dashboard' && "hidden")}
+            >
+              <Dashboard onNavigate={handleNavigate} />
+            </motion.div>
+          )}
+
+          {/* Billing Page */}
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: currentPage === 'billing' ? 1 : 0, y: currentPage === 'billing' ? 0 : 8 }}
+            transition={{ duration: 0.2, ease: 'easeInOut' }}
+            className={cn("flex-1 min-h-0 min-w-0", currentPage !== 'billing' && "hidden")}
+          >
+            <div className="flex h-full">
+              {/* Product Grid (desktop only) */}
+              <div className="flex-1 hidden sm:flex flex-col overflow-hidden">
+                {isLoading ? (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="text-center">
+                      <Package className="w-12 h-12 text-muted-foreground mx-auto mb-4 animate-pulse" />
+                      <p className="text-muted-foreground">Loading products...</p>
+                    </div>
+                  </div>
+                ) : (
+                  <ProductGrid searchFocusKey={searchFocusKey} />
+                )}
+              </div>
+
+              {/* Mobile billing: cart + scan button (no product list) */}
+              <div className="flex-1 flex flex-col overflow-hidden w-full sm:hidden min-h-0">
+                <div className="p-1.5 border-b bg-background">
+                  <div className="flex flex-row items-center gap-1.5 w-full">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        type="text"
+                        placeholder="Search products by name or barcode..."
+                        value={mobileSearchQuery}
+                        onChange={(e) => handleMobileSearchChange(e.target.value)}
+                        className="pl-9 h-8 text-sm"
+                      />
+                      {mobileSearchQuery && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 md:h-8 md:w-8 p-0"
+                          onClick={() => { setMobileSearchQuery(''); setMobileSearchResults([]); }}
+                          aria-label="Clear Search"
+                        >
+                          <X className="w-3 h-3 md:w-4 md:h-4" />
+                        </Button>
+                      )}
+                    </div>
+                    <Button size="sm" className="shrink-0 h-8 w-8 p-0" onClick={handleOpenMobileScanner} aria-label="Scan Barcode">
+                      <ScanLine className="h-4 w-4 md:mr-2" />
+                      <span className="hidden md:inline">Scan</span>
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Search Results */}
+                {mobileSearchQuery && (
+                  <div className="border-b bg-background max-h-48 overflow-y-auto">
+                    <div className="p-2">
+                      <h3 className="text-xs font-medium mb-1.5">Search Results ({mobileSearchResults.length})</h3>
+                      {isMobileSearching ? (
+                        <p className="text-sm text-muted-foreground">Searching...</p>
+                      ) : mobileSearchResults.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">No products found</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {mobileSearchResults.slice(0, 15).map((product) => (
+                            <div
+                              key={product.id}
+                              className="flex items-center justify-between p-1.5 rounded-lg border hover:bg-muted/50 cursor-pointer"
+                              onClick={() => {
+                                addItem(product, 1);
+                                setMobileSearchQuery('');
+                                setMobileSearchResults([]);
+                              }}
+                            >
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-sm truncate">{product.name}</p>
+                                {product.barcode && (
+                                  <p className="text-xs text-muted-foreground">{product.barcode}</p>
+                                )}
+                              </div>
+                              <div className="text-right">
+                                <p className="font-semibold text-sm">₹{product.sellingPrice.toLocaleString('en-IN')}</p>
+                                {product.currentStock <= 0 && (
+                                  <p className="text-xs text-destructive">Out of stock</p>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex-1 min-h-0">
+                  <CartPanel onCheckout={handleOpenCheckout} customers={customers} onScan={handleOpenMobileScanner} />
+                </div>
+              </div>
+
+              {/* Desktop Cart Panel */}
+              <aside className="hidden sm:block w-96 border-l bg-card shrink-0">
+                <CartPanel onCheckout={handleOpenCheckout} customers={customers} onScan={handleOpenMobileScanner} />
+              </aside>
+            </div>
+          </motion.div>
+
+          {/* Stock Page */}
+          {(currentPage === 'stock' || isStockMounted) && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: currentPage === 'stock' ? 1 : 0, y: currentPage === 'stock' ? 0 : 8 }}
+              transition={{ duration: 0.2, ease: 'easeInOut' }}
+              className={cn("flex-1 min-h-0 min-w-0", currentPage !== 'stock' && "hidden")}
+            >
+              <StockManagement
+                onAddProduct={handleAddProduct}
+                onEditProduct={handleEditProduct}
+                onAddStock={handleAddStock}
+                onDeleteProduct={handleDeleteProduct}
+                onStatistics={() => setCurrentPage('stock-statistics')}
+              />
+            </motion.div>
+          )}
+
+          {/* Parties Page */}
+          {(currentPage === 'parties' || isPartiesMounted) && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: currentPage === 'parties' ? 1 : 0, y: currentPage === 'parties' ? 0 : 8 }}
+              transition={{ duration: 0.2, ease: 'easeInOut' }}
+              className={cn("flex-1 min-h-0 min-w-0", currentPage !== 'parties' && "hidden")}
+            >
+              <PartiesManagement />
+            </motion.div>
+          )}
+
+          {/* Due Collection Page */}
+          {(currentPage === 'due-collection' || isDueCollectionMounted) && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: currentPage === 'due-collection' ? 1 : 0, y: currentPage === 'due-collection' ? 0 : 8 }}
+              transition={{ duration: 0.2, ease: 'easeInOut' }}
+              className={cn("flex-1 min-h-0 min-w-0", currentPage !== 'due-collection' && "hidden")}
+            >
+              <DueCollection />
+            </motion.div>
+          )}
+
+          {/* Purchase Orders Page */}
+          {(currentPage === 'purchase-orders' || isPurchaseOrdersMounted) && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: currentPage === 'purchase-orders' ? 1 : 0, y: currentPage === 'purchase-orders' ? 0 : 8 }}
+              transition={{ duration: 0.2, ease: 'easeInOut' }}
+              className={cn("flex-1 min-h-0 min-w-0", currentPage !== 'purchase-orders' && "hidden")}
+            >
+              <PurchaseOrderManagement />
+            </motion.div>
+          )}
+
+          {/* Reports Page */}
+          {(currentPage === 'reports' || isReportsMounted) && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: currentPage === 'reports' ? 1 : 0, y: currentPage === 'reports' ? 0 : 8 }}
+              transition={{ duration: 0.2, ease: 'easeInOut' }}
+              className={cn("flex-1 min-h-0 min-w-0", currentPage !== 'reports' && "hidden")}
+            >
+              <Reports onNavigate={handleNavigate} />
+            </motion.div>
+          )}
+
+          {/* Expenses Page */}
+          {(currentPage === 'expenses' || isExpensesMounted) && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: currentPage === 'expenses' ? 1 : 0, y: currentPage === 'expenses' ? 0 : 8 }}
+              transition={{ duration: 0.2, ease: 'easeInOut' }}
+              className={cn("flex-1 min-h-0 min-w-0", currentPage !== 'expenses' && "hidden")}
+            >
+              <Expenses onReport={() => setCurrentPage('expenses-report')} />
+            </motion.div>
+          )}
+
+          {/* Settings Page */}
+          {(currentPage === 'settings' || isSettingsMounted) && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: currentPage === 'settings' ? 1 : 0, y: currentPage === 'settings' ? 0 : 8 }}
+              transition={{ duration: 0.2, ease: 'easeInOut' }}
+              className={cn("flex-1 min-h-0 min-w-0", currentPage !== 'settings' && "hidden")}
+            >
+              <SettingsManagement />
+            </motion.div>
+          )}
+
+          {/* Other sub-reports or pages that do not need caching */}
+          {['stock-statistics', 'expenses-report', 'sales-report', 'payment-report', 'stock-report', 'dues-report', 'products-report', 'categories-report', 'customers-report', 'supplier-report', 'menu'].includes(currentPage) && (
+            <motion.div
+              key={currentPage}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.2, ease: 'easeInOut' }}
+              className="flex-1 flex flex-col min-h-0 min-w-0"
+            >
+              {renderPageContent()}
+            </motion.div>
+          )}
+
           {(currentPage === 'transactions' || isTransactionsPageMounted) && (
             <motion.div
               initial={{ opacity: 0, y: 8 }}

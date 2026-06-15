@@ -123,6 +123,7 @@ export default function PurchaseStatistics({ onBack }: PurchaseStatisticsProps) 
     setLoading(true);
     try {
       const params = new URLSearchParams();
+      params.set('tzOffset', new Date().getTimezoneOffset().toString());
       if (days === 'custom') {
         params.set('from', customFrom);
         params.set('to', customTo);

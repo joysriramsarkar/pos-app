@@ -79,7 +79,7 @@ function ProductDetailView({ productId, days, onBack }: { productId: string; day
 
   useEffect(() => {
     setLoading(true);
-    fetch(`/api/reports/product-detail?productId=${productId}&days=${days}`)
+    fetch(`/api/reports/product-detail?productId=${productId}&days=${days}&tzOffset=${new Date().getTimezoneOffset()}`)
       .then(r => r.json())
       .then(setData)
       .catch(() => setData(null))
@@ -296,7 +296,7 @@ export function ProductStatistics({ onBack }: ProductStatisticsProps) {
 
   useEffect(() => {
     setLoading(true);
-    fetch(`/api/reports/products?days=${days}`)
+    fetch(`/api/reports/products?days=${days}&tzOffset=${new Date().getTimezoneOffset()}`)
       .then(r => r.ok ? r.json() : { topProducts: [] })
       .then(({ topProducts }) => setStats(topProducts ?? []))
       .catch(() => setStats([]))

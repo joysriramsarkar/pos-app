@@ -122,6 +122,7 @@ export interface Purchase {
   invoiceNumber?: string;
   totalAmount: number;
   paymentStatus: PaymentStatus;
+  deliveryStatus?: string;
   notes?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -135,6 +136,7 @@ export interface PurchaseItem {
   productId: string;
   productName: string;
   quantity: number;
+  receivedQty?: number;
   buyingPrice: number;
   totalPrice: number;
   createdAt: Date;

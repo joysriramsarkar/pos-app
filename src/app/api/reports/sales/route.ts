@@ -5,13 +5,16 @@ import { format, eachDayOfInterval, parseISO, subDays } from "date-fns";
 import { toZonedTime } from "date-fns-tz";
 import { requirePermission } from "@/lib/api-middleware";
 
-const TZ = "Asia/Kolkata";
-
-function toISTBounds(date: Date): { start: Date; end: Date } {
-  const zoned = toZonedTime(date, TZ);
-  const start = new Date(Date.UTC(
-    zoned.getFullYear(), zoned.getMonth(), zoned.getDate(), 0, 0, 0, 0
-  ) - 5.5 * 60 * 60 * 1000);
+function toLocalBounds(date: Date, offsetMinutes: number): { start: Date; end: Date } {
+  const offsetMs = -offsetMinutes * 60 * 1000;
+  const localTime = new Date(date.getTime() + offsetMs);
+  const startLocal = new Date(Date.UTC(
+    localTime.getUTCFullYear(),
+    localTime.getUTCMonth(),
+    localTime.getUTCDate(),
+    0, 0, 0, 0
+  ));
+  const start = new Date(startLocal.getTime() - offsetMs);
   const end = new Date(start.getTime() + 24 * 60 * 60 * 1000 - 1);
   return { start, end };
 }
@@ -23,18 +26,27 @@ export async function GET(request: NextRequest) {
   try {
     const sp = request.nextUrl.searchParams;
     const isHourly = sp.get("hourly") === "true";
+    const tzOffset = parseInt(sp.get("tzOffset") || "-330");
+    const offsetMs = -tzOffset * 60 * 1000;
+    const TZ = tzOffset === -360 ? "Asia/Dhaka" : "Asia/Kolkata";
 
     let startDate: Date;
     let endDate: Date;
 
     if (sp.get("from") && sp.get("to")) {
-      startDate = toISTBounds(parseISO(sp.get("from")!)).start;
-      endDate = toISTBounds(parseISO(sp.get("to")!)).end;
+      startDate = toLocalBounds(parseISO(sp.get("from")!), tzOffset).start;
+      endDate = toLocalBounds(parseISO(sp.get("to")!), tzOffset).end;
     } else {
       const days = parseInt(sp.get("days") || "30");
-      const now = toZonedTime(new Date(), TZ);
-      startDate = toISTBounds(subDays(now, days - 1)).start;
-      endDate = toISTBounds(now).end;
+      const nowUtc = new Date();
+      const localNow = new Date(nowUtc.getTime() + offsetMs);
+      const endLocal = new Date(Date.UTC(
+        localNow.getUTCFullYear(), localNow.getUTCMonth(), localNow.getUTCDate(), 0, 0, 0, 0
+      ));
+      endDate = new Date(endLocal.getTime() - offsetMs + 24 * 60 * 60 * 1000 - 1);
+
+      const startLocal = new Date(endLocal.getTime() - (days - 1) * 24 * 60 * 60 * 1000);
+      startDate = new Date(startLocal.getTime() - offsetMs);
     }
 
     // Aggregate totals directly in DB — no in-memory loops over all sales

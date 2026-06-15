@@ -238,14 +238,15 @@ model Supplier {
 }
 
 model Purchase {
-  id            String   @id @default(cuid())
-  supplierId    String?  @map("supplier_id")
-  invoiceNumber String?  @map("invoice_number")
-  totalAmount   Decimal  @default(0) @map("total_amount")
-  paymentStatus String   @default("Pending") @map("payment_status") // Paid, Pending, Partial
-  notes         String?
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  id             String   @id @default(cuid())
+  supplierId     String?  @map("supplier_id")
+  invoiceNumber  String?  @unique @map("invoice_number")
+  totalAmount    Decimal  @default(0) @map("total_amount")
+  paymentStatus  String   @default("Pending") @map("payment_status") // Paid, Pending, Partial
+  deliveryStatus String   @default("Pending") @map("delivery_status") // Pending, Ordered, PartiallyReceived, Received, Cancelled
+  notes          String?
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
   supplier Supplier?      @relation(fields: [supplierId], references: [id])
   items    PurchaseItem[]
@@ -262,6 +263,7 @@ model PurchaseItem {
   productId   String   @map("product_id")
   productName String   @map("product_name")
   quantity    Decimal
+  receivedQty Decimal  @default(0) @map("received_qty")
   buyingPrice Decimal  @map("buying_price")
   totalPrice  Decimal  @map("total_price")
   createdAt   DateTime @default(now()) @map("created_at")
