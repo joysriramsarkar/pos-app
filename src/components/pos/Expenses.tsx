@@ -34,13 +34,12 @@ import { useTranslations } from 'next-intl';
 import { exportToCSV, getExportDate } from '@/lib/export-utils';
 import { useSettingsStore } from '@/stores/settings-store';
 
-const CATEGORIES = ['Rent', 'Utilities', 'Salaries', 'Supplies', 'Maintenance', 'Supplier Payment', 'Other'] as const;
+const CATEGORIES = ['Rent', 'Utilities', 'Salaries', 'Maintenance', 'Supplier Payment', 'Other'] as const;
 
 const CATEGORY_CONFIG: Record<string, { icon: typeof Wallet; color: string; bgColor: string; gradient: string }> = {
   Rent: { icon: Building2, color: 'text-purple-600', bgColor: 'bg-purple-100', gradient: 'from-purple-500/10 to-purple-500/5' },
   Utilities: { icon: Wrench, color: 'text-blue-600', bgColor: 'bg-blue-100', gradient: 'from-blue-500/10 to-blue-500/5' },
   Salaries: { icon: Briefcase, color: 'text-green-600', bgColor: 'bg-green-100', gradient: 'from-green-500/10 to-green-500/5' },
-  Supplies: { icon: Box, color: 'text-amber-600', bgColor: 'bg-amber-100', gradient: 'from-amber-500/10 to-amber-500/5' },
   Maintenance: { icon: Wrench, color: 'text-orange-600', bgColor: 'bg-orange-100', gradient: 'from-orange-500/10 to-orange-500/5' },
   'Supplier Payment': { icon: Truck, color: 'text-rose-600', bgColor: 'bg-rose-100', gradient: 'from-rose-500/10 to-rose-500/5' },
   Other: { icon: MoreHorizontal, color: 'text-gray-600', bgColor: 'bg-gray-100', gradient: 'from-gray-500/10 to-gray-500/5' },
@@ -53,6 +52,7 @@ interface Expense {
   amount: number;
   category: string;
   notes?: string | null;
+  paymentMethod?: string | null;
   date: string | Date;
   supplierId?: string | null;
   supplierName?: string | null;
@@ -71,8 +71,11 @@ export function Expenses({ onReport }: ExpensesProps) {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [amount, setAmount] = useState('');
-  const [category, setCategory] = useState<string>('Other');
+  const [category, setCategory] = useState<string>('Supplier Payment');
   const [notes, setNotes] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('Cash');
+  const [cashAmount, setCashAmount] = useState('');
+  const [upiAmount, setUpiAmount] = useState('');
   const [supplierId, setSupplierId] = useState<string>('');
   const [supplierOpen, setSupplierOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -80,12 +83,18 @@ export function Expenses({ onReport }: ExpensesProps) {
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editExpense, setEditExpense] = useState<Expense | null>(null);
   const [editAmount, setEditAmount] = useState('');
-  const [editCategory, setEditCategory] = useState<string>('Other');
+  const [editCategory, setEditCategory] = useState<string>('Supplier Payment');
   const [editNotes, setEditNotes] = useState('');
+  const [editPaymentMethod, setEditPaymentMethod] = useState('Cash');
+  const [editCashAmount, setEditCashAmount] = useState('');
+  const [editUpiAmount, setEditUpiAmount] = useState('');
   const [editSupplierId, setEditSupplierId] = useState<string>('');
   const [editDate, setEditDate] = useState('');
   const [editSupplierOpen, setEditSupplierOpen] = useState(false);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+
+  // Note: cashAmount/upiAmount auto-calculation is handled inline in the onChange handlers.
+  // No useEffect needed here — it would reset values while the user is typing.
   const [showAddSupplier, setShowAddSupplier] = useState(false);
   const [newSupplierName, setNewSupplierName] = useState('');
   const [addingSupplier, setAddingSupplier] = useState(false);
@@ -224,6 +233,13 @@ export function Expenses({ onReport }: ExpensesProps) {
   const handleAddExpense = async () => {
     if (!amount || !category) return;
     setIsLoading(true);
+    let finalNotes = notes.trim();
+    if (paymentMethod === 'Mixed') {
+      const cAmt = parseFloat(cashAmount) || 0;
+      const uAmt = parseFloat(upiAmount) || 0;
+      const breakdown = `[নগদ: ${cAmt}, ইউপিআই: ${uAmt}]`;
+      finalNotes = finalNotes ? `${finalNotes} ${breakdown}` : breakdown;
+    }
     try {
       const res = await fetch('/api/expenses', {
         method: 'POST',
@@ -232,15 +248,19 @@ export function Expenses({ onReport }: ExpensesProps) {
           id: uuidv4(),
           amount: parseFloat(convertBengaliToEnglishNumerals(amount)),
           category,
-          notes,
+          notes: finalNotes || null,
+          paymentMethod,
           date: selectedDate,
-          supplierId: (category === 'Supplies' || category === 'Supplier Payment') && supplierId && supplierId !== 'none' ? supplierId : null,
+          supplierId: category === 'Supplier Payment' && supplierId && supplierId !== 'none' ? supplierId : null,
         }),
       });
       if (res.ok) {
         toast({ title: t('expense_added') });
         setAmount('');
         setNotes('');
+        setPaymentMethod('Cash');
+        setCashAmount('');
+        setUpiAmount('');
         setSupplierId('');
         fetchExpenses();
       } else {
@@ -282,8 +302,22 @@ export function Expenses({ onReport }: ExpensesProps) {
   const handleOpenEditDialog = (expense: Expense) => {
     setEditExpense(expense);
     setEditAmount(String(expense.amount ?? ''));
-    setEditCategory(expense.category || 'Supplies');
-    setEditNotes(expense.notes ?? '');
+    setEditCategory(expense.category || 'Other');
+    
+    let rawNotes = expense.notes ?? '';
+    const mixedRegex = /\[নগদ:\s*([0-9.]+),\s*ইউপিআই:\s*([0-9.]+)\]/;
+    const match = rawNotes.match(mixedRegex);
+    if (match && expense.paymentMethod === 'Mixed') {
+      setEditCashAmount(match[1]);
+      setEditUpiAmount(match[2]);
+      rawNotes = rawNotes.replace(mixedRegex, '').trim();
+    } else {
+      setEditCashAmount('');
+      setEditUpiAmount('');
+    }
+    
+    setEditNotes(rawNotes);
+    setEditPaymentMethod(expense.paymentMethod || 'Cash');
     setEditSupplierId(expense.supplierId ?? '');
     setEditDate(format(new Date(expense.date), 'yyyy-MM-dd'));
     setShowEditDialog(true);
@@ -292,6 +326,13 @@ export function Expenses({ onReport }: ExpensesProps) {
   const handleUpdateExpense = async () => {
     if (!editExpense || !editAmount || !editCategory || !editDate) return;
     setIsSavingEdit(true);
+    let finalNotes = editNotes.trim();
+    if (editPaymentMethod === 'Mixed') {
+      const cAmt = parseFloat(editCashAmount) || 0;
+      const uAmt = parseFloat(editUpiAmount) || 0;
+      const breakdown = `[নগদ: ${cAmt}, ইউপিআই: ${uAmt}]`;
+      finalNotes = finalNotes ? `${finalNotes} ${breakdown}` : breakdown;
+    }
     try {
       const res = await fetch('/api/expenses', {
         method: 'PUT',
@@ -300,9 +341,10 @@ export function Expenses({ onReport }: ExpensesProps) {
           id: editExpense.id,
           amount: parseFloat(convertBengaliToEnglishNumerals(editAmount)),
           category: editCategory,
-          notes: editNotes,
+          notes: finalNotes || null,
+          paymentMethod: editPaymentMethod,
           date: editDate,
-          supplierId: (editCategory === 'Supplies' || editCategory === 'Supplier Payment') && editSupplierId && editSupplierId !== 'none' ? editSupplierId : null,
+          supplierId: editCategory === 'Supplier Payment' && editSupplierId && editSupplierId !== 'none' ? editSupplierId : null,
         }),
       });
       if (res.ok) {
@@ -310,6 +352,8 @@ export function Expenses({ onReport }: ExpensesProps) {
         fetchExpenses();
         setShowEditDialog(false);
         setEditExpense(null);
+        setEditCashAmount('');
+        setEditUpiAmount('');
       } else {
         toast({ title: 'Error', description: 'Failed to update expense.', variant: 'destructive' });
       }
@@ -543,7 +587,7 @@ export function Expenses({ onReport }: ExpensesProps) {
                 </SelectContent>
               </Select>
             </div>
-            {(category === 'Supplies' || category === 'Supplier Payment') && (
+            {category === 'Supplier Payment' && (
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <label className="text-sm font-medium flex items-center gap-1.5">
@@ -624,6 +668,90 @@ export function Expenses({ onReport }: ExpensesProps) {
               <label className="text-sm font-medium">{t('notes')}</label>
               <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={t('optional_description')} className="h-9" />
             </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">পেমেন্ট পদ্ধতি</label>
+              <Select value={paymentMethod} onValueChange={(v) => {
+                setPaymentMethod(v);
+                if (v === 'Mixed' && amount) {
+                  const totalAmt = parseFloat(convertBengaliToEnglishNumerals(amount)) || 0;
+                  setCashAmount(totalAmt.toString());
+                  setUpiAmount('0');
+                } else if (v !== 'Mixed') {
+                  setCashAmount('');
+                  setUpiAmount('');
+                }
+              }}>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Cash">Cash (নগদ)</SelectItem>
+                  <SelectItem value="UPI">UPI (ইউপিআই)</SelectItem>
+                  <SelectItem value="Mixed">Mixed (মিশ্র)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {paymentMethod === 'Mixed' && (() => {
+              const totalAmt = parseFloat(convertBengaliToEnglishNumerals(amount)) || 0;
+              const cashVal = parseFloat(cashAmount) || 0;
+              const upiVal = parseFloat(upiAmount) || 0;
+              const mixedSum = cashVal + upiVal;
+              const isMixedOk = Math.abs(mixedSum - totalAmt) < 0.01;
+              return (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium flex items-center gap-1">
+                        💵 নগদ ({currency})
+                      </label>
+                      <Input
+                        type="text"
+                        value={cashAmount}
+                        onChange={(e) => {
+                          const val = convertBengaliToEnglishNumerals(e.target.value).replace(/[^0-9.]/g, '');
+                          setCashAmount(val);
+                          const cashVal = parseFloat(val) || 0;
+                          if (cashVal <= totalAmt) {
+                            setUpiAmount((totalAmt - cashVal).toFixed(2).replace(/\.00$/, ''));
+                          } else {
+                            setUpiAmount('0');
+                          }
+                        }}
+                        placeholder="0.00"
+                        className="h-9"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium flex items-center gap-1">
+                        📱 ইউপিআই ({currency})
+                      </label>
+                      <Input
+                        type="text"
+                        value={upiAmount}
+                        onChange={(e) => {
+                          const val = convertBengaliToEnglishNumerals(e.target.value).replace(/[^0-9.]/g, '');
+                          setUpiAmount(val);
+                          const upiVal = parseFloat(val) || 0;
+                          if (upiVal <= totalAmt) {
+                            setCashAmount((totalAmt - upiVal).toFixed(2).replace(/\.00$/, ''));
+                          } else {
+                            setCashAmount('0');
+                          }
+                        }}
+                        placeholder="0.00"
+                        className="h-9"
+                      />
+                    </div>
+                  </div>
+                  <div className={`text-xs px-2 py-1.5 rounded-lg flex items-center justify-between ${
+                    isMixedOk
+                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400'
+                      : 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400'
+                  }`}>
+                    <span>নগদ {currency}{cashVal} + ইউপিআই {currency}{upiVal}</span>
+                    <span className="font-semibold">{isMixedOk ? '✓ মিলেছে' : `বাকি: ${currency}${Math.abs(totalAmt - mixedSum).toFixed(2)}`}</span>
+                  </div>
+                </div>
+              );
+            })()}
             <Button className="w-full h-9 bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600" onClick={handleAddExpense} disabled={isLoading || !amount}>
               <Plus className="w-4 h-4 mr-2" /> {t('add')}
             </Button>
@@ -643,6 +771,7 @@ export function Expenses({ onReport }: ExpensesProps) {
                 <TableRow>
                   <TableHead>{t('category')}</TableHead>
                   <TableHead>{t('notes')} / {t('supplier')}</TableHead>
+                  <TableHead>পেমেন্ট পদ্ধতি</TableHead>
                   <TableHead className="text-right">{t('amount')}</TableHead>
                   <TableHead className="w-10 text-right">{t('action')}</TableHead>
                 </TableRow>
@@ -668,6 +797,11 @@ export function Expenses({ onReport }: ExpensesProps) {
                           </span>
                         )}
                         {exp.notes || '—'}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary" className="text-[11px] h-5 bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 font-normal">
+                          {exp.paymentMethod || 'Cash'}
+                        </Badge>
                       </TableCell>
                       <TableCell className="text-right font-bold text-red-600 dark:text-red-400 tabular-nums">
                         {formatPrice(Number(exp.amount ?? 0))}
@@ -730,14 +864,14 @@ export function Expenses({ onReport }: ExpensesProps) {
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium">{t('category')}</label>
-              <Select value={editCategory} onValueChange={(v) => { setEditCategory(v); if (v !== 'Supplies') setEditSupplierId(''); }}>
+              <Select value={editCategory} onValueChange={(v) => { setEditCategory(v); if (v !== 'Supplier Payment') setEditSupplierId(''); }}>
                 <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {CATEGORIES.map((c) => <SelectItem key={c} value={c}>{getCategoryBn(c)}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
-            {(editCategory === 'Supplies' || editCategory === 'Supplier Payment') && (
+            {editCategory === 'Supplier Payment' && (
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <label className="text-sm font-medium flex items-center gap-1.5">
@@ -828,6 +962,94 @@ export function Expenses({ onReport }: ExpensesProps) {
                 className="h-9"
               />
             </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">পেমেন্ট পদ্ধতি</label>
+              <Select value={editPaymentMethod} onValueChange={(v) => {
+                setEditPaymentMethod(v);
+                if (v === 'Mixed' && editAmount) {
+                  const totalAmt = parseFloat(convertBengaliToEnglishNumerals(editAmount)) || 0;
+                  const currentCash = parseFloat(editCashAmount) || 0;
+                  const currentUpi = parseFloat(editUpiAmount) || 0;
+                  if (currentCash + currentUpi === 0) {
+                    setEditCashAmount(totalAmt.toString());
+                    setEditUpiAmount('0');
+                  }
+                } else if (v !== 'Mixed') {
+                  setEditCashAmount('');
+                  setEditUpiAmount('');
+                }
+              }}>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Cash">Cash (নগদ)</SelectItem>
+                  <SelectItem value="UPI">UPI (ইউপিআই)</SelectItem>
+                  <SelectItem value="Mixed">Mixed (মিশ্র)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {editPaymentMethod === 'Mixed' && (() => {
+              const totalAmt = parseFloat(convertBengaliToEnglishNumerals(editAmount)) || 0;
+              const cashVal = parseFloat(editCashAmount) || 0;
+              const upiVal = parseFloat(editUpiAmount) || 0;
+              const mixedSum = cashVal + upiVal;
+              const isMixedOk = Math.abs(mixedSum - totalAmt) < 0.01;
+              return (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium flex items-center gap-1">
+                        💵 নগদ ({currency})
+                      </label>
+                      <Input
+                        type="text"
+                        value={editCashAmount}
+                        onChange={(e) => {
+                          const val = convertBengaliToEnglishNumerals(e.target.value).replace(/[^0-9.]/g, '');
+                          setEditCashAmount(val);
+                          const cashV = parseFloat(val) || 0;
+                          if (cashV <= totalAmt) {
+                            setEditUpiAmount((totalAmt - cashV).toFixed(2).replace(/\.00$/, ''));
+                          } else {
+                            setEditUpiAmount('0');
+                          }
+                        }}
+                        placeholder="0.00"
+                        className="h-9"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium flex items-center gap-1">
+                        📱 ইউপিআই ({currency})
+                      </label>
+                      <Input
+                        type="text"
+                        value={editUpiAmount}
+                        onChange={(e) => {
+                          const val = convertBengaliToEnglishNumerals(e.target.value).replace(/[^0-9.]/g, '');
+                          setEditUpiAmount(val);
+                          const upiV = parseFloat(val) || 0;
+                          if (upiV <= totalAmt) {
+                            setEditCashAmount((totalAmt - upiV).toFixed(2).replace(/\.00$/, ''));
+                          } else {
+                            setEditCashAmount('0');
+                          }
+                        }}
+                        placeholder="0.00"
+                        className="h-9"
+                      />
+                    </div>
+                  </div>
+                  <div className={`text-xs px-2 py-1.5 rounded-lg flex items-center justify-between ${
+                    isMixedOk
+                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400'
+                      : 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400'
+                  }`}>
+                    <span>নগদ {currency}{cashVal} + ইউপিআই {currency}{upiVal}</span>
+                    <span className="font-semibold">{isMixedOk ? '✓ মিলেছে' : `বাকি: ${currency}${Math.abs(totalAmt - mixedSum).toFixed(2)}`}</span>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
           <DialogFooter className="gap-2 shrink-0">
             <Button variant="outline" onClick={() => { setShowEditDialog(false); setEditExpense(null); }}>

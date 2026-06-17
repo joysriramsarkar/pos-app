@@ -543,10 +543,16 @@
     "view_details": "বিস্তারিত দেখুন"
   },
   "Parties": {
+    "sort_by": "ক্রমের ফিল্টার",
+    "sort_name_asc": "নাম (A-Z)",
+    "sort_name_desc": "নাম (Z-A)",
+    "sort_due_desc": "বকেয়া (সর্বোচ্চ আগে)",
+    "sort_due_asc": "বকেয়া (সর্বনিম্ন আগে)",
+    "sort_purchases_desc": "মোট ক্রয় (সর্বোচ্চ আগে)",
     "title": "পার্টিজ",
-    "subtitle": "ক্রেতা ও সাপ্লায়ার",
+    "subtitle": "ক্রেতা ও সাপ্লায়ার",
     "add_customer": "ক্রেতা যোগ করুন",
-    "add_supplier": "সাপ্লায়ার যোগ করুন",
+    "add_supplier": "সাপ্লায়ার যোগ করুন",
     "total_due": "মোট বাকি",
     "customers_with_due": "বাকি আছে এমন ক্রেতা",
     "total_customers": "মোট ক্রেতা",

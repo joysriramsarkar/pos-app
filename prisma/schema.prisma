@@ -242,9 +242,11 @@ model Purchase {
   supplierId     String?  @map("supplier_id")
   invoiceNumber  String?  @unique @map("invoice_number")
   totalAmount    Decimal  @default(0) @map("total_amount")
+  paidAmount     Decimal  @default(0) @map("paid_amount")
   paymentStatus  String   @default("Pending") @map("payment_status") // Paid, Pending, Partial
   deliveryStatus String   @default("Pending") @map("delivery_status") // Pending, Ordered, PartiallyReceived, Received, Cancelled
   notes          String?
+  paymentMethod  String   @default("Cash") @map("payment_method") // Cash, UPI, Bank, etc.
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
@@ -383,15 +385,16 @@ model RolePermission {
 // ============================================================================
 
 model Expense {
-  id           String   @id @default(cuid())
-  amount       Decimal
-  category     String
-  notes        String?
-  date         DateTime @default(now())
-  supplierId   String?  @map("supplier_id")
-  supplierName String?  @map("supplier_name")
-  isActive     Boolean  @default(true) @map("is_active")
-  createdAt    DateTime @default(now()) @map("created_at")
+  id            String   @id @default(cuid())
+  amount        Decimal
+  category      String
+  notes         String?
+  paymentMethod String   @default("Cash") @map("payment_method")
+  date          DateTime @default(now())
+  supplierId    String?  @map("supplier_id")
+  supplierName  String?  @map("supplier_name")
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at")
 
   supplier Supplier? @relation(fields: [supplierId], references: [id])
 

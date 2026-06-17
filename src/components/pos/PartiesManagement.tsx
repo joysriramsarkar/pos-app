@@ -18,6 +18,13 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   Table,
   TableBody,
   TableCell,
@@ -96,6 +103,9 @@ export function PartiesManagement() {
     notes: '',
   });
 
+  const [customerSort, setCustomerSort] = useState<string>('name-asc');
+  const [supplierSort, setSupplierSort] = useState<string>('name-asc');
+
   const customers = useCustomersStore((state) => state.customers);
   const addCustomer = useCustomersStore((state) => state.addCustomer);
   const updateCustomer = useCustomersStore((state) => state.updateCustomer);
@@ -141,6 +151,7 @@ export function PartiesManagement() {
 
   // Fetch customers and suppliers on component mount
   useEffect(() => {
+    let active = true;
     const customersController = new AbortController();
     const suppliersController = new AbortController();
     const timeoutId = setTimeout(() => {
@@ -155,13 +166,14 @@ export function PartiesManagement() {
           fetch('/api/suppliers', { signal: suppliersController.signal }),
         ]);
 
+        if (!active) return;
         clearTimeout(timeoutId);
 
         // Handle customers
         if (customersResult.status === 'fulfilled' && customersResult.value.ok) {
           try {
             const { data } = await customersResult.value.json();
-            setCustomers(data);
+            if (active) setCustomers(data);
           } catch (parseErr) {
             console.error('Failed to parse customers response:', parseErr);
           }
@@ -171,7 +183,7 @@ export function PartiesManagement() {
           try {
             const { CustomersDB } = await import('@/lib/offline/indexeddb');
             const cachedCustomers = await CustomersDB.getAll();
-            if (cachedCustomers.length > 0) {
+            if (cachedCustomers.length > 0 && active) {
               console.log(`✅ Using ${cachedCustomers.length} cached customers`);
               setCustomers(cachedCustomers);
             }
@@ -186,7 +198,7 @@ export function PartiesManagement() {
           try {
             const { CustomersDB } = await import('@/lib/offline/indexeddb');
             const cachedCustomers = await CustomersDB.getAll();
-            if (cachedCustomers.length > 0) {
+            if (cachedCustomers.length > 0 && active) {
               console.log(`✅ Using ${cachedCustomers.length} cached customers`);
               setCustomers(cachedCustomers);
             }
@@ -199,7 +211,7 @@ export function PartiesManagement() {
         if (suppliersResult.status === 'fulfilled' && suppliersResult.value.ok) {
           try {
             const { data } = await suppliersResult.value.json();
-            setSuppliers(data);
+            if (active) setSuppliers(data);
             // Cache suppliers for offline use
             try {
               const { SuppliersDB } = await import('@/lib/offline/indexeddb');
@@ -216,7 +228,7 @@ export function PartiesManagement() {
           try {
             const { SuppliersDB } = await import('@/lib/offline/indexeddb');
             const cachedSuppliers = await SuppliersDB.getAll();
-            if (cachedSuppliers.length > 0) {
+            if (cachedSuppliers.length > 0 && active) {
               console.log(`✅ Using ${cachedSuppliers.length} cached suppliers`);
               setSuppliers(cachedSuppliers);
             }
@@ -231,7 +243,7 @@ export function PartiesManagement() {
           try {
             const { SuppliersDB } = await import('@/lib/offline/indexeddb');
             const cachedSuppliers = await SuppliersDB.getAll();
-            if (cachedSuppliers.length > 0) {
+            if (cachedSuppliers.length > 0 && active) {
               console.log(`✅ Using ${cachedSuppliers.length} cached suppliers`);
               setSuppliers(cachedSuppliers);
             }
@@ -245,6 +257,7 @@ export function PartiesManagement() {
     };
     fetchData();
     return () => {
+      active = false;
       clearTimeout(timeoutId);
       customersController.abort();
       suppliersController.abort();
@@ -253,29 +266,66 @@ export function PartiesManagement() {
 
 
 
-  // Filter customers
+  // Filter and sort customers
   const filteredCustomers = useMemo(() => {
-    if (!searchQuery) return customers.filter(c => c.isActive);
-    const query = searchQuery.toLowerCase();
-    return customers.filter(c =>
-      c.isActive && (
-        c.name.toLowerCase().includes(query) ||
-        c.phone?.includes(query)
-      )
-    );
-  }, [customers, searchQuery]);
+    let result = customers.filter(c => c.isActive);
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter(c =>
+        c.isActive && (
+          c.name.toLowerCase().includes(query) ||
+          c.phone?.includes(query)
+        )
+      );
+    }
+    return [...result].sort((a, b) => {
+      if (customerSort === 'name-asc') {
+        return a.name.localeCompare(b.name, 'bn');
+      }
+      if (customerSort === 'name-desc') {
+        return b.name.localeCompare(a.name, 'bn');
+      }
+      if (customerSort === 'due-desc') {
+        return toMoneyNumber(b.totalDue) - toMoneyNumber(a.totalDue);
+      }
+      if (customerSort === 'due-asc') {
+        return toMoneyNumber(a.totalDue) - toMoneyNumber(b.totalDue);
+      }
+      return 0;
+    });
+  }, [customers, searchQuery, customerSort]);
 
-  // Filter suppliers
+  // Filter and sort suppliers
   const filteredSuppliers = useMemo(() => {
-    if (!searchQuery) return suppliers.filter(s => s.isActive);
-    const query = searchQuery.toLowerCase();
-    return suppliers.filter(s =>
-      s.isActive && (
-        s.name.toLowerCase().includes(query) ||
-        s.phone?.includes(query)
-      )
-    );
-  }, [suppliers, searchQuery]);
+    let result = suppliers.filter(s => s.isActive);
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter(s =>
+        s.isActive && (
+          s.name.toLowerCase().includes(query) ||
+          s.phone?.includes(query)
+        )
+      );
+    }
+    return [...result].sort((a, b) => {
+      if (supplierSort === 'name-asc') {
+        return a.name.localeCompare(b.name, 'bn');
+      }
+      if (supplierSort === 'name-desc') {
+        return b.name.localeCompare(a.name, 'bn');
+      }
+      if (supplierSort === 'due-desc') {
+        return toMoneyNumber((b as any).totalDue || 0) - toMoneyNumber((a as any).totalDue || 0);
+      }
+      if (supplierSort === 'due-asc') {
+        return toMoneyNumber((a as any).totalDue || 0) - toMoneyNumber((b as any).totalDue || 0);
+      }
+      if (supplierSort === 'purchases-desc') {
+        return toMoneyNumber((b as any).totalPurchases || 0) - toMoneyNumber((a as any).totalPurchases || 0);
+      }
+      return 0;
+    });
+  }, [suppliers, searchQuery, supplierSort]);
 
   const totalDue = customers.reduce((sum, c) => sum + toMoneyNumber(c.totalDue), 0);
   const customersWithDue = customers.filter(c => toMoneyNumber(c.totalDue) > 0).length;
@@ -483,7 +533,13 @@ export function PartiesManagement() {
 
         const { data: updatedSupplier } = await response.json();
         setSuppliers(prev => 
-          prev.map(s => s.id === editingParty.id ? updatedSupplier : s)
+          prev.map(s => s.id === editingParty.id ? {
+            ...s,
+            ...updatedSupplier,
+            totalPurchases: (s as any).totalPurchases,
+            totalPaid: (s as any).totalPaid,
+            totalDue: (s as any).totalDue,
+          } : s)
         );
       }
 
@@ -616,7 +672,12 @@ export function PartiesManagement() {
         }
 
         const { data: newSupplier } = await response.json();
-        setSuppliers(prev => [...prev, newSupplier]);
+        setSuppliers(prev => [...prev, {
+          ...newSupplier,
+          totalPurchases: 0,
+          totalPaid: 0,
+          totalDue: 0
+        }]);
         toast({ title: 'Supplier Added', description: `${newSupplier.name} has been added successfully.` });
 
       } catch (error) {
@@ -672,30 +733,61 @@ export function PartiesManagement() {
           </Card>
         </div>
 
-        {/* Search */}
-        <div className="relative">
-          <label htmlFor="parties-search" className="sr-only">Search by name or phone</label>
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            id="parties-search"
-            name="parties-search"
-            ref={searchInputRef}
-            placeholder="Search by name or phone..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
-            autoFocus
-          />
-          {searchQuery && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0"
-              onClick={() => setSearchQuery('')}
-            >
-              <X className="w-4 h-4" />
-            </Button>
-          )}
+        {/* Search and Sort */}
+        <div className="flex flex-col sm:flex-row gap-2.5">
+          <div className="relative flex-1">
+            <label htmlFor="parties-search" className="sr-only">Search by name or phone</label>
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              id="parties-search"
+              name="parties-search"
+              ref={searchInputRef}
+              placeholder="Search by name or phone..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9"
+              autoFocus
+            />
+            {searchQuery && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0"
+                onClick={() => setSearchQuery('')}
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            )}
+          </div>
+          
+          <div className="w-full sm:w-[200px]">
+            {activeTab === 'customer' ? (
+              <Select value={customerSort} onValueChange={setCustomerSort}>
+                <SelectTrigger className="w-full h-10 bg-background">
+                  <SelectValue placeholder={t('sort_by') || 'Sort By'} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="name-asc">{t('sort_name_asc') || 'Name (A-Z)'}</SelectItem>
+                  <SelectItem value="name-desc">{t('sort_name_desc') || 'Name (Z-A)'}</SelectItem>
+                  <SelectItem value="due-desc">{t('sort_due_desc') || 'Dues (High to Low)'}</SelectItem>
+                  <SelectItem value="due-asc">{t('sort_due_asc') || 'Dues (Low to High)'}</SelectItem>
+                </SelectContent>
+              </Select>
+            ) : (
+              <Select value={supplierSort} onValueChange={setSupplierSort}>
+                <SelectTrigger className="w-full h-10 bg-background">
+                  <SelectValue placeholder={t('sort_by') || 'Sort By'} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="name-asc">{t('sort_name_asc') || 'Name (A-Z)'}</SelectItem>
+                  <SelectItem value="name-desc">{t('sort_name_desc') || 'Name (Z-A)'}</SelectItem>
+                  <SelectItem value="due-desc">{t('sort_due_desc') || 'Dues (High to Low)'}</SelectItem>
+                  <SelectItem value="due-asc">{t('sort_due_asc') || 'Dues (Low to High)'}</SelectItem>
+                  <SelectItem value="purchases-desc">{t('sort_purchases_desc') || 'Total Purchases (High to Low)'}</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+          </div>
         </div>
       </div>
 

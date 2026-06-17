@@ -5,6 +5,47 @@ import { requirePermission, getAuthenticatedUser } from '@/lib/api-middleware';
 import { logAudit } from '@/lib/audit';
 import { SupplierInputSchema } from '@/schemas';
 
+function calculateSupplierBalances(supplier: {
+  purchases: { totalAmount: any; paidAmount?: any; paymentStatus?: string }[];
+  expenses: { amount: any; notes?: string | null }[];
+}) {
+  let poDue = 0;
+  let basePurchases = 0;
+
+  for (const p of supplier.purchases) {
+    const total = Number(p.totalAmount);
+    const paid = Number(p.paidAmount || 0);
+    basePurchases += total;
+
+    if (!p.paymentStatus || p.paymentStatus === 'Pending' || p.paymentStatus === 'Partial') {
+      poDue += total - paid;
+    }
+  }
+
+  let extraPurchases = 0;
+  let totalPaid = 0;
+  let manualPayments = 0;
+
+  for (const e of supplier.expenses) {
+    const amount = Number(e.amount);
+    totalPaid += amount;
+
+    const notes = e.notes || '';
+    if (notes.startsWith('Paid supplier:')) {
+      manualPayments += amount;
+    } else if (notes.startsWith('Paid for purchase order:') || notes.startsWith('Paid for direct purchase:')) {
+      // payment for a specific PO, already handled in poDue
+    } else {
+      extraPurchases += amount;
+    }
+  }
+
+  const totalPurchases = basePurchases + extraPurchases;
+  const totalDue = Math.max(0, poDue - manualPayments);
+
+  return { totalPurchases, totalPaid, totalDue };
+}
+
 const getIp = (req: NextRequest) => req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || undefined;
 
 export async function GET(request: NextRequest) {
@@ -30,7 +71,7 @@ export async function GET(request: NextRequest) {
           expenses: {
             where: {
               isActive: true,
-              category: { in: ['Supplier Payment', 'Supplies'] }
+              category: 'Supplier Payment'
             },
             orderBy: { date: 'desc' }
           }
@@ -54,26 +95,14 @@ export async function GET(request: NextRequest) {
         });
       }
 
-      // Supplies expenses also count as credit (purchase of goods)
-      for (const e of supplier.expenses) {
-        if (e.category === 'Supplies') {
-          creditEntries.push({
-            id: `purchase-${e.id}`,
-            entryType: 'credit' as const,
-            amount: Number(e.amount),
-            referenceId: `EXP-${e.id.substring(0, 8)}`,
-            description: e.notes || 'মালামাল ক্রয়',
-            createdAt: e.date,
-          });
-        }
-      }
+
 
       const debitEntries = supplier.expenses.map(e => ({
         id: e.id,
         entryType: 'debit' as const,
         amount: Number(e.amount),
         referenceId: `EXP-${e.id.substring(0, 8)}`,
-        description: e.notes || `টাকা পরিশোধ (${e.category === 'Supplies' ? 'মালামাল ক্রয়' : 'পেমেন্ট'})`,
+        description: e.notes || 'টাকা পরিশোধ (পেমেন্ট)',
         createdAt: e.date,
       }));
 
@@ -93,10 +122,7 @@ export async function GET(request: NextRequest) {
         };
       }).reverse();
 
-      const totalPurchases = supplier.purchases.reduce((sum, p) => sum + Number(p.totalAmount), 0) + 
-                            supplier.expenses.filter(e => e.category === 'Supplies').reduce((sum, e) => sum + Number(e.amount), 0);
-      const totalPaid = supplier.expenses.reduce((sum, e) => sum + Number(e.amount), 0);
-      const totalDue = Math.max(0, totalPurchases - totalPaid);
+      const { totalPurchases, totalPaid, totalDue } = calculateSupplierBalances(supplier);
 
       return NextResponse.json({
         success: true,
@@ -129,14 +155,14 @@ export async function GET(request: NextRequest) {
         include: {
           purchases: {
             where: { deliveryStatus: { in: ['Received', 'PartiallyReceived'] } },
-            select: { totalAmount: true }
+            select: { totalAmount: true, paidAmount: true, paymentStatus: true }
           },
           expenses: {
             where: {
               isActive: true,
-              category: { in: ['Supplier Payment', 'Supplies'] }
+              category: 'Supplier Payment'
             },
-            select: { amount: true, category: true }
+            select: { amount: true, category: true, notes: true }
           }
         },
         skip: (page - 1) * pageSize,
@@ -145,10 +171,7 @@ export async function GET(request: NextRequest) {
     ]);
 
     const mappedSuppliers = suppliers.map((supplier) => {
-      const totalPurchases = supplier.purchases.reduce((sum, p) => sum + Number(p.totalAmount), 0) + 
-                            supplier.expenses.filter(e => e.category === 'Supplies').reduce((sum, e) => sum + Number(e.amount), 0);
-      const totalPaid = supplier.expenses.reduce((sum, e) => sum + Number(e.amount), 0);
-      const totalDue = Math.max(0, totalPurchases - totalPaid);
+      const { totalPurchases, totalPaid, totalDue } = calculateSupplierBalances(supplier);
 
       return {
         ...supplier,

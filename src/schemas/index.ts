@@ -102,6 +102,7 @@ export const ExpenseInputSchema = z.object({
   amount: money().pipe(z.number().positive('Amount must be positive')),
   category: z.string().min(1, 'Category is required'),
   notes: z.string().nullable().optional(),
+  paymentMethod: z.string().optional().default('Cash'),
   date: z.string().optional(),
   supplierId: z.string().nullable().optional(),
   supplierName: z.string().nullable().optional(),

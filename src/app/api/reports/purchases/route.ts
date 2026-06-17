@@ -67,17 +67,7 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: "desc" },
     });
 
-    // Fetch Supplies category expenses in this range (cash-paid stock purchases)
-    const suppliesExpenses = await prisma.expense.findMany({
-      where: {
-        date: { gte: startDate, lte: endDate },
-        category: "Supplies",
-        isActive: true,
-      },
-      include: {
-        supplier: true,
-      },
-    });
+
 
     // Fetch Supplier Payments in this range (to calculate payments done)
     const paymentExpenses = await prisma.expense.findMany({
@@ -99,13 +89,10 @@ export async function GET(request: NextRequest) {
       .filter(p => p.paymentStatus === 'Paid')
       .reduce((sum, p) => sum + Number(p.totalAmount), 0);
 
-    const suppliesPurchasesAmount = suppliesExpenses
-      .reduce((sum, e) => sum + Number(e.amount), 0);
+    const totalPurchasesAmount = receivedPurchasesAmount;
 
-    const totalPurchasesAmount = receivedPurchasesAmount + suppliesPurchasesAmount;
-
-    // Supplier Payment expenses + Supplies expenses (which are immediate cash payments)
-    const totalPaymentsAmount = paymentExpenses.reduce((sum, e) => sum + Number(e.amount), 0) + suppliesPurchasesAmount;
+    // Supplier Payment expenses
+    const totalPaymentsAmount = paymentExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
 
     // Chart Data
     let chartData: { date: string; amount: number; count: number }[] = [];
@@ -125,11 +112,7 @@ export async function GET(request: NextRequest) {
         }
       });
 
-      suppliesExpenses.forEach((e) => {
-        const hour = toZonedTime(e.date, TZ).getHours();
-        chartMap[hour].amount += Number(e.amount);
-        chartMap[hour].count += 1;
-      });
+
 
       chartData = chartMap;
     } else {
@@ -151,14 +134,7 @@ export async function GET(request: NextRequest) {
         }
       });
 
-      suppliesExpenses.forEach((e) => {
-        const key = format(toZonedTime(e.date, TZ), "yyyy-MM-dd");
-        const day = dailyMap.get(key);
-        if (day) {
-          day.amount += Number(e.amount);
-          day.count += 1;
-        }
-      });
+
 
       chartData = Array.from(dailyMap.values());
     }
@@ -177,14 +153,7 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    suppliesExpenses.forEach((e) => {
-      const supId = e.supplierId || "none";
-      const supName = e.supplier?.name || e.supplierName || "সাপ্লায়ার ছাড়া";
-      const existing = supplierMap.get(supId) || { id: supId, name: supName, orderCount: 0, totalAmount: 0 };
-      existing.orderCount += 1;
-      existing.totalAmount += Number(e.amount);
-      supplierMap.set(supId, existing);
-    });
+
 
     const topSuppliers = Array.from(supplierMap.values())
       .sort((a, b) => b.totalAmount - a.totalAmount);
@@ -222,7 +191,6 @@ export async function GET(request: NextRequest) {
         receivedOrdersCount,
         cancelledOrdersCount,
         receivedPurchasesAmount,
-        suppliesPurchasesAmount,
         totalPurchasesAmount,
         totalPaymentsAmount,
       },

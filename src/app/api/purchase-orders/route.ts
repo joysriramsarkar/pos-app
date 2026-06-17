@@ -57,7 +57,9 @@ export async function GET(request: NextRequest) {
         supplierId: p.supplierId,
         status: mappedStatus,
         totalAmount: Number(p.totalAmount),
-        paidAmount: p.paymentStatus === 'Paid' ? Number(p.totalAmount) : 0,
+        paidAmount: Number(p.paidAmount || 0),
+        paymentMethod: p.paymentMethod || 'Cash',
+        paymentStatus: p.paymentStatus,
         notes: p.notes,
         expectedDate: p.createdAt.toISOString(),
         createdAt: p.createdAt.toISOString(),
@@ -102,7 +104,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { supplierId, items, expectedDate, notes, directReceive, amountPaid } = body;
+    const { supplierId, items, expectedDate, notes, directReceive, amountPaid, paymentMethod, cashAmount, upiAmount } = body;
 
     if (!items || items.length === 0) {
       return NextResponse.json(
@@ -152,7 +154,7 @@ export async function POST(request: NextRequest) {
       String(purchaseDate.getMonth() + 1).padStart(2, '0') +
       String(purchaseDate.getDate()).padStart(2, '0');
 
-    let purchase;
+    let purchase: any;
     let attempts = 0;
     const maxAttempts = 5;
 
@@ -196,7 +198,9 @@ export async function POST(request: NextRequest) {
                 invoiceNumber: orderNumber,
                 supplierId: (supplierId && supplierId !== 'none') ? supplierId : null,
                 totalAmount,
+                paidAmount: actualAmountPaid,
                 paymentStatus,
+                paymentMethod: paymentMethod || 'Cash',
                 deliveryStatus: 'Received',
                 notes: notes || null,
                 createdAt: purchaseDate,
@@ -271,15 +275,19 @@ export async function POST(request: NextRequest) {
             }
 
 
-            if (actualAmountPaid > 0 && p.supplierId && p.supplier) {
+            if (actualAmountPaid > 0) {
+              let expenseNotes = `Paid for direct purchase: ${p.invoiceNumber}${paymentMethod ? ` (Method: ${paymentMethod})` : ''}`;
+              if (paymentMethod === 'Mixed' && (cashAmount !== undefined || upiAmount !== undefined)) {
+                expenseNotes += ` [নগদ: ${cashAmount || 0}, ইউপিআই: ${upiAmount || 0}]`;
+              }
               await tx.expense.create({
                 data: {
                   amount: actualAmountPaid,
                   category: 'Supplier Payment',
-                  notes: `Paid for direct purchase: ${p.invoiceNumber}`,
+                  notes: expenseNotes,
                   date: purchaseDate,
                   supplierId: p.supplierId,
-                  supplierName: p.supplier.name,
+                  supplierName: p.supplier?.name || null,
                 },
               });
             }
@@ -292,7 +300,9 @@ export async function POST(request: NextRequest) {
                 invoiceNumber: orderNumber,
                 supplierId: (supplierId && supplierId !== 'none') ? supplierId : null,
                 totalAmount,
+                paidAmount: 0,
                 paymentStatus: 'Pending',
+                paymentMethod: paymentMethod || 'Cash',
                 deliveryStatus: 'Pending',
                 notes: notes || null,
                 createdAt: purchaseDate,
@@ -315,7 +325,7 @@ export async function POST(request: NextRequest) {
                 items: {
                   include: {
                     product: {
-                      select: { id: true, name: true, nameBn: true, unit: true },
+                      select: { id: true, name: true, nameBn: true, unit: true, currentStock: true, buyingPrice: true },
                     },
                   },
                 },
@@ -366,7 +376,9 @@ export async function POST(request: NextRequest) {
       supplierId: purchase.supplierId,
       status: mappedStatus,
       totalAmount: Number(purchase.totalAmount),
-      paidAmount: purchase.paymentStatus === 'Paid' ? Number(purchase.totalAmount) : 0,
+      paidAmount: Number(purchase.paidAmount || 0),
+      paymentMethod: purchase.paymentMethod || 'Cash',
+      paymentStatus: purchase.paymentStatus,
       notes: purchase.notes,
       expectedDate: expectedDate || null,
       createdAt: purchase.createdAt.toISOString(),
@@ -376,7 +388,7 @@ export async function POST(request: NextRequest) {
         name: purchase.supplier.name,
         phone: purchase.supplier.phone,
       } : null,
-      items: purchase.items.map((item) => ({
+      items: purchase.items.map((item: any) => ({
         id: item.id,
         purchaseOrderId: purchase.id,
         productId: item.productId,
@@ -482,7 +494,9 @@ export async function PUT(request: NextRequest) {
       supplierId: updated.supplierId,
       status: mappedStatus,
       totalAmount: Number(updated.totalAmount),
-      paidAmount: 0,
+      paidAmount: Number(updated.paidAmount || 0),
+      paymentMethod: updated.paymentMethod || 'Cash',
+      paymentStatus: updated.paymentStatus,
       notes: updated.notes,
       expectedDate: updated.createdAt.toISOString(),
       createdAt: updated.createdAt.toISOString(),

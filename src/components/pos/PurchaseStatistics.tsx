@@ -30,7 +30,6 @@ interface SummaryData {
   receivedOrdersCount: number;
   cancelledOrdersCount: number;
   receivedPurchasesAmount: number;
-  suppliesPurchasesAmount: number;
   totalPurchasesAmount: number;
   totalPaymentsAmount: number;
 }
@@ -287,9 +286,9 @@ export default function PurchaseStatistics({ onBack }: PurchaseStatisticsProps) 
                 <div className="space-y-1">
                   <p className="text-[11px] text-indigo-600 dark:text-indigo-400 font-semibold uppercase tracking-wider">মোট ক্রয়</p>
                   <p className="text-xl font-black text-indigo-700 dark:text-indigo-300">{formatPrice(summary?.totalPurchasesAmount || 0)}</p>
-                  {summary && summary.suppliesPurchasesAmount > 0 && (
+                  {summary && (
                     <p className="text-[10px] text-muted-foreground">
-                      অর্ডার: {formatPrice(summary.receivedPurchasesAmount)} + মালামাল: {formatPrice(summary.suppliesPurchasesAmount)}
+                      মোট অর্ডারকৃত ও প্রাপ্ত মালামালের পরিমাণ
                     </p>
                   )}
                 </div>

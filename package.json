@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev -p 3000",
     "clean": "npx rimraf .next",
-    "build": "prisma generate --config prisma.config.ts && next build",
+    "build": "prisma generate --config prisma.config.ts && next build && shx mkdir -p .next/standalone/.next && shx cp -r public .next/standalone/public && shx cp -r .next/static .next/standalone/.next/static",
     "analyze": "cross-env BUNDLE_ANALYZE=true next build --no-turbo",
     "start": "node .next/standalone/server.js",
     "db:push": "prisma db push --config prisma.config.ts",
