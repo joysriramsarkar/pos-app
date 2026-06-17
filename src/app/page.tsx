@@ -1450,7 +1450,7 @@ function POSDashboard() {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: currentPage === 'dashboard' ? 1 : 0, y: currentPage === 'dashboard' ? 0 : 8 }}
               transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className={cn("flex-1 min-h-0 min-w-0", currentPage !== 'dashboard' && "hidden")}
+              className={cn("flex-1 min-h-0 min-w-0 flex flex-col", currentPage !== 'dashboard' && "hidden")}
             >
               <Dashboard onNavigate={handleNavigate} />
             </motion.div>
@@ -1461,7 +1461,7 @@ function POSDashboard() {
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: currentPage === 'billing' ? 1 : 0, y: currentPage === 'billing' ? 0 : 8 }}
             transition={{ duration: 0.2, ease: 'easeInOut' }}
-            className={cn("flex-1 min-h-0 min-w-0", currentPage !== 'billing' && "hidden")}
+            className={cn("flex-1 min-h-0 min-w-0 flex flex-col", currentPage !== 'billing' && "hidden")}
           >
             <div className="flex h-full">
               {/* Product Grid (desktop only) */}
@@ -1569,7 +1569,7 @@ function POSDashboard() {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: currentPage === 'stock' ? 1 : 0, y: currentPage === 'stock' ? 0 : 8 }}
               transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className={cn("flex-1 min-h-0 min-w-0", currentPage !== 'stock' && "hidden")}
+              className={cn("flex-1 min-h-0 min-w-0 flex flex-col", currentPage !== 'stock' && "hidden")}
             >
               <StockManagement
                 onAddProduct={handleAddProduct}
@@ -1587,7 +1587,7 @@ function POSDashboard() {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: currentPage === 'parties' ? 1 : 0, y: currentPage === 'parties' ? 0 : 8 }}
               transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className={cn("flex-1 min-h-0 min-w-0", currentPage !== 'parties' && "hidden")}
+              className={cn("flex-1 min-h-0 min-w-0 flex flex-col", currentPage !== 'parties' && "hidden")}
             >
               <PartiesManagement />
             </motion.div>
@@ -1599,7 +1599,7 @@ function POSDashboard() {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: currentPage === 'due-collection' ? 1 : 0, y: currentPage === 'due-collection' ? 0 : 8 }}
               transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className={cn("flex-1 min-h-0 min-w-0", currentPage !== 'due-collection' && "hidden")}
+              className={cn("flex-1 min-h-0 min-w-0 flex flex-col", currentPage !== 'due-collection' && "hidden")}
             >
               <DueCollection />
             </motion.div>
@@ -1611,7 +1611,7 @@ function POSDashboard() {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: currentPage === 'purchase-orders' ? 1 : 0, y: currentPage === 'purchase-orders' ? 0 : 8 }}
               transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className={cn("flex-1 min-h-0 min-w-0", currentPage !== 'purchase-orders' && "hidden")}
+              className={cn("flex-1 min-h-0 min-w-0 flex flex-col", currentPage !== 'purchase-orders' && "hidden")}
             >
               <PurchaseOrderManagement />
             </motion.div>
@@ -1623,7 +1623,7 @@ function POSDashboard() {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: currentPage === 'reports' ? 1 : 0, y: currentPage === 'reports' ? 0 : 8 }}
               transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className={cn("flex-1 min-h-0 min-w-0", currentPage !== 'reports' && "hidden")}
+              className={cn("flex-1 min-h-0 min-w-0 flex flex-col", currentPage !== 'reports' && "hidden")}
             >
               <Reports onNavigate={handleNavigate} />
             </motion.div>
@@ -1635,7 +1635,7 @@ function POSDashboard() {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: currentPage === 'expenses' ? 1 : 0, y: currentPage === 'expenses' ? 0 : 8 }}
               transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className={cn("flex-1 min-h-0 min-w-0", currentPage !== 'expenses' && "hidden")}
+              className={cn("flex-1 min-h-0 min-w-0 flex flex-col", currentPage !== 'expenses' && "hidden")}
             >
               <Expenses onReport={() => setCurrentPage('expenses-report')} />
             </motion.div>
@@ -1647,7 +1647,7 @@ function POSDashboard() {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: currentPage === 'settings' ? 1 : 0, y: currentPage === 'settings' ? 0 : 8 }}
               transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className={cn("flex-1 min-h-0 min-w-0", currentPage !== 'settings' && "hidden")}
+              className={cn("flex-1 min-h-0 min-w-0 flex flex-col", currentPage !== 'settings' && "hidden")}
             >
               <SettingsManagement />
             </motion.div>
@@ -1671,7 +1671,7 @@ function POSDashboard() {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: currentPage === 'transactions' ? 1 : 0, y: currentPage === 'transactions' ? 0 : 8 }}
               transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className={cn("flex-1 min-h-0", currentPage !== 'transactions' && "hidden")}
+              className={cn("flex-1 min-h-0 flex flex-col", currentPage !== 'transactions' && "hidden")}
             >
               <TransactionHistory />
             </motion.div>
@@ -1681,7 +1681,7 @@ function POSDashboard() {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: currentPage === 'users' ? 1 : 0, y: currentPage === 'users' ? 0 : 8 }}
               transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className={cn("flex-1 min-h-0", currentPage !== 'users' && "hidden")}
+              className={cn("flex-1 min-h-0 flex flex-col", currentPage !== 'users' && "hidden")}
             >
               <UsersManagement />
             </motion.div>
@@ -1691,7 +1691,7 @@ function POSDashboard() {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: currentPage === 'audit' ? 1 : 0, y: currentPage === 'audit' ? 0 : 8 }}
               transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className={cn("flex-1 min-h-0", currentPage !== 'audit' && "hidden")}
+              className={cn("flex-1 min-h-0 flex flex-col", currentPage !== 'audit' && "hidden")}
             >
               <AuditLogs />
             </motion.div>

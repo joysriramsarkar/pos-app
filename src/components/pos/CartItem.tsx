@@ -130,7 +130,18 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
       .slice(0, 4)
       .map(([qty]) => parseFloat(qty));
   }, [productUsage]);
-  const QUANTITY_PRESETS = popularQuantities.length > 0 ? popularQuantities : (isWeighted ? [0.5, 1, 2, 5] : [1, 5, 10, 20]);
+
+  const QUANTITY_PRESETS = useMemo(() => {
+    const defaultPresets = isWeighted ? [0.5, 1, 2, 5] : [1, 5, 10, 20];
+    const combined = [...popularQuantities];
+    for (const preset of defaultPresets) {
+      if (combined.length >= 4) break;
+      if (!combined.includes(preset)) {
+        combined.push(preset);
+      }
+    }
+    return combined.sort((a, b) => a - b);
+  }, [popularQuantities, isWeighted]);
 
   const handlePiecePreset = useCallback((qty: number) => {
     const validated = Math.min(qty, item.availableStock);
@@ -139,11 +150,16 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
 
   const pricePresets = useMemo(() => {
     if (!isWeighted) return [];
-    if (popularQuantities.length > 0) {
-      const prices = popularQuantities.map((qty) => Math.round(qty * item.unitPrice));
-      return Array.from(new Set(prices)).filter((p) => p > 0).sort((a, b) => a - b).slice(0, 4);
+    const defaultPrices = [10, 20, 25, 50];
+    const calculatedPrices = popularQuantities.map((qty) => Math.round(qty * item.unitPrice)).filter(p => p > 0);
+    const combined = Array.from(new Set(calculatedPrices));
+    for (const preset of defaultPrices) {
+      if (combined.length >= 4) break;
+      if (!combined.includes(preset)) {
+        combined.push(preset);
+      }
     }
-    return [10, 20, 25, 50];
+    return combined.sort((a, b) => a - b);
   }, [isWeighted, popularQuantities, item.unitPrice]);
 
   const handlePricePreset = useCallback((price: number) => {

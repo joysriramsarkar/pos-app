@@ -604,6 +604,12 @@
     "view_details": "View Details"
   },
   "Parties": {
+    "sort_by": "Sort By",
+    "sort_name_asc": "Name (A-Z)",
+    "sort_name_desc": "Name (Z-A)",
+    "sort_due_desc": "Dues (High to Low)",
+    "sort_due_asc": "Dues (Low to High)",
+    "sort_purchases_desc": "Total Purchases (High to Low)",
     "title": "Parties",
     "subtitle": "Customers & Suppliers",
     "add_customer": "Add Customer",

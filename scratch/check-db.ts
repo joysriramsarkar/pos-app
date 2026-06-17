@@ -1,35 +1,43 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-console.log("process.env.DATABASE_URL:", process.env.DATABASE_URL);
-
 async function main() {
   const { db } = await import('../src/lib/db');
+  console.log('Connecting to DB...');
   
+  // Find suppliers that have purchases or expenses
   const suppliers = await db.supplier.findMany({
-    where: {
-      name: { in: ['আমূল দুধ', 'আইটিসি সিগারেট'] }
-    },
     include: {
-      purchases: true,
+      purchases: {
+        where: { deliveryStatus: { in: ['Received', 'PartiallyReceived'] } },
+      },
       expenses: {
-        where: { isActive: true }
+        where: {
+          isActive: true,
+          category: { in: ['Supplier Payment', 'Supplies'] }
+        }
       }
     }
   });
-  
+
+  console.log('Suppliers with activity:');
+  let count = 0;
   for (const s of suppliers) {
-    console.log(`=========================================`);
-    console.log(`SUPPLIER: ${s.name} (ID: ${s.id})`);
-    console.log(`PURCHASES (${s.purchases.length}):`);
-    for (const p of s.purchases) {
-      console.log(`- PO: ${p.invoiceNumber}, Date: ${p.createdAt.toISOString().split('T')[0]}, Total: ${p.totalAmount}, Delivery: ${p.deliveryStatus}, Payment: ${p.paymentStatus}`);
-    }
-    console.log(`EXPENSES (${s.expenses.length}):`);
-    for (const e of s.expenses) {
-      console.log(`- Exp ID: ${e.id}, Amount: ${e.amount}, Date: ${e.date.toISOString().split('T')[0]}, Category: ${e.category}, Notes: "${e.notes}"`);
+    const totalPurchases = s.purchases.reduce((sum, p) => sum + Number(p.totalAmount), 0) + 
+                          s.expenses.filter(e => e.category === 'Supplies').reduce((sum, e) => sum + Number(e.amount), 0);
+    const totalPaid = s.expenses.reduce((sum, e) => sum + Number(e.amount), 0);
+    
+    if (totalPurchases > 0 || totalPaid > 0) {
+      count++;
+      console.log(`Supplier: ${s.name} (ID: ${s.id})`);
+      console.log(`  - Purchases Count: ${s.purchases.length}`);
+      console.log(`  - Expenses Count: ${s.expenses.length}`);
+      console.log(`  - Total Purchases: ${totalPurchases}`);
+      console.log(`  - Total Paid: ${totalPaid}`);
+      console.log(`  - Calculated Due: ${Math.max(0, totalPurchases - totalPaid)}`);
     }
   }
+  console.log(`Total active suppliers: ${count} / ${suppliers.length}`);
 }
 
 main().catch(console.error);

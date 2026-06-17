@@ -69,7 +69,6 @@ export function SupplierReport({ onBack }: SupplierReportProps) {
     receivedOrdersCount: 0,
     cancelledOrdersCount: 0,
     receivedPurchasesAmount: 0,
-    suppliesPurchasesAmount: 0,
     totalPurchasesAmount: 0,
     totalPaymentsAmount: 0
   };

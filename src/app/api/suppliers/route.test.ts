@@ -67,16 +67,16 @@ describe('Suppliers API', () => {
         expenses: [
           {
             id: 'e1',
-            category: 'Supplies',
+            category: 'Supplier Payment',
             amount: 400,
-            notes: 'Expense Supplies',
+            notes: 'Paid supplier: Supplier One',
             date: '2026-06-02T00:00:00Z',
           },
           {
             id: 'e2',
             category: 'Supplier Payment',
             amount: 500,
-            notes: 'Payment',
+            notes: 'Paid supplier: Supplier One',
             date: '2026-06-03T00:00:00Z',
           },
         ],
@@ -89,10 +89,10 @@ describe('Suppliers API', () => {
 
       const json = await res.json();
       expect(json.success).toBe(true);
-      expect(json.data.totalPurchases).toBe(1400); // 1000 PO + 400 Supplies EXP
+      expect(json.data.totalPurchases).toBe(1000); // 1000 PO
       expect(json.data.totalPaid).toBe(900); // 400 + 500
-      expect(json.data.totalDue).toBe(500); // 1400 - 900
-      expect(json.data.ledgerEntries.length).toBe(4);
+      expect(json.data.totalDue).toBe(100); // 1000 - 900
+      expect(json.data.ledgerEntries.length).toBe(3);
     });
 
     it('returns a list of suppliers with search and pagination', async () => {
@@ -101,7 +101,7 @@ describe('Suppliers API', () => {
           id: 'sup1',
           name: 'Supplier One',
           purchases: [{ totalAmount: 1000 }],
-          expenses: [{ amount: 400, category: 'Supplies' }],
+          expenses: [{ amount: 400, category: 'Supplier Payment', notes: 'Paid supplier: Supplier One' }],
         },
       ];
       mockCount.mockResolvedValueOnce(1);
@@ -113,7 +113,7 @@ describe('Suppliers API', () => {
 
       const json = await res.json();
       expect(json.success).toBe(true);
-      expect(json.data[0].totalPurchases).toBe(1400);
+      expect(json.data[0].totalPurchases).toBe(1000);
       expect(json.total).toBe(1);
     });
 

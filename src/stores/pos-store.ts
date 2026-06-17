@@ -675,7 +675,7 @@ export const useQuantityUsageStore = create<QuantityUsageState & QuantityUsageAc
 
       recordQuantity: (productId, quantity) => {
         set((state) => {
-          const productUsage = state.usage[productId] || {};
+          const productUsage = { ...(state.usage[productId] || {}) };
           productUsage[quantity] = (productUsage[quantity] || 0) + 1;
           return {
             usage: {

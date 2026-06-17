@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: parsed.error.issues[0].message }, { status: 400 });
     }
 
-    const { id, amount, category, notes, date, supplierId, supplierName } = parsed.data;
+    const { id, amount, category, notes, paymentMethod, date, supplierId, supplierName } = parsed.data;
     const parsedDate = parseExpenseDate(date) ?? new Date();
 
     let expense;
@@ -111,6 +111,7 @@ export async function POST(request: NextRequest) {
           amount,
           category,
           notes,
+          paymentMethod: paymentMethod || 'Cash',
           date: parsedDate,
           supplierId: supplierId ?? null,
           supplierName: supplierName ?? null,
@@ -122,6 +123,7 @@ export async function POST(request: NextRequest) {
           amount,
           category,
           notes,
+          paymentMethod: paymentMethod || 'Cash',
           date: parsedDate,
           supplierId: supplierId ?? null,
           supplierName: supplierName ?? null,
@@ -159,8 +161,9 @@ export async function PUT(request: NextRequest) {
       amount: parsed.data.amount,
       category: parsed.data.category,
       notes: parsed.data.notes ?? null,
-      supplierId: (parsed.data.category === 'Supplies' || parsed.data.category === 'Supplier Payment') ? parsed.data.supplierId ?? null : null,
-      supplierName: (parsed.data.category === 'Supplies' || parsed.data.category === 'Supplier Payment') ? parsed.data.supplierName ?? null : null,
+      paymentMethod: parsed.data.paymentMethod || 'Cash',
+      supplierId: parsed.data.category === 'Supplier Payment' ? parsed.data.supplierId ?? null : null,
+      supplierName: parsed.data.category === 'Supplier Payment' ? parsed.data.supplierName ?? null : null,
     };
 
     const parsedDate = parseExpenseDate(parsed.data.date);

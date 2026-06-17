@@ -19,9 +19,12 @@ export async function POST(
   try {
     const { id } = await context.params;
     const body = await request.json();
-    const { receivedItems, amountPaid } = body as {
+    const { receivedItems, amountPaid, paymentMethod, cashAmount, upiAmount } = body as {
       receivedItems: { id: string; receivedQty: number }[];
       amountPaid?: number;
+      paymentMethod?: string;
+      cashAmount?: number;
+      upiAmount?: number;
     };
 
     if (!receivedItems || receivedItems.length === 0) {
@@ -86,7 +89,7 @@ export async function POST(
     const nextDeliveryStatus = allFullyReceived ? 'Received' : 'PartiallyReceived';
 
     // Update stock and create stock entries in a transaction
-    const result = await db.$transaction(async (tx) => {
+    const result: any = await db.$transaction(async (tx) => {
       // Update each order item and update product stock
       for (const receivedItem of receivedItems) {
         const orderItem = order.items.find((i) => i.id === receivedItem.id);
@@ -168,7 +171,9 @@ export async function POST(
         data: {
           paymentStatus,
           deliveryStatus: nextDeliveryStatus,
-          totalAmount: receivedTotalAmount
+          totalAmount: receivedTotalAmount,
+          paidAmount: actualAmountPaid,
+          paymentMethod: paymentMethod || 'Cash'
         },
         include: {
           supplier: true,
@@ -181,15 +186,19 @@ export async function POST(
       });
 
       // Create Expense record for payment if actualAmountPaid > 0
-      if (actualAmountPaid > 0 && order.supplierId && order.supplier) {
+      if (actualAmountPaid > 0) {
+        let expenseNotes = `Paid for purchase order: ${order.invoiceNumber}${paymentMethod ? ` (Method: ${paymentMethod})` : ''}`;
+        if (paymentMethod === 'Mixed' && (cashAmount !== undefined || upiAmount !== undefined)) {
+          expenseNotes += ` [নগদ: ${cashAmount || 0}, ইউপিআই: ${upiAmount || 0}]`;
+        }
         await tx.expense.create({
           data: {
             amount: actualAmountPaid,
             category: 'Supplier Payment',
-            notes: `Paid for purchase order: ${order.invoiceNumber}`,
-            date: order.createdAt,
+            notes: expenseNotes,
+            date: new Date(),
             supplierId: order.supplierId,
-            supplierName: order.supplier.name,
+            supplierName: order.supplier?.name || null,
           },
         });
       }
@@ -218,7 +227,9 @@ export async function POST(
       supplierId: result.supplierId,
       status: 'প্রাপ্ত',
       totalAmount: Number(result.totalAmount),
-      paidAmount: Number(result.totalAmount),
+      paidAmount: Number(result.paidAmount || 0),
+      paymentMethod: result.paymentMethod || 'Cash',
+      paymentStatus: result.paymentStatus,
       notes: result.notes,
       expectedDate: result.createdAt.toISOString(),
       createdAt: result.createdAt.toISOString(),
@@ -228,7 +239,7 @@ export async function POST(
         name: result.supplier.name,
         phone: result.supplier.phone,
       } : null,
-      items: result.items.map((item) => ({
+      items: result.items.map((item: any) => ({
         id: item.id,
         purchaseOrderId: result.id,
         productId: item.productId,

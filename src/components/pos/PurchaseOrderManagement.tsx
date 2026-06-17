@@ -18,6 +18,9 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 import { cn, convertBengaliToEnglishNumerals } from '@/lib/utils';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -107,10 +110,26 @@ export default function PurchaseOrderManagement() {
   const [productOpen, setProductOpen] = useState(false);
   const [supplierSearch, setSupplierSearch] = useState('');
   const [supplierOpen, setSupplierOpen] = useState(false);
+  const [formPaymentMethod, setFormPaymentMethod] = useState('Cash');
 
   // Receive form state
   const [receiveItems, setReceiveItems] = useState<{ id: string; receivedQty: number; maxQty: number; productName: string }[]>([]);
   const [receiveAmountPaid, setReceiveAmountPaid] = useState<string>('');
+  const [receivePaymentMethod, setReceivePaymentMethod] = useState('Cash');
+  const [lastAddedProductId, setLastAddedProductId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (lastAddedProductId) {
+      const timer = setTimeout(() => {
+        const input = document.getElementById(`qty-${lastAddedProductId}`);
+        if (input) {
+          input.focus();
+          (input as HTMLInputElement).select();
+        }
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [lastAddedProductId]);
 
   const receiveTotal = useMemo(() => {
     if (!selectedOrder) return 0;
@@ -189,20 +208,44 @@ export default function PurchaseOrderManagement() {
     [products, formItems]
   );
 
+  const supplierProductIds = useMemo(() => {
+    if (!formSupplierId || formSupplierId === 'none') return new Set<string>();
+    const productIds = new Set<string>();
+    orders.forEach((order) => {
+      if (order.supplierId === formSupplierId) {
+        order.items.forEach((item) => {
+          productIds.add(item.productId);
+        });
+      }
+    });
+    return productIds;
+  }, [orders, formSupplierId]);
+
   const filteredProducts = useMemo(() => {
     const q = productSearch.trim();
-    if (!q) return availableProducts;
-    const lowerQuery = q.toLowerCase();
-    const normalizedQuery = convertBengaliToEnglishNumerals(q);
-    return availableProducts.filter(
-      (p) =>
-        p.name.toLowerCase().includes(lowerQuery) ||
-        p.nameBn?.includes(q) ||
-        p.barcode?.includes(q) ||
-        convertBengaliToEnglishNumerals(p.barcode || '').includes(normalizedQuery) ||
-        p.category.toLowerCase().includes(lowerQuery)
-    );
-  }, [availableProducts, productSearch]);
+    let result = availableProducts;
+    if (q) {
+      const lowerQuery = q.toLowerCase();
+      const normalizedQuery = convertBengaliToEnglishNumerals(q);
+      result = availableProducts.filter(
+        (p) =>
+          p.name.toLowerCase().includes(lowerQuery) ||
+          p.nameBn?.includes(q) ||
+          p.barcode?.includes(q) ||
+          convertBengaliToEnglishNumerals(p.barcode || '').includes(normalizedQuery) ||
+          p.category.toLowerCase().includes(lowerQuery)
+      );
+    }
+    // Sort supplier's products first
+    if (formSupplierId && formSupplierId !== 'none') {
+      result = [...result].sort((a, b) => {
+        const aIsSupplierProduct = supplierProductIds.has(a.id) ? 1 : 0;
+        const bIsSupplierProduct = supplierProductIds.has(b.id) ? 1 : 0;
+        return bIsSupplierProduct - aIsSupplierProduct;
+      });
+    }
+    return result;
+  }, [availableProducts, productSearch, formSupplierId, supplierProductIds]);
 
   const filteredOrders = useMemo(() => {
     let result = orders;
@@ -249,6 +292,7 @@ export default function PurchaseOrderManagement() {
       return;
     }
     setFormItems([...formItems, { productId: formProductId, quantity: 1, unitPrice: Number(product.buyingPrice) }]);
+    setLastAddedProductId(formProductId);
     setFormProductId('');
     setFormProductName('');
     setProductSearch('');
@@ -278,6 +322,7 @@ export default function PurchaseOrderManagement() {
     setProductOpen(false);
     setSupplierSearch('');
     setSupplierOpen(false);
+    setFormPaymentMethod('Cash');
   };
 
   const handleCreateOrder = async (directReceive = false) => {
@@ -297,6 +342,7 @@ export default function PurchaseOrderManagement() {
           notes: formNotes || null,
           directReceive,
           amountPaid: (directReceive && formAmountPaid) ? parseFloat(formAmountPaid) : undefined,
+          paymentMethod: directReceive ? formPaymentMethod : undefined,
         }),
       });
       const data = await res.json();
@@ -388,6 +434,7 @@ export default function PurchaseOrderManagement() {
       }))
     );
     setReceiveAmountPaid('');
+    setReceivePaymentMethod('Cash');
     setSelectedOrder(order);
     setShowReceiveDialog(true);
   };
@@ -407,6 +454,7 @@ export default function PurchaseOrderManagement() {
         body: JSON.stringify({
           receivedItems: validItems.map((i) => ({ id: i.id, receivedQty: i.receivedQty })),
           amountPaid: receiveAmountPaid ? parseFloat(receiveAmountPaid) : undefined,
+          paymentMethod: receivePaymentMethod,
         }),
       });
       const data = await res.json();
@@ -777,6 +825,11 @@ export default function PurchaseOrderManagement() {
                                 )}
                               />
                               <span className="truncate">{product.nameBn || product.name}</span>
+                              {supplierProductIds.has(product.id) && (
+                                <Badge variant="secondary" className="ml-2 text-[10px] py-0 px-1 font-semibold text-indigo-600 bg-indigo-50 border-indigo-100 dark:bg-indigo-950/20 dark:text-indigo-400">
+                                  সাপ্লায়ারের
+                                </Badge>
+                              )}
                               <span className="ml-auto text-xs text-muted-foreground shrink-0">
                                 {formatPrice(Number(product.buyingPrice))}
                               </span>
@@ -797,9 +850,9 @@ export default function PurchaseOrderManagement() {
             {formItems.length > 0 && (
               <Card>
                 <CardContent className="p-0">
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto max-h-[280px] overflow-y-auto">
                     <Table>
-                      <TableHeader>
+                      <TableHeader className="sticky top-0 bg-background z-10">
                         <TableRow>
                           <TableHead>{tc('name')}</TableHead>
                           <TableHead className="w-24">{t('quantity')}</TableHead>
@@ -816,6 +869,7 @@ export default function PurchaseOrderManagement() {
                               <TableCell className="text-sm">{product?.nameBn || product?.name}</TableCell>
                               <TableCell>
                                 <Input
+                                  id={`qty-${item.productId}`}
                                   type="text"
                                   value={item.quantity === 0 ? '' : item.quantity}
                                   onChange={(e) => {
@@ -918,13 +972,24 @@ export default function PurchaseOrderManagement() {
                 />
               </div>
             </div>
+
+            {/* Payment Method */}
+            <div className="space-y-1.5">
+              <Label htmlFor="form-payment-method" className="text-sm font-medium">পেমেন্ট পদ্ধতি</Label>
+              <Select value={formPaymentMethod} onValueChange={setFormPaymentMethod}>
+                <SelectTrigger id="form-payment-method" className="h-9">
+                  <SelectValue placeholder="পেমেন্ট পদ্ধতি নির্বাচন করুন" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Cash">Cash (নগদ)</SelectItem>
+                  <SelectItem value="UPI">UPI (ইউপিআই)</SelectItem>
+                  <SelectItem value="Mixed">Mixed (মিশ্র)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <DialogFooter className="gap-2 flex-wrap sm:justify-end">
             <Button variant="outline" onClick={() => setShowCreateDialog(false)}>{tc('cancel')}</Button>
-            <Button variant="secondary" onClick={() => handleCreateOrder(false)} disabled={saving || formItems.length === 0}>
-              {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              খসড়া অর্ডার তৈরি
-            </Button>
             <Button onClick={() => handleCreateOrder(true)} disabled={saving || formItems.length === 0} className="bg-green-600 text-white hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600">
               {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
               সরাসরি ক্রয় ও স্টক আপডেট
@@ -982,9 +1047,9 @@ export default function PurchaseOrderManagement() {
                 <h4 className="font-medium mb-2">{t('items_count', { count: selectedOrder.items.length })}</h4>
                 <Card>
                   <CardContent className="p-0">
-                    <div className="overflow-x-auto">
+                    <div className="overflow-x-auto max-h-[250px] overflow-y-auto">
                       <Table>
-                        <TableHeader>
+                        <TableHeader className="sticky top-0 bg-background z-10">
                           <TableRow>
                             <TableHead>{tc('name')}</TableHead>
                             <TableHead className="text-right">{t('quantity')}</TableHead>
@@ -1059,9 +1124,9 @@ export default function PurchaseOrderManagement() {
               </p>
               <Card>
                 <CardContent className="p-0">
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto max-h-[250px] overflow-y-auto">
                     <Table>
-                      <TableHeader>
+                      <TableHeader className="sticky top-0 bg-background z-10">
                         <TableRow>
                           <TableHead>পণ্য</TableHead>
                           <TableHead className="text-right">অর্ডার</TableHead>
@@ -1134,6 +1199,23 @@ export default function PurchaseOrderManagement() {
                       <p className="text-[10px] text-muted-foreground">
                         বাকি রাখতে চাইলে পরিশোধের পরিমাণ লিখুন। ফাঁকা রাখলে সম্পূর্ণ পরিশোধিত ধরা হবে।
                       </p>
+                    </div>
+                  )}
+
+                  {/* Payment Method for Receive Dialog */}
+                  {selectedOrder.supplierId && (
+                    <div className="space-y-1.5 border-t pt-2.5">
+                      <Label htmlFor="receive-payment-method" className="text-xs">পেমেন্ট পদ্ধতি</Label>
+                      <Select value={receivePaymentMethod} onValueChange={setReceivePaymentMethod}>
+                        <SelectTrigger id="receive-payment-method" className="h-8 text-sm bg-background">
+                          <SelectValue placeholder="পেমেন্ট পদ্ধতি নির্বাচন করুন" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Cash">Cash (নগদ)</SelectItem>
+                          <SelectItem value="UPI">UPI (ইউপিআই)</SelectItem>
+                          <SelectItem value="Mixed">Mixed (মিশ্র)</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                   )}
                 </div>
