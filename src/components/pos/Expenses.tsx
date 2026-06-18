@@ -822,7 +822,7 @@ export function Expenses({ onReport }: ExpensesProps) {
                   );
                 }) : (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center text-muted-foreground py-12">
+                    <TableCell colSpan={5} className="text-center text-muted-foreground py-12">
                       <Receipt className="w-8 h-8 mx-auto mb-2 opacity-30" />
                       <p className="text-sm">{useCustomDate && customDate ? t('no_expenses_date') : t('no_expenses_today')}</p>
                     </TableCell>

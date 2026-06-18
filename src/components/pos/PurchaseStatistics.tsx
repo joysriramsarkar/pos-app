@@ -166,7 +166,6 @@ export default function PurchaseStatistics({ onBack }: PurchaseStatisticsProps) 
     return Math.max(0, summary.totalPurchasesAmount - summary.totalPaymentsAmount);
   }, [summary]);
 
-  const chartKey = days === '1' ? 'date' : 'date'; // Hourly uses time/hour label, daily uses date
   const chartColor = '#6366f1'; // Indigo
 
   const formattedChartData = useMemo(() => {

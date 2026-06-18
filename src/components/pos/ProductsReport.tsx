@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { useDebouncedSearch } from '@/hooks/use-debounced-search';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -30,7 +31,7 @@ export function ProductsReport({ onBack }: ProductsReportProps) {
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   
-  const [searchQuery, setSearchQuery] = useState('');
+  const { inputValue: searchInput, searchQuery, setInputValue: setSearchInput } = useDebouncedSearch();
   const [sortField, setSortField] = useState<ProductSortField>('revenue');
   const [chartMetric, setChartMetric] = useState<ChartMetric>('revenue');
   
@@ -303,8 +304,8 @@ export function ProductsReport({ onBack }: ProductsReportProps) {
               <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
               <Input
                 placeholder="Search products..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
                 className="pl-8 h-8 text-xs w-full"
               />
             </div>

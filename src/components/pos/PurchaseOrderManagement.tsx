@@ -111,6 +111,7 @@ export default function PurchaseOrderManagement() {
   const [supplierSearch, setSupplierSearch] = useState('');
   const [supplierOpen, setSupplierOpen] = useState(false);
   const [formPaymentMethod, setFormPaymentMethod] = useState('Cash');
+  const [formGstPercentage, setFormGstPercentage] = useState('');
 
   // Receive form state
   const [receiveItems, setReceiveItems] = useState<{ id: string; receivedQty: number; maxQty: number; productName: string }[]>([]);
@@ -307,7 +308,10 @@ export default function PurchaseOrderManagement() {
     setFormItems(formItems.map((i) => (i.productId === productId ? { ...i, [field]: value } : i)));
   };
 
-  const formTotal = formItems.reduce((sum, i) => sum + i.quantity * (parseFloat(i.unitPrice as string) || 0), 0);
+  const formSubtotal = formItems.reduce((sum, i) => sum + i.quantity * (parseFloat(i.unitPrice as string) || 0), 0);
+  const gstAmount = formGstPercentage ? formSubtotal * (parseFloat(formGstPercentage) / 100) : 0;
+  const formTotal = formSubtotal + gstAmount;
+  const totalItemCount = formItems.reduce((sum, i) => sum + i.quantity, 0);
 
   const resetForm = () => {
     setFormSupplierId('');
@@ -323,6 +327,7 @@ export default function PurchaseOrderManagement() {
     setSupplierSearch('');
     setSupplierOpen(false);
     setFormPaymentMethod('Cash');
+    setFormGstPercentage('');
   };
 
   const handleCreateOrder = async (directReceive = false) => {
@@ -343,6 +348,7 @@ export default function PurchaseOrderManagement() {
           directReceive,
           amountPaid: (directReceive && formAmountPaid) ? parseFloat(formAmountPaid) : undefined,
           paymentMethod: directReceive ? formPaymentMethod : undefined,
+          gstPercentage: formGstPercentage ? parseFloat(formGstPercentage) : undefined,
         }),
       });
       const data = await res.json();
@@ -705,15 +711,15 @@ export default function PurchaseOrderManagement() {
             {/* Supplier */}
             <div>
               <Label>{t('supplier')}</Label>
-              <Popover open={supplierOpen} onOpenChange={setSupplierOpen} modal={false}>
+              <Popover open={supplierOpen} onOpenChange={setSupplierOpen} modal={true}>
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
                     role="combobox"
                     aria-expanded={supplierOpen}
-                    className="w-full justify-between font-normal"
+                    className="w-full justify-between font-normal min-w-0"
                   >
-                    <span className="truncate">
+                    <span className="truncate flex-1 text-left">
                       {formSupplierId === 'none'
                         ? t('no_supplier')
                         : formSupplierId
@@ -723,8 +729,8 @@ export default function PurchaseOrderManagement() {
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
-                  <Command>
+                <PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start" side="bottom" avoidCollisions={false}>
+                  <Command shouldFilter={false}>
                     <CommandInput
                       value={supplierSearch}
                       onValueChange={setSupplierSearch}
@@ -782,15 +788,15 @@ export default function PurchaseOrderManagement() {
             <div>
               <Label>{t('add_products')}</Label>
               <div className="flex gap-2 mt-1">
-                <Popover open={productOpen} onOpenChange={setProductOpen} modal={false}>
+                <Popover open={productOpen} onOpenChange={setProductOpen} modal={true}>
                   <PopoverTrigger asChild>
                     <Button
                       variant="outline"
                       role="combobox"
                       aria-expanded={productOpen}
-                      className="flex-1 justify-between font-normal"
+                      className="flex-1 justify-between font-normal min-w-0"
                     >
-                      <span className="truncate">
+                      <span className="truncate flex-1 text-left">
                         {formProductId
                           ? formProductName || availableProducts.find((p) => p.id === formProductId)?.nameBn || availableProducts.find((p) => p.id === formProductId)?.name
                           : t('select_product')}
@@ -798,7 +804,7 @@ export default function PurchaseOrderManagement() {
                       <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
+                  <PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start" side="bottom" avoidCollisions={false}>
                     <Command shouldFilter={false}>
                       <CommandInput
                         value={productSearch}
@@ -846,88 +852,184 @@ export default function PurchaseOrderManagement() {
               </div>
             </div>
 
-            {/* Items Table */}
+            {/* Items Table / Cards */}
             {formItems.length > 0 && (
-              <Card>
-                <CardContent className="p-0">
-                  <div className="overflow-x-auto max-h-[280px] overflow-y-auto">
-                    <Table>
-                      <TableHeader className="sticky top-0 bg-background z-10">
-                        <TableRow>
-                          <TableHead>{tc('name')}</TableHead>
-                          <TableHead className="w-24">{t('quantity')}</TableHead>
-                          <TableHead className="w-28">{t('unit_price')}</TableHead>
-                          <TableHead className="w-28">{t('total_price')}</TableHead>
-                          <TableHead className="w-12"></TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {formItems.map((item) => {
-                          const product = products.find((p) => p.id === item.productId);
-                          return (
-                            <TableRow key={item.productId}>
-                              <TableCell className="text-sm">{product?.nameBn || product?.name}</TableCell>
-                              <TableCell>
-                                <Input
-                                  id={`qty-${item.productId}`}
-                                  type="text"
-                                  value={item.quantity === 0 ? '' : item.quantity}
-                                  onChange={(e) => {
-                                    const val = convertBengaliToEnglishNumerals(e.target.value);
-                                    const cleaned = val.replace(/[^0-9]/g, '');
-                                    updateFormItem(item.productId, 'quantity', parseInt(cleaned) || 0);
-                                  }}
-                                  onBlur={() => {
-                                    if (item.quantity <= 0) {
-                                      updateFormItem(item.productId, 'quantity', 1);
-                                    }
-                                  }}
-                                  className="h-8 w-20"
-                                />
-                              </TableCell>
-                              <TableCell>
-                                <Input
-                                  type="text"
-                                  value={item.unitPrice === 0 ? '' : item.unitPrice}
-                                  onChange={(e) => {
-                                    const val = convertBengaliToEnglishNumerals(e.target.value);
-                                    const cleaned = val.replace(/[^0-9.]/g, '');
-                                    const dotCount = (cleaned.match(/\./g) || []).length;
-                                    if (dotCount > 1) return;
-                                    updateFormItem(item.productId, 'unitPrice', cleaned);
-                                  }}
-                                  onBlur={() => {
-                                    const parsedPrice = parseFloat(item.unitPrice as string) || 0;
-                                    if (parsedPrice < 0) {
-                                      updateFormItem(item.productId, 'unitPrice', 0);
-                                    } else {
-                                      updateFormItem(item.productId, 'unitPrice', parsedPrice);
-                                    }
-                                  }}
-                                  className="h-8 w-24"
-                                />
-                              </TableCell>
-                              <TableCell className="font-medium">{formatPrice(item.quantity * (parseFloat(item.unitPrice as string) || 0))}</TableCell>
-                              <TableCell>
-                                <Button variant="ghost" size="sm" onClick={() => removeFormItem(item.productId)}>
-                                  <Trash2 className="h-3.5 w-3.5 text-red-500" />
-                                </Button>
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </CardContent>
-              </Card>
+              <>
+                {/* Desktop View */}
+                <Card className="hidden md:block">
+                  <CardContent className="p-0">
+                    <div className="overflow-x-auto max-h-[280px] overflow-y-auto">
+                      <Table>
+                        <TableHeader className="sticky top-0 bg-background z-10">
+                          <TableRow>
+                            <TableHead>{tc('name')}</TableHead>
+                            <TableHead className="w-24">{t('quantity')}</TableHead>
+                            <TableHead className="w-28">{t('unit_price')}</TableHead>
+                            <TableHead className="w-28">{t('total_price')}</TableHead>
+                            <TableHead className="w-12"></TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {formItems.map((item) => {
+                            const product = products.find((p) => p.id === item.productId);
+                            return (
+                              <TableRow key={item.productId}>
+                                <TableCell className="text-sm">{product?.nameBn || product?.name}</TableCell>
+                                <TableCell>
+                                  <Input
+                                    id={`qty-${item.productId}`}
+                                    type="text"
+                                    value={item.quantity === 0 ? '' : item.quantity}
+                                    onChange={(e) => {
+                                      const val = convertBengaliToEnglishNumerals(e.target.value);
+                                      const cleaned = val.replace(/[^0-9]/g, '');
+                                      updateFormItem(item.productId, 'quantity', parseInt(cleaned) || 0);
+                                    }}
+                                    onBlur={() => {
+                                      if (item.quantity <= 0) {
+                                        updateFormItem(item.productId, 'quantity', 1);
+                                      }
+                                    }}
+                                    className="h-8 w-20"
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <Input
+                                    type="text"
+                                    value={item.unitPrice === 0 ? '' : item.unitPrice}
+                                    onChange={(e) => {
+                                      const val = convertBengaliToEnglishNumerals(e.target.value);
+                                      const cleaned = val.replace(/[^0-9.]/g, '');
+                                      const dotCount = (cleaned.match(/\./g) || []).length;
+                                      if (dotCount > 1) return;
+                                      updateFormItem(item.productId, 'unitPrice', cleaned);
+                                    }}
+                                    onBlur={() => {
+                                      const parsedPrice = parseFloat(item.unitPrice as string) || 0;
+                                      if (parsedPrice < 0) {
+                                        updateFormItem(item.productId, 'unitPrice', 0);
+                                      } else {
+                                        updateFormItem(item.productId, 'unitPrice', parsedPrice);
+                                      }
+                                    }}
+                                    className="h-8 w-24"
+                                  />
+                                </TableCell>
+                                <TableCell className="font-medium">{formatPrice(item.quantity * (parseFloat(item.unitPrice as string) || 0))}</TableCell>
+                                <TableCell>
+                                  <Button variant="ghost" size="sm" onClick={() => removeFormItem(item.productId)}>
+                                    <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Mobile View */}
+                <div className="md:hidden flex flex-col gap-3">
+                  {formItems.map((item) => {
+                    const product = products.find((p) => p.id === item.productId);
+                    return (
+                      <Card key={`mobile-${item.productId}`} className="p-3">
+                        <div className="flex justify-between items-start mb-3 gap-2">
+                          <span className="text-sm font-semibold">{product?.nameBn || product?.name}</span>
+                          <Button variant="ghost" size="sm" onClick={() => removeFormItem(item.productId)} className="h-6 w-6 p-0 shrink-0">
+                            <Trash2 className="h-4 w-4 text-red-500" />
+                          </Button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">{t('quantity')}</Label>
+                            <Input
+                              id={`qty-mobile-${item.productId}`}
+                              type="text"
+                              value={item.quantity === 0 ? '' : item.quantity}
+                              onChange={(e) => {
+                                const val = convertBengaliToEnglishNumerals(e.target.value);
+                                const cleaned = val.replace(/[^0-9]/g, '');
+                                updateFormItem(item.productId, 'quantity', parseInt(cleaned) || 0);
+                              }}
+                              onBlur={() => {
+                                if (item.quantity <= 0) {
+                                  updateFormItem(item.productId, 'quantity', 1);
+                                }
+                              }}
+                              className="h-8 w-full"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">{t('unit_price')}</Label>
+                            <Input
+                              type="text"
+                              value={item.unitPrice === 0 ? '' : item.unitPrice}
+                              onChange={(e) => {
+                                const val = convertBengaliToEnglishNumerals(e.target.value);
+                                const cleaned = val.replace(/[^0-9.]/g, '');
+                                const dotCount = (cleaned.match(/\./g) || []).length;
+                                if (dotCount > 1) return;
+                                updateFormItem(item.productId, 'unitPrice', cleaned);
+                              }}
+                              onBlur={() => {
+                                const parsedPrice = parseFloat(item.unitPrice as string) || 0;
+                                if (parsedPrice < 0) {
+                                  updateFormItem(item.productId, 'unitPrice', 0);
+                                } else {
+                                  updateFormItem(item.productId, 'unitPrice', parsedPrice);
+                                }
+                              }}
+                              className="h-8 w-full"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex justify-between items-center mt-3 pt-2 border-t text-sm">
+                          <span className="text-muted-foreground">{t('total_price')}:</span>
+                          <span className="font-bold">{formatPrice(item.quantity * (parseFloat(item.unitPrice as string) || 0))}</span>
+                        </div>
+                      </Card>
+                    );
+                  })}
+                </div>
+              </>
             )}
 
-            {/* Running Total */}
+            {/* Calculations Area */}
             {formItems.length > 0 && (
-              <div className="bg-muted p-3 rounded-lg text-sm flex justify-between">
-                <span className="text-muted-foreground">{t('total_price')}</span>
-                <span className="font-bold text-lg">{formatPrice(formTotal)}</span>
+              <div className="bg-muted/50 rounded-lg p-3 space-y-2 border border-border/50">
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-muted-foreground">সাবটোটাল ({formItems.length} প্রকার, {totalItemCount} আইটেম):</span>
+                  <span className="font-semibold">{formatPrice(formSubtotal)}</span>
+                </div>
+                
+                <div className="flex justify-between items-center text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground">জিএসটি (অপশনাল):</span>
+                    <div className="relative w-20">
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.1"
+                        placeholder="0"
+                        value={formGstPercentage}
+                        onChange={(e) => setFormGstPercentage(e.target.value)}
+                        className="h-7 text-xs pr-6"
+                      />
+                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">%</span>
+                    </div>
+                  </div>
+                  <span className="font-medium text-muted-foreground">{gstAmount > 0 ? '+' : ''}{formatPrice(gstAmount)}</span>
+                </div>
+                
+                <Separator className="my-1" />
+                
+                <div className="flex justify-between items-center">
+                  <span className="font-bold text-base">মোট:</span>
+                  <span className="font-bold text-xl text-primary">{formatPrice(formTotal)}</span>
+                </div>
               </div>
             )}
 

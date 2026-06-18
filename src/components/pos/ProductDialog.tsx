@@ -278,7 +278,21 @@ export function ProductDialog({
   };
 
   const isCategoryValid = category === 'new_category_custom_value' ? newCategory.trim().length > 0 : !!category;
-  const isValid = name && isCategoryValid && buyingPrice && sellingPrice;
+
+  const hasChanges = isEditing ? (
+    name !== product?.name ||
+    nameBn !== (product?.nameBn || '') ||
+    barcode !== (product?.barcode || '') ||
+    category !== product?.category ||
+    buyingPrice !== product?.buyingPrice.toString() ||
+    sellingPrice !== product?.sellingPrice.toString() ||
+    unit !== product?.unit ||
+    currentStock !== product?.currentStock.toString() ||
+    minStockLevel !== product?.minStockLevel.toString() ||
+    isActive !== product?.isActive
+  ) : true;
+
+  const isValid = name && isCategoryValid && buyingPrice && sellingPrice && hasChanges;
 
   // Calculate profit margin
   const profitMargin = buyingPrice && sellingPrice && parseFloat(buyingPrice) > 0

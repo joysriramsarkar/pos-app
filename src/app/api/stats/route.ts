@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    const todaySalesTotal = todaySales.reduce((sum, sale) => sum + Number(Number(sale.totalAmount) || 0), 0);
+    const todaySalesTotal = todaySales.reduce((sum, sale) => sum + Number(sale.totalAmount || 0), 0);
     const todayOrdersCount = todaySales.length;
     const todayCashTotal = todaySales.reduce((sum, sale) => sum + Number(sale.cashAmount || 0), 0);
     const todayUpiTotal = todaySales.reduce((sum, sale) => sum + Number(sale.upiAmount || 0), 0);
@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    const yesterdaySalesTotal = yesterdaySales.reduce((sum, sale) => sum + Number(Number(sale.totalAmount) || 0), 0);
+    const yesterdaySalesTotal = yesterdaySales.reduce((sum, sale) => sum + Number(sale.totalAmount || 0), 0);
     const yesterdayOrdersCount = yesterdaySales.length;
 
     // Yesterday's expenses
@@ -193,38 +193,40 @@ export async function GET(request: NextRequest) {
     const todayProfit = todaySalesTotal - todayExpensesTotal - costOfGoodsSold;
     const profitMargin = todaySalesTotal > 0 ? ((todayProfit / todaySalesTotal) * 100) : 0;
 
-    // Last 7 days sales data
+    // Last 7 days sales data — use 2 bulk queries instead of 14 sequential ones
     const last7DaysSales = [];
+    const day7Start = new Date(startOfDay);
+    day7Start.setDate(day7Start.getDate() - 6);
+
+    const [week7Sales, week7Expenses] = await Promise.all([
+      db.sale.findMany({
+        where: {
+          createdAt: { gte: day7Start, lt: endOfDay },
+          status: 'Completed',
+        },
+        select: { totalAmount: true, createdAt: true },
+      }),
+      db.expense.findMany({
+        where: {
+          date: { gte: day7Start, lt: endOfDay },
+          isActive: true,
+        },
+        select: { amount: true, date: true },
+      }),
+    ]);
+
     for (let i = 6; i >= 0; i--) {
       const dayStart = new Date(startOfDay);
       dayStart.setDate(dayStart.getDate() - i);
       const dayEnd = new Date(dayStart);
       dayEnd.setDate(dayEnd.getDate() + 1);
 
-      const daySales = await db.sale.findMany({
-        where: {
-          createdAt: {
-            gte: dayStart,
-            lt: dayEnd,
-          },
-          status: 'Completed',
-        },
-        select: { totalAmount: true },
-      });
-
-      const dayExpenses = await db.expense.findMany({
-        where: {
-          date: {
-            gte: dayStart,
-            lt: dayEnd,
-          },
-          isActive: true,
-        },
-        select: { amount: true },
-      });
-
-      const daySalesTotal = daySales.reduce((sum, s) => sum + Number(s.totalAmount || 0), 0);
-      const dayExpensesTotal = dayExpenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+      const daySalesTotal = week7Sales
+        .filter(s => s.createdAt >= dayStart && s.createdAt < dayEnd)
+        .reduce((sum, s) => sum + Number(s.totalAmount || 0), 0);
+      const dayExpensesTotal = week7Expenses
+        .filter(e => e.date >= dayStart && e.date < dayEnd)
+        .reduce((sum, e) => sum + Number(e.amount || 0), 0);
 
       // Format date in Bengali
       const bengaliDays = ['রবিবার', 'সোমবার', 'মঙ্গলবার', 'বুধবার', 'বৃহস্পতিবার', 'শুক্রবার', 'শনিবার'];
