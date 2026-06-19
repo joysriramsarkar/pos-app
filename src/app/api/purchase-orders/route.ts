@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { supplierId, items, expectedDate, notes, directReceive, amountPaid, paymentMethod, cashAmount, upiAmount } = body;
+    const { supplierId, items, expectedDate, notes, directReceive, amountPaid, paymentMethod, cashAmount, upiAmount, gstPercentage } = body;
 
     if (!items || items.length === 0) {
       return NextResponse.json(
@@ -133,10 +133,18 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const totalAmount = items.reduce(
+    let totalAmount = items.reduce(
       (sum: number, item: { quantity: number; unitPrice: number }) => sum + item.quantity * item.unitPrice,
       0
     );
+
+    let finalNotes = notes || '';
+    if (gstPercentage && !isNaN(Number(gstPercentage))) {
+      const gstAmt = totalAmount * Number(gstPercentage) / 100;
+      totalAmount = totalAmount + gstAmt;
+      const gstNote = `জিএসটি: ${gstPercentage}% (৳${gstAmt.toFixed(2)})`;
+      finalNotes = finalNotes ? `${finalNotes}\n${gstNote}` : gstNote;
+    }
 
     let purchaseDate = new Date();
     if (expectedDate) {
@@ -202,7 +210,7 @@ export async function POST(request: NextRequest) {
                 paymentStatus,
                 paymentMethod: paymentMethod || 'Cash',
                 deliveryStatus: 'Received',
-                notes: notes || null,
+                notes: finalNotes || null,
                 createdAt: purchaseDate,
                 items: {
                   create: await Promise.all(items.map(async (item: { productId: string; quantity: number; unitPrice: number }) => {
@@ -304,7 +312,7 @@ export async function POST(request: NextRequest) {
                 paymentStatus: 'Pending',
                 paymentMethod: paymentMethod || 'Cash',
                 deliveryStatus: 'Pending',
-                notes: notes || null,
+                notes: finalNotes || null,
                 createdAt: purchaseDate,
                 items: {
                   create: await Promise.all(items.map(async (item: { productId: string; quantity: number; unitPrice: number }) => {

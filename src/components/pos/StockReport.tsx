@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { useDebouncedSearch } from '@/hooks/use-debounced-search';
 import { format } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -29,7 +30,7 @@ export function StockReport({ onBack }: StockReportProps) {
   
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+  const { inputValue: searchInput, searchQuery, setInputValue: setSearchInput } = useDebouncedSearch();
   const [filterCategory, setFilterCategory] = useState('All');
   const [filterStatus, setFilterStatus] = useState<StockFilterStatus>('All');
   
@@ -329,8 +330,8 @@ export function StockReport({ onBack }: StockReportProps) {
                 <Search className="absolute left-2 top-2 h-3.5 w-3.5 text-muted-foreground" />
                 <Input
                   placeholder="Search..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
                   className="pl-7 h-8 text-[11px] w-full"
                 />
               </div>

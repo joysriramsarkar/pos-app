@@ -128,17 +128,11 @@ export async function GET(request: NextRequest) {
           (s, i) => s + (costMap.get(i.productId) || 0) * Number(i.quantity),
           0
         );
-        chartData[hour].revenue += Number(Number(sale.totalAmount));
-        chartData[hour].profit += Number(Number(sale.totalAmount)) - cost;
+        chartData[hour].revenue += Number(sale.totalAmount);
+        chartData[hour].profit += Number(sale.totalAmount) - cost;
         chartData[hour].count += 1;
       });
     } else {
-      const dailyAgg = await prisma.sale.groupBy({
-        by: ["createdAt"],
-        where: { createdAt: { gte: startDate, lte: endDate }, status: "Completed" },
-        _sum: { totalAmount: true },
-        _count: { id: true },
-      });
 
       // Build day map from interval
       const dayList = eachDayOfInterval({ start: startDate, end: endDate });
@@ -162,8 +156,8 @@ export async function GET(request: NextRequest) {
             (s, i) => s + (costMap.get(i.productId) || 0) * Number(i.quantity),
             0
           );
-          day.revenue += Number(Number(sale.totalAmount));
-          day.profit += Number(Number(sale.totalAmount)) - cost;
+          day.revenue += Number(sale.totalAmount);
+          day.profit += Number(sale.totalAmount) - cost;
           day.count += 1;
         }
       });

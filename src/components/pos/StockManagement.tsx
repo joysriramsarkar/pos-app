@@ -216,7 +216,10 @@ export function StockManagement({
               buyingPrice: Number(p.buyingPrice) || 0,
               sellingPrice: Number(p.sellingPrice) || 0,
             }));
-            setSearchResults(parsedData);
+            const localOnlyMatches = localMatches.filter(
+              (local) => !parsedData.some((server: any) => server.id === local.id)
+            );
+            setSearchResults([...parsedData, ...localOnlyMatches]);
           }
         } catch {
           // keep local results if network fails

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect, useRef } from 'react';
+import { useDebouncedSearch } from '@/hooks/use-debounced-search';
 import { v4 as uuidv4 } from 'uuid';
 import { useCustomersStore } from '@/stores/pos-store';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -83,13 +84,16 @@ export function PartiesManagement() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   
   const [activeTab, setActiveTab] = useState<PartyType>('customer');
-  const [searchQuery, setSearchQuery] = useState('');
+  const { inputValue: searchInput, searchQuery, setInputValue: setSearchInput, clearSearch: clearSearchQuery } = useDebouncedSearch();
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [showLedger, setShowLedger] = useState(false);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [showPrepaymentDialog, setShowPrepaymentDialog] = useState(false);
   const [showWithdrawDialog, setShowWithdrawDialog] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('Cash');
+  const [cashAmount, setCashAmount] = useState('');
+  const [upiAmount, setUpiAmount] = useState('');
   const [prepaymentAmount, setPrepaymentAmount] = useState('');
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -116,6 +120,9 @@ export function PartiesManagement() {
   const [showSupplierLedger, setShowSupplierLedger] = useState(false);
   const [showSupplierPaymentDialog, setShowSupplierPaymentDialog] = useState(false);
   const [supplierPaymentAmount, setSupplierPaymentAmount] = useState('');
+  const [supplierPaymentMethod, setSupplierPaymentMethod] = useState('Cash');
+  const [supplierCashAmount, setSupplierCashAmount] = useState('');
+  const [supplierUpiAmount, setSupplierUpiAmount] = useState('');
   const [supplierLedgerEntries, setSupplierLedgerEntries] = useState<any[]>([]);
   const { toast } = useToast();
 
@@ -377,6 +384,9 @@ export function PartiesManagement() {
   const handleRecordSupplierPayment = (supplier: Supplier) => {
     setSelectedSupplier(supplier);
     setSupplierPaymentAmount('');
+    setSupplierPaymentMethod('Cash');
+    setSupplierCashAmount('');
+    setSupplierUpiAmount('');
     setShowSupplierPaymentDialog(true);
   };
 
@@ -399,6 +409,13 @@ export function PartiesManagement() {
       return;
     }
 
+    let finalNotes = `Paid supplier: ${selectedSupplier.name}`;
+    if (supplierPaymentMethod === 'Mixed') {
+      const cAmt = parseFloat(supplierCashAmount) || 0;
+      const uAmt = parseFloat(supplierUpiAmount) || 0;
+      finalNotes += ` [নগদ: ${cAmt}, ইউপিআই: ${uAmt}]`;
+    }
+
     try {
       const response = await fetch('/api/expenses', {
         method: 'POST',
@@ -407,7 +424,8 @@ export function PartiesManagement() {
           id: uuidv4(),
           amount,
           category: 'Supplier Payment',
-          notes: `Paid supplier: ${selectedSupplier.name}`,
+          notes: finalNotes,
+          paymentMethod: supplierPaymentMethod,
           supplierId: selectedSupplier.id,
           supplierName: selectedSupplier.name,
         }),
@@ -435,6 +453,9 @@ export function PartiesManagement() {
   const handleRecordPayment = (customer: Customer) => {
     setSelectedCustomer(customer);
     setPaymentAmount('');
+    setPaymentMethod('Cash');
+    setCashAmount('');
+    setUpiAmount('');
     setShowPaymentDialog(true);
   };
 
@@ -558,29 +579,32 @@ export function PartiesManagement() {
     if (!selectedCustomer || !paymentAmount) return;
 
     const paidAmount = parseFloat(paymentAmount);
-    const updatedCustomerData = {
-      id: selectedCustomer.id,
-      name: selectedCustomer.name,
-      phone: selectedCustomer.phone,
-      address: selectedCustomer.address,
-      notes: selectedCustomer.notes,
-      totalDue: Math.max(0, toMoneyNumber(new Decimal(selectedCustomer.totalDue).minus(paidAmount))),
-      totalPaid: toMoneyNumber(new Decimal(selectedCustomer.totalPaid).plus(paidAmount)),
-    };
+    let finalNotes = '';
+    if (paymentMethod === 'Mixed') {
+      const cAmt = parseFloat(cashAmount) || 0;
+      const uAmt = parseFloat(upiAmount) || 0;
+      finalNotes = `Mixed [নগদ: ${cAmt}, ইউপিআই: ${uAmt}]`;
+    }
 
     try {
-      const response = await fetch('/api/customers', {
-        method: 'PUT',
+      const response = await fetch('/api/due-collection', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updatedCustomerData),
+        body: JSON.stringify({
+          customerId: selectedCustomer.id,
+          amount: paidAmount,
+          paymentMethod,
+          notes: finalNotes || `Due collection (${paymentMethod})`
+        }),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to update payment.');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to record payment.');
       }
 
-      const { data: updatedFromServer } = await response.json();
-      updateCustomer(selectedCustomer.id, updatedFromServer);
+      const { data } = await response.json();
+      updateCustomer(selectedCustomer.id, data.customer);
       setShowPaymentDialog(false);
       toast({ title: 'Payment Recorded', description: `₹${paidAmount} payment recorded for ${selectedCustomer.name}.` });
 
@@ -691,6 +715,13 @@ export function PartiesManagement() {
     setShowAddDialog(false);
   };
 
+  const hasPartyChanges = editingParty ? (
+    newParty.name !== editingParty.name ||
+    newParty.phone !== (editingParty.phone || '') ||
+    newParty.address !== (editingParty.address || '') ||
+    newParty.notes !== (editingParty.notes || '')
+  ) : true;
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -743,17 +774,17 @@ export function PartiesManagement() {
               name="parties-search"
               ref={searchInputRef}
               placeholder="Search by name or phone..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
               className="pl-9"
               autoFocus
             />
-            {searchQuery && (
+            {searchInput && (
               <Button
                 variant="ghost"
                 size="sm"
                 className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0"
-                onClick={() => setSearchQuery('')}
+                onClick={clearSearchQuery}
               >
                 <X className="w-4 h-4" />
               </Button>
@@ -1154,6 +1185,66 @@ export function PartiesManagement() {
               </div>
             </div>
 
+            <div className="space-y-1.5">
+              <Label>পেমেন্ট পদ্ধতি</Label>
+              <Select value={paymentMethod} onValueChange={(v) => {
+                setPaymentMethod(v);
+                if (v === 'Mixed' && paymentAmount) {
+                  const totalAmt = parseFloat(convertBengaliToEnglishNumerals(paymentAmount)) || 0;
+                  setCashAmount(totalAmt.toString());
+                  setUpiAmount('0');
+                } else if (v !== 'Mixed') {
+                  setCashAmount('');
+                  setUpiAmount('');
+                }
+              }}>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Cash">Cash (নগদ)</SelectItem>
+                  <SelectItem value="UPI">UPI (ইউপিআই)</SelectItem>
+                  <SelectItem value="Mixed">Mixed (মিশ্র)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {paymentMethod === 'Mixed' && (() => {
+              const totalAmt = parseFloat(convertBengaliToEnglishNumerals(paymentAmount)) || 0;
+              const cashVal = parseFloat(cashAmount) || 0;
+              const upiVal = parseFloat(upiAmount) || 0;
+              const mixedSum = cashVal + upiVal;
+              const isMixedOk = Math.abs(mixedSum - totalAmt) < 0.01;
+              return (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">নগদ</Label>
+                      <Input type="text" value={cashAmount} onChange={(e) => {
+                        const val = convertBengaliToEnglishNumerals(e.target.value).replace(/[^0-9.]/g, '');
+                        setCashAmount(val);
+                        const cVal = parseFloat(val) || 0;
+                        if (cVal <= totalAmt) setUpiAmount((totalAmt - cVal).toFixed(2).replace(/\.00$/, ''));
+                        else setUpiAmount('0');
+                      }} className="h-9" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">ইউপিআই</Label>
+                      <Input type="text" value={upiAmount} onChange={(e) => {
+                        const val = convertBengaliToEnglishNumerals(e.target.value).replace(/[^0-9.]/g, '');
+                        setUpiAmount(val);
+                        const uVal = parseFloat(val) || 0;
+                        if (uVal <= totalAmt) setCashAmount((totalAmt - uVal).toFixed(2).replace(/\.00$/, ''));
+                        else setCashAmount('0');
+                      }} className="h-9" />
+                    </div>
+                  </div>
+                  <div className={`text-xs px-2 py-1.5 rounded-lg flex items-center justify-between ${isMixedOk ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400' : 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400'}`}>
+                    <span>নগদ {cashVal} + ইউপিআই {upiVal}</span>
+                    <span className="font-semibold">{isMixedOk ? '✓ মিলেছে' : `বাকি: ${Math.abs(totalAmt - mixedSum).toFixed(2)}`}</span>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Quick Amounts */}
             <div className="flex flex-wrap gap-2">
               {[100, 200, 500, 1000].map((amount) => (
@@ -1383,7 +1474,7 @@ export function PartiesManagement() {
             <Button variant="outline" onClick={() => { setShowEditDialog(false); setEditingParty(null); setNewParty({ name: '', phone: '', address: '', notes: '' }); }}>
               Cancel
             </Button>
-            <Button onClick={handleUpdateParty} disabled={!newParty.name} className="bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600">
+            <Button onClick={handleUpdateParty} disabled={!newParty.name || !hasPartyChanges} className="bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600">
               Update {editingPartyType === 'customer' ? 'Customer' : 'Supplier'}
             </Button>
           </DialogFooter>
@@ -1583,6 +1674,66 @@ export function PartiesManagement() {
                 />
               </div>
             </div>
+
+            <div className="space-y-1.5">
+              <Label>পেমেন্ট পদ্ধতি</Label>
+              <Select value={supplierPaymentMethod} onValueChange={(v) => {
+                setSupplierPaymentMethod(v);
+                if (v === 'Mixed' && supplierPaymentAmount) {
+                  const totalAmt = parseFloat(convertBengaliToEnglishNumerals(supplierPaymentAmount)) || 0;
+                  setSupplierCashAmount(totalAmt.toString());
+                  setSupplierUpiAmount('0');
+                } else if (v !== 'Mixed') {
+                  setSupplierCashAmount('');
+                  setSupplierUpiAmount('');
+                }
+              }}>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Cash">Cash (নগদ)</SelectItem>
+                  <SelectItem value="UPI">UPI (ইউপিআই)</SelectItem>
+                  <SelectItem value="Mixed">Mixed (মিশ্র)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {supplierPaymentMethod === 'Mixed' && (() => {
+              const totalAmt = parseFloat(convertBengaliToEnglishNumerals(supplierPaymentAmount)) || 0;
+              const cashVal = parseFloat(supplierCashAmount) || 0;
+              const upiVal = parseFloat(supplierUpiAmount) || 0;
+              const mixedSum = cashVal + upiVal;
+              const isMixedOk = Math.abs(mixedSum - totalAmt) < 0.01;
+              return (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">নগদ</Label>
+                      <Input type="text" value={supplierCashAmount} onChange={(e) => {
+                        const val = convertBengaliToEnglishNumerals(e.target.value).replace(/[^0-9.]/g, '');
+                        setSupplierCashAmount(val);
+                        const cVal = parseFloat(val) || 0;
+                        if (cVal <= totalAmt) setSupplierUpiAmount((totalAmt - cVal).toFixed(2).replace(/\.00$/, ''));
+                        else setSupplierUpiAmount('0');
+                      }} className="h-9" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">ইউপিআই</Label>
+                      <Input type="text" value={supplierUpiAmount} onChange={(e) => {
+                        const val = convertBengaliToEnglishNumerals(e.target.value).replace(/[^0-9.]/g, '');
+                        setSupplierUpiAmount(val);
+                        const uVal = parseFloat(val) || 0;
+                        if (uVal <= totalAmt) setSupplierCashAmount((totalAmt - uVal).toFixed(2).replace(/\.00$/, ''));
+                        else setSupplierCashAmount('0');
+                      }} className="h-9" />
+                    </div>
+                  </div>
+                  <div className={`text-xs px-2 py-1.5 rounded-lg flex items-center justify-between ${isMixedOk ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400' : 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400'}`}>
+                    <span>নগদ {cashVal} + ইউপিআই {upiVal}</span>
+                    <span className="font-semibold">{isMixedOk ? '✓ মিলেছে' : `বাকি: ${Math.abs(totalAmt - mixedSum).toFixed(2)}`}</span>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Quick Amounts */}
             <div className="flex flex-wrap gap-2">

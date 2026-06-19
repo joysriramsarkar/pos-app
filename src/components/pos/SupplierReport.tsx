@@ -23,7 +23,7 @@ interface SupplierReportProps {
 
 export function SupplierReport({ onBack }: SupplierReportProps) {
   const t = useTranslations('Reports');
-  const tPurchase = useTranslations('PurchaseOrders') || (() => 'Purchase Orders');
+
   const { formatPrice, formatDate, formatNumber, formatStringNumbers } = useNumberFormat();
   const currencySymbol = useSettingsStore((s) => s.settings.currency_symbol);
   

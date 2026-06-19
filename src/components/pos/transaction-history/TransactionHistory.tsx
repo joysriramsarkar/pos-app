@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useDebouncedSearch } from '@/hooks/use-debounced-search';
 import { useTranslations } from 'next-intl';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -26,7 +27,8 @@ export function TransactionHistory() {
   const { formatNumber } = useNumberFormat();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
+  // Debounced search: input is instant, API fires 400ms after typing stops
+  const { inputValue: searchInput, searchQuery, setInputValue: setSearchInput, clearSearch: clearSearchInput } = useDebouncedSearch('', 400);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterPaymentMethod, setFilterPaymentMethod] = useState<string>('all');
   const [currentPage, setCurrentPage] = useState(1);
@@ -202,7 +204,7 @@ export function TransactionHistory() {
   };
 
   const handleResetFilters = () => {
-    setSearchQuery('');
+    clearSearchInput();
     setFilterStatus('all');
     setFilterPaymentMethod('all');
     setCurrentPage(1);
@@ -216,9 +218,9 @@ export function TransactionHistory() {
       </div>
 
       <TransactionFilters
-        searchQuery={searchQuery}
+        searchQuery={searchInput}
         setSearchQuery={(q) => {
-          setSearchQuery(q);
+          setSearchInput(q);
           setCurrentPage(1);
         }}
         filterStatus={filterStatus}

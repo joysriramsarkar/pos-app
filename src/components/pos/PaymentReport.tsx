@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { useDebouncedSearch } from '@/hooks/use-debounced-search';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,7 +30,7 @@ export function PaymentReport({ onBack }: PaymentReportProps) {
   
   const [sales, setSales] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+  const { inputValue: searchInput, searchQuery, setInputValue: setSearchInput } = useDebouncedSearch();
   const [filterMethod, setFilterMethod] = useState('All');
   
   const [viewMode, setViewMode] = useState<ViewMode>('daily');
@@ -414,8 +415,8 @@ export function PaymentReport({ onBack }: PaymentReportProps) {
               <Search className="absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder={t('search_invoice_customer')}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
                 className="pl-8 h-8 text-xs w-full"
               />
             </div>
