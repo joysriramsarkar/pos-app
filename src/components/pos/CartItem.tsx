@@ -257,11 +257,36 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
             </Button>
           </div>
 
-          {/* Quantity Presets */}
-          {!isOverStock && (
-            <div className="flex items-center gap-0.5">
-              {isWeighted ? (
-                pricePresets.map((price) => (
+          <div className="flex items-center gap-2">
+            {/* Stock Warning */}
+            {isOverStock && (
+              <Badge variant="destructive" className="text-xs">
+                {t('only_stock', { stock: item.availableStock })}
+              </Badge>
+            )}
+
+            {/* Remove Button */}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive touch-manipulation"
+              onClick={handleRemove}
+              aria-label="Remove item"
+            >
+              <Trash2 className="w-3 h-3 md:w-4 md:h-4" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Quantity/Price Presets Row */}
+        {!isOverStock && (
+          <div className="flex flex-wrap items-center gap-1.5 mt-1.5 pt-1.5 border-t border-dashed border-border/40">
+            <span className="text-[9px] font-medium text-muted-foreground mr-0.5">
+              {isWeighted ? "প্রিসেট টাকা:" : "প্রিসেট পরিমাণ:"}
+            </span>
+            {isWeighted ? (
+              <>
+                {pricePresets.map((price) => (
                   <button
                     key={price}
                     onClick={() => handlePricePreset(price)}
@@ -269,39 +294,42 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
                   >
                     {currencySymbol}{formatStringNumbers(price)}
                   </button>
-                ))
-              ) : (
-                QUANTITY_PRESETS.map((qty) => (
-                  <button
-                    key={qty}
-                    onClick={() => handlePiecePreset(qty)}
-                    className="h-6 px-1.5 rounded text-[10px] font-medium bg-primary/10 hover:bg-primary/20 text-primary transition-colors touch-manipulation"
-                  >
-                    {formatStringNumbers(qty)}
-                  </button>
-                ))
-              )}
-            </div>
-          )}
-
-          {/* Stock Warning */}
-          {isOverStock && (
-            <Badge variant="destructive" className="text-xs">
-              {t('only_stock', { stock: item.availableStock })}
-            </Badge>
-          )}
-
-          {/* Remove Button */}
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive touch-manipulation"
-            onClick={handleRemove}
-            aria-label="Remove item"
-          >
-            <Trash2 className="w-3 h-3 md:w-4 md:h-4" />
-          </Button>
-        </div>
+                ))}
+                <Input
+                  type="number"
+                  placeholder="কাস্টম টাকা"
+                  className="h-6 w-20 text-[10px] px-1.5 py-0 bg-primary/5 border-primary/20 text-primary focus-visible:ring-1 focus-visible:ring-primary/30"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      const val = parseFloat(convertBengaliToEnglishNumerals(e.currentTarget.value));
+                      if (!isNaN(val) && val > 0) {
+                        handlePricePreset(val);
+                        e.currentTarget.blur();
+                      }
+                    }
+                  }}
+                  onBlur={(e) => {
+                    const val = parseFloat(convertBengaliToEnglishNumerals(e.currentTarget.value));
+                    if (!isNaN(val) && val > 0) {
+                      handlePricePreset(val);
+                      e.currentTarget.value = '';
+                    }
+                  }}
+                />
+              </>
+            ) : (
+              QUANTITY_PRESETS.map((qty) => (
+                <button
+                  key={qty}
+                  onClick={() => handlePiecePreset(qty)}
+                  className="h-6 px-1.5 rounded text-[10px] font-medium bg-primary/10 hover:bg-primary/20 text-primary transition-colors touch-manipulation"
+                >
+                  {formatStringNumbers(qty)}
+                </button>
+              ))
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

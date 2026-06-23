@@ -336,15 +336,15 @@ function POSDashboard() {
       return;
     }
     
-    const cleaned = query.replace(/rs\.?|₹/gi, '').trim();
+    const cleaned = query.replace(/rs\.?|₹|'/gi, '').trim();
     const lowerQuery = cleaned.toLowerCase();
     const normalizedQuery = convertBengaliToEnglishNumerals(cleaned).replace(/\s+/g, '');
     
     const results = products.filter(p => {
       if (!p.isActive) return false;
       return (
-        p.name.toLowerCase().includes(lowerQuery) ||
-        p.nameBn?.includes(cleaned) ||
+        p.name.toLowerCase().replace(/'/g, '').includes(lowerQuery) ||
+        (p.nameBn && p.nameBn.replace(/'/g, '').includes(cleaned)) ||
         (p.barcode && p.barcode.includes(normalizedQuery)) ||
         convertBengaliToEnglishNumerals(p.barcode || '').includes(normalizedQuery)
       );
