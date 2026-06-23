@@ -14,7 +14,7 @@ import { useProductsStore, useUIStore, useCartStore } from '@/stores/pos-store';
 import { cn, convertBengaliToEnglishNumerals } from '@/lib/utils';
 import { useTranslations } from 'next-intl';
 
-const cleanSearchQuery = (q: string) => q.replace(/rs\.?|₹/gi, '').trim();
+const cleanSearchQuery = (q: string) => q.replace(/rs\.?|₹|'/gi, '').trim();
 import { useToast } from '@/hooks/use-toast';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useNumberFormat } from '@/hooks/use-number-format';
@@ -104,11 +104,9 @@ export function ProductGrid({
         const lowerQuery = cleaned.toLowerCase();
         const normalizedQuery = convertBengaliToEnglishNumerals(cleaned);
 
-
-
-  return (
-          product.name.toLowerCase().includes(lowerQuery) ||
-          product.nameBn?.includes(cleaned) ||
+        return (
+          product.name.toLowerCase().replace(/'/g, '').includes(lowerQuery) ||
+          (product.nameBn && product.nameBn.replace(/'/g, '').includes(cleaned)) ||
           product.barcode?.includes(cleaned) ||
           convertBengaliToEnglishNumerals(product.barcode || '').includes(normalizedQuery) ||
           product.sellingPrice.toString() === normalizedQuery
@@ -300,12 +298,7 @@ export function ProductGrid({
                   </Badge>
                 ))}
               </div>
-          {hasMore && (
-            <div ref={observerTarget} className="h-10 flex items-center justify-center py-4 text-muted-foreground">
-               {isLoadingMore ? 'লোডিং...' : ''}
-            </div>
-          )}
-        </ScrollArea>
+            </ScrollArea>
           )}
 
           <div className="flex items-center justify-between pt-1">
@@ -387,9 +380,9 @@ export function ProductGrid({
             </div>
           )}
           {!externalProducts && hasMore && !searchQuery && !selectedCategoryId && (
-            <div className="flex justify-center mt-6 mb-4">
+            <div ref={observerTarget} className="flex justify-center mt-6 mb-4">
               <Button variant="outline" onClick={loadMoreProducts} disabled={isLoadingMore}>
-                {isLoadingMore ? 'Loading...' : 'Load More Products'}
+                {isLoadingMore ? 'লোডিং...' : 'Load More Products'}
               </Button>
             </div>
           )}
