@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider  = "postgresql"
 }
 
 // ============================================================================
@@ -80,6 +80,7 @@ model StockHistory {
 model Customer {
   id             String   @id @default(cuid())
   name           String
+  nameEn         String?  @map("name_en")
   phone          String?  @unique
   address        String?
   totalDue       Decimal  @default(0) @map("total_due") // Running total of outstanding balance (owes store)
@@ -222,6 +223,7 @@ model SaleReturnItem {
 model Supplier {
   id        String   @id @default(cuid())
   name      String
+  nameEn    String?  @map("name_en")
   phone     String?
   address   String?
   email     String?

@@ -604,6 +604,13 @@
     "view_details": "View Details"
   },
   "Parties": {
+    "due_entry": "Due Entry",
+    "due_entry_title": "Manual Due Entry",
+    "due_entry_desc": "Record manual outstanding due for {name}",
+    "due_entry_amount": "Due Amount",
+    "due_entry_success": "Manual due entry recorded successfully.",
+    "due_entry_failed": "Failed to record manual due entry.",
+    "name_en_label": "English Name",
     "sort_by": "Sort By",
     "sort_name_asc": "Name (A-Z)",
     "sort_name_desc": "Name (Z-A)",

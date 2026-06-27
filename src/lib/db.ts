@@ -25,8 +25,10 @@ function createPrismaClient(): PrismaClient {
   // Use dummy connection string if building to prevent throw
   const pool = new Pool({
     connectionString: connectionString || "postgresql://dummy:dummy@localhost:5432/dummy",
-    max: process.env.DATABASE_POOL_SIZE ? parseInt(process.env.DATABASE_POOL_SIZE, 10) : 20,
-    idleTimeoutMillis: 30000,
+    // Vercel Serverless-এ প্রতিটি function আলাদা process — max 3 যথেষ্ট
+    // বেশি দিলে Supabase-এর connection limit শেষ হয়ে যায়
+    max: process.env.DATABASE_POOL_SIZE ? parseInt(process.env.DATABASE_POOL_SIZE, 10) : 3,
+    idleTimeoutMillis: 10000, // 30s থেকে কমিয়ে 10s — idle connection তাড়াতাড়ি ছাড়বে
     connectionTimeoutMillis: 10000,
     allowExitOnIdle: true,
   })

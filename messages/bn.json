@@ -543,6 +543,13 @@
     "view_details": "বিস্তারিত দেখুন"
   },
   "Parties": {
+    "due_entry": "বাকি এন্ট্রি",
+    "due_entry_title": "ম্যানুয়াল বাকি এন্ট্রি",
+    "due_entry_desc": "{name} এর জন্য ম্যানুয়াল বাকি এন্ট্রি রেকর্ড করুন",
+    "due_entry_amount": "বাকির পরিমাণ",
+    "due_entry_success": "ম্যানুয়াল বাকি এন্ট্রি সফলভাবে সম্পন্ন হয়েছে।",
+    "due_entry_failed": "ম্যানুয়াল বাকি এন্ট্রি রেকর্ড করতে ব্যর্থ হয়েছে।",
+    "name_en_label": "ইংরেজিতে নাম",
     "sort_by": "ক্রমের ফিল্টার",
     "sort_name_asc": "নাম (A-Z)",
     "sort_name_desc": "নাম (Z-A)",

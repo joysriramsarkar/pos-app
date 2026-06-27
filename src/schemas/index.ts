@@ -56,6 +56,7 @@ export type SaleInput = z.infer<typeof SaleInputSchema>;
 export const CustomerInputSchema = z.object({
   id: z.string().optional(),
   name: z.string().min(1, 'Customer name is required'),
+  nameEn: z.string().nullable().optional().transform(v => v === '' ? null : v),
   phone: z.string().nullable().optional().transform(v => v === '' ? null : v),
   address: z.string().nullable().optional().transform(v => v === '' ? null : v),
   notes: z.string().nullable().optional().transform(v => v === '' ? null : v),
@@ -88,6 +89,7 @@ export type StockEntryInput = z.infer<typeof StockEntryInputSchema>;
 
 export const SupplierInputSchema = z.object({
   name: z.string().min(1, 'Supplier name is required'),
+  nameEn: z.string().nullable().optional().transform(v => v === '' ? null : v),
   phone: z.string().nullable().optional().transform(v => v === '' ? null : v),
   address: z.string().nullable().optional().transform(v => v === '' ? null : v),
   email: z.string().email('Invalid email').nullable().optional().transform(v => v === '' ? null : v),

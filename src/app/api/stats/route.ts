@@ -1,4 +1,5 @@
-export const dynamic = 'force-dynamic';
+// ড্যাশবোর্ড স্ট্যাটস প্রতি ৩০ সেকেন্ডে একবার রিফ্রেশ হবে — real-time লাগে না
+export const revalidate = 30;
 // ============================================================================
 // Stats API Route - Lakhan Bhandar POS
 // ============================================================================
@@ -85,18 +86,13 @@ export async function GET(request: NextRequest) {
     });
     const totalDue = customersWithDue.reduce((sum, c) => sum + Number(c.totalDue || 0), 0);
 
-    // Low stock count - products where currentStock <= minStockLevel
-    const allActiveProducts = await db.product.findMany({
-      where: { isActive: true },
-      select: {
-        id: true,
-        name: true,
-        nameBn: true,
-        currentStock: true,
-        minStockLevel: true,
-      },
-    });
-    const lowStockProducts = allActiveProducts.filter(p => Number(p.currentStock) <= Number(p.minStockLevel));
+    // Low stock count - সরাসরি ডেটাবেসে filter করা, পুরো টেবিল মেমরিতে না এনে
+    const lowStockProducts = await db.$queryRaw<{ id: string; name: string; nameBn: string | null; currentStock: number; minStockLevel: number }[]>`
+      SELECT id, name, name_bn as "nameBn", CAST(current_stock AS FLOAT) as "currentStock", CAST(min_stock_level AS FLOAT) as "minStockLevel"
+      FROM products
+      WHERE is_active = true AND current_stock <= min_stock_level
+      LIMIT 20
+    `;
 
     // Recent transactions (last 10)
     const recentSales = await db.sale.findMany({

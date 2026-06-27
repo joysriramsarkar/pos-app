@@ -79,6 +79,42 @@ const getInitialsBg = (name: string) => {
   return colors[Math.abs(hash) % colors.length];
 };
 
+const normalizeAndValidatePhone = (phone: string): string | null => {
+  if (!phone) return null;
+  
+  // 1. Strip spaces and whitespace
+  let clean = phone.replace(/\s+/g, '');
+  
+  // 2. Convert Bengali numerals to English numerals
+  clean = convertBengaliToEnglishNumerals(clean);
+  
+  // 3. Remove leading '+' if present
+  if (clean.startsWith('+')) {
+    clean = clean.slice(1);
+  }
+  
+  // 4. Handle prefixes to extract the last 10 digits
+  // If it starts with '091' followed by 10 digits (13 digits total)
+  if (clean.startsWith('091') && clean.length === 13) {
+    clean = clean.slice(3);
+  }
+  // If it starts with '91' followed by 10 digits (12 digits total)
+  else if (clean.startsWith('91') && clean.length === 12) {
+    clean = clean.slice(2);
+  }
+  // If it starts with '0' followed by 10 digits (11 digits total)
+  else if (clean.startsWith('0') && clean.length === 11) {
+    clean = clean.slice(1);
+  }
+  
+  // 5. Test if it is exactly 10 digits
+  if (/^[0-9]{10}$/.test(clean)) {
+    return clean;
+  }
+  
+  return null;
+};
+
 export function PartiesManagement() {
   const t = useTranslations('Parties');
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -102,10 +138,16 @@ export function PartiesManagement() {
   const [editingPartyType, setEditingPartyType] = useState<PartyType>('customer');
   const [newParty, setNewParty] = useState({
     name: '',
+    nameEn: '',
     phone: '',
     address: '',
     notes: '',
   });
+
+  const [showDueEntryDialog, setShowDueEntryDialog] = useState(false);
+  const [dueEntryAmount, setDueEntryAmount] = useState('');
+  const [dueEntryDescription, setDueEntryDescription] = useState('');
+  const [isNameEnTouched, setIsNameEnTouched] = useState(false);
 
   const [customerSort, setCustomerSort] = useState<string>('name-asc');
   const [supplierSort, setSupplierSort] = useState<string>('name-asc');
@@ -128,6 +170,41 @@ export function PartiesManagement() {
 
   const { formatPrice, formatDate } = useNumberFormat();
 
+  // Auto-translate name to English for Customers/Suppliers
+  useEffect(() => {
+    if (!newParty.name.trim()) {
+      if (!isNameEnTouched) {
+        setNewParty(prev => ({ ...prev, nameEn: '' }));
+      }
+      return;
+    }
+
+    const hasBengali = /[\u0980-\u09FF]/.test(newParty.name);
+    if (!hasBengali) {
+      if (!isNameEnTouched) {
+        setNewParty(prev => ({ ...prev, nameEn: newParty.name }));
+      }
+      return;
+    }
+
+    const timeoutId = setTimeout(async () => {
+      if (!isNameEnTouched) {
+        try {
+          const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=bn&tl=en&dt=t&q=${encodeURIComponent(newParty.name.trim())}`);
+          const data = await res.json();
+          if (data && data[0] && data[0][0] && data[0][0][0]) {
+            const translated = data[0][0][0];
+            setNewParty(prev => isNameEnTouched ? prev : { ...prev, nameEn: translated });
+          }
+        } catch (err) {
+          console.error("Auto-translate to English failed:", err);
+        }
+      }
+    }, 800);
+
+    return () => clearTimeout(timeoutId);
+  }, [newParty.name, isNameEnTouched]);
+
   useEffect(() => {
     if (
       !showLedger &&
@@ -137,7 +214,8 @@ export function PartiesManagement() {
       !showAddDialog &&
       !showEditDialog &&
       !showSupplierLedger &&
-      !showSupplierPaymentDialog
+      !showSupplierPaymentDialog &&
+      !showDueEntryDialog
     ) {
       const timer = setTimeout(() => {
         searchInputRef.current?.focus();
@@ -153,6 +231,7 @@ export function PartiesManagement() {
     showEditDialog,
     showSupplierLedger,
     showSupplierPaymentDialog,
+    showDueEntryDialog,
     activeTab
   ]);
 
@@ -281,6 +360,7 @@ export function PartiesManagement() {
       result = result.filter(c =>
         c.isActive && (
           c.name.toLowerCase().includes(query) ||
+          c.nameEn?.toLowerCase().includes(query) ||
           c.phone?.includes(query)
         )
       );
@@ -310,6 +390,7 @@ export function PartiesManagement() {
       result = result.filter(s =>
         s.isActive && (
           s.name.toLowerCase().includes(query) ||
+          s.nameEn?.toLowerCase().includes(query) ||
           s.phone?.includes(query)
         )
       );
@@ -450,6 +531,49 @@ export function PartiesManagement() {
     }
   };
 
+  const handleRecordDueEntry = (customer: Customer) => {
+    setSelectedCustomer(customer);
+    setDueEntryAmount('');
+    setDueEntryDescription('');
+    setShowDueEntryDialog(true);
+  };
+
+  const handleDueEntrySubmit = async () => {
+    if (!selectedCustomer || !dueEntryAmount) return;
+
+    const amount = parseFloat(dueEntryAmount);
+    if (amount <= 0) {
+      toast({ title: t('invalid_amount') || 'ভুল পরিমাণ', description: t('positive_amount') || 'একটি ধনাত্মক পরিমাণ লিখুন।', variant: 'destructive' });
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/due-entry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerId: selectedCustomer.id,
+          amount,
+          description: dueEntryDescription
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to record due entry.');
+      }
+
+      const { data: updatedCustomer } = await response.json();
+      updateCustomer(selectedCustomer.id, updatedCustomer);
+      setShowDueEntryDialog(false);
+      toast({ title: t('due_entry_success') || 'বাকি এন্ট্রি সফল', description: `৳${amount} outstanding due added for ${selectedCustomer.name}.` });
+
+    } catch (error) {
+      console.error("Failed to record due entry:", error);
+      toast({ title: t('due_entry_failed') || 'বাকি এন্ট্রি ব্যর্থ', description: error instanceof Error ? error.message : 'An unexpected error occurred.', variant: 'destructive' });
+    }
+  };
+
   const handleRecordPayment = (customer: Customer) => {
     setSelectedCustomer(customer);
     setPaymentAmount('');
@@ -502,20 +626,26 @@ export function PartiesManagement() {
     setEditingPartyType(activeTab);
     setNewParty({
       name: party.name,
+      nameEn: (party as any).nameEn || '',
       phone: party.phone || '',
       address: party.address || '',
       notes: party.notes || '',
     });
+    setIsNameEnTouched(true);
     setShowEditDialog(true);
   };
 
   const handleUpdateParty = async () => {
     if (!editingParty || !newParty.name) return;
 
-    // ensure phone is 10 digits when provided
-    if (newParty.phone && !/^[0-9]{10}$/.test(newParty.phone)) {
-      toast({ title: 'Invalid phone', description: 'Phone number must be exactly 10 digits.', variant: 'destructive' });
-      return;
+    let phoneNormalized = newParty.phone ? newParty.phone.trim() : '';
+    if (phoneNormalized) {
+      const validated = normalizeAndValidatePhone(phoneNormalized);
+      if (!validated) {
+        toast({ title: 'Invalid phone', description: 'Phone number must be exactly 10 digits (e.g. +91 75848 64899).', variant: 'destructive' });
+        return;
+      }
+      phoneNormalized = validated;
     }
 
     try {
@@ -526,6 +656,7 @@ export function PartiesManagement() {
           body: JSON.stringify({
             id: editingParty.id,
             ...newParty,
+            phone: phoneNormalized || null,
           }),
         });
 
@@ -544,6 +675,7 @@ export function PartiesManagement() {
           body: JSON.stringify({
             id: editingParty.id,
             ...newParty,
+            phone: phoneNormalized || null,
           }),
         });
 
@@ -567,7 +699,8 @@ export function PartiesManagement() {
       setShowEditDialog(false);
       setEditingParty(null);
       setEditingPartyType('customer');
-      setNewParty({ name: '', phone: '', address: '', notes: '' });
+      setNewParty({ name: '', nameEn: '', phone: '', address: '', notes: '' });
+      setIsNameEnTouched(false);
       toast({ title: `${editingPartyType === 'customer' ? 'Customer' : 'Supplier'} Updated`, description: `${newParty.name} has been updated successfully.` });
     } catch (error) {
       console.error('Failed to update party:', error);
@@ -653,10 +786,14 @@ export function PartiesManagement() {
   const handleAddParty = async () => {
     if (!newParty.name) return;
 
-    // ensure phone is 10 digits when provided
-    if (newParty.phone && !/^[0-9]{10}$/.test(newParty.phone)) {
-      toast({ title: 'Invalid phone', description: 'Phone number must be exactly 10 digits.', variant: 'destructive' });
-      return;
+    let phoneNormalized = newParty.phone ? newParty.phone.trim() : '';
+    if (phoneNormalized) {
+      const validated = normalizeAndValidatePhone(phoneNormalized);
+      if (!validated) {
+        toast({ title: 'Invalid phone', description: 'Phone number must be exactly 10 digits (e.g. +91 75848 64899).', variant: 'destructive' });
+        return;
+      }
+      phoneNormalized = validated;
     }
 
     if (activeTab === 'customer') {
@@ -664,7 +801,10 @@ export function PartiesManagement() {
         const response = await fetch('/api/customers', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newParty),
+          body: JSON.stringify({
+            ...newParty,
+            phone: phoneNormalized || null,
+          }),
         });
 
         if (!response.ok) {
@@ -687,7 +827,10 @@ export function PartiesManagement() {
         const response = await fetch('/api/suppliers', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newParty),
+          body: JSON.stringify({
+            ...newParty,
+            phone: phoneNormalized || null,
+          }),
         });
 
         if (!response.ok) {
@@ -711,12 +854,14 @@ export function PartiesManagement() {
       }
     }
 
-    setNewParty({ name: '', phone: '', address: '', notes: '' });
+    setNewParty({ name: '', nameEn: '', phone: '', address: '', notes: '' });
+    setIsNameEnTouched(false);
     setShowAddDialog(false);
   };
 
   const hasPartyChanges = editingParty ? (
     newParty.name !== editingParty.name ||
+    newParty.nameEn !== ((editingParty as any).nameEn || '') ||
     newParty.phone !== (editingParty.phone || '') ||
     newParty.address !== (editingParty.address || '') ||
     newParty.notes !== (editingParty.notes || '')
@@ -736,7 +881,7 @@ export function PartiesManagement() {
               {t('subtitle')}
             </p>
           </div>
-          <Button onClick={() => setShowAddDialog(true)} className="bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600">
+          <Button onClick={() => { setNewParty({ name: '', nameEn: '', phone: '', address: '', notes: '' }); setIsNameEnTouched(false); setShowAddDialog(true); }} className="bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600">
             <UserPlus className="w-4 h-4 mr-2" />
             {activeTab === 'customer' ? t('add_customer_btn') : t('add_supplier_btn')}
           </Button>
@@ -931,6 +1076,15 @@ export function PartiesManagement() {
                         >
                           <PlusCircle className="w-3 h-3 md:w-3.5 md:h-3.5" />
                           <span>{t('prepayment')}</span>
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 md:h-8 text-[11px] md:text-xs gap-1 px-2 md:px-3 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 dark:text-red-400 border-red-100 dark:border-red-900/30"
+                          onClick={() => handleRecordDueEntry(customer)}
+                        >
+                          <PlusCircle className="w-3 h-3 md:w-3.5 md:h-3.5" />
+                          <span>{t('due_entry')}</span>
                         </Button>
                         {isPrepaid && (
                           <Button
@@ -1407,7 +1561,14 @@ export function PartiesManagement() {
       </Dialog>
 
       {/* Edit Party Dialog */}
-      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+      <Dialog open={showEditDialog} onOpenChange={(open) => {
+        setShowEditDialog(open);
+        if (!open) {
+          setEditingParty(null);
+          setNewParty({ name: '', nameEn: '', phone: '', address: '', notes: '' });
+          setIsNameEnTouched(false);
+        }
+      }}>
         <DialogContent className="sm:max-w-md w-[95vw] max-h-[90dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -1427,6 +1588,19 @@ export function PartiesManagement() {
                 value={newParty.name}
                 onChange={(e) => setNewParty(prev => ({ ...prev, name: e.target.value }))}
                 placeholder="Enter name"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-party-nameEn">{t('name_en_label') || 'English Name'}</Label>
+              <Input
+                id="edit-party-nameEn"
+                value={newParty.nameEn}
+                onChange={(e) => {
+                  setNewParty(prev => ({ ...prev, nameEn: e.target.value }));
+                  setIsNameEnTouched(true);
+                }}
+                placeholder="Auto-translated to English"
               />
             </div>
 
@@ -1471,7 +1645,7 @@ export function PartiesManagement() {
           </div>
 
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => { setShowEditDialog(false); setEditingParty(null); setNewParty({ name: '', phone: '', address: '', notes: '' }); }}>
+            <Button variant="outline" onClick={() => { setShowEditDialog(false); setEditingParty(null); setNewParty({ name: '', nameEn: '', phone: '', address: '', notes: '' }); setIsNameEnTouched(false); }}>
               Cancel
             </Button>
             <Button onClick={handleUpdateParty} disabled={!newParty.name || !hasPartyChanges} className="bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600">
@@ -1482,7 +1656,13 @@ export function PartiesManagement() {
       </Dialog>
 
       {/* Add Party Dialog */}
-      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+      <Dialog open={showAddDialog} onOpenChange={(open) => {
+        setShowAddDialog(open);
+        if (!open) {
+          setNewParty({ name: '', nameEn: '', phone: '', address: '', notes: '' });
+          setIsNameEnTouched(false);
+        }
+      }}>
         <DialogContent className="sm:max-w-md w-[95vw] max-h-[90dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -1502,6 +1682,19 @@ export function PartiesManagement() {
                 value={newParty.name}
                 onChange={(e) => setNewParty(prev => ({ ...prev, name: e.target.value }))}
                 placeholder="Enter name"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="party-form-nameEn">{t('name_en_label') || 'English Name'}</Label>
+              <Input
+                id="party-form-nameEn"
+                value={newParty.nameEn}
+                onChange={(e) => {
+                  setNewParty(prev => ({ ...prev, nameEn: e.target.value }));
+                  setIsNameEnTouched(true);
+                }}
+                placeholder="Auto-translated to English"
               />
             </div>
 
@@ -1542,11 +1735,70 @@ export function PartiesManagement() {
           </div>
 
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setShowAddDialog(false)}>
+            <Button variant="outline" onClick={() => { setShowAddDialog(false); setNewParty({ name: '', nameEn: '', phone: '', address: '', notes: '' }); setIsNameEnTouched(false); }}>
               Cancel
             </Button>
             <Button onClick={handleAddParty} disabled={!newParty.name} className="bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600">
               Add {activeTab === 'customer' ? 'Customer' : 'Supplier'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Manual Due Entry Dialog */}
+      <Dialog open={showDueEntryDialog} onOpenChange={setShowDueEntryDialog}>
+        <DialogContent className="sm:max-w-sm w-[95vw] max-h-[90dvh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{t('due_entry_title') || 'ম্যানুয়াল বাকি এন্ট্রি'}</DialogTitle>
+            <DialogDescription>
+              {t('due_entry_desc', { name: selectedCustomer?.name || '' }) || `${selectedCustomer?.name || ''} এর জন্য ম্যানুয়াল বাকি এন্ট্রি রেকর্ড করুন`}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="due-entry-amount">{t('due_entry_amount') || 'বাকির পরিমাণ'}</Label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">৳</span>
+                <Input
+                  id="due-entry-amount"
+                  type="text"
+                  value={dueEntryAmount}
+                  onChange={(e) => {
+                    const val = convertBengaliToEnglishNumerals(e.target.value);
+                    const cleaned = val.replace(/[^0-9.]/g, '');
+                    const dotCount = (cleaned.match(/\./g) || []).length;
+                    if (dotCount > 1) return;
+                    setDueEntryAmount(cleaned);
+                  }}
+                  placeholder="0"
+                  className="pl-9"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="due-entry-description">{t('notes_label') || 'নোট'}</Label>
+              <Textarea
+                id="due-entry-description"
+                value={dueEntryDescription}
+                onChange={(e) => setDueEntryDescription(e.target.value)}
+                placeholder={t('additional_notes') || 'অতিরিক্ত নোট...'}
+                rows={2}
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setShowDueEntryDialog(false)}>
+              {t('cancel') || 'বাতিল'}
+            </Button>
+            <Button
+              onClick={handleDueEntrySubmit}
+              disabled={!dueEntryAmount || parseFloat(dueEntryAmount) <= 0}
+              className="bg-red-600 text-white hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-650"
+            >
+              {t('due_entry') || 'বাকি এন্ট্রি'}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -155,10 +155,8 @@ export function Dashboard({ onNavigate }: DashboardProps) {
     fetchStats();
   }, []);
 
-  // Sync refresh on transaction history update
-  useEffect(() => {
-    fetchStats();
-  }, [sales]);
+  // Stats are fetched once on mount. Manual refresh can be triggered via the refresh button.
+  // Removed: automatic refetch on every sales update — this was causing excessive API calls.
 
   // Number pop animation when stats change
   useEffect(() => {

@@ -1,6 +1,9 @@
-import { PrismaClient } from '@prisma/client';
+import * as dotenv from 'dotenv';
+dotenv.config();
+if (process.env.DIRECT_URL) {
+  process.env.DATABASE_URL = process.env.DIRECT_URL;
+}
 
-const prisma = new PrismaClient();
 
 const categories = [
   { name: 'Groceries', nameBn: 'মুদি ও চাল-ডাল' },
@@ -8,13 +11,83 @@ const categories = [
   { name: 'Beverages', nameBn: 'পানীয়' },
   { name: 'Dairy & Frozen', nameBn: 'দুগ্ধজাত ও হিমায়িত' },
   { name: 'Personal Care', nameBn: 'ব্যক্তিগত যত্ন' },
-  { name: 'Household & Cleaning', nameBn: 'গৃহস্থালি' },
+  { name: 'Household & Cleaning', nameBn: 'গৃহস্থালি ও পরিষ্কার' },
   { name: 'Confectionery', nameBn: 'মিষ্টান্ন ও চকোলেট' },
+  { name: 'General', nameBn: 'সাধারণ' },
 ];
 
+const categoryNameMappings: Record<string, string> = {
+  // Confectionery
+  'চকোস': 'Confectionery',
+  'চকোলেট': 'Confectionery',
+  'Confectionery': 'Confectionery',
+  // Groceries
+  'ছাতু': 'Groceries',
+  'মসলা': 'Groceries',
+  'ডাল': 'Groceries',
+  'ময়দা': 'Groceries',
+  'Pulses': 'Groceries',
+  'আটা': 'Groceries',
+  'Oils': 'Groceries',
+  'Groceries': 'Groceries',
+  'চাল': 'Groceries',
+  'লবণ': 'Groceries',
+  'আচার': 'Groceries',
+  'সোয়াবিন': 'Groceries',
+  // Household & Cleaning
+  'ব্রাশ': 'Household & Cleaning',
+  'ধূপকাঠি': 'Household & Cleaning',
+  'Household': 'Household & Cleaning',
+  'Household & Cleaning': 'Household & Cleaning',
+  'সার্ফ': 'Household & Cleaning',
+  // Dairy & Frozen
+  'পনির': 'Dairy & Frozen',
+  'Dairy': 'Dairy & Frozen',
+  'দুধ': 'Dairy & Frozen',
+  'Dairy & Frozen': 'Dairy & Frozen',
+  // Packaged Snacks
+  'বিস্কুট': 'Packaged Snacks',
+  'কেক': 'Packaged Snacks',
+  'পাউরুটি': 'Packaged Snacks',
+  'নুডলস': 'Packaged Snacks',
+  'চিপস': 'Packaged Snacks',
+  'বাউলি': 'Packaged Snacks',
+  'চানাচুর': 'Packaged Snacks',
+  'ক্রিমরোল': 'Packaged Snacks',
+  'Snacks': 'Packaged Snacks',
+  'Packaged Snacks': 'Packaged Snacks',
+  'বেকারি কেক': 'Packaged Snacks',
+  'বেকারি অন্যান্য': 'Packaged Snacks',
+  'বেকারি বিস্কুট': 'Packaged Snacks',
+  'পাপড়': 'Packaged Snacks',
+  // Personal Care
+  'নারী স্বাস্থ্য': 'Personal Care',
+  'Personal Care': 'Personal Care',
+  'সাবান': 'Personal Care',
+  'মাথার তেল': 'Personal Care',
+  'শ্যাম্পু': 'Personal Care',
+  'টুথপেস্ট': 'Personal Care',
+  // Beverages
+  'Beverages': 'Beverages',
+  'জল': 'Beverages',
+  'কফি': 'Beverages',
+  'চা পাতা': 'Beverages',
+  'জলের বোতল': 'Beverages',
+  // General / Other
+  'General': 'General',
+  'Other': 'General',
+  'সিগারেট': 'General',
+  'বিড়ি': 'General',
+  'গুটকা': 'General',
+  'লাইটার': 'General',
+  'প্রিন্ট ও সম্পাদনা': 'General',
+};
+
 async function main() {
-  for (const cat of categories) {
-    await prisma.category.upsert({
+  const { db: prisma } = await import('../src/lib/db');
+  try {
+    for (const cat of categories) {
+      await prisma.category.upsert({
       where: { name: cat.name },
       update: { nameBn: cat.nameBn },
       create: { name: cat.name, nameBn: cat.nameBn },
@@ -58,20 +131,34 @@ async function main() {
   ];
 
   const products = await prisma.product.findMany();
+  let updatedCount = 0;
+  
   for (const product of products) {
     let newCategory = product.category;
     let foundMatch = false;
-    for (const mapping of mappings) {
-      if (product.name.toLowerCase().includes(mapping.contains.toLowerCase()) || 
-          (product.nameBn && product.nameBn.includes(mapping.contains))) {
-        newCategory = mapping.category;
-        foundMatch = true;
-        break;
+
+    // 1. Try to map using the current category string
+    const currentCat = product.category ? product.category.trim() : '';
+    if (categoryNameMappings[currentCat]) {
+      newCategory = categoryNameMappings[currentCat];
+      foundMatch = true;
+    }
+
+    // 2. Keyword fallback on product names if no direct category mapping matched
+    if (!foundMatch) {
+      for (const mapping of mappings) {
+        if (product.name.toLowerCase().includes(mapping.contains.toLowerCase()) || 
+            (product.nameBn && product.nameBn.includes(mapping.contains))) {
+          newCategory = mapping.category;
+          foundMatch = true;
+          break;
+        }
       }
     }
     
+    // 3. Fallback to General if still not matching a standard category
     if (!foundMatch && !categories.some(c => c.name === product.category)) {
-        newCategory = 'Groceries'; // Default fallback
+      newCategory = 'General';
     }
 
     if (newCategory !== product.category) {
@@ -79,11 +166,15 @@ async function main() {
         where: { id: product.id },
         data: { category: newCategory }
       });
-      console.log(`Updated ${product.name} to category ${newCategory}`);
+      console.log(`Updated "${product.name}" (${product.category}) -> "${newCategory}"`);
+      updatedCount++;
     }
   }
   
-  console.log('Categories updated successfully.');
+  console.log(`Successfully updated ${updatedCount} products to standard categories.`);
+  } finally {
+    await prisma.$disconnect();
+  }
 }
 
-main().catch(console.error).finally(() => prisma.$disconnect());
+main().catch(console.error);

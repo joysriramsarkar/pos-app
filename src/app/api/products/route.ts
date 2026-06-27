@@ -1,4 +1,5 @@
-export const dynamic = 'force-dynamic';
+export const revalidate = 30;
+
 // ============================================================================
 // Products API Route - Lakhan Bhandar POS
 // ============================================================================

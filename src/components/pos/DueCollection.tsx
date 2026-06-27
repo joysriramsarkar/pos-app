@@ -257,197 +257,199 @@ export default function DueCollection() {
     const isValid = amount > 0 && amount <= selectedCustomer.dueAmount;
 
     return (
-      <div className="space-y-4 p-4 md:p-6 max-w-2xl mx-auto animate-in slide-in-from-right-2 duration-300">
-        <div className="flex items-center gap-3">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => {
-              setView('list');
-              setSelectedCustomer(null);
-            }}
-            className="shrink-0"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <div>
-            <h1 className="text-xl font-bold">{t('collect_amount')}</h1>
-            <p className="text-sm text-muted-foreground">{t('subtitle')}</p>
-          </div>
-        </div>
-
-        <Card className="border-orange-200 dark:border-orange-900 bg-gradient-to-r from-orange-50/50 to-transparent dark:from-orange-950/20">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="h-12 w-12 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center shrink-0">
-                <User className="h-6 w-6 text-orange-600 dark:text-orange-400" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="font-semibold text-lg truncate">{selectedCustomer.name}</h3>
-                {selectedCustomer.phone && (
-                  <p className="text-sm text-muted-foreground flex items-center gap-1">
-                    <Phone className="h-3.5 w-3.5" />
-                    {selectedCustomer.phone}
-                  </p>
-                )}
-              </div>
-              <div className="text-right shrink-0">
-                <p className="text-xs text-muted-foreground">{t('due_amount')}</p>
-                <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">
-                  {formatTaka(selectedCustomer.dueAmount)}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto w-full h-full pb-8">
+        <div className="space-y-4 p-4 md:p-6 max-w-2xl mx-auto animate-in slide-in-from-right-2 duration-300">
+          <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => {
+                setView('list');
+                setSelectedCustomer(null);
+              }}
+              className="shrink-0"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
             <div>
-              <Label className="text-sm font-medium">{t('collect_amount')}</Label>
-              <div className="relative mt-1.5">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">৳</span>
-                <Input
-                  type="number"
-                  value={collectAmount}
-                  onChange={(e) => setCollectAmount(e.target.value)}
-                  placeholder={t('enter_amount')}
-                  className="pl-9 text-lg font-semibold h-12"
-                  max={selectedCustomer.dueAmount}
-                  min={0}
+              <h1 className="text-xl font-bold">{t('collect_amount')}</h1>
+              <p className="text-sm text-muted-foreground">{t('subtitle')}</p>
+            </div>
+          </div>
+
+          <Card className="border-orange-200 dark:border-orange-900 bg-gradient-to-r from-orange-50/50 to-transparent dark:from-orange-950/20">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="h-12 w-12 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center shrink-0">
+                  <User className="h-6 w-6 text-orange-600 dark:text-orange-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-semibold text-lg truncate">{selectedCustomer.name}</h3>
+                  {selectedCustomer.phone && (
+                    <p className="text-sm text-muted-foreground flex items-center gap-1">
+                      <Phone className="h-3.5 w-3.5" />
+                      {selectedCustomer.phone}
+                    </p>
+                  )}
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-xs text-muted-foreground">{t('due_amount')}</p>
+                  <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+                    {formatTaka(selectedCustomer.dueAmount)}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-4 space-y-4">
+              <div>
+                <Label className="text-sm font-medium">{t('collect_amount')}</Label>
+                <div className="relative mt-1.5">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">৳</span>
+                  <Input
+                    type="number"
+                    value={collectAmount}
+                    onChange={(e) => setCollectAmount(e.target.value)}
+                    placeholder={t('enter_amount')}
+                    className="pl-9 text-lg font-semibold h-12"
+                    max={selectedCustomer.dueAmount}
+                    min={0}
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 gap-1.5"
+                  onClick={handleSetFullAmount}
+                >
+                  <Wallet className="h-3.5 w-3.5" />
+                  {t('collect_full')}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 gap-1.5"
+                  onClick={handleSetHalfAmount}
+                >
+                  {t('collect_half')}
+                </Button>
+              </div>
+
+              {amount > 0 && isValid && (
+                <div className="flex items-center justify-between p-3 rounded-xl bg-muted/50">
+                  <span className="text-sm text-muted-foreground">{t('remaining_due')}</span>
+                  <span className={`font-bold ${remaining > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                    {formatTaka(remaining)}
+                  </span>
+                </div>
+              )}
+
+              {amount > selectedCustomer.dueAmount && (
+                <div className="flex items-center gap-2 p-2 rounded-lg bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 text-sm">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  {t('amount_exceeds')}
+                </div>
+              )}
+
+              <Separator />
+
+              <div>
+                <Label className="text-sm font-medium">{t('payment_method')}</Label>
+                <div className="flex gap-2 mt-1.5">
+                  <Button
+                    variant={paymentMethod === 'নগদ' ? 'default' : 'outline'}
+                    size="sm"
+                    className="flex-1 gap-1.5"
+                    onClick={() => setPaymentMethod('নগদ')}
+                  >
+                    <Banknote className="h-3.5 w-3.5" />
+                    {t('cash')}
+                  </Button>
+                  <Button
+                    variant={paymentMethod === 'ইউপিআই' ? 'default' : 'outline'}
+                    size="sm"
+                    className="flex-1 gap-1.5"
+                    onClick={() => setPaymentMethod('ইউপিআই')}
+                  >
+                    <Smartphone className="h-3.5 w-3.5" />
+                    {t('upi')}
+                  </Button>
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-sm font-medium">{t('notes')}</Label>
+                <Textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder={t('notes_placeholder')}
+                  className="mt-1.5 resize-none"
+                  rows={2}
                 />
               </div>
-            </div>
+            </CardContent>
+          </Card>
 
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="flex-1 gap-1.5"
-                onClick={handleSetFullAmount}
-              >
-                <Wallet className="h-3.5 w-3.5" />
-                {t('collect_full')}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="flex-1 gap-1.5"
-                onClick={handleSetHalfAmount}
-              >
-                {t('collect_half')}
-              </Button>
-            </div>
+          <Button
+            className="w-full h-14 text-lg font-bold shadow-lg"
+            disabled={!isValid || submitting}
+            onClick={handleSubmit}
+          >
+            ৳ {isValid ? formatTaka(amount) : '৳০'} {t('collect')}
+          </Button>
 
-            {amount > 0 && isValid && (
-              <div className="flex items-center justify-between p-3 rounded-xl bg-muted/50">
-                <span className="text-sm text-muted-foreground">{t('remaining_due')}</span>
-                <span className={`font-bold ${remaining > 0 ? 'text-orange-600' : 'text-green-600'}`}>
-                  {formatTaka(remaining)}
-                </span>
-              </div>
-            )}
-
-            {amount > selectedCustomer.dueAmount && (
-              <div className="flex items-center gap-2 p-2 rounded-lg bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 text-sm">
-                <AlertTriangle className="h-4 w-4 shrink-0" />
-                {t('amount_exceeds')}
-              </div>
-            )}
-
-            <Separator />
-
-            <div>
-              <Label className="text-sm font-medium">{t('payment_method')}</Label>
-              <div className="flex gap-2 mt-1.5">
-                <Button
-                  variant={paymentMethod === 'নগদ' ? 'default' : 'outline'}
-                  size="sm"
-                  className="flex-1 gap-1.5"
-                  onClick={() => setPaymentMethod('নগদ')}
-                >
-                  <Banknote className="h-3.5 w-3.5" />
-                  {t('cash')}
+          <Dialog open={showConfirm} onOpenChange={setShowConfirm}>
+            <DialogContent className="max-w-sm">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5 text-orange-500" />
+                  {t('confirm_collection')}
+                </DialogTitle>
+                <DialogDescription>
+                  {t('confirm_message', { amount: formatTaka(amount) })}
+                </DialogDescription>
+              </DialogHeader>
+              {selectedCustomer && (
+                <div className="p-3 rounded-xl bg-muted/50 space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">{tc('name')}</span>
+                    <span className="font-medium">{selectedCustomer.name}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">{t('due_amount')}</span>
+                    <span className="font-medium text-orange-600">{formatTaka(selectedCustomer.dueAmount)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">{t('collect_amount')}</span>
+                    <span className="font-bold text-green-600">{formatTaka(amount)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">{t('payment_method')}</span>
+                    <span className="font-medium">{paymentMethod}</span>
+                  </div>
+                </div>
+              )}
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button variant="outline" onClick={() => setShowConfirm(false)} disabled={submitting}>
+                  {tc('cancel')}
                 </Button>
                 <Button
-                  variant={paymentMethod === 'ইউপিআই' ? 'default' : 'outline'}
-                  size="sm"
-                  className="flex-1 gap-1.5"
-                  onClick={() => setPaymentMethod('ইউপিআই')}
+                  onClick={handleConfirmCollection}
+                  disabled={submitting}
+                  className="bg-green-600 hover:bg-green-700 text-white"
                 >
-                  <Smartphone className="h-3.5 w-3.5" />
-                  {t('upi')}
+                  {submitting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                  {t('collect')}
                 </Button>
-              </div>
-            </div>
-
-            <div>
-              <Label className="text-sm font-medium">{t('notes')}</Label>
-              <Textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder={t('notes_placeholder')}
-                className="mt-1.5 resize-none"
-                rows={2}
-              />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Button
-          className="w-full h-14 text-lg font-bold shadow-lg"
-          disabled={!isValid || submitting}
-          onClick={handleSubmit}
-        >
-          ৳ {isValid ? formatTaka(amount) : '৳০'} {t('collect')}
-        </Button>
-
-        <Dialog open={showConfirm} onOpenChange={setShowConfirm}>
-          <DialogContent className="max-w-sm">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5 text-orange-500" />
-                {t('confirm_collection')}
-              </DialogTitle>
-              <DialogDescription>
-                {t('confirm_message', { amount: formatTaka(amount) })}
-              </DialogDescription>
-            </DialogHeader>
-            {selectedCustomer && (
-              <div className="p-3 rounded-xl bg-muted/50 space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">{tc('name')}</span>
-                  <span className="font-medium">{selectedCustomer.name}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">{t('due_amount')}</span>
-                  <span className="font-medium text-orange-600">{formatTaka(selectedCustomer.dueAmount)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">{t('collect_amount')}</span>
-                  <span className="font-bold text-green-600">{formatTaka(amount)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">{t('payment_method')}</span>
-                  <span className="font-medium">{paymentMethod}</span>
-                </div>
-              </div>
-            )}
-            <DialogFooter className="gap-2 sm:gap-0">
-              <Button variant="outline" onClick={() => setShowConfirm(false)} disabled={submitting}>
-                {tc('cancel')}
-              </Button>
-              <Button
-                onClick={handleConfirmCollection}
-                disabled={submitting}
-                className="bg-green-600 hover:bg-green-700 text-white"
-              >
-                {submitting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                {t('collect')}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
     );
   }

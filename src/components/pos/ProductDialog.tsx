@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useTranslations } from 'next-intl';
 import { useNumberFormat } from '@/hooks/use-number-format';
@@ -145,7 +145,7 @@ export function ProductDialog({
 
   const { toast } = useToast();
   const categories = useProductsStore((state) => state.categories);
-  const allCategories = [...new Set([...DEFAULT_CATEGORIES, ...categories])].sort();
+  const allCategories = useMemo(() => [...new Set([...DEFAULT_CATEGORIES, ...categories])].sort(), [categories]);
 
   const isEditing = !!product;
 
