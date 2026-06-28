@@ -4,10 +4,12 @@ import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useSettingsStore, AppSettings } from "@/stores/settings-store";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Store, Printer, Database, Palette, Users, Globe, Receipt } from "lucide-react";
+import { Store, Printer, Database, Palette, Users, Globe, Receipt, Key } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { useTheme } from "@/components/providers/ThemeProvider";
+import { UsersManagement } from "./UsersManagement";
 
 import ProfileTab from "./settings/ProfileTab";
 import PrinterTab from "./settings/PrinterTab";
@@ -26,6 +28,7 @@ export default function SettingsManagement() {
 
   const [localSettings, setLocalSettings] = useState<AppSettings>(settings);
   const [isSaving, setIsSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState("profile");
 
   useEffect(() => {
     fetchSettings();
@@ -110,6 +113,7 @@ export default function SettingsManagement() {
     { value: "theme", label: t("theme"), icon: Palette, hasChanges: hasThemeChanges },
     { value: "language", label: t("language"), icon: Globe, hasChanges: hasLanguageChanges },
     { value: "users", label: t("users"), icon: Users, hasChanges: () => false },
+    { value: "password", label: t("change_password"), icon: Key, hasChanges: () => false },
     { value: "backup", label: t("backup"), icon: Database, hasChanges: () => false },
   ];
 
@@ -125,9 +129,31 @@ export default function SettingsManagement() {
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-scroll p-3 md:p-6">
-        <div className="max-w-5xl mx-auto">
-          <Tabs defaultValue="profile" className="flex flex-col md:flex-row gap-4 md:gap-6 items-start">
-            <TabsList className="flex flex-row md:flex-col h-auto w-full md:w-52 bg-transparent p-0 justify-start md:items-start overflow-x-auto no-scrollbar border-b md:border-b-0 md:border-r border-border pb-2 md:pb-0 md:pr-3 shrink-0 md:sticky md:top-0 md:h-fit">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col md:flex-row gap-4 md:gap-6 items-stretch md:items-start w-full">
+            {/* Mobile View: Select Dropdown to switch tabs */}
+            <div className="w-full md:hidden mb-1">
+              <Select value={activeTab} onValueChange={setActiveTab}>
+                <SelectTrigger className="w-full h-11 bg-background border border-border">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {tabs.map(({ value, label, icon: Icon, hasChanges: tabHasChanges }) => (
+                    <SelectItem key={value} value={value}>
+                      <span className="flex items-center gap-2">
+                        <Icon className="w-4 h-4 shrink-0 text-muted-foreground" />
+                        <span>{label}</span>
+                        {tabHasChanges() && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0" />
+                        )}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Desktop View: Normal vertical tabs sidebar */}
+            <TabsList className="hidden md:flex flex-row md:flex-col h-auto w-full md:w-52 bg-transparent p-0 justify-start md:items-start overflow-x-auto no-scrollbar border-b md:border-b-0 md:border-r border-border pb-2 md:pb-0 md:pr-3 shrink-0 md:sticky md:top-0 md:h-fit">
               {tabs.map(({ value, label, icon: Icon, hasChanges: tabHasChanges }) => (
                 <TabsTrigger
                   key={value}
@@ -143,7 +169,7 @@ export default function SettingsManagement() {
               ))}
             </TabsList>
 
-            <div className="flex-1 min-w-0">
+            <div className="flex-1 min-w-0 w-full">
               <TabsContent value="profile" className="m-0 focus-visible:outline-none focus-visible:ring-0">
                 <ProfileTab localSettings={localSettings} handleChange={handleChange} handleSave={handleSave} isSaving={isSaving} hasChanges={hasProfileChanges} />
               </TabsContent>
@@ -161,6 +187,9 @@ export default function SettingsManagement() {
                 <LanguageTab localSettings={localSettings} handleChange={handleChange} handleSave={handleSave} isSaving={isSaving} hasChanges={hasLanguageChanges} />
               </TabsContent>
               <TabsContent value="users" className="m-0 focus-visible:outline-none focus-visible:ring-0">
+                <UsersManagement />
+              </TabsContent>
+              <TabsContent value="password" className="m-0 focus-visible:outline-none focus-visible:ring-0">
                 <UsersTab session={session} />
               </TabsContent>
               <TabsContent value="backup" className="m-0 focus-visible:outline-none focus-visible:ring-0">
@@ -168,7 +197,6 @@ export default function SettingsManagement() {
               </TabsContent>
             </div>
           </Tabs>
-        </div>
       </div>
     </div>
   );

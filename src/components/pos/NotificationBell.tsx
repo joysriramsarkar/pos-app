@@ -5,7 +5,6 @@ import { useTranslations } from 'next-intl';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Bell, BellRing, AlertTriangle, CircleAlert, Wallet, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -178,7 +177,7 @@ export default function NotificationBell({ variant = 'desktop' }: NotificationBe
         </div>
 
         {/* Notifications List */}
-        <ScrollArea className="max-h-96">
+        <div className="max-h-96 overflow-y-auto">
           {notifications.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-8 px-4">
               <div className="h-12 w-12 rounded-full bg-muted/50 flex items-center justify-center mb-3">
@@ -240,7 +239,7 @@ export default function NotificationBell({ variant = 'desktop' }: NotificationBe
               })}
             </div>
           )}
-        </ScrollArea>
+        </div>
       </PopoverContent>
 
       {/* Animation keyframes */}

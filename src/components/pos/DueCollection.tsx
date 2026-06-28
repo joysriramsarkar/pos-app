@@ -38,6 +38,7 @@ import {
 interface DueCustomer {
   id: string;
   name: string;
+  nameEn: string | null;
   phone: string | null;
   dueAmount: number;
   updatedAt: string;
@@ -58,10 +59,20 @@ export default function DueCollection() {
   const [view, setView] = useState<ViewState>('list');
   const [collectAmount, setCollectAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('নগদ');
+  const [cashAmount, setCashAmount] = useState('');
+  const [upiAmount, setUpiAmount] = useState('');
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [successData, setSuccessData] = useState<{ collected: number; remaining: number } | null>(null);
+
+  useEffect(() => {
+    if (paymentMethod === 'মিশ্র') {
+      const cash = parseFloat(cashAmount) || 0;
+      const upi = parseFloat(upiAmount) || 0;
+      setCollectAmount(String(cash + upi));
+    }
+  }, [cashAmount, upiAmount, paymentMethod]);
 
   const fetchCustomers = useCallback(async () => {
     setLoading(true);
@@ -89,6 +100,7 @@ export default function DueCollection() {
     const term = search.toLowerCase();
     return (
       c.name.toLowerCase().includes(term) ||
+      (c.nameEn && c.nameEn.toLowerCase().includes(term)) ||
       (c.phone && c.phone.includes(term))
     );
   });
@@ -98,18 +110,32 @@ export default function DueCollection() {
     setCollectAmount('');
     setPaymentMethod('নগদ');
     setNotes('');
+    setCashAmount('');
+    setUpiAmount('');
     setView('form');
   };
 
   const handleSetFullAmount = () => {
     if (selectedCustomer) {
-      setCollectAmount(String(selectedCustomer.dueAmount));
+      const amt = selectedCustomer.dueAmount;
+      if (paymentMethod === 'মিশ্র') {
+        setCashAmount(String(amt));
+        setUpiAmount('0');
+      } else {
+        setCollectAmount(String(amt));
+      }
     }
   };
 
   const handleSetHalfAmount = () => {
     if (selectedCustomer) {
-      setCollectAmount(String(Math.ceil(selectedCustomer.dueAmount / 2)));
+      const amt = selectedCustomer.dueAmount / 2;
+      if (paymentMethod === 'মিশ্র') {
+        setCashAmount(String(amt));
+        setUpiAmount('0');
+      } else {
+        setCollectAmount(String(amt));
+      }
     }
   };
 
@@ -131,6 +157,9 @@ export default function DueCollection() {
     setSubmitting(true);
     try {
       const amount = parseFloat(collectAmount);
+      const finalNotes = paymentMethod === 'মিশ্র'
+        ? `${notes || ''} [নগদ: ৳${cashAmount || 0}, ইউপিআই: ৳${upiAmount || 0}]`.trim()
+        : notes;
       const res = await fetch('/api/due-collection', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -138,7 +167,7 @@ export default function DueCollection() {
           customerId: selectedCustomer.id,
           amount,
           paymentMethod,
-          notes: notes || undefined,
+          notes: finalNotes || undefined,
         }),
       });
       const data = await res.json();
@@ -178,12 +207,13 @@ export default function DueCollection() {
         ...selectedCustomer,
         dueAmount: successData.remaining,
       });
+      setCollectAmount('');
+      setPaymentMethod('নগদ');
+      setNotes('');
+      setCashAmount('');
+      setUpiAmount('');
+      setView('form');
     }
-    setCollectAmount('');
-    setNotes('');
-    setPaymentMethod('নগদ');
-    setSuccessData(null);
-    setView('form');
   };
 
   const handleDone = () => {
@@ -316,6 +346,7 @@ export default function DueCollection() {
                     className="pl-9 text-lg font-semibold h-12"
                     max={selectedCustomer.dueAmount}
                     min={0}
+                    readOnly={paymentMethod === 'মিশ্র'}
                   />
                 </div>
               </div>
@@ -379,8 +410,48 @@ export default function DueCollection() {
                     <Smartphone className="h-3.5 w-3.5" />
                     {t('upi')}
                   </Button>
+                  <Button
+                    variant={paymentMethod === 'মিশ্র' ? 'default' : 'outline'}
+                    size="sm"
+                    className="flex-1 gap-1.5"
+                    onClick={() => {
+                      setPaymentMethod('মিশ্র');
+                      setCashAmount('');
+                      setUpiAmount('');
+                    }}
+                  >
+                    <Sparkles className="h-3.5 w-3.5" />
+                    {t('mixed')}
+                  </Button>
                 </div>
               </div>
+
+              {paymentMethod === 'মিশ্র' && (
+                <div className="grid grid-cols-2 gap-3 mt-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">নগদ পরিমাণ</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={cashAmount}
+                      onChange={(e) => setCashAmount(e.target.value)}
+                      placeholder="নগদ"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">ইউপিআই পরিমাণ</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={upiAmount}
+                      onChange={(e) => setUpiAmount(e.target.value)}
+                      placeholder="ইউপিআই"
+                    />
+                  </div>
+                </div>
+              )}
 
               <div>
                 <Label className="text-sm font-medium">{t('notes')}</Label>
@@ -533,6 +604,9 @@ export default function DueCollection() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <h3 className="font-semibold text-sm truncate">{customer.name}</h3>
+                    {customer.nameEn && customer.nameEn !== customer.name && (
+                      <p className="text-[10px] text-muted-foreground/80 font-medium truncate">{customer.nameEn}</p>
+                    )}
                     {customer.phone ? (
                       <p className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5">
                         <Phone className="h-3 w-3 shrink-0" />
@@ -587,6 +661,9 @@ export default function DueCollection() {
                         </span>
                       )}
                     </div>
+                    {customer.nameEn && customer.nameEn !== customer.name && (
+                      <p className="text-[10px] text-muted-foreground/80 font-medium truncate mt-0.5">{customer.nameEn}</p>
+                    )}
                     {customer.lastPaymentDate && (
                       <p className="text-xs text-muted-foreground mt-0.5">
                         {formatDate(new Date(customer.lastPaymentDate))}

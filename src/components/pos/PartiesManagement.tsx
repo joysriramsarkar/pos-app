@@ -1007,6 +1007,9 @@ export function PartiesManagement() {
                         </div>
                         <div className="min-w-0 flex-1">
                           <h3 className="font-bold text-sm md:text-base text-slate-800 dark:text-slate-200 truncate" title={customer.name}>{customer.name}</h3>
+                          {customer.nameEn && customer.nameEn !== customer.name && (
+                            <p className="text-[10px] md:text-xs text-muted-foreground/80 font-medium truncate" title={customer.nameEn}>{customer.nameEn}</p>
+                          )}
                           {customer.phone ? (
                             <p className="text-[11px] md:text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
                               <Phone className="w-3 h-3 shrink-0" />
@@ -1138,6 +1141,9 @@ export function PartiesManagement() {
                         </div>
                         <div className="min-w-0 flex-1">
                           <h3 className="font-bold text-sm md:text-base text-slate-800 dark:text-slate-200 truncate" title={supplier.name}>{supplier.name}</h3>
+                          {supplier.nameEn && supplier.nameEn !== supplier.name && (
+                            <p className="text-[10px] md:text-xs text-muted-foreground/80 font-medium truncate" title={supplier.nameEn}>{supplier.nameEn}</p>
+                          )}
                           {supplier.phone ? (
                             <p className="text-[11px] md:text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
                               <Phone className="w-3 h-3 shrink-0" />
@@ -1220,7 +1226,7 @@ export function PartiesManagement() {
 
       {/* Ledger Dialog */}
       <Dialog open={showLedger} onOpenChange={setShowLedger}>
-        <DialogContent className="sm:max-w-lg w-[95vw] max-h-[90dvh] overflow-y-auto">
+        <DialogContent className="md:max-w-2xl w-[95vw] max-h-[90dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileText className="w-5 h-5" />
@@ -1806,7 +1812,7 @@ export function PartiesManagement() {
 
       {/* Supplier Ledger Dialog */}
       <Dialog open={showSupplierLedger} onOpenChange={setShowSupplierLedger}>
-        <DialogContent className="sm:max-w-lg w-[95vw] max-h-[90dvh] overflow-y-auto">
+        <DialogContent className="md:max-w-2xl w-[95vw] max-h-[90dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileText className="w-5 h-5" />

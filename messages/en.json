@@ -365,6 +365,7 @@
     "all_clear": "All Clear",
     "cash": "Cash",
     "upi": "Upi",
+    "mixed": "Mixed",
     "amount_exceeds": "Amount Exceeds",
     "enter_amount": "Enter Amount"
   },
@@ -1218,6 +1219,7 @@
     "backup": "Backup",
     "theme": "Theme",
     "users": "Users",
+    "change_password": "Change Password",
     "language": "Language",
     "billing": "Billing",
     "success": "Settings saved successfully",
@@ -1316,6 +1318,7 @@
   },
   "Stock": {
     "title": "Stock Management",
+    "detailed_desc": "Advanced stock level metrics & inventory cost valuations",
     "items": "items",
     "total_value": "Total Value",
     "negative_stock": "Negative Stock",

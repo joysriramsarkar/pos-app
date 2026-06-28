@@ -117,7 +117,6 @@ const navItems: { id: Exclude<PageType, 'menu' | 'stock-statistics' | 'expenses-
   { id: 'reports', label: 'Reports', icon: <FileText className="w-5 h-5" /> },
   { id: 'transactions', label: 'Transactions', icon: <History className="w-5 h-5" /> },
   { id: 'expenses', label: 'Expenses', icon: <Banknote className="w-5 h-5" /> },
-  { id: 'users', label: 'Users', icon: <UserCog className="w-5 h-5" /> },
   { id: 'settings', label: 'Settings', icon: <Settings className="w-5 h-5" /> },
   { id: 'audit', label: 'Audit Logs', icon: <ClipboardList className="w-5 h-5" /> },
   { id: 'purchase-orders', label: 'Purchase Orders', icon: <Truck className="w-5 h-5" /> },
@@ -145,7 +144,6 @@ function POSDashboard() {
   const [isExpensesMounted, setIsExpensesMounted] = useState(false);
   const [isSettingsMounted, setIsSettingsMounted] = useState(false);
   const [isTransactionsPageMounted, setIsTransactionsPageMounted] = useState(false);
-  const [isUsersPageMounted, setIsUsersPageMounted] = useState(false);
   const [isAuditPageMounted, setIsAuditPageMounted] = useState(false);
   const [mobileCartOpen, setMobileCartOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
@@ -187,7 +185,6 @@ function POSDashboard() {
     if (currentPage === 'expenses' && !isExpensesMounted) setIsExpensesMounted(true);
     if (currentPage === 'settings' && !isSettingsMounted) setIsSettingsMounted(true);
     if (currentPage === 'transactions' && !isTransactionsPageMounted) setIsTransactionsPageMounted(true);
-    if (currentPage === 'users' && !isUsersPageMounted) setIsUsersPageMounted(true);
     if (currentPage === 'audit' && !isAuditPageMounted) setIsAuditPageMounted(true);
   }, [
     currentPage,
@@ -200,7 +197,6 @@ function POSDashboard() {
     isExpensesMounted,
     isSettingsMounted,
     isTransactionsPageMounted,
-    isUsersPageMounted,
     isAuditPageMounted,
   ]);
 
@@ -1676,16 +1672,7 @@ function POSDashboard() {
               <TransactionHistory />
             </motion.div>
           )}
-          {(currentPage === 'users' || isUsersPageMounted) && (
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: currentPage === 'users' ? 1 : 0, y: currentPage === 'users' ? 0 : 8 }}
-              transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className={cn("flex-1 min-h-0 flex flex-col", currentPage !== 'users' && "hidden")}
-            >
-              <UsersManagement />
-            </motion.div>
-          )}
+          {/* Users management has been moved inside Settings */}
           {(currentPage === 'audit' || isAuditPageMounted) && (
             <motion.div
               initial={{ opacity: 0, y: 8 }}

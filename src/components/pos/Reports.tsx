@@ -284,7 +284,7 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
   const errorMessage = tabError[activeTab] ?? null;
 
   const outstandingDues = useMemo(
-    () => dueData?.reduce((acc, c) => acc + Number(c.totalDue), 0).toFixed(2) || '0.00',
+    () => (dueData?.reduce((acc, c) => acc + Number(c.totalDue), 0) ?? 0).toFixed(2),
     [dueData]
   );
 

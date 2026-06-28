@@ -22,7 +22,6 @@ function calculateSupplierBalances(supplier: {
     }
   }
 
-  let extraPurchases = 0;
   let totalPaid = 0;
   let manualPayments = 0;
 
@@ -31,16 +30,15 @@ function calculateSupplierBalances(supplier: {
     totalPaid += amount;
 
     const notes = e.notes || '';
-    if (notes.startsWith('Paid supplier:')) {
-      manualPayments += amount;
-    } else if (notes.startsWith('Paid for purchase order:') || notes.startsWith('Paid for direct purchase:')) {
+    if (notes.startsWith('Paid for purchase order:') || notes.startsWith('Paid for direct purchase:')) {
       // payment for a specific PO, already handled in poDue
     } else {
-      extraPurchases += amount;
+      // General manual payment to the supplier
+      manualPayments += amount;
     }
   }
 
-  const totalPurchases = basePurchases + extraPurchases;
+  const totalPurchases = basePurchases;
   const totalDue = Math.max(0, poDue - manualPayments);
 
   return { totalPurchases, totalPaid, totalDue };

@@ -69,16 +69,13 @@ const UNITS = [
 
 const DEFAULT_CATEGORIES = [
   'Groceries',
-  'Dairy',
-  'Vegetables',
-  'Fruits',
-  'Pulses',
-  'Oils',
-  'Snacks',
+  'Packaged Snacks',
   'Beverages',
-  'Household',
+  'Dairy & Frozen',
   'Personal Care',
-  'Other',
+  'Household & Cleaning',
+  'Confectionery',
+  'General',
 ];
 
 // Helper to generate barcode

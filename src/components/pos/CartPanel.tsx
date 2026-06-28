@@ -143,6 +143,7 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
       const normalizedPhoneQuery = convertBengaliToEnglishNumerals(query);
       const localResults = customers.filter((c) =>
         c.name.toLowerCase().includes(query.toLowerCase()) ||
+        (c.nameEn && c.nameEn.toLowerCase().includes(query.toLowerCase())) ||
         c.phone?.includes(normalizedPhoneQuery)
       );
 
@@ -218,6 +219,7 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
         : customers.filter(
             (c) =>
               c.name.toLowerCase().includes(customerSearchQuery.toLowerCase()) ||
+              (c.nameEn && c.nameEn.toLowerCase().includes(customerSearchQuery.toLowerCase())) ||
               c.phone?.includes(customerSearchQuery)
           )
       )
@@ -338,13 +340,16 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
                     <Button
                       key={customer.id}
                       variant="ghost"
-                      className="w-full justify-start h-9 text-sm"
+                      className="w-full justify-start h-auto py-1.5 text-sm"
                       onClick={() => handleCustomerSelect(customer)}
                     >
-                      <div className="flex flex-col items-start">
+                      <div className="flex flex-col items-start leading-tight">
                         <span>{customer.name}</span>
+                        {customer.nameEn && customer.nameEn !== customer.name && (
+                          <span className="text-[10px] text-muted-foreground/80 font-medium">{customer.nameEn}</span>
+                        )}
                         {customer.phone && (
-                          <span className="text-xs text-muted-foreground">{customer.phone}</span>
+                          <span className="text-[10px] text-muted-foreground mt-0.5">{customer.phone}</span>
                         )}
                       </div>
                       {toMoneyNumber(customer.totalDue) > 0 && (
