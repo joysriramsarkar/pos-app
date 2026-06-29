@@ -138,6 +138,7 @@
     "order_total": "Order Total",
     "mixed_payment": "Mixed Payment",
     "due_payment_label": "Due Payment",
+    "due": "Due",
     "prepaid": "Prepaid"
   },
   "Common": {
@@ -1291,7 +1292,7 @@
     "users_desc": "Manage user credentials and authentication.",
     "logged_in_user": "Logged In User",
     "logout": "Log Out",
-    "change_password": "Change Password",
+    "change_password_title": "Change Password",
     "current_password": "Current Password",
     "new_password": "New Password",
     "confirm_password": "Confirm New Password",

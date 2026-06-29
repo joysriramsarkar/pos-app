@@ -257,7 +257,6 @@ export function CheckoutDialog({
       return;
     }
 
-    const insufficientStockItems: Array<{ name: string; qty: number; available: number }> = [];
     const productMap = new Map(products.map((p) => [p.id, p]));
     for (const cartItem of items) {
       const product = productMap.get(cartItem.productId);
@@ -265,21 +264,6 @@ export function CheckoutDialog({
         setInputError(t('product_no_longer_exists', { name: cartItem.productName }));
         return;
       }
-      if (cartItem.quantity > product.currentStock) {
-        insufficientStockItems.push({
-          name: cartItem.productName,
-          qty: cartItem.quantity,
-          available: product.currentStock,
-        });
-      }
-    }
-
-    if (insufficientStockItems.length > 0) {
-      const itemsText = insufficientStockItems
-        .map((item) => `${item.name} (${t('need')}: ${item.qty}, ${t('available')}: ${item.available})`)
-        .join('\n');
-      setInputError(`${t('insufficient_stock')}\n${itemsText}`);
-      return;
     }
 
     const finalPaymentMethod = remainingTotal === 0 ? 'Prepaid' : paymentMethod;

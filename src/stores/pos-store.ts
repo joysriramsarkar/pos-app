@@ -134,20 +134,11 @@ export const useCartStore = create<CartState & CartActions>()(
       })),
 
       addItem: (product: Product, quantity: number = 1) => {
-        let actualQuantity = quantity;
-        if (product.currentStock > 0 && product.currentStock < quantity) {
-          actualQuantity = product.currentStock;
-        }
+        const actualQuantity = quantity;
 
         // Validate quantity before adding to cart
         if (actualQuantity <= 0) {
           console.warn('Cannot add item with quantity <= 0');
-          return;
-        }
-        
-        // Check if product has enough stock
-        if (product.currentStock < actualQuantity) {
-          console.warn(`Insufficient stock for ${product.name}. Available: ${product.currentStock}, Requested: ${actualQuantity}`);
           return;
         }
         
@@ -160,17 +151,7 @@ export const useCartStore = create<CartState & CartActions>()(
         if (existingItemIndex >= 0) {
           const updatedItems = [...currentItems];
           const existingItem = updatedItems[existingItemIndex];
-          let newQuantity = new Decimal(existingItem.quantity).plus(new Decimal(actualQuantity)).toNumber();
-
-          // Re-check stock when adding more of existing item
-          if (newQuantity > product.currentStock) {
-            if (product.currentStock > existingItem.quantity) {
-              newQuantity = product.currentStock;
-            } else {
-              console.warn(`Total quantity exceeds available stock for ${product.name}. Available: ${product.currentStock}, Total: ${newQuantity}`);
-              return;
-            }
-          }
+          const newQuantity = new Decimal(existingItem.quantity).plus(new Decimal(actualQuantity)).toNumber();
 
           updatedItems[existingItemIndex] = {
             ...existingItem,
@@ -665,6 +646,7 @@ interface QuantityUsageState {
 interface QuantityUsageActions {
   recordQuantity: (productId: string, quantity: number) => void;
   getPopularQuantities: (productId: string, limit?: number) => number[];
+  mergeUsage: (newUsage: Record<string, Record<string, number>>) => void;
   reset: () => void;
 }
 
@@ -692,6 +674,19 @@ export const useQuantityUsageStore = create<QuantityUsageState & QuantityUsageAc
           .sort(([, a], [, b]) => b - a)
           .slice(0, limit)
           .map(([qty]) => parseFloat(qty));
+      },
+
+      mergeUsage: (newUsage) => {
+        set((state) => {
+          const merged = { ...state.usage };
+          for (const [productId, productUsage] of Object.entries(newUsage)) {
+            merged[productId] = {
+              ...(merged[productId] || {}),
+              ...productUsage,
+            };
+          }
+          return { usage: merged };
+        });
       },
 
       reset: () => set({ usage: {} }),

@@ -376,6 +376,13 @@ export default function PurchaseOrderManagement() {
       toast.error(t('add_products'));
       return;
     }
+    if (directReceive && formAmountPaid) {
+      const parsedPaid = parseFloat(formAmountPaid);
+      if (!isNaN(parsedPaid) && parsedPaid > formTotal) {
+        toast.error('পরিশোধিত টাকা ক্রয়ের মোট পরিমাণের চেয়ে বেশি হতে পারবে না।');
+        return;
+      }
+    }
     setSaving(true);
     try {
       const res = await fetch('/api/purchase-orders', {
@@ -501,6 +508,14 @@ export default function PurchaseOrderManagement() {
     if (validItems.length === 0) {
       toast.error(t('quantity'));
       return;
+    }
+    if (receiveAmountPaid) {
+      const parsedPaid = parseFloat(receiveAmountPaid);
+      const maxAllowed = selectedOrder.totalAmount - selectedOrder.paidAmount;
+      if (!isNaN(parsedPaid) && parsedPaid > maxAllowed) {
+        toast.error(`পরিশোধিত টাকা বকেয়া পরিমাণের (৳${maxAllowed}) চেয়ে বেশি হতে পারবে না।`);
+        return;
+      }
     }
     setSaving(true);
     try {

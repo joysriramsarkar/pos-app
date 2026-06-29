@@ -312,19 +312,13 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
       products.map((p: any) => [p.id, p]),
     );
 
-    // STRICT validation: Reject sales with insufficient stock
+    // Validate all products exist
     for (const item of stockDeductions) {
       const product = productMap.get(item.productId);
 
       if (!product) {
         throw new Error(
           `Product ${item.productId} not found during sync validation`,
-        );
-      }
-
-      if (product.currentStock < item.quantity) {
-        throw new Error(
-          `Insufficient stock for product "${product.name}" during sync. Available: ${product.currentStock}, Required: ${item.quantity}`,
         );
       }
     }
@@ -404,16 +398,42 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
       if (stockDeductions.length > 0) {
         // Sort stockDeductions by productId to guarantee consistent lock ordering and prevent deadlocks
         stockDeductions.sort((a, b) => a.productId.localeCompare(b.productId));
-        const productIds = stockDeductions.map((i) => i.productId);
-        const quantities = stockDeductions.map((i) => i.quantity);
 
+        for (let i = 0; i < stockDeductions.length; i++) {
+          const productId = stockDeductions[i].productId;
+          const requiredQty = Number(stockDeductions[i].quantity);
 
-      for (let i = 0; i < productIds.length; i++) {
-        await tx.product.updateMany({
-          where: { id: productIds[i], currentStock: { gte: quantities[i] } },
-          data: { currentStock: { decrement: quantities[i] }, updatedAt: new Date() }
-        });
-      }
+          const product = productMap.get(productId);
+          const currentStock = Number(product?.currentStock || 0);
+
+          if (currentStock < requiredQty) {
+            const shortage = requiredQty - currentStock;
+
+            // Record the auto-adjustment in stock history so it is fully audit-logged
+            await tx.stockHistory.create({
+              data: {
+                productId: productId,
+                changeType: "adjustment",
+                quantity: shortage,
+                reason: `Auto-adjusted for sync sale: ${saleData.invoiceNumber}`,
+                referenceId: sale.id,
+                saleId: sale.id,
+              }
+            });
+
+            // Set stock to 0 since shortage was added and then sold
+            await tx.product.update({
+              where: { id: productId },
+              data: { currentStock: 0, updatedAt: new Date() }
+            });
+          } else {
+            // Normal decrement
+            await tx.product.update({
+              where: { id: productId },
+              data: { currentStock: { decrement: requiredQty }, updatedAt: new Date() }
+            });
+          }
+        }
 
         // Create stock history for audit trail
         const historyData = stockDeductions.map((item) => ({

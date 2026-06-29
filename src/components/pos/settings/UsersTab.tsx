@@ -104,7 +104,7 @@ export default function UsersTab({ session }: UsersTabProps) {
         </div>
 
         <form onSubmit={handlePasswordChange} className="space-y-4 border rounded-lg p-4">
-          <h4 className="font-medium text-sm">{t("change_password")}</h4>
+          <h4 className="font-medium text-sm">{t("change_password_title")}</h4>
 
           {(["current", "new", "confirm"] as const).map((field) => (
             <div key={field} className="space-y-1.5">

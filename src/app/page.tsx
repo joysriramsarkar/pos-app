@@ -462,6 +462,23 @@ function POSDashboard() {
     loadProducts();
   }, [activeUser?.requiresPasswordChange]);
 
+  // Load quantity suggestions on mount from last 30 days of sales
+  useEffect(() => {
+    if (activeUser?.requiresPasswordChange) return;
+    const loadQuantitySuggestions = async () => {
+      try {
+        const res = await fetch('/api/products/quantity-suggestions');
+        if (res.ok) {
+          const { data } = await res.json();
+          useQuantityUsageStore.getState().mergeUsage(data);
+        }
+      } catch (error) {
+        console.error('Failed to load quantity suggestions:', error);
+      }
+    };
+    loadQuantitySuggestions();
+  }, [activeUser?.requiresPasswordChange]);
+
   // Refresh products when tab becomes visible or after offline sync completes
   useEffect(() => {
     if (activeUser?.requiresPasswordChange) return;

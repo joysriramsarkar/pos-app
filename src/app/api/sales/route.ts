@@ -272,20 +272,48 @@ async function handlePost(request: NextRequest) {
         stockDeductions.sort((a, b) => a.productId.localeCompare(b.productId));
 
         if (stockDeductions.length > 0) {
-          const itemProductIds = stockDeductions.map((item) => item.productId);
-          const itemQuantities = stockDeductions.map((item) => item.quantity);
-
-          let updateResult = 0;
           for (let i = 0; i < stockDeductions.length; i++) {
-            const res = await tx.product.updateMany({
-              where: { id: stockDeductions[i].productId, currentStock: { gte: stockDeductions[i].quantity } },
-              data: { currentStock: { decrement: stockDeductions[i].quantity }, updatedAt: new Date() }
-            });
-            updateResult += res.count;
-          }
+            const productId = stockDeductions[i].productId;
+            const requiredQty = Number(stockDeductions[i].quantity);
 
-          if (updateResult !== stockDeductions.length) {
-            throw new Error(`Insufficient stock for one or more products. Another transaction may have depleted stock.`);
+            const product = await tx.product.findUnique({
+              where: { id: productId },
+              select: { currentStock: true, name: true }
+            });
+
+            if (!product) {
+              throw new Error(`Product not found: ${productId}`);
+            }
+
+            const currentStock = Number(product.currentStock || 0);
+
+            if (currentStock < requiredQty) {
+              const shortage = requiredQty - currentStock;
+
+              // Record the auto-adjustment in stock history so it is fully audit-logged
+              await tx.stockHistory.create({
+                data: {
+                  productId: productId,
+                  changeType: "adjustment",
+                  quantity: shortage,
+                  reason: `Auto-adjusted for sale: ${newSale.invoiceNumber}`,
+                  referenceId: newSale.id,
+                  saleId: newSale.id,
+                }
+              });
+
+              // Set stock to 0 since shortage was added and then sold
+              await tx.product.update({
+                where: { id: productId },
+                data: { currentStock: 0, updatedAt: new Date() }
+              });
+            } else {
+              // Normal decrement
+              await tx.product.update({
+                where: { id: productId },
+                data: { currentStock: { decrement: requiredQty }, updatedAt: new Date() }
+              });
+            }
           }
         }
 

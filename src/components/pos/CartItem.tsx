@@ -46,8 +46,8 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
 
   const handleQuantityChange = useCallback(
     (newQuantity: number) => {
-      // Ensure we don't go below 0 and not above availableStock
-      const validatedQuantity = Math.max(0, Math.min(newQuantity, item.availableStock));
+      // Ensure we don't go below 0
+      const validatedQuantity = Math.max(0, newQuantity);
       if (validatedQuantity === 0) {
         // If quantity becomes 0, remove the item
         removeItem(item.id);
@@ -55,15 +55,14 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
         updateQuantity(item.id, validatedQuantity);
       }
     },
-    [item.id, item.availableStock, updateQuantity, removeItem]
+    [item.id, updateQuantity, removeItem]
   );
 
   const handleIncrement = useCallback(() => {
     const step = getStep(item.unit);
     const newQty = new Decimal(item.quantity).plus(new Decimal(step)).toNumber();
-    const validatedQuantity = Math.min(newQty, item.availableStock);
-    updateQuantity(item.id, validatedQuantity);
-  }, [item.id, item.quantity, item.unit, item.availableStock, updateQuantity]);
+    updateQuantity(item.id, newQty);
+  }, [item.id, item.quantity, item.unit, updateQuantity]);
 
   const handleDecrement = useCallback(() => {
     const step = getStep(item.unit);
@@ -144,9 +143,8 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
   }, [popularQuantities, isWeighted]);
 
   const handlePiecePreset = useCallback((qty: number) => {
-    const validated = Math.min(qty, item.availableStock);
-    updateQuantity(item.id, validated);
-  }, [item.id, item.availableStock, updateQuantity]);
+    updateQuantity(item.id, qty);
+  }, [item.id, updateQuantity]);
 
   const pricePresets = useMemo(() => {
     if (!isWeighted) return [];
@@ -164,9 +162,8 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
 
   const handlePricePreset = useCallback((price: number) => {
     const qty = parseFloat((price / item.unitPrice).toFixed(5));
-    const validated = Math.min(qty, item.availableStock);
-    updateQuantity(item.id, validated);
-  }, [item.id, item.unitPrice, item.availableStock, updateQuantity]);
+    updateQuantity(item.id, qty);
+  }, [item.id, item.unitPrice, updateQuantity]);
 
   return (
     <div
@@ -241,7 +238,6 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
               className="w-14 h-7 text-center px-1 touch-manipulation text-xs"
               aria-label="Quantity"
               onWheel={(e) => e.currentTarget.blur()}
-              max={item.availableStock}
               min={0}
             />
 

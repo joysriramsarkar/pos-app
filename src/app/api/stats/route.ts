@@ -185,8 +185,12 @@ export async function GET(request: NextRequest) {
       return sum + (buyingPrice * Number(item.quantity));
     }, 0);
 
-    // Today's profit: sales - expenses - cost of goods
-    const todayProfit = todaySalesTotal - todayExpensesTotal - costOfGoodsSold;
+    // Today's profit: sales - operating expenses (excluding supplier payments) - cost of goods sold
+    const todayExpensesNonSupplier = todayExpenses
+      .filter(e => e.category !== 'Supplier Payment')
+      .reduce((sum, e) => sum + Number(e.amount || 0), 0);
+
+    const todayProfit = todaySalesTotal - todayExpensesNonSupplier - costOfGoodsSold;
     const profitMargin = todaySalesTotal > 0 ? ((todayProfit / todaySalesTotal) * 100) : 0;
 
     // Last 7 days sales data — use 2 bulk queries instead of 14 sequential ones

@@ -411,10 +411,8 @@ function CompactProductCard({ product, onSelect }: CompactProductCardProps) {
   const isOutOfStock = product.currentStock <= 0;
 
   const handleClick = () => {
-    if (!isOutOfStock) {
-      if (onSelect) onSelect(product);
-      else addItem(product, 1);
-    }
+    if (onSelect) onSelect(product);
+    else addItem(product, 1);
   };
 
   const { formatPrice } = useNumberFormat();
@@ -422,19 +420,18 @@ function CompactProductCard({ product, onSelect }: CompactProductCardProps) {
   return (
     <button
       onClick={handleClick}
-      disabled={isOutOfStock}
       className={cn(
         'flex flex-col items-center justify-center p-2.5 rounded-xl border border-border/50 bg-card text-center shadow-xs',
         'lg:hover:bg-primary/5 lg:hover:border-primary/20 lg:hover:shadow-md lg:hover:-translate-y-0.5 transition-all duration-200',
         'focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1',
         'touch-manipulation min-h-22.5',
-        isOutOfStock && 'opacity-50 grayscale cursor-not-allowed lg:hover:bg-card lg:hover:border-border/50 lg:hover:shadow-xs lg:hover:translate-y-0'
+        isOutOfStock && 'border-red-200/50 dark:border-red-900/30'
       )}
       aria-label={`${product.name}, ${formatPrice(product.sellingPrice)}`}
     >
       <span className="text-[11px] font-medium line-clamp-2 mb-1.5 leading-tight">{product.name}</span>
       <span className="text-sm font-bold text-primary tracking-tight">{formatPrice(product.sellingPrice)}</span>
-      {isOutOfStock && <span className="text-[9px] text-destructive uppercase font-bold mt-1 tracking-wider">Out</span>}
+      {isOutOfStock && <span className="text-[9px] text-destructive uppercase font-bold mt-1 tracking-wider">Out ({product.currentStock})</span>}
     </button>
   );
 }
