@@ -47,6 +47,7 @@ export interface ProductFormData {
   nameBn?: string;
   barcode?: string;
   category: string;
+  subCategory?: string;
   buyingPrice: number;
   sellingPrice: number;
   unit: string;
@@ -113,6 +114,8 @@ export function ProductDialog({
   const [barcode, setBarcode] = useState('');
   const [category, setCategory] = useState('');
   const [newCategory, setNewCategory] = useState('');
+  const [subCategory, setSubCategory] = useState('');
+  const [newSubCategory, setNewSubCategory] = useState('');
   const [buyingPrice, setBuyingPrice] = useState('');
   const [sellingPrice, setSellingPrice] = useState('');
   const [unit, setUnit] = useState('piece');
@@ -142,7 +145,12 @@ export function ProductDialog({
 
   const { toast } = useToast();
   const categories = useProductsStore((state) => state.categories);
+  const products = useProductsStore((state) => state.products);
   const allCategories = useMemo(() => [...new Set([...DEFAULT_CATEGORIES, ...categories])].sort(), [categories]);
+  const allSubCategories = useMemo(() =>
+    [...new Set(products.map((p) => p.subCategory).filter(Boolean) as string[])].sort(),
+    [products]
+  );
 
   const isEditing = !!product;
 
@@ -154,6 +162,7 @@ export function ProductDialog({
         setNameBn(product.nameBn || '');
         setBarcode(product.barcode || '');
         setCategory(product.category);
+        setSubCategory(product.subCategory || '');
         setBuyingPrice(product.buyingPrice.toString());
         setSellingPrice(product.sellingPrice.toString());
         setUnit(product.unit);
@@ -168,6 +177,8 @@ export function ProductDialog({
         setBarcode('');
         setCategory('');
         setNewCategory('');
+        setSubCategory('');
+        setNewSubCategory('');
         setBuyingPrice('');
         setSellingPrice('');
         setUnit('piece');
@@ -255,6 +266,12 @@ export function ProductDialog({
         nameBn: nameBn || undefined,
         barcode: barcode || undefined,
         category: category === 'new_category_custom_value' ? newCategory.trim() : category,
+        subCategory:
+          subCategory === '__none__' || subCategory === ''
+            ? undefined
+            : subCategory === 'new_subcat_custom_value'
+            ? newSubCategory.trim() || undefined
+            : subCategory.trim() || undefined,
         buyingPrice: bp,
         sellingPrice: sp,
         unit,
@@ -281,6 +298,7 @@ export function ProductDialog({
     nameBn !== (product?.nameBn || '') ||
     barcode !== (product?.barcode || '') ||
     category !== product?.category ||
+    subCategory !== (product?.subCategory || '') ||
     buyingPrice !== product?.buyingPrice.toString() ||
     sellingPrice !== product?.sellingPrice.toString() ||
     unit !== product?.unit ||
@@ -435,6 +453,46 @@ export function ProductDialog({
                   onChange={(e) => setNewCategory(e.target.value)}
                   placeholder={t('new_category_placeholder')}
                   className={cn("h-9 text-sm", showCategoryError ? 'border-destructive focus-visible:ring-destructive' : '')}
+                  autoFocus
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Subcategory */}
+          <div className="space-y-2">
+            <Label htmlFor="product-form-subcategory">{t('subcategory')}</Label>
+            <Select
+              value={subCategory}
+              onValueChange={(val) => {
+                setSubCategory(val);
+                if (val !== 'new_subcat_custom_value') {
+                  setNewSubCategory('');
+                }
+              }}
+            >
+              <SelectTrigger id="product-form-subcategory">
+                <SelectValue placeholder={t('subcategory_placeholder')} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">{t('no_subcategory')}</SelectItem>
+                {allSubCategories.map((sc) => (
+                  <SelectItem key={sc} value={sc}>{sc}</SelectItem>
+                ))}
+                <SelectItem value="new_subcat_custom_value" className="text-primary font-medium">
+                  {t('add_new_subcategory')}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            {subCategory === 'new_subcat_custom_value' && (
+              <div className="animate-in fade-in slide-in-from-top-1 pt-2">
+                <label htmlFor="product-form-newSubCategory" className="sr-only">New subcategory name</label>
+                <Input
+                  id="product-form-newSubCategory"
+                  value={newSubCategory}
+                  onChange={(e) => setNewSubCategory(e.target.value)}
+                  placeholder={t('new_subcategory_placeholder')}
+                  className="h-9 text-sm"
                   autoFocus
                 />
               </div>

@@ -22,6 +22,7 @@ export interface Product {
   name: string;
   nameBn?: string;
   category: string;
+  subCategory?: string | null;
   buyingPrice: number;
   sellingPrice: number;
   unit: string;

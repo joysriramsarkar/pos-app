@@ -9,6 +9,7 @@ export const ProductInputSchema = z.object({
   name: z.string().min(1, 'Product name is required'),
   nameBn: z.string().nullable().optional(),
   category: z.string().min(1, 'Category is required'),
+  subCategory: z.string().nullable().optional(),
   buyingPrice: money().pipe(z.number().min(0, 'Valid buying price is required')),
   sellingPrice: money().pipe(z.number().min(0, 'Valid selling price is required')),
   unit: z.string().default('piece'),

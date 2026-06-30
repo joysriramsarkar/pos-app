@@ -51,6 +51,7 @@ export async function GET(request: NextRequest) {
     
     if (search) {
       where.OR = [
+
         { name: { contains: search, mode: 'insensitive' } },
         { nameBn: { contains: search, mode: 'insensitive' } },
         { barcode: { contains: search, mode: 'insensitive' } },
@@ -123,6 +124,7 @@ export async function POST(request: NextRequest) {
         name: String(validatedData.name).trim(),
         nameBn: validatedData.nameBn ? String(validatedData.nameBn).trim() : null,
         category: String(validatedData.category).trim(),
+        subCategory: validatedData.subCategory ? String(validatedData.subCategory).trim() : null,
         buyingPrice: validatedData.buyingPrice,
         sellingPrice: validatedData.sellingPrice,
         unit: validatedData.unit,
@@ -207,6 +209,7 @@ export async function PUT(request: NextRequest) {
         name: validatedData.name !== undefined ? String(validatedData.name).trim() : undefined,
         nameBn: validatedData.nameBn !== undefined ? (validatedData.nameBn ? String(validatedData.nameBn).trim() : null) : undefined,
         category: validatedData.category !== undefined ? String(validatedData.category).trim() : undefined,
+        subCategory: validatedData.subCategory !== undefined ? (validatedData.subCategory ? String(validatedData.subCategory).trim() : null) : undefined,
         buyingPrice: validatedData.buyingPrice,
         sellingPrice: validatedData.sellingPrice,
         unit: validatedData.unit,

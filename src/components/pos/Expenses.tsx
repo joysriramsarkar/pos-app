@@ -99,13 +99,19 @@ export function Expenses({ onReport }: ExpensesProps) {
   const [newSupplierName, setNewSupplierName] = useState('');
   const [addingSupplier, setAddingSupplier] = useState(false);
   const [supplierSearch, setSupplierSearch] = useState('');
-  const [useCustomDate, setUseCustomDate] = useState(false);
+  const [dateFilterMode, setDateFilterMode] = useState<'today' | 'yesterday' | 'custom'>('today');
   const [customDate, setCustomDate] = useState('');
   const { toast } = useToast();
   const currency = useSettingsStore((s) => s.settings.currency_symbol || '৳');
 
   const today = format(new Date(), 'yyyy-MM-dd');
-  const selectedDate = useCustomDate && customDate ? customDate : today;
+  const yesterday = useMemo(() => format(new Date(Date.now() - 24 * 60 * 60 * 1000), 'yyyy-MM-dd'), []);
+
+  const selectedDate = useMemo(() => {
+    if (dateFilterMode === 'today') return today;
+    if (dateFilterMode === 'yesterday') return yesterday;
+    return customDate || today;
+  }, [dateFilterMode, customDate, today, yesterday]);
 
   const todayExpenses = useMemo(
     () => expenses.filter(e => format(new Date(e.date), 'yyyy-MM-dd') === today),
@@ -117,10 +123,11 @@ export function Expenses({ onReport }: ExpensesProps) {
     [todayExpenses]
   );
 
-  const displayDateLabel = useMemo(
-    () => (useCustomDate && customDate ? format(new Date(customDate), 'dd MMMM yyyy') : format(new Date(), 'dd MMMM yyyy')),
-    [useCustomDate, customDate]
-  );
+  const displayDateLabel = useMemo(() => {
+    if (dateFilterMode === 'today') return format(new Date(), 'dd MMMM yyyy');
+    if (dateFilterMode === 'yesterday') return format(new Date(Date.now() - 24 * 60 * 60 * 1000), 'dd MMMM yyyy');
+    return customDate ? format(new Date(customDate), 'dd MMMM yyyy') : format(new Date(), 'dd MMMM yyyy');
+  }, [dateFilterMode, customDate]);
 
   const EXPENSES_CACHE_TTL = 30 * 60 * 1000;
 
@@ -529,10 +536,10 @@ export function Expenses({ onReport }: ExpensesProps) {
         <div className="flex items-center gap-2">
           <CalendarDays className="h-4 w-4 text-muted-foreground" />
           <Select
-            value={useCustomDate ? 'custom' : 'today'}
-            onValueChange={(v) => {
-              setUseCustomDate(v === 'custom');
-              if (v === 'today') setCustomDate('');
+            value={dateFilterMode}
+            onValueChange={(v: 'today' | 'yesterday' | 'custom') => {
+              setDateFilterMode(v);
+              if (v !== 'custom') setCustomDate('');
             }}
           >
             <SelectTrigger className="w-[140px] h-9">
@@ -540,11 +547,12 @@ export function Expenses({ onReport }: ExpensesProps) {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="today">{tc('today')}</SelectItem>
+              <SelectItem value="yesterday">{tc('yesterday')}</SelectItem>
               <SelectItem value="custom">{tc('custom')}</SelectItem>
             </SelectContent>
           </Select>
         </div>
-        {useCustomDate && (
+        {dateFilterMode === 'custom' && (
           <Input
             type="date"
             value={customDate}
@@ -762,7 +770,7 @@ export function Expenses({ onReport }: ExpensesProps) {
         <Card className="col-span-1 lg:col-span-2 rounded-2xl shadow-sm border border-border/50 flex flex-col min-h-[350px] lg:min-h-0">
           <CardHeader className="pb-3 pt-4 px-4 shrink-0 border-b">
             <CardTitle className="text-base flex items-center gap-2">
-              <Receipt className="w-4 h-4 text-red-500" /> {useCustomDate && customDate ? t('expense_list') : t('today_expense_list')}
+              <Receipt className="w-4 h-4 text-red-500" /> {dateFilterMode !== 'today' ? t('expense_list') : t('today_expense_list')}
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0 flex-1 overflow-y-auto">
@@ -824,7 +832,7 @@ export function Expenses({ onReport }: ExpensesProps) {
                   <TableRow>
                     <TableCell colSpan={5} className="text-center text-muted-foreground py-12">
                       <Receipt className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                      <p className="text-sm">{useCustomDate && customDate ? t('no_expenses_date') : t('no_expenses_today')}</p>
+                      <p className="text-sm">{dateFilterMode !== 'today' ? t('no_expenses_date') : t('no_expenses_today')}</p>
                     </TableCell>
                   </TableRow>
                 )}

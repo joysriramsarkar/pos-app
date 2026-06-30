@@ -35,4 +35,6 @@ export { ProductsReport } from './ProductsReport';
 export { CategoriesReport } from './CategoriesReport';
 export { CustomersReport } from './CustomersReport';
 export { SupplierReport } from './SupplierReport';
+export { DailyProfitCalculator } from './DailyProfitCalculator';
+
 

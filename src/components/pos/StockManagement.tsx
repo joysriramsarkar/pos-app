@@ -726,9 +726,16 @@ export function StockManagement({
                                 {product.barcode}
                               </span>
                             )}
-                            <Badge variant="outline" className="text-[9px] px-1 h-4 mt-1">
-                              {product.category}
-                            </Badge>
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              <Badge variant="outline" className="text-[9px] px-1 h-4">
+                                {product.category}
+                              </Badge>
+                              {product.subCategory && (
+                                <Badge variant="secondary" className="text-[9px] px-1 h-4 font-normal">
+                                  {product.subCategory}
+                                </Badge>
+                              )}
+                            </div>
                           </div>
                           <div className="flex flex-col items-end shrink-0 gap-1">
                             <Badge variant={status.variant} className="text-[10px] h-4.5 px-1.5">
@@ -879,9 +886,16 @@ export function StockManagement({
                             </div>
                           </TableCell>
                           <TableCell>
-                            <Badge variant="outline" className="text-xs">
-                              {product.category}
-                            </Badge>
+                            <div className="flex flex-col gap-1 items-start">
+                              <Badge variant="outline" className="text-xs">
+                                {product.category}
+                              </Badge>
+                              {product.subCategory && (
+                                <Badge variant="secondary" className="text-[10px] font-normal px-1 py-0">
+                                  {product.subCategory}
+                                </Badge>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell className="text-right">{formatPrice(product.buyingPrice)}</TableCell>
                           <TableCell className="text-right font-medium">{formatPrice(product.sellingPrice)}</TableCell>

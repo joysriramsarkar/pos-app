@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Minus, Plus, Trash2, GripVertical } from 'lucide-react';
 import type { CartItem as CartItemType } from '@/types/pos';
-import { useCartStore, useQuantityUsageStore } from '@/stores/pos-store';
+import { useCartStore, useQuantityUsageStore, useProductsStore } from '@/stores/pos-store';
 import { cn, convertBengaliToEnglishNumerals } from '@/lib/utils';
 import Decimal from 'decimal.js';
 import { useNumberFormat } from '@/hooks/use-number-format';
@@ -118,8 +118,13 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
     }
   };
 
-  const isOverStock = item.quantity > item.availableStock;
-  const isAtStockLimit = item.quantity >= item.availableStock;
+  const storeProduct = useProductsStore((state) =>
+    state.products.find((p) => p.id === item.productId)
+  );
+  const availableStock = storeProduct ? Number(storeProduct.currentStock) : item.availableStock;
+
+  const isOverStock = item.quantity > availableStock;
+  const isAtStockLimit = item.quantity >= availableStock;
 
   const isWeighted = ['kg', 'liter', 'gram', 'ml'].includes(item.unit);
   const productUsage = useQuantityUsageStore((state) => state.usage[item.productId] ?? EMPTY_USAGE);
@@ -257,7 +262,7 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
             {/* Stock Warning */}
             {isOverStock && (
               <Badge variant="destructive" className="text-xs">
-                {t('only_stock', { stock: item.availableStock })}
+                {t('only_stock', { stock: availableStock })}
               </Badge>
             )}
 
@@ -275,57 +280,55 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
         </div>
 
         {/* Quantity/Price Presets Row */}
-        {!isOverStock && (
-          <div className="flex flex-wrap items-center gap-1.5 mt-1.5 pt-1.5 border-t border-dashed border-border/40">
-            <span className="text-[9px] font-medium text-muted-foreground mr-0.5">
-              {isWeighted ? "প্রিসেট টাকা:" : "প্রিসেট পরিমাণ:"}
-            </span>
-            {isWeighted ? (
-              <>
-                {pricePresets.map((price) => (
-                  <button
-                    key={price}
-                    onClick={() => handlePricePreset(price)}
-                    className="h-6 px-1.5 rounded text-[10px] font-medium bg-primary/10 hover:bg-primary/20 text-primary transition-colors touch-manipulation"
-                  >
-                    {currencySymbol}{formatStringNumbers(price)}
-                  </button>
-                ))}
-                <Input
-                  type="number"
-                  placeholder="কাস্টম টাকা"
-                  className="h-6 w-20 text-[10px] px-1.5 py-0 bg-primary/5 border-primary/20 text-primary focus-visible:ring-1 focus-visible:ring-primary/30"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      const val = parseFloat(convertBengaliToEnglishNumerals(e.currentTarget.value));
-                      if (!isNaN(val) && val > 0) {
-                        handlePricePreset(val);
-                        e.currentTarget.blur();
-                      }
-                    }
-                  }}
-                  onBlur={(e) => {
+        <div className="flex flex-wrap items-center gap-1.5 mt-1.5 pt-1.5 border-t border-dashed border-border/40">
+          <span className="text-[9px] font-medium text-muted-foreground mr-0.5">
+            {isWeighted ? "প্রিসেট টাকা:" : "প্রিসেট পরিমাণ:"}
+          </span>
+          {isWeighted ? (
+            <>
+              {pricePresets.map((price) => (
+                <button
+                  key={price}
+                  onClick={() => handlePricePreset(price)}
+                  className="h-6 px-1.5 rounded text-[10px] font-medium bg-primary/10 hover:bg-primary/20 text-primary transition-colors touch-manipulation"
+                >
+                  {currencySymbol}{formatStringNumbers(price)}
+                </button>
+              ))}
+              <Input
+                type="number"
+                placeholder="কাস্টম টাকা"
+                className="h-6 w-20 text-[10px] px-1.5 py-0 bg-primary/5 border-primary/20 text-primary focus-visible:ring-1 focus-visible:ring-primary/30"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
                     const val = parseFloat(convertBengaliToEnglishNumerals(e.currentTarget.value));
                     if (!isNaN(val) && val > 0) {
                       handlePricePreset(val);
-                      e.currentTarget.value = '';
+                      e.currentTarget.blur();
                     }
-                  }}
-                />
-              </>
-            ) : (
-              QUANTITY_PRESETS.map((qty) => (
-                <button
-                  key={qty}
-                  onClick={() => handlePiecePreset(qty)}
-                  className="h-6 px-1.5 rounded text-[10px] font-medium bg-primary/10 hover:bg-primary/20 text-primary transition-colors touch-manipulation"
-                >
-                  {formatStringNumbers(qty)}
-                </button>
-              ))
-            )}
-          </div>
-        )}
+                  }
+                }}
+                onBlur={(e) => {
+                  const val = parseFloat(convertBengaliToEnglishNumerals(e.currentTarget.value));
+                  if (!isNaN(val) && val > 0) {
+                    handlePricePreset(val);
+                    e.currentTarget.value = '';
+                  }
+                }}
+              />
+            </>
+          ) : (
+            QUANTITY_PRESETS.map((qty) => (
+              <button
+                key={qty}
+                onClick={() => handlePiecePreset(qty)}
+                className="h-6 px-1.5 rounded text-[10px] font-medium bg-primary/10 hover:bg-primary/20 text-primary transition-colors touch-manipulation"
+              >
+                {formatStringNumbers(qty)}
+              </button>
+            ))
+          )}
+        </div>
       </div>
     </div>
   );
