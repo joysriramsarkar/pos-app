@@ -8,10 +8,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ArrowLeft, Truck, Download, CalendarDays, Calendar, CalendarRange, ChevronLeft, ChevronRight } from 'lucide-react';
-import { BarChart, Bar, LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { useTranslations } from 'next-intl';
+import { BarChart, Bar, LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
+import { useTranslations, useLocale } from 'next-intl';
 import { useNumberFormat } from '@/hooks/use-number-format';
-import { useSettingsStore } from '@/stores/settings-store';
 import { subDays, addDays, format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 
 type ViewMode = 'daily' | 'weekly' | 'monthly';
@@ -23,9 +23,13 @@ interface SupplierReportProps {
 
 export function SupplierReport({ onBack }: SupplierReportProps) {
   const t = useTranslations('Reports');
+  const locale = useLocale();
+  const isBn = locale === 'bn';
+  const { formatPrice, formatDate, formatNumber, formatStringNumbers, formatCompact } = useNumberFormat();
 
-  const { formatPrice, formatDate, formatNumber, formatStringNumbers } = useNumberFormat();
-  const currencySymbol = useSettingsStore((s) => s.settings.currency_symbol);
+  const supplierChartConfig: ChartConfig = {
+    amount: { label: 'কেনাকাটা', color: 'var(--chart-1)' },
+  };
   
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -161,8 +165,7 @@ export function SupplierReport({ onBack }: SupplierReportProps) {
     setDateTo(format(new Date(), 'yyyy-MM-dd'));
   };
 
-  const yFmt = (v: number) => `${currencySymbol}${v >= 1000 ? formatStringNumbers((v / 1000).toFixed(1)) + 'k' : formatStringNumbers(v)}`;
-  const tooltipStyle = { borderRadius: '8px', fontSize: '12px' };
+
 
   return (
     <div className="flex-1 flex flex-col gap-4 p-4 md:p-6 bg-slate-50/50 overflow-y-auto min-h-0 pb-24 animate-page-enter">
@@ -242,9 +245,9 @@ export function SupplierReport({ onBack }: SupplierReportProps) {
             </div>
           ) : (
             <div className="flex items-center gap-2 flex-wrap">
-              {[7, 30, 90].map((d) => (
+              {[7, 30, 365].map((d) => (
                 <Button key={d} size="sm" variant="outline" className="h-8 text-xs" onClick={() => setRangePreset(d)}>
-                  {formatStringNumbers(d)}d
+                  {d === 365 ? t('yearly') : `${formatStringNumbers(d)}d`}
                 </Button>
               ))}
               <Button
@@ -338,41 +341,70 @@ export function SupplierReport({ onBack }: SupplierReportProps) {
           ) : processedChartData.length === 0 ? (
             <p className="text-center text-muted-foreground text-sm py-12">{t('no_sales_period') || 'No purchases recorded in this period.'}</p>
           ) : (
-            <div className="w-full h-56">
-              <ResponsiveContainer width="100%" height="100%">
-                {chartStyle === 'bar' ? (
-                  <BarChart data={processedChartData} margin={{ top: 10, right: 5, left: -25, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
-                    <XAxis dataKey="date" tick={{ fontSize: 9 }} tickLine={false} axisLine={false} />
-                    <YAxis tickFormatter={yFmt} tick={{ fontSize: 9 }} tickLine={false} axisLine={false} />
-                    <Tooltip formatter={(v: any) => [formatPrice(v)]} contentStyle={tooltipStyle} />
-                    <Bar dataKey="amount" name={t('total_purchases_stock_cost')} fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={25} />
-                  </BarChart>
-                ) : chartStyle === 'line' ? (
-                  <LineChart data={processedChartData} margin={{ top: 10, right: 5, left: -25, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
-                    <XAxis dataKey="date" tick={{ fontSize: 9 }} tickLine={false} axisLine={false} />
-                    <YAxis tickFormatter={yFmt} tick={{ fontSize: 9 }} tickLine={false} axisLine={false} />
-                    <Tooltip formatter={(v: any) => [formatPrice(v)]} contentStyle={tooltipStyle} />
-                    <Line type="monotone" dataKey="amount" name={t('total_purchases_stock_cost')} stroke="#3b82f6" strokeWidth={2} dot={{ r: 2 }} />
-                  </LineChart>
-                ) : (
-                  <AreaChart data={processedChartData} margin={{ top: 10, right: 5, left: -25, bottom: 5 }}>
-                    <defs>
-                      <linearGradient id="colorPurchAmt" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2}/>
-                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
-                    <XAxis dataKey="date" tick={{ fontSize: 9 }} tickLine={false} axisLine={false} />
-                    <YAxis tickFormatter={yFmt} tick={{ fontSize: 9 }} tickLine={false} axisLine={false} />
-                    <Tooltip formatter={(v: any) => [formatPrice(v)]} contentStyle={tooltipStyle} />
-                    <Area type="monotone" dataKey="amount" name={t('total_purchases_stock_cost')} stroke="#3b82f6" fillOpacity={1} fill="url(#colorPurchAmt)" strokeWidth={2} />
-                  </AreaChart>
-                )}
-              </ResponsiveContainer>
-            </div>
+            <ChartContainer config={supplierChartConfig} className="h-[224px] w-full">
+              {chartStyle === 'bar' ? (
+                <BarChart data={processedChartData} margin={{ top: 10, right: 5, left: 0, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="hsl(var(--border) / 0.5)" />
+                  <XAxis dataKey="date" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} tickFormatter={(v) => {
+                    if (viewMode === 'daily') {
+                       const d = new Date(v);
+                       if (!isNaN(d.getTime())) {
+                           // If it's a short range like 7 days, we can show weekday names.
+                           const rangeDays = Math.ceil((new Date(dateTo).getTime() - new Date(dateFrom).getTime()) / (1000 * 3600 * 24));
+                           if (rangeDays <= 7) return d.toLocaleDateString(isBn ? 'bn-BD' : 'en-IN', { weekday: 'short' });
+                           if (rangeDays > 300) return d.toLocaleDateString(isBn ? 'bn-BD' : 'en-IN', { month: 'short', year: '2-digit' });
+                       }
+                    }
+                    return formatStringNumbers(v);
+                  }} />
+                  <YAxis tickFormatter={formatCompact} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} width={55} />
+                  <ChartTooltip content={<ChartTooltipContent formatter={(v) => <span className="font-bold tabular-nums">{formatPrice(Number(v))}</span>} />} />
+                  <Bar dataKey="amount" name="amount" fill="var(--chart-1)" radius={[4, 4, 0, 0]} maxBarSize={25} />
+                </BarChart>
+              ) : chartStyle === 'line' ? (
+                <LineChart data={processedChartData} margin={{ top: 10, right: 5, left: 0, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="hsl(var(--border) / 0.5)" />
+                  <XAxis dataKey="date" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} tickFormatter={(v) => {
+                    if (viewMode === 'daily') {
+                       const d = new Date(v);
+                       if (!isNaN(d.getTime())) {
+                           const rangeDays = Math.ceil((new Date(dateTo).getTime() - new Date(dateFrom).getTime()) / (1000 * 3600 * 24));
+                           if (rangeDays <= 7) return d.toLocaleDateString(isBn ? 'bn-BD' : 'en-IN', { weekday: 'short' });
+                           if (rangeDays > 300) return d.toLocaleDateString(isBn ? 'bn-BD' : 'en-IN', { month: 'short', year: '2-digit' });
+                       }
+                    }
+                    return formatStringNumbers(v);
+                  }} />
+                  <YAxis tickFormatter={formatCompact} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} width={55} />
+                  <ChartTooltip content={<ChartTooltipContent formatter={(v) => <span className="font-bold tabular-nums">{formatPrice(Number(v))}</span>} />} />
+                  <Line type="monotone" dataKey="amount" name="amount" stroke="var(--chart-1)" strokeWidth={2} dot={{ r: 2, fill: 'var(--chart-1)' }} />
+                </LineChart>
+              ) : (
+                <AreaChart data={processedChartData} margin={{ top: 10, right: 5, left: 0, bottom: 5 }}>
+                  <defs>
+                    <linearGradient id="supplierAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="var(--chart-1)" stopOpacity={0.2}/>
+                      <stop offset="95%" stopColor="var(--chart-1)" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="hsl(var(--border) / 0.5)" />
+                  <XAxis dataKey="date" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} tickFormatter={(v) => {
+                    if (viewMode === 'daily') {
+                       const d = new Date(v);
+                       if (!isNaN(d.getTime())) {
+                           const rangeDays = Math.ceil((new Date(dateTo).getTime() - new Date(dateFrom).getTime()) / (1000 * 3600 * 24));
+                           if (rangeDays <= 7) return d.toLocaleDateString(isBn ? 'bn-BD' : 'en-IN', { weekday: 'short' });
+                           if (rangeDays > 300) return d.toLocaleDateString(isBn ? 'bn-BD' : 'en-IN', { month: 'short', year: '2-digit' });
+                       }
+                    }
+                    return formatStringNumbers(v);
+                  }} />
+                  <YAxis tickFormatter={formatCompact} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} width={55} />
+                  <ChartTooltip content={<ChartTooltipContent formatter={(v) => <span className="font-bold tabular-nums">{formatPrice(Number(v))}</span>} />} />
+                  <Area type="monotone" dataKey="amount" name="amount" stroke="var(--chart-1)" fillOpacity={1} fill="url(#supplierAreaGrad)" strokeWidth={2} />
+                </AreaChart>
+              )}
+            </ChartContainer>
           )}
         </CardContent>
       </Card>

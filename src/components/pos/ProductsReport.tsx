@@ -10,10 +10,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, Tag, Download, Search } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
 import { useTranslations } from 'next-intl';
 import { useNumberFormat } from '@/hooks/use-number-format';
-import { useSettingsStore } from '@/stores/settings-store';
 import { subDays, format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 
 type ProductSortField = 'quantity' | 'revenue' | 'profit';
@@ -25,8 +25,13 @@ interface ProductsReportProps {
 
 export function ProductsReport({ onBack }: ProductsReportProps) {
   const t = useTranslations('Reports');
-  const { formatPrice, formatNumber, formatStringNumbers } = useNumberFormat();
-  const currencySymbol = useSettingsStore((s) => s.settings.currency_symbol);
+  const { formatPrice, formatNumber, formatStringNumbers, formatCompact, formatCompactUnit } = useNumberFormat();
+
+  const chartConfig: ChartConfig = {
+    revenue: { label: 'রাজস্ব', color: 'var(--chart-1)' },
+    profit: { label: 'মুনাফা', color: 'var(--chart-2)' },
+    quantity: { label: 'পরিমাণ', color: 'var(--chart-3)' },
+  };
   
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -165,11 +170,7 @@ export function ProductsReport({ onBack }: ProductsReportProps) {
     }
   };
 
-  const yFmt = (v: number) => {
-    if (chartMetric === 'quantity') return formatStringNumbers(v);
-    return `${currencySymbol}${v >= 1000 ? formatStringNumbers((v / 1000).toFixed(1)) + 'k' : formatStringNumbers(v)}`;
-  };
-  const tooltipStyle = { borderRadius: '8px', fontSize: '12px' };
+  // formatCompact used for Y-axis; formatCompactUnit for quantity axis (no currency)
 
   return (
     <div className="flex-1 flex flex-col gap-4 p-4 md:p-6 bg-slate-50/50 overflow-y-auto min-h-0 pb-24 animate-page-enter">
@@ -280,17 +281,53 @@ export function ProductsReport({ onBack }: ProductsReportProps) {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="w-full h-56">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData} margin={{ top: 10, right: 5, left: -25, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
-                  <XAxis dataKey="name" tick={{ fontSize: 9 }} tickLine={false} axisLine={false} />
-                  <YAxis tickFormatter={yFmt} tick={{ fontSize: 9 }} tickLine={false} axisLine={false} />
-                  <Tooltip formatter={(v: number) => [chartMetric === 'quantity' ? formatNumber(v) : formatPrice(v)]} contentStyle={tooltipStyle} />
-                  <Bar dataKey={chartMetric} name={chartMetric.toUpperCase()} fill={chartMetric === 'revenue' ? '#3b82f6' : chartMetric === 'profit' ? '#10b981' : '#f59e0b'} radius={[4, 4, 0, 0]} maxBarSize={25} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+            {/* Horizontal bar chart: names on Y-axis, values extend right — no rotation needed */}
+            <ChartContainer config={chartConfig} className="h-[280px] w-full">
+              <BarChart
+                data={chartData}
+                layout="vertical"
+                margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
+              >
+                <CartesianGrid strokeDasharray="4 4" horizontal={false} stroke="hsl(var(--border) / 0.5)" />
+                <XAxis
+                  type="number"
+                  tickFormatter={chartMetric === 'quantity' ? formatCompactUnit : formatCompact}
+                  tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <YAxis
+                  type="category"
+                  dataKey="name"
+                  tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }}
+                  tickLine={false}
+                  axisLine={false}
+                  width={90}
+                />
+                <ChartTooltip
+                  content={
+                    <ChartTooltipContent
+                      formatter={(value) => (
+                        <span className="font-bold tabular-nums">
+                          {chartMetric === 'quantity' ? formatNumber(Number(value)) : formatPrice(Number(value))}
+                        </span>
+                      )}
+                    />
+                  }
+                />
+                <Bar
+                  dataKey={chartMetric}
+                  name={chartMetric}
+                  fill={
+                    chartMetric === 'revenue' ? 'var(--chart-1)'
+                    : chartMetric === 'profit' ? 'var(--chart-2)'
+                    : 'var(--chart-3)'
+                  }
+                  radius={[0, 4, 4, 0]}
+                  maxBarSize={18}
+                />
+              </BarChart>
+            </ChartContainer>
           </CardContent>
         </Card>
       )}

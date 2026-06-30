@@ -4,18 +4,20 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, TrendingUp, TrendingDown, DollarSign, CalendarDays, Calendar, CalendarRange, ChevronLeft, ChevronRight, Download, BarChart2 } from 'lucide-react';
-import { format, startOfMonth, endOfMonth, startOfWeek, subDays, addDays, subMonths, getWeek, getYear } from 'date-fns';
+import { ArrowLeft, TrendingUp, TrendingDown, DollarSign, CalendarDays, Calendar, CalendarRange, ChevronLeft, ChevronRight, Download, BarChart2, GitCompare } from 'lucide-react';
+import { format, startOfMonth, endOfMonth, subDays, addDays, subMonths } from 'date-fns';
 import {
   BarChart, Bar, LineChart, Line, AreaChart, Area,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
+  XAxis, YAxis, CartesianGrid, ReferenceLine
 } from 'recharts';
+import {
+  ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent,
+  type ChartConfig,
+} from '@/components/ui/chart';
 import { useTranslations } from 'next-intl';
 import { useNumberFormat } from '@/hooks/use-number-format';
-import { useSettingsStore } from '@/stores/settings-store';
 
 type ViewMode = 'daily' | 'weekly' | 'monthly';
 type ChartStyle = 'bar' | 'line' | 'area';
@@ -24,31 +26,58 @@ interface SalesReportProps {
   onBack: () => void;
 }
 
+const chartConfig = {
+  revenue: { label: 'রাজস্ব', color: 'var(--chart-1)' },
+  profit: { label: 'মুনাফা', color: 'var(--chart-2)' },
+  prevRevenue: { label: 'পূর্ববর্তী পিরিয়ড', color: 'var(--chart-4)' },
+} satisfies ChartConfig;
+
+// Animated chart skeleton
+function ChartSkeleton({ height = 260 }: { height?: number }) {
+  return (
+    <div className="w-full animate-pulse" style={{ height }}>
+      <div className="h-full rounded-lg bg-muted/50 relative overflow-hidden">
+        <div className="absolute inset-0 flex items-end justify-around px-4 pb-4 gap-2">
+          {Array.from({ length: 12 }).map((_, i) => (
+            <div
+              key={i}
+              className="flex-1 rounded-t-sm bg-muted"
+              style={{ height: `${30 + Math.sin(i * 0.8) * 25 + Math.random() * 20}%`, opacity: 0.6 + i * 0.03 }}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function SalesReport({ onBack }: SalesReportProps) {
   const t = useTranslations('Reports');
-  const { formatPrice, formatDate, formatNumber, formatStringNumbers } = useNumberFormat();
-  const currencySymbol = useSettingsStore((s) => s.settings.currency_symbol);
-  
+  const { formatPrice, formatDate, formatNumber, formatStringNumbers, formatCompact } = useNumberFormat();
+
   const [data, setData] = useState<any[]>([]);
+  const [prevData, setPrevData] = useState<any[]>([]);
   const [summary, setSummary] = useState<any>(null);
   const [loading, setLoading] = useState(false);
-  
+  const [showComparison, setShowComparison] = useState(false);
+
   const [viewMode, setViewMode] = useState<ViewMode>('daily');
   const [chartStyle, setChartStyle] = useState<ChartStyle>('bar');
-  
+
   // Date states
   const [singleDate, setSingleDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [dateFrom, setDateFrom] = useState(format(subDays(new Date(), 29), 'yyyy-MM-dd'));
   const [dateTo, setDateTo] = useState(format(new Date(), 'yyyy-MM-dd'));
-  
+
   const fetchFrom = viewMode === 'daily' ? singleDate : dateFrom;
   const fetchTo = viewMode === 'daily' ? singleDate : dateTo;
-  
+
   useEffect(() => {
     setLoading(true);
     const hourlyParam = viewMode === 'daily' ? '&hourly=true' : '';
-    const url = `/api/reports/sales?from=${fetchFrom}&to=${fetchTo}${hourlyParam}&tzOffset=${new Date().getTimezoneOffset()}`;
-    
+    const compareParam = showComparison && viewMode !== 'daily' ? '&compare=true' : '';
+    const url = `/api/reports/sales?from=${fetchFrom}&to=${fetchTo}${hourlyParam}${compareParam}&tzOffset=${new Date().getTimezoneOffset()}`;
+
     const controller = new AbortController();
     fetch(url, { signal: controller.signal })
       .then((r) => (r.ok ? r.json() : null))
@@ -56,30 +85,31 @@ export function SalesReport({ onBack }: SalesReportProps) {
         if (res) {
           setData(res.chartData ?? []);
           setSummary(res.summary);
+          setPrevData(res.prevChartData ?? []);
         }
       })
       .catch((err) => {
         if (err.name !== 'AbortError') console.error(err);
       })
       .finally(() => setLoading(false));
-      
+
     return () => controller.abort();
-  }, [fetchFrom, fetchTo, viewMode]);
+  }, [fetchFrom, fetchTo, viewMode, showComparison]);
 
   // Aggregate based on viewMode if not daily (daily is retrieved hourly or already processed)
   const processedChartData = useMemo(() => {
     if (viewMode === 'daily') {
       return data;
     }
-    
+
     // Group weekly or monthly
     const map: Record<string, { label: string; revenue: number; profit: number; count: number; ts: number }> = {};
-    
+
     data.forEach((e) => {
       const d = new Date(e.date);
       let k = '';
       let ts = 0;
-      
+
       if (viewMode === 'weekly') {
         const dayIndex = d.getDay();
         const daysMap = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
@@ -104,7 +134,7 @@ export function SalesReport({ onBack }: SalesReportProps) {
           ts = 5;
         }
       }
-      
+
       if (!map[k]) {
         map[k] = { label: k, revenue: 0, profit: 0, count: 0, ts };
       }
@@ -112,7 +142,7 @@ export function SalesReport({ onBack }: SalesReportProps) {
       map[k].profit += Number(e.profit || 0);
       map[k].count += Number(e.count || 0);
     });
-    
+
     return Object.values(map)
       .sort((a, b) => a.ts - b.ts)
       .map(({ label, revenue, profit, count }) => ({
@@ -122,6 +152,15 @@ export function SalesReport({ onBack }: SalesReportProps) {
         count
       }));
   }, [data, viewMode, t]);
+
+  // Merge prevRevenue into processedChartData for overlay
+  const chartDataWithComparison = useMemo(() => {
+    if (!showComparison || !prevData.length || viewMode === 'daily') return processedChartData;
+    return processedChartData.map((d, i) => ({
+      ...d,
+      prevRevenue: prevData[i]?.prevRevenue ?? 0,
+    }));
+  }, [processedChartData, prevData, showComparison, viewMode]);
 
   const totalRevenue = useMemo(() => {
     return processedChartData.reduce((s, e) => s + (e.revenue || 0), 0);
@@ -156,7 +195,7 @@ export function SalesReport({ onBack }: SalesReportProps) {
       ]),
       ['Total', totalRevenue.toFixed(2), totalProfit.toFixed(2), totalCount]
     ];
-    
+
     const csv = rows.map((r: any[]) => r.map((v: any) => `"${v}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -172,11 +211,131 @@ export function SalesReport({ onBack }: SalesReportProps) {
     setDateTo(format(new Date(), 'yyyy-MM-dd'));
   };
 
-  const yFmt = (v: number) => `${currencySymbol}${v >= 1000 ? formatStringNumbers((v / 1000).toFixed(1)) + 'k' : formatStringNumbers(v)}`;
-  const tooltipStyle = { borderRadius: '8px', fontSize: '12px' };
+  const avgRevenue = processedChartData.length > 0
+    ? processedChartData.reduce((s, d) => s + d.revenue, 0) / processedChartData.length
+    : 0;
+
+  const renderChart = () => {
+    const commonProps = {
+      data: chartDataWithComparison,
+      margin: { top: 10, right: 5, left: 0, bottom: 5 },
+    };
+
+    const commonAxes = (
+      <>
+        <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="hsl(var(--border) / 0.5)" />
+        <XAxis
+          dataKey="date"
+          tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+          tickLine={false}
+          axisLine={false}
+          tickFormatter={formatStringNumbers}
+        />
+        <YAxis
+          tickFormatter={formatCompact}
+          tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+          tickLine={false}
+          axisLine={false}
+          width={55}
+        />
+        <ChartTooltip
+          content={
+            <ChartTooltipContent
+              formatter={(value, name) => (
+                <div className="flex items-center justify-between gap-4 min-w-[160px]">
+                  <span className="text-muted-foreground text-xs">
+                    {name === 'revenue' ? t('total_revenue')
+                      : name === 'profit' ? t('net_profit')
+                      : t('prev_period') || 'Prev Period'}
+                  </span>
+                  <span className="font-bold text-foreground tabular-nums">
+                    {formatPrice(Number(value))}
+                  </span>
+                </div>
+              )}
+            />
+          }
+        />
+        <ChartLegend content={<ChartLegendContent />} />
+        {avgRevenue > 0 && viewMode !== 'daily' && (
+          <ReferenceLine
+            y={Math.round(avgRevenue)}
+            stroke="var(--chart-1)"
+            strokeOpacity={0.4}
+            strokeDasharray="6 3"
+            strokeWidth={1.5}
+            label={{
+              value: 'গড়',
+              position: 'right',
+              fill: 'hsl(var(--muted-foreground))',
+              fontSize: 10,
+            }}
+          />
+        )}
+      </>
+    );
+
+    if (chartStyle === 'bar') {
+      return (
+        <BarChart {...commonProps}>
+          <defs>
+            <linearGradient id="sr-revGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={1} />
+              <stop offset="100%" stopColor="var(--chart-1)" stopOpacity={0.7} />
+            </linearGradient>
+            <linearGradient id="sr-profGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="var(--chart-2)" stopOpacity={1} />
+              <stop offset="100%" stopColor="var(--chart-2)" stopOpacity={0.7} />
+            </linearGradient>
+          </defs>
+          {commonAxes}
+          <Bar dataKey="revenue" name="revenue" fill="url(#sr-revGrad)" radius={[4, 4, 0, 0]} maxBarSize={28} />
+          <Bar dataKey="profit" name="profit" fill="url(#sr-profGrad)" radius={[4, 4, 0, 0]} maxBarSize={28} />
+          {showComparison && viewMode !== 'daily' && (
+            <Bar dataKey="prevRevenue" name="prevRevenue" fill="var(--chart-4)" fillOpacity={0.4} radius={[4, 4, 0, 0]} maxBarSize={28} />
+          )}
+        </BarChart>
+      );
+    }
+
+    if (chartStyle === 'line') {
+      return (
+        <LineChart {...commonProps}>
+          {commonAxes}
+          <Line type="monotone" dataKey="revenue" name="revenue" stroke="var(--chart-1)" strokeWidth={2.5} dot={{ r: 2, fill: 'var(--chart-1)' }} />
+          <Line type="monotone" dataKey="profit" name="profit" stroke="var(--chart-2)" strokeWidth={2.5} dot={{ r: 2, fill: 'var(--chart-2)' }} />
+          {showComparison && viewMode !== 'daily' && (
+            <Line type="monotone" dataKey="prevRevenue" name="prevRevenue" stroke="var(--chart-4)" strokeWidth={1.5} strokeDasharray="5 3" dot={false} />
+          )}
+        </LineChart>
+      );
+    }
+
+    // area
+    return (
+      <AreaChart {...commonProps}>
+        <defs>
+          <linearGradient id="sr-areaRev" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="5%" stopColor="var(--chart-1)" stopOpacity={0.2} />
+            <stop offset="95%" stopColor="var(--chart-1)" stopOpacity={0} />
+          </linearGradient>
+          <linearGradient id="sr-areaProf" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="5%" stopColor="var(--chart-2)" stopOpacity={0.2} />
+            <stop offset="95%" stopColor="var(--chart-2)" stopOpacity={0} />
+          </linearGradient>
+        </defs>
+        {commonAxes}
+        <Area type="monotone" dataKey="revenue" name="revenue" stroke="var(--chart-1)" fill="url(#sr-areaRev)" strokeWidth={2} />
+        <Area type="monotone" dataKey="profit" name="profit" stroke="var(--chart-2)" fill="url(#sr-areaProf)" strokeWidth={2} />
+        {showComparison && viewMode !== 'daily' && (
+          <Area type="monotone" dataKey="prevRevenue" name="prevRevenue" stroke="var(--chart-4)" fill="none" strokeWidth={1.5} strokeDasharray="5 3" />
+        )}
+      </AreaChart>
+    );
+  };
 
   return (
-    <div className="flex-1 flex flex-col gap-4 p-4 md:p-6 bg-slate-50/50 overflow-y-auto min-h-0 pb-24 animate-page-enter">
+    <div className="flex-1 flex flex-col gap-4 p-4 md:p-6 bg-slate-50/50 dark:bg-background overflow-y-auto min-h-0 pb-24 animate-page-enter">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-3">
@@ -319,7 +478,7 @@ export function SalesReport({ onBack }: SalesReportProps) {
           </CardContent>
         </Card>
 
-        <Card className="rounded-2xl shadow-sm bg-amber-50/50 dark:bg-amber-950/10 border-amber-100 dark:border-amber-900/30 grid-col-span-2 lg:grid-col-span-1">
+        <Card className="rounded-2xl shadow-sm bg-amber-50/50 dark:bg-amber-950/10 border-amber-100 dark:border-amber-900/30">
           <CardContent className="p-3.5 flex flex-col justify-between h-full">
             <p className="text-[10px] uppercase font-bold text-amber-600 tracking-wider">{t('margin')}</p>
             <p className="text-lg md:text-xl font-extrabold text-amber-700 mt-1">{formatNumber(Number(profitMargin.toFixed(1)))}%</p>
@@ -331,71 +490,43 @@ export function SalesReport({ onBack }: SalesReportProps) {
       <Card className="rounded-2xl shadow-sm">
         <CardHeader className="pb-2 flex flex-row items-center justify-between flex-wrap gap-2">
           <CardTitle className="text-sm font-semibold">{t('sales_trend')}</CardTitle>
-          <div className="flex gap-1 bg-muted p-0.5 rounded-lg">
-            {(['bar', 'line', 'area'] as ChartStyle[]).map((style) => (
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Period comparison toggle — only available for non-daily views */}
+            {viewMode !== 'daily' && (
               <Button
-                key={style}
                 size="sm"
-                variant={chartStyle === style ? 'default' : 'ghost'}
-                className="h-7 text-[10px] px-2.5 rounded-md"
-                onClick={() => setChartStyle(style)}
+                variant={showComparison ? 'default' : 'outline'}
+                className="h-7 text-[10px] px-2.5 rounded-md gap-1"
+                onClick={() => setShowComparison((v) => !v)}
               >
-                {style.toUpperCase()}
+                <GitCompare className="w-3 h-3" />
+                {t('compare_prev') || 'Prev Period'}
               </Button>
-            ))}
+            )}
+            <div className="flex gap-1 bg-muted p-0.5 rounded-lg">
+              {(['bar', 'line', 'area'] as ChartStyle[]).map((style) => (
+                <Button
+                  key={style}
+                  size="sm"
+                  variant={chartStyle === style ? 'default' : 'ghost'}
+                  className="h-7 text-[10px] px-2.5 rounded-md"
+                  onClick={() => setChartStyle(style)}
+                >
+                  {style.toUpperCase()}
+                </Button>
+              ))}
+            </div>
           </div>
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="h-60 w-full flex items-center justify-center">
-              <p className="text-muted-foreground text-xs">{t('loading')}</p>
-            </div>
+            <ChartSkeleton height={260} />
           ) : processedChartData.length === 0 ? (
             <p className="text-center text-muted-foreground text-sm py-12">{t('no_sales_data')}</p>
           ) : (
-            <ResponsiveContainer width="100%" height={260}>
-              {chartStyle === 'bar' ? (
-                <BarChart data={processedChartData} margin={{ top: 10, right: 5, left: -20, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
-                  <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-                  <YAxis tickFormatter={yFmt} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-                  <Tooltip formatter={(v: any) => [formatPrice(v)]} contentStyle={tooltipStyle} />
-                  <Legend wrapperStyle={{ fontSize: '11px', marginTop: '10px' }} />
-                  <Bar dataKey="revenue" name={t('total_revenue')} fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={30} />
-                  <Bar dataKey="profit" name={t('net_profit')} fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={30} />
-                </BarChart>
-              ) : chartStyle === 'line' ? (
-                <LineChart data={processedChartData} margin={{ top: 10, right: 5, left: -20, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
-                  <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-                  <YAxis tickFormatter={yFmt} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-                  <Tooltip formatter={(v: any) => [formatPrice(v)]} contentStyle={tooltipStyle} />
-                  <Legend wrapperStyle={{ fontSize: '11px', marginTop: '10px' }} />
-                  <Line type="monotone" dataKey="revenue" name={t('total_revenue')} stroke="#3b82f6" strokeWidth={2.5} dot={{ r: 2 }} />
-                  <Line type="monotone" dataKey="profit" name={t('net_profit')} stroke="#10b981" strokeWidth={2.5} dot={{ r: 2 }} />
-                </LineChart>
-              ) : (
-                <AreaChart data={processedChartData} margin={{ top: 10, right: 5, left: -20, bottom: 5 }}>
-                  <defs>
-                    <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2}/>
-                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
-                    </linearGradient>
-                    <linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>
-                      <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
-                  <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-                  <YAxis tickFormatter={yFmt} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-                  <Tooltip formatter={(v: any) => [formatPrice(v)]} contentStyle={tooltipStyle} />
-                  <Legend wrapperStyle={{ fontSize: '11px', marginTop: '10px' }} />
-                  <Area type="monotone" dataKey="revenue" name={t('total_revenue')} stroke="#3b82f6" fillOpacity={1} fill="url(#colorRevenue)" strokeWidth={2} />
-                  <Area type="monotone" dataKey="profit" name={t('net_profit')} stroke="#10b981" fillOpacity={1} fill="url(#colorProfit)" strokeWidth={2} />
-                </AreaChart>
-              )}
-            </ResponsiveContainer>
+            <ChartContainer config={chartConfig} className="h-[260px] w-full">
+              {renderChart()}
+            </ChartContainer>
           )}
         </CardContent>
       </Card>
@@ -430,7 +561,7 @@ export function SalesReport({ onBack }: SalesReportProps) {
                   const margin = row.revenue > 0 ? (row.profit / row.revenue) * 100 : 0;
                   return (
                     <TableRow key={row.date} className="hover:bg-muted/30">
-                      <TableCell className="text-xs font-medium">{row.date}</TableCell>
+                      <TableCell className="text-xs font-medium">{formatStringNumbers(row.date)}</TableCell>
                       <TableCell className="text-right text-xs">{formatNumber(row.count)}</TableCell>
                       <TableCell className="text-right text-xs font-semibold">{formatPrice(row.revenue)}</TableCell>
                       <TableCell className="text-right text-xs font-medium text-emerald-600 dark:text-emerald-400">{formatPrice(row.profit)}</TableCell>

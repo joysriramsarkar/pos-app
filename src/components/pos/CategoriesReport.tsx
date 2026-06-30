@@ -6,13 +6,38 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ArrowLeft, Tag, Download } from 'lucide-react';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent, type ChartConfig } from '@/components/ui/chart';
 import { useTranslations } from 'next-intl';
 import { useNumberFormat } from '@/hooks/use-number-format';
-import { useSettingsStore } from '@/stores/settings-store';
 import { subDays, format } from 'date-fns';
 
-const CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#ec4899', '#14b8a6', '#f97316'];
+// CSS token colors — auto-switch light/dark
+const CHART_COLORS = [
+  'var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)',
+  'var(--chart-4)', 'var(--chart-5)', 'var(--chart-1)',
+  'var(--chart-2)', 'var(--chart-3)'
+];
+
+const pieChartConfig: ChartConfig = {
+  revenue: { label: 'রাজস্ব', color: 'var(--chart-1)' },
+};
+
+const barChartConfig: ChartConfig = {
+  profit: { label: 'মুনাফা', color: 'var(--chart-2)' },
+};
+
+function ChartSkeleton({ height = 192 }: { height?: number }) {
+  return (
+    <div className="w-full animate-pulse" style={{ height }}>
+      <div className="h-full rounded-lg bg-muted/50 flex items-end justify-around px-3 pb-3 gap-1.5">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div key={i} className="flex-1 rounded-t-sm bg-muted" style={{ height: `${40 + Math.sin(i) * 25}%` }} />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 interface CategoriesReportProps {
   onBack: () => void;
@@ -20,8 +45,7 @@ interface CategoriesReportProps {
 
 export function CategoriesReport({ onBack }: CategoriesReportProps) {
   const t = useTranslations('Reports');
-  const { formatPrice, formatNumber, formatStringNumbers } = useNumberFormat();
-  const currencySymbol = useSettingsStore((s) => s.settings.currency_symbol);
+  const { formatPrice, formatNumber, formatStringNumbers, formatCompact } = useNumberFormat();
   
   const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -131,8 +155,7 @@ export function CategoriesReport({ onBack }: CategoriesReportProps) {
     }
   };
 
-  const yFmt = (v: number) => `${currencySymbol}${v >= 1000 ? formatStringNumbers((v / 1000).toFixed(1)) + 'k' : formatStringNumbers(v)}`;
-  const tooltipStyle = { borderRadius: '8px', fontSize: '12px' };
+
 
   return (
     <div className="flex-1 flex flex-col gap-4 p-4 md:p-6 bg-slate-50/50 overflow-y-auto min-h-0 pb-24 animate-page-enter">
@@ -235,19 +258,21 @@ export function CategoriesReport({ onBack }: CategoriesReportProps) {
             ) : pieData.length === 0 ? (
               <p className="text-center text-muted-foreground text-sm py-12">{t('no_data')}</p>
             ) : (
-              <div className="w-full h-48">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={65}>
-                      {pieData.map((_, i) => (
-                        <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={(v: number) => formatPrice(v)} contentStyle={tooltipStyle} />
-                    <Legend wrapperStyle={{ fontSize: '9px' }} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
+              <ChartContainer config={pieChartConfig} className="h-[192px] w-full">
+                <PieChart>
+                  <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70}>
+                    {pieData.map((_, i) => (
+                      <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <ChartTooltip
+                    content={<ChartTooltipContent formatter={(v) => (
+                      <span className="font-bold tabular-nums">{formatPrice(Number(v))}</span>
+                    )} />}
+                  />
+                  <ChartLegend content={<ChartLegendContent />} />
+                </PieChart>
+              </ChartContainer>
             )}
           </CardContent>
         </Card>
@@ -263,17 +288,19 @@ export function CategoriesReport({ onBack }: CategoriesReportProps) {
             ) : barData.length === 0 ? (
               <p className="text-center text-muted-foreground text-sm py-12">{t('no_data')}</p>
             ) : (
-              <div className="w-full h-48">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={barData} margin={{ top: 10, right: 5, left: -25, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
-                    <XAxis dataKey="name" tick={{ fontSize: 9 }} tickLine={false} axisLine={false} />
-                    <YAxis tickFormatter={yFmt} tick={{ fontSize: 9 }} tickLine={false} axisLine={false} />
-                    <Tooltip formatter={(v: number) => formatPrice(v)} contentStyle={tooltipStyle} />
-                    <Bar dataKey="profit" name="Net Profit" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={25} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+              <ChartContainer config={barChartConfig} className="h-[192px] w-full">
+                <BarChart data={barData} layout="vertical" margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="4 4" horizontal={false} stroke="hsl(var(--border) / 0.5)" />
+                  <XAxis type="number" tickFormatter={formatCompact} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} />
+                  <YAxis type="category" dataKey="name" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} width={70} />
+                  <ChartTooltip
+                    content={<ChartTooltipContent formatter={(v) => (
+                      <span className="font-bold tabular-nums">{formatPrice(Number(v))}</span>
+                    )} />}
+                  />
+                  <Bar dataKey="profit" name="profit" fill="var(--chart-2)" radius={[0, 4, 4, 0]} maxBarSize={18} />
+                </BarChart>
+              </ChartContainer>
             )}
           </CardContent>
         </Card>

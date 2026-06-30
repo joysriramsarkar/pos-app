@@ -8,10 +8,10 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, Users, Download, Search, ChevronRight } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
 import { useTranslations } from 'next-intl';
 import { useNumberFormat } from '@/hooks/use-number-format';
-import { useSettingsStore } from '@/stores/settings-store';
 import { subDays, format } from 'date-fns';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
@@ -21,8 +21,11 @@ interface CustomersReportProps {
 
 export function CustomersReport({ onBack }: CustomersReportProps) {
   const t = useTranslations('Reports');
-  const { formatPrice, formatDate, formatNumber, formatStringNumbers } = useNumberFormat();
-  const currencySymbol = useSettingsStore((s) => s.settings.currency_symbol);
+  const { formatPrice, formatDate, formatNumber, formatStringNumbers, formatCompact } = useNumberFormat();
+
+  const customerChartConfig: ChartConfig = {
+    spent: { label: 'খরচ', color: 'var(--chart-1)' },
+  };
   
   const [customers, setCustomers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -165,8 +168,7 @@ export function CustomersReport({ onBack }: CustomersReportProps) {
     setSelectedCustomerPhone(c.phone || 'N/A');
   };
 
-  const yFmt = (v: number) => `${currencySymbol}${v >= 1000 ? formatStringNumbers((v / 1000).toFixed(1)) + 'k' : formatStringNumbers(v)}`;
-  const tooltipStyle = { borderRadius: '8px', fontSize: '12px' };
+
 
   return (
     <div className="flex-1 flex flex-col gap-4 p-4 md:p-6 bg-slate-50/50 overflow-y-auto min-h-0 pb-24 animate-page-enter">
@@ -263,17 +265,15 @@ export function CustomersReport({ onBack }: CustomersReportProps) {
             <CardTitle className="text-sm font-semibold">Top 10 Customers Spend Comparison</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="w-full h-52">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData} margin={{ top: 10, right: 5, left: -25, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
-                  <XAxis dataKey="name" tick={{ fontSize: 9 }} tickLine={false} axisLine={false} />
-                  <YAxis tickFormatter={yFmt} tick={{ fontSize: 9 }} tickLine={false} axisLine={false} />
-                  <Tooltip formatter={(v: number) => formatPrice(v)} contentStyle={tooltipStyle} />
-                  <Bar dataKey="spent" name="Spent Amount" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={25} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+            <ChartContainer config={customerChartConfig} className="h-[220px] w-full">
+              <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="4 4" horizontal={false} stroke="hsl(var(--border) / 0.5)" />
+                <XAxis type="number" tickFormatter={formatCompact} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} width={80} />
+                <ChartTooltip content={<ChartTooltipContent formatter={(v) => <span className="font-bold tabular-nums">{formatPrice(Number(v))}</span>} />} />
+                <Bar dataKey="spent" name="spent" fill="var(--chart-1)" radius={[0, 4, 4, 0]} maxBarSize={18} />
+              </BarChart>
+            </ChartContainer>
           </CardContent>
         </Card>
       )}

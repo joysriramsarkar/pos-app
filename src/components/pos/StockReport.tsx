@@ -11,10 +11,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, Package, Download, Search, AlertTriangle, CheckCircle, HelpCircle } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
 import { useTranslations } from 'next-intl';
 import { useNumberFormat } from '@/hooks/use-number-format';
-import { useSettingsStore } from '@/stores/settings-store';
 
 type StockFilterStatus = 'All' | 'Low' | 'Out' | 'In';
 
@@ -25,8 +25,12 @@ interface StockReportProps {
 export function StockReport({ onBack }: StockReportProps) {
   const t = useTranslations('Reports');
   const tStock = useTranslations('Stock');
-  const { formatPrice, formatNumber, formatStringNumbers } = useNumberFormat();
-  const currencySymbol = useSettingsStore((s) => s.settings.currency_symbol);
+  const { formatPrice, formatNumber, formatStringNumbers, formatCompactUnit } = useNumberFormat();
+
+  const stockChartConfig: ChartConfig = {
+    stock: { label: 'বর্তমান স্টক', color: 'var(--chart-5)' },
+    minLevel: { label: 'ন্যূনতম স্তর', color: 'hsl(var(--muted-foreground))' },
+  };
   
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -200,7 +204,7 @@ export function StockReport({ onBack }: StockReportProps) {
     URL.revokeObjectURL(url);
   };
 
-  const tooltipStyle = { borderRadius: '8px', fontSize: '12px' };
+
 
   return (
     <div className="flex-1 flex flex-col gap-4 p-4 md:p-6 bg-slate-50/50 overflow-y-auto min-h-0 pb-24 animate-page-enter">
@@ -270,18 +274,17 @@ export function StockReport({ onBack }: StockReportProps) {
             <CardTitle className="text-sm font-semibold">{t('critical_stock')}</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="w-full h-52">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={lowestStockChartData} margin={{ top: 10, right: 5, left: -25, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
-                  <XAxis dataKey="name" tick={{ fontSize: 9 }} tickLine={false} axisLine={false} />
-                  <YAxis tick={{ fontSize: 9 }} tickLine={false} axisLine={false} />
-                  <Tooltip contentStyle={tooltipStyle} />
-                  <Bar dataKey="stock" name={t('current_stock_bar')} fill="#ef4444" radius={[4, 4, 0, 0]} maxBarSize={20} />
-                  <Bar dataKey="minLevel" name={t('min_level_bar')} fill="#94a3b8" radius={[4, 4, 0, 0]} maxBarSize={20} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+            {/* Horizontal bars: product names on left, qty extends right — readable on mobile */}
+            <ChartContainer config={stockChartConfig} className="h-[240px] w-full">
+              <BarChart data={lowestStockChartData} layout="vertical" margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="4 4" horizontal={false} stroke="hsl(var(--border) / 0.5)" />
+                <XAxis type="number" tickFormatter={formatCompactUnit} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} width={85} />
+                <ChartTooltip content={<ChartTooltipContent formatter={(v) => <span className="font-bold tabular-nums">{formatNumber(Number(v))}</span>} />} />
+                <Bar dataKey="stock" name="stock" fill="var(--chart-5)" radius={[0, 4, 4, 0]} maxBarSize={14} />
+                <Bar dataKey="minLevel" name="minLevel" fill="hsl(var(--muted-foreground) / 0.4)" radius={[0, 4, 4, 0]} maxBarSize={14} />
+              </BarChart>
+            </ChartContainer>
           </CardContent>
         </Card>
       )}

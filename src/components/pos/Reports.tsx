@@ -33,6 +33,8 @@ import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip as RechartsTooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell
 } from 'recharts';
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -53,9 +55,24 @@ import { useTranslations } from 'next-intl';
 import { useNumberFormat } from '@/hooks/use-number-format';
 
 type ChartType = 'bar' | 'line';
-type DatePreset = '1' | '7' | '30' | '90' | 'custom';
+type DatePreset = '1' | '7' | '30' | '365' | 'custom';
 
-const PAYMENT_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
+const PAYMENT_COLORS = [
+  'var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)',
+  'var(--chart-5)', 'var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)'
+];
+
+const salesChartConfig = {
+  revenue: { label: "Revenue", color: "var(--chart-1)" },
+  profit: { label: "Profit", color: "var(--chart-2)" }
+};
+
+const paymentChartConfig = {
+  "Cash": { label: "Cash", color: "var(--chart-1)" },
+  "Card": { label: "Card", color: "var(--chart-2)" },
+  "UPI": { label: "UPI", color: "var(--chart-3)" },
+  "Others": { label: "Others", color: "var(--chart-4)" }
+};
 
 function mergeSmallSlices(data: { name: string; value: number }[], threshold = 0.04) {
   const total = data.reduce((s, d) => s + d.value, 0);
@@ -67,7 +84,7 @@ function mergeSmallSlices(data: { name: string; value: number }[], threshold = 0
 
 const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate }) => {
   const t = useTranslations('Reports');
-  const { formatNumber, formatPrice } = useNumberFormat();
+  const { formatNumber, formatPrice, formatCompact, formatStringNumbers, isBn } = useNumberFormat();
   const [salesData, setSalesData] = useState<SaleChartPoint[]>([]);
   const [summaryData, setSummaryData] = useState<SummaryData | null>(null);
   const [stockData, setStockData] = useState<StockItem[]>([]);
@@ -324,7 +341,7 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
 
   const DateFilter = (
     <div className="flex flex-wrap items-end gap-2 shrink-0">
-      {(['1', '7', '30', '90'] as DatePreset[]).map(p => (
+      {(['1', '7', '30', '365'] as DatePreset[]).map(p => (
         <Button
           key={p}
           size="sm"
@@ -332,7 +349,7 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
           className="min-h-9 text-xs"
           onClick={() => setPreset(p)}
         >
-          {p === '1' ? t('today') : `${p}d`}
+          {p === '1' ? t('today') : p === '7' ? t('days_7') : p === '30' ? t('days_30') : t('yearly')}
         </Button>
       ))}
       <Button
@@ -504,33 +521,81 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
               <CardContent>
                 <div className="w-full h-64 md:h-80">
                   {isLoading ? (
-                    <div className="w-full h-full flex items-center justify-center border border-dashed rounded-lg">
-                      <p className="text-muted-foreground">{t('loading_chart')}</p>
+                    <div className="w-full h-full flex items-center justify-center">
+                      <Skeleton className="w-full h-full rounded-lg" />
                     </div>
                   ) : salesData?.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
+                    <ChartContainer config={salesChartConfig} className="w-full h-full aspect-auto">
                       {chartType === 'bar' ? (
                         <BarChart data={salesData} margin={{ top: 20, right: 10, left: 0, bottom: 5 }}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
-                          <XAxis dataKey="date" tickFormatter={v => isToday ? v : (() => { const d = new Date(v); return `${d.getDate()}/${d.getMonth()+1}`; })()} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-                          <YAxis tickFormatter={v => v >= 1000 ? `₹${(v/1000).toFixed(v % 1000 === 0 ? 0 : 1)}k` : `₹${v}`} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={50} />
-                          <RechartsTooltip formatter={(v: number, n: string) => [`₹${v.toFixed(2)}`, n.charAt(0).toUpperCase()+n.slice(1)]} labelFormatter={l => isToday ? `${l} hrs` : new Date(l).toLocaleDateString()} contentStyle={{ borderRadius: '8px' }} />
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border) / 0.5)" />
+                          <XAxis dataKey="date" tickFormatter={v => {
+                            const d = new Date(v);
+                            if (preset === '7') return d.toLocaleDateString(isBn ? 'bn-BD' : 'en-IN', { weekday: 'short' });
+                            if (preset === '365') return d.toLocaleDateString(isBn ? 'bn-BD' : 'en-IN', { month: 'short', year: '2-digit' });
+                            return formatStringNumbers(isToday ? v : `${d.getDate()}/${d.getMonth()+1}`);
+                          }} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+                          <YAxis tickFormatter={formatCompact} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={60} />
+                          <ChartTooltip 
+                            cursor={false} 
+                            content={
+                              <ChartTooltipContent 
+                                labelFormatter={(label) => {
+                                  const d = new Date(label);
+                                  if (preset === '7') return d.toLocaleDateString(isBn ? 'bn-BD' : 'en-IN', { weekday: 'long', day: 'numeric', month: 'short' });
+                                  if (preset === '365') return d.toLocaleDateString(isBn ? 'bn-BD' : 'en-IN', { month: 'long', year: 'numeric' });
+                                  return formatStringNumbers(isToday ? label : `${d.getDate()}/${d.getMonth()+1}`);
+                                }}
+                                formatter={(value, name, item) => (
+                                  <div className="flex items-center gap-2 min-w-[130px]">
+                                    <div className="h-2.5 w-2.5 shrink-0 rounded-[2px]" style={{ backgroundColor: item.color }} />
+                                    <span className="text-muted-foreground text-xs flex-1">{name}</span>
+                                    <span className="font-bold text-foreground tabular-nums">{formatPrice(Number(value))}</span>
+                                  </div>
+                                )}
+                              />
+                            } 
+                          />
                           <Legend wrapperStyle={{ fontSize: '12px' }} />
-                          <Bar dataKey="revenue" name="Revenue" fill="#3b82f6" radius={[4,4,0,0]} maxBarSize={30} />
-                          <Bar dataKey="profit" name="Profit" fill="#10b981" radius={[4,4,0,0]} maxBarSize={30} />
+                          <Bar dataKey="revenue" name={t('chart_revenue')} fill="var(--color-revenue)" radius={[4,4,0,0]} maxBarSize={30} />
+                          <Bar dataKey="profit" name={t('chart_profit')} fill="var(--color-profit)" radius={[4,4,0,0]} maxBarSize={30} />
                         </BarChart>
                       ) : (
                         <LineChart data={salesData} margin={{ top: 20, right: 10, left: 0, bottom: 5 }}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
-                          <XAxis dataKey="date" tickFormatter={v => isToday ? v : (() => { const d = new Date(v); return `${d.getDate()}/${d.getMonth()+1}`; })()} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-                          <YAxis tickFormatter={v => v >= 1000 ? `₹${(v/1000).toFixed(v % 1000 === 0 ? 0 : 1)}k` : `₹${v}`} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={50} />
-                          <RechartsTooltip formatter={(v: number, n: string) => [`₹${v.toFixed(2)}`, n.charAt(0).toUpperCase()+n.slice(1)]} labelFormatter={l => isToday ? `${l} hrs` : new Date(l).toLocaleDateString()} contentStyle={{ borderRadius: '8px' }} />
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border) / 0.5)" />
+                          <XAxis dataKey="date" tickFormatter={v => {
+                            const d = new Date(v);
+                            if (preset === '7') return d.toLocaleDateString(isBn ? 'bn-BD' : 'en-IN', { weekday: 'short' });
+                            if (preset === '365') return d.toLocaleDateString(isBn ? 'bn-BD' : 'en-IN', { month: 'short', year: '2-digit' });
+                            return formatStringNumbers(isToday ? v : `${d.getDate()}/${d.getMonth()+1}`);
+                          }} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+                          <YAxis tickFormatter={formatCompact} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={60} />
+                          <ChartTooltip 
+                            cursor={false} 
+                            content={
+                              <ChartTooltipContent 
+                                labelFormatter={(label) => {
+                                  const d = new Date(label);
+                                  if (preset === '7') return d.toLocaleDateString(isBn ? 'bn-BD' : 'en-IN', { weekday: 'long', day: 'numeric', month: 'short' });
+                                  if (preset === '365') return d.toLocaleDateString(isBn ? 'bn-BD' : 'en-IN', { month: 'long', year: 'numeric' });
+                                  return formatStringNumbers(isToday ? label : `${d.getDate()}/${d.getMonth()+1}`);
+                                }}
+                                formatter={(value, name, item) => (
+                                  <div className="flex items-center gap-2 min-w-[130px]">
+                                    <div className="h-2.5 w-2.5 shrink-0 rounded-[2px]" style={{ backgroundColor: item.color }} />
+                                    <span className="text-muted-foreground text-xs flex-1">{name}</span>
+                                    <span className="font-bold text-foreground tabular-nums">{formatPrice(Number(value))}</span>
+                                  </div>
+                                )}
+                              />
+                            } 
+                          />
                           <Legend wrapperStyle={{ fontSize: '12px' }} />
-                          <Line type="monotone" dataKey="revenue" name="Revenue" stroke="#3b82f6" strokeWidth={2} dot={false} />
-                          <Line type="monotone" dataKey="profit" name="Profit" stroke="#10b981" strokeWidth={2} dot={false} />
+                          <Line type="monotone" dataKey="revenue" name={t('chart_revenue')} stroke="var(--color-revenue)" strokeWidth={2} dot={false} />
+                          <Line type="monotone" dataKey="profit" name={t('chart_profit')} stroke="var(--color-profit)" strokeWidth={2} dot={false} />
                         </LineChart>
                       )}
-                    </ResponsiveContainer>
+                    </ChartContainer>
                   ) : (
                     <div className="w-full h-full flex items-center justify-center border border-dashed rounded-lg">
                       <p className="text-muted-foreground">{t('no_sales_data')}</p>
@@ -561,7 +626,7 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
                 <CardContent>
                   <div className="w-full h-64">
                     {paymentBreakdown.length > 0 ? (
-                      <ResponsiveContainer width="100%" height="100%">
+                      <ChartContainer config={paymentChartConfig} className="w-full h-full aspect-auto">
                         <PieChart>
                           {(() => { const d = mergeSmallSlices(paymentBreakdown); return (
                           <Pie data={d} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80}>
@@ -570,10 +635,10 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
                             ))}
                           </Pie>
                           ); })()}
-                          <RechartsTooltip formatter={(v: number) => `₹${v.toFixed(2)}`} />
+                          <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
                           <Legend wrapperStyle={{ fontSize: '12px' }} />
                         </PieChart>
-                      </ResponsiveContainer>
+                      </ChartContainer>
                     ) : (
                       <div className="w-full h-full flex items-center justify-center border border-dashed rounded-lg">
                         <p className="text-muted-foreground">{tabLoading['payment'] || tabLoading['sales'] ? t('loading') : t('no_data')}</p>
@@ -1113,6 +1178,7 @@ function ProductDetailContent({ product, dateParams, detail, setDetail, isLoadin
   }, [product?.id, dateParams, setIsLoading, setDetail]);
 
   const t = useTranslations('Reports');
+  const { formatPrice, formatCompact, formatStringNumbers } = useNumberFormat();
   if (isLoading) return <div className="py-16 text-center text-muted-foreground">{t('loading')}</div>;
   if (!detail || !detail.summary || !detail.product) return null;
 
@@ -1158,12 +1224,12 @@ function ProductDetailContent({ product, dateParams, detail, setDetail, isLoadin
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={dailyTrend} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
-                <XAxis dataKey="date" tickFormatter={v => { const d = new Date(v); return `${d.getDate()}/${d.getMonth()+1}`; }} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-                <YAxis tickFormatter={v => v >= 1000 ? `₹${(v/1000).toFixed(1)}k` : `₹${v}`} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} width={42} />
-                <RechartsTooltip formatter={(v: number, n: string) => [n === 'revenue' ? `₹${v.toFixed(2)}` : v, n === 'revenue' ? 'Revenue' : 'Qty']} labelFormatter={l => new Date(l).toLocaleDateString()} contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
+                <XAxis dataKey="date" tickFormatter={v => { const d = new Date(v); return formatStringNumbers(`${d.getDate()}/${d.getMonth()+1}`); }} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+                <YAxis tickFormatter={formatCompact} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} width={42} />
+                <RechartsTooltip formatter={(v: number, n: string) => [n === 'revenue' ? formatPrice(v) : formatStringNumbers(String(v)), n === 'revenue' ? t('chart_revenue') : t('qty_sold')]} labelFormatter={l => new Date(l).toLocaleDateString()} contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
                 <Legend wrapperStyle={{ fontSize: '11px' }} />
-                <Bar dataKey="revenue" name="Revenue" fill="#3b82f6" radius={[3,3,0,0]} maxBarSize={20} />
-                <Bar dataKey="qty" name="Qty" fill="#10b981" radius={[3,3,0,0]} maxBarSize={20} />
+                <Bar dataKey="revenue" name={t('chart_revenue')} fill="#3b82f6" radius={[3,3,0,0]} maxBarSize={20} />
+                <Bar dataKey="qty" name={t('qty_sold')} fill="#10b981" radius={[3,3,0,0]} maxBarSize={20} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -1177,8 +1243,8 @@ function ProductDetailContent({ product, dateParams, detail, setDetail, isLoadin
           <div className="h-36">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={weeklyPattern} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
-                <XAxis dataKey="day" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-                <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} width={28} />
+                <XAxis dataKey="day" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={formatStringNumbers} />
+                <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} width={28} tickFormatter={formatStringNumbers} />
                 <RechartsTooltip formatter={(v: number) => [v, 'Qty']} contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
                 <Bar dataKey="qty" fill="#8b5cf6" radius={[3,3,0,0]} maxBarSize={24}>
                   {weeklyPattern.map((entry, i: number) => (
@@ -1194,8 +1260,8 @@ function ProductDetailContent({ product, dateParams, detail, setDetail, isLoadin
           <div className="h-36">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={hourlyPattern} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
-                <XAxis dataKey="hour" tick={{ fontSize: 9 }} tickLine={false} axisLine={false} interval={3} />
-                <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} width={28} />
+                <XAxis dataKey="hour" tick={{ fontSize: 9 }} tickLine={false} axisLine={false} interval={3} tickFormatter={formatStringNumbers} />
+                <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} width={28} tickFormatter={formatStringNumbers} />
                 <RechartsTooltip formatter={(v: number) => [v, 'Qty']} contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
                 <Bar dataKey="qty" fill="#f59e0b" radius={[3,3,0,0]} maxBarSize={16}>
                   {hourlyPattern.map((entry, i: number) => (
@@ -1262,6 +1328,7 @@ function CustomerDetailContent({ customer, dateParams, detail, setDetail, isLoad
   }, [customer?.id, dateParams, setIsLoading, setDetail]);
 
   const t = useTranslations('Reports');
+  const { formatPrice, formatCompact, formatStringNumbers } = useNumberFormat();
   if (isLoading) return <div className="py-10 text-center text-muted-foreground">{t('loading')}</div>;
   if (!detail) return null;
 
@@ -1286,9 +1353,9 @@ function CustomerDetailContent({ customer, dateParams, detail, setDetail, isLoad
           <div className="h-40">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={detail.monthlyTrend} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
-                <XAxis dataKey="month" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-                <YAxis tickFormatter={v => `₹${v >= 1000 ? (v/1000).toFixed(1)+'k' : v}`} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} width={45} />
-                <RechartsTooltip formatter={(v: number) => `₹${v.toFixed(2)}`} contentStyle={{ borderRadius: '8px' }} />
+                <XAxis dataKey="month" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={formatStringNumbers} />
+                <YAxis tickFormatter={formatCompact} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} width={45} />
+                <RechartsTooltip formatter={(v: number) => formatPrice(v)} contentStyle={{ borderRadius: '8px' }} />
                 <Bar dataKey="spent" fill="#3b82f6" radius={[4,4,0,0]} maxBarSize={24} />
               </BarChart>
             </ResponsiveContainer>
@@ -1333,7 +1400,7 @@ function ExpensesTabContent({ expenses, dateParams, onNavigate, isLoading }: {
   onNavigate?: (page: string) => void;
   isLoading?: boolean;
 }) {
-  const { formatPrice: fp } = useNumberFormat();
+  const { formatPrice: fp, formatCompact, formatStringNumbers } = useNumberFormat();
 
   // Filter expenses by dateParams range
   const filtered = useMemo(() => {
@@ -1432,8 +1499,8 @@ function ExpensesTabContent({ expenses, dateParams, onNavigate, isLoading }: {
               <ResponsiveContainer width="100%" height={200}>
                 <BarChart data={trendData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
-                  <XAxis dataKey="label" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-                  <YAxis tickFormatter={v => `₹${v >= 1000 ? (v/1000).toFixed(1)+'k' : v}`} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} width={45} />
+                  <XAxis dataKey="label" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={formatStringNumbers} />
+                  <YAxis tickFormatter={formatCompact} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} width={45} />
                   <RechartsTooltip formatter={(v: number) => [fp(v), t('expense')]} contentStyle={{ borderRadius: '8px', fontSize: '12px' }} />
                   <Bar dataKey="amount" fill="#ef4444" radius={[4,4,0,0]} maxBarSize={40} />
                 </BarChart>

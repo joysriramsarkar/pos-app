@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { db as prisma } from '@/lib/db';
-import { startOfDay, endOfDay, parseISO, subDays, format, eachDayOfInterval } from 'date-fns';
+import { startOfDay, endOfDay, parseISO, subDays, format, eachDayOfInterval, eachMonthOfInterval } from 'date-fns';
 import { requirePermission } from '@/lib/api-middleware';
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -59,6 +59,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     let totalQty = 0;
     let totalRevenue = 0;
+    const days = Number(sp.get('days') || 30);
+    const isYearly = days === 365;
 
     for (const item of saleItems) {
       const date = item.createdAt;
@@ -67,7 +69,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       const profit = revenue - Number(product.buyingPrice) * qty;
 
       // Daily trend
-      const dateKey = format(date, 'yyyy-MM-dd');
+      const dateKey = format(date, isYearly ? 'yyyy-MM' : 'yyyy-MM-dd');
       const prevD = dailyMap.get(dateKey);
       if (prevD) {
         prevD.revenue += revenue;
@@ -105,9 +107,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     // --- Post-loop Formatting ---
-    const allDays = eachDayOfInterval({ start: startDate, end: endDate });
-    const dailyTrend = allDays.map((d) => {
-      const key = format(d, 'yyyy-MM-dd');
+    const intervalList = isYearly 
+      ? eachMonthOfInterval({ start: startDate, end: endDate })
+      : eachDayOfInterval({ start: startDate, end: endDate });
+      
+    const dailyTrend = intervalList.map((d) => {
+      const key = format(d, isYearly ? 'yyyy-MM' : 'yyyy-MM-dd');
       const v = dailyMap.get(key) ?? { revenue: 0, qty: 0, profit: 0 };
       return { date: key, ...v };
     });
