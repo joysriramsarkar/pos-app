@@ -99,7 +99,10 @@
     "order_summary": "অর্ডার সারসংক্ষেপ",
     "clear_cart_confirm": "কার্ট মুছতে চান?",
     "empty_suggestion": "পণ্য খুঁজে কার্টে যোগ করুন",
-    "scan_or_search": "বারকোড স্ক্যান বা পণ্য খুঁজুন"
+    "scan_or_search": "বারকোড স্ক্যান বা পণ্য খুঁজুন",
+    "preset_price": "প্রিসেট টাকা:",
+    "preset_quantity": "প্রিসেট পরিমাণ:",
+    "custom_price": "কাস্টম টাকা"
   },
   "Checkout": {
     "title": "চেকআউট",
@@ -119,6 +122,10 @@
     "change": "বদলি",
     "balance_due": "বকেয়া",
     "add_as_prepayment": "বদলির {amount} আগাম জমা হিসেবে যোগ করবেন?",
+    "allocate_change": "ফেরতযোগ্য টাকার ব্যবহার",
+    "clear_due": "বকেয়া শোধ",
+    "add_prepayment": "প্রিপেমেন্ট হিসেবে জমা",
+    "allocation_exceeds_change": "বরাদ্দকৃত অর্থ ফেরতযোগ্য টাকার চেয়ে বেশি হতে পারে না",
     "return_to_customer": "ক্রেতাকে {amount} ফেরত দিন",
     "due_balance_info": "{amount} ক্রেতার বাকি হিসেবে যোগ হবে।",
     "complete_sale": "বিক্রয় সম্পন্ন করুন",
@@ -194,7 +201,8 @@
     "export_success": "রপ্তানি সফল",
     "export_failed": "রপ্তানি ব্যর্থ",
     "payment": "পেমেন্ট",
-    "partial": "আংশিক"
+    "partial": "আংশিক",
+    "max": "সর্বোচ্চ"
   },
   "DailyCalculator": {
     "title": "লাভ-ক্ষতি হিসাবকারী",

@@ -49,6 +49,7 @@ export const SaleInputSchema = z.object({
   usePrepaid: z.boolean().optional().default(false),
   prepaidAmountUsed: money().pipe(z.number().nonnegative()).optional().default(0),
   changeAsPrepayment: money().pipe(z.number().nonnegative()).optional().default(0),
+  debtRepaymentAmount: money().pipe(z.number().nonnegative()).optional().default(0),
 });
 
 export type SaleItemInput = z.infer<typeof SaleItemInputSchema>;

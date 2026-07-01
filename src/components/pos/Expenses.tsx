@@ -310,7 +310,7 @@ export function Expenses({ onReport }: ExpensesProps) {
     setEditExpense(expense);
     setEditAmount(String(expense.amount ?? ''));
     setEditCategory(expense.category || 'Other');
-    
+
     let rawNotes = expense.notes ?? '';
     const mixedRegex = /\[নগদ:\s*([0-9.]+),\s*ইউপিআই:\s*([0-9.]+)\]/;
     const match = rawNotes.match(mixedRegex);
@@ -322,7 +322,7 @@ export function Expenses({ onReport }: ExpensesProps) {
       setEditCashAmount('');
       setEditUpiAmount('');
     }
-    
+
     setEditNotes(rawNotes);
     setEditPaymentMethod(expense.paymentMethod || 'Cash');
     setEditSupplierId(expense.supplierId ?? '');
@@ -411,64 +411,64 @@ export function Expenses({ onReport }: ExpensesProps) {
   };
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 w-full overflow-y-auto gap-4 p-4 pb-24 animate-page-enter">
+    <div className="flex-1 flex flex-col min-h-0 w-full overflow-y-auto gap-2 md:gap-4 p-3 md:p-4 pb-24 animate-page-enter">
       {/* Header */}
       <div className="flex items-center justify-between shrink-0">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Receipt className="w-6 h-6 text-emerald-600 dark:text-emerald-500" /> {t('title')}
+          <h1 className="text-xl md:text-2xl font-bold flex items-center gap-2">
+            <Receipt className="w-5 h-5 md:w-6 md:h-6 text-emerald-600 dark:text-emerald-500" /> {t('title')}
           </h1>
-          <p className="text-muted-foreground text-sm">{displayDateLabel} — {t('subtitle')}</p>
+          <p className="text-muted-foreground text-xs md:text-sm">{displayDateLabel}</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={handleExportCSV} className="gap-1" disabled={filteredExpenses.length === 0}>
-            <Download className="w-4 h-4" /> {tc('export_csv')}
+        <div className="flex gap-1.5">
+          <Button variant="outline" size="sm" onClick={handleExportCSV} className="gap-1 h-8" disabled={filteredExpenses.length === 0}>
+            <Download className="w-3.5 h-3.5" />
           </Button>
-          <Button size="sm" onClick={onReport} className="gap-2 border-emerald-200 text-emerald-600 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400">
-            <BarChart3 className="w-4 h-4" /> {t('report')}
+          <Button variant="outline" size="sm" onClick={onReport} className="gap-1.5 h-8 border-emerald-200 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 dark:border-emerald-800 dark:text-emerald-400">
+            <BarChart3 className="w-3.5 h-3.5" /> <span className="text-xs">{t('report')}</span>
           </Button>
         </div>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 shrink-0">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-3 shrink-0">
         <Card className="overflow-hidden shadow-sm border-red-200 dark:border-red-900/50">
-          <CardContent className="p-4 bg-gradient-to-br from-red-50/80 to-red-100/30 dark:from-red-950/40 dark:to-red-900/20">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-red-500 to-red-600 flex items-center justify-center shadow-md shrink-0">
-                <Wallet className="h-5 w-5 text-white" />
+          <CardContent className="p-2.5 md:p-4 bg-gradient-to-br from-red-50/80 to-red-100/30 dark:from-red-950/40 dark:to-red-900/20">
+            <div className="flex items-center gap-2">
+              <div className="h-8 w-8 md:h-10 md:w-10 rounded-lg md:rounded-xl bg-gradient-to-br from-red-500 to-red-600 flex items-center justify-center shadow-sm shrink-0">
+                <Wallet className="h-4 w-4 md:h-5 md:w-5 text-white" />
               </div>
-              <div className="min-w-0">
-                <p className="text-[10px] md:text-xs text-muted-foreground whitespace-nowrap">{t('today_total')}</p>
-                <p className="text-lg md:text-xl font-bold text-red-600 whitespace-nowrap tabular-nums">{formatPrice(filteredTotal)}</p>
+              <div className="min-w-0 flex-1">
+                <p className="text-[9px] md:text-xs text-muted-foreground line-clamp-2 leading-tight">{t('today_total')}</p>
+                <p className="text-sm md:text-xl font-bold text-red-600 truncate tabular-nums">{formatPrice(filteredTotal)}</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
         <Card className="overflow-hidden shadow-sm border-blue-200 dark:border-blue-900/50">
-          <CardContent className="p-4 bg-gradient-to-br from-blue-50/80 to-blue-100/30 dark:from-blue-950/40 dark:to-blue-900/20">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-md shrink-0">
-                <Receipt className="h-5 w-5 text-white" />
+          <CardContent className="p-2.5 md:p-4 bg-gradient-to-br from-blue-50/80 to-blue-100/30 dark:from-blue-950/40 dark:to-blue-900/20">
+            <div className="flex items-center gap-2">
+              <div className="h-8 w-8 md:h-10 md:w-10 rounded-lg md:rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-sm shrink-0">
+                <Receipt className="h-4 w-4 md:h-5 md:w-5 text-white" />
               </div>
-              <div className="min-w-0">
-                <p className="text-[10px] md:text-xs text-muted-foreground whitespace-nowrap">{tc('total')} {t('entries')}</p>
-                <p className="text-lg md:text-xl font-bold whitespace-nowrap tabular-nums">{formatNumber(filteredExpenses.length)}</p>
+              <div className="min-w-0 flex-1">
+                <p className="text-[9px] md:text-xs text-muted-foreground line-clamp-2 leading-tight">{tc('total')} {t('entries')}</p>
+                <p className="text-sm md:text-xl font-bold truncate tabular-nums">{formatNumber(filteredExpenses.length)}</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
         <Card className="overflow-hidden shadow-sm border-orange-200 dark:border-orange-900/50">
-          <CardContent className="p-4 bg-gradient-to-br from-orange-50/80 to-orange-100/30 dark:from-orange-950/40 dark:to-orange-900/20">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center shadow-md shrink-0">
-                <TrendingUp className="h-5 w-5 text-white" />
+          <CardContent className="p-2.5 md:p-4 bg-gradient-to-br from-orange-50/80 to-orange-100/30 dark:from-orange-950/40 dark:to-orange-900/20">
+            <div className="flex items-center gap-2">
+              <div className="h-8 w-8 md:h-10 md:w-10 rounded-lg md:rounded-xl bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center shadow-sm shrink-0">
+                <TrendingUp className="h-4 w-4 md:h-5 md:w-5 text-white" />
               </div>
-              <div className="min-w-0">
-                <p className="text-[10px] md:text-xs text-muted-foreground whitespace-nowrap">{t('highest_category')}</p>
-                <p className="text-sm md:text-base font-bold whitespace-nowrap truncate">
+              <div className="min-w-0 flex-1">
+                <p className="text-[9px] md:text-xs text-muted-foreground line-clamp-2 leading-tight">{t('highest_category')}</p>
+                <p className="text-xs md:text-base font-bold truncate">
                   {highestCategory ? getCategoryBn(highestCategory.category) : '—'}
                 </p>
               </div>
@@ -477,14 +477,14 @@ export function Expenses({ onReport }: ExpensesProps) {
         </Card>
 
         <Card className="overflow-hidden shadow-sm border-emerald-200 dark:border-emerald-900/50">
-          <CardContent className="p-4 bg-gradient-to-br from-emerald-50/80 to-emerald-100/30 dark:from-emerald-950/40 dark:to-emerald-900/20">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center shadow-md shrink-0">
-                <ArrowUpRight className="h-5 w-5 text-white" />
+          <CardContent className="p-2.5 md:p-4 bg-gradient-to-br from-emerald-50/80 to-emerald-100/30 dark:from-emerald-950/40 dark:to-emerald-900/20">
+            <div className="flex items-center gap-2">
+              <div className="h-8 w-8 md:h-10 md:w-10 rounded-lg md:rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center shadow-sm shrink-0">
+                <ArrowUpRight className="h-4 w-4 md:h-5 md:w-5 text-white" />
               </div>
-              <div className="min-w-0">
-                <p className="text-[10px] md:text-xs text-muted-foreground whitespace-nowrap">{t('avg_entry')}</p>
-                <p className="text-lg md:text-xl font-bold whitespace-nowrap tabular-nums">
+              <div className="min-w-0 flex-1">
+                <p className="text-[9px] md:text-xs text-muted-foreground line-clamp-2 leading-tight">{t('avg_entry')}</p>
+                <p className="text-sm md:text-xl font-bold truncate tabular-nums">
                   {formatPrice(filteredExpenses.length > 0 ? Math.round(filteredTotal / filteredExpenses.length) : 0)}
                 </p>
               </div>
@@ -496,33 +496,33 @@ export function Expenses({ onReport }: ExpensesProps) {
       {/* Category Breakdown Progress Bars */}
       {categoryBreakdown.length > 0 && (
         <Card className="overflow-hidden shadow-sm shrink-0">
-          <CardContent className="p-4">
-            <h3 className="font-semibold text-sm mb-3 flex items-center gap-2">
-              <TrendingDown className="h-4 w-4 text-muted-foreground" />
+          <CardContent className="p-2.5 md:p-4">
+            <h3 className="font-semibold text-xs md:text-sm mb-2 flex items-center gap-1.5">
+              <TrendingDown className="h-3.5 w-3.5 text-muted-foreground" />
               ক্যাটাগরি বিভাজন
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-4">
               {categoryBreakdown.map((cat) => {
                 const config = CATEGORY_CONFIG[cat.category] || CATEGORY_CONFIG['Other'];
                 const Icon = config.icon;
                 return (
-                  <div key={cat.category} className="space-y-1.5 border p-2.5 rounded-xl bg-slate-50/50 dark:bg-slate-900/30">
+                  <div key={cat.category} className="space-y-1 border p-2 rounded-lg bg-slate-50/50 dark:bg-slate-900/30">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className={`h-7 w-7 rounded-lg bg-gradient-to-br ${config.gradient} flex items-center justify-center shrink-0`}>
-                          <Icon className={`h-4 w-4 ${config.color}`} />
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <div className={`h-5 w-5 rounded-md bg-gradient-to-br ${config.gradient} flex items-center justify-center shrink-0`}>
+                          <Icon className={`h-3 w-3 ${config.color}`} />
                         </div>
-                        <span className="text-sm font-medium truncate">{getCategoryBn(cat.category)}</span>
-                        <Badge variant="secondary" className="text-[10px] h-5 shrink-0 px-1.5">
-                          {cat.count} টি
+                        <span className="text-xs font-medium truncate">{getCategoryBn(cat.category)}</span>
+                        <Badge variant="secondary" className="text-[9px] h-4 shrink-0 px-1">
+                          {cat.count}
                         </Badge>
                       </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <span className="text-sm font-bold tabular-nums">{formatPrice(cat.amount)}</span>
-                        <span className="text-xs text-muted-foreground tabular-nums">({cat.percentage.toFixed(0)}%)</span>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <span className="text-xs font-bold tabular-nums">{formatPrice(cat.amount)}</span>
+                        <span className="text-[10px] text-muted-foreground">({cat.percentage.toFixed(0)}%)</span>
                       </div>
                     </div>
-                    <Progress value={cat.percentage} className="h-2" />
+                    <Progress value={cat.percentage} className="h-1.5" />
                   </div>
                 );
               })}
@@ -532,46 +532,44 @@ export function Expenses({ onReport }: ExpensesProps) {
       )}
 
       {/* Date Filter & Input */}
-      <div className="flex items-center gap-3 shrink-0">
-        <div className="flex items-center gap-2">
-          <CalendarDays className="h-4 w-4 text-muted-foreground" />
-          <Select
-            value={dateFilterMode}
-            onValueChange={(v: 'today' | 'yesterday' | 'custom') => {
-              setDateFilterMode(v);
-              if (v !== 'custom') setCustomDate('');
-            }}
-          >
-            <SelectTrigger className="w-[140px] h-9">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="today">{tc('today')}</SelectItem>
-              <SelectItem value="yesterday">{tc('yesterday')}</SelectItem>
-              <SelectItem value="custom">{tc('custom')}</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+      <div className="flex items-center gap-2 shrink-0">
+        <CalendarDays className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+        <Select
+          value={dateFilterMode}
+          onValueChange={(v: 'today' | 'yesterday' | 'custom') => {
+            setDateFilterMode(v);
+            if (v !== 'custom') setCustomDate('');
+          }}
+        >
+          <SelectTrigger className="w-[120px] h-8 text-sm">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="today">{tc('today')}</SelectItem>
+            <SelectItem value="yesterday">{tc('yesterday')}</SelectItem>
+            <SelectItem value="custom">{tc('custom')}</SelectItem>
+          </SelectContent>
+        </Select>
         {dateFilterMode === 'custom' && (
           <Input
             type="date"
             value={customDate}
             onChange={(e) => setCustomDate(e.target.value)}
-            className="w-[180px] h-9"
+            className="flex-1 h-8 text-sm"
             max={today}
           />
         )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 min-h-0 flex-1">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-2 md:gap-4 min-h-0 flex-1">
         {/* Add Expense Form */}
-        <Card className="col-span-1 h-fit rounded-2xl shadow-sm border border-border/50">
-          <CardHeader className="pb-3 pt-4 px-4">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Plus className="w-4 h-4 text-emerald-600" /> {t('add_expense')}
+        <Card className="col-span-1 h-fit rounded-xl md:rounded-2xl shadow-sm border border-border/50">
+          <CardHeader className="pb-2 pt-3 px-3 md:pb-3 md:pt-4 md:px-4">
+            <CardTitle className="text-sm md:text-base flex items-center gap-2">
+              <Plus className="w-3.5 h-3.5 text-emerald-600" /> {t('add_expense')}
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3 px-4 pb-4">
+          <CardContent className="space-y-2 md:space-y-3 px-3 pb-3 md:px-4 md:pb-4">
             <div className="space-y-1.5">
               <label className="text-sm font-medium">{t('amount')} ({currency})</label>
               <div className="relative">
@@ -749,11 +747,10 @@ export function Expenses({ onReport }: ExpensesProps) {
                       />
                     </div>
                   </div>
-                  <div className={`text-xs px-2 py-1.5 rounded-lg flex items-center justify-between ${
-                    isMixedOk
-                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400'
-                      : 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400'
-                  }`}>
+                  <div className={`text-xs px-2 py-1.5 rounded-lg flex items-center justify-between ${isMixedOk
+                    ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400'
+                    : 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400'
+                    }`}>
                     <span>নগদ {currency}{cashVal} + ইউপিআই {currency}{upiVal}</span>
                     <span className="font-semibold">{isMixedOk ? '✓ মিলেছে' : `বাকি: ${currency}${Math.abs(totalAmt - mixedSum).toFixed(2)}`}</span>
                   </div>
@@ -767,13 +764,13 @@ export function Expenses({ onReport }: ExpensesProps) {
         </Card>
 
         {/* Expense List */}
-        <Card className="col-span-1 lg:col-span-2 rounded-2xl shadow-sm border border-border/50 flex flex-col min-h-[350px] lg:min-h-0">
-          <CardHeader className="pb-3 pt-4 px-4 shrink-0 border-b">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Receipt className="w-4 h-4 text-red-500" /> {dateFilterMode !== 'today' ? t('expense_list') : t('today_expense_list')}
+        <Card className="col-span-1 lg:col-span-2 rounded-2xl shadow-sm border border-border/50 flex flex-col h-fit lg:h-full lg:min-h-[350px]">
+          <CardHeader className="py-2 px-3 md:pb-3 md:pt-4 md:px-4 shrink-0 border-b">
+            <CardTitle className="text-sm md:text-base flex items-center gap-2">
+              <Receipt className="w-3.5 h-3.5 md:w-4 md:h-4 text-red-500" /> {dateFilterMode !== 'today' ? t('expense_list') : t('today_expense_list')}
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-0 flex-1 overflow-y-auto">
+          <CardContent className="p-0 lg:flex-1 lg:overflow-y-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -840,9 +837,9 @@ export function Expenses({ onReport }: ExpensesProps) {
             </Table>
           </CardContent>
           {filteredExpenses.length > 0 && (
-            <div className="flex justify-between items-center px-4 py-3 border-t bg-slate-50/50 dark:bg-slate-900/30 shrink-0">
-              <span className="text-sm font-semibold">{t('total')}</span>
-              <span className="text-lg font-bold text-red-600 dark:text-red-400 tabular-nums">{formatPrice(filteredTotal)}</span>
+            <div className="flex justify-between items-center px-3 py-px border-t bg-slate-50/50 dark:bg-slate-900/30 shrink-0">
+              <span className="text-xs font-semibold text-muted-foreground">{t('total')}</span>
+              <span className="text-sm font-bold text-red-600 dark:text-red-400 tabular-nums">{formatPrice(filteredTotal)}</span>
             </div>
           )}
         </Card>
@@ -1047,11 +1044,10 @@ export function Expenses({ onReport }: ExpensesProps) {
                       />
                     </div>
                   </div>
-                  <div className={`text-xs px-2 py-1.5 rounded-lg flex items-center justify-between ${
-                    isMixedOk
-                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400'
-                      : 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400'
-                  }`}>
+                  <div className={`text-xs px-2 py-1.5 rounded-lg flex items-center justify-between ${isMixedOk
+                    ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400'
+                    : 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400'
+                    }`}>
                     <span>নগদ {currency}{cashVal} + ইউপিআই {currency}{upiVal}</span>
                     <span className="font-semibold">{isMixedOk ? '✓ মিলেছে' : `বাকি: ${currency}${Math.abs(totalAmt - mixedSum).toFixed(2)}`}</span>
                   </div>

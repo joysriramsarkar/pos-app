@@ -193,6 +193,7 @@ async function handlePost(request: NextRequest) {
     const amountPaidValue = toMoneyDecimal(validatedData.amountPaid);
     const prepaidToUse = toMoneyDecimal(validatedData.prepaidAmountUsed || 0);
     const changeAsPrepayment = toMoneyDecimal(validatedData.changeAsPrepayment || 0);
+    const debtRepaymentAmount = toMoneyDecimal(validatedData.debtRepaymentAmount || 0);
     const externalPaidAmount = subtractMoney(amountPaidValue, prepaidToUse);
 
     if (amountPaidValue.gt(totalAmount)) {
@@ -365,7 +366,7 @@ async function handlePost(request: NextRequest) {
             });
           }
 
-          if (dueAmount.gt(0)) {
+          if (dueAmount.gt(0) || externalPaidAmount.gt(0)) {
             const creditAmount = subtractMoney(totalAmount, prepaidToUse);
             totalDueIncrement = creditAmount;
             totalDueDecrement = externalPaidAmount;
@@ -374,16 +375,18 @@ async function handlePost(request: NextRequest) {
             const subAmt = subtractMoney(creditBalanceAfter, externalPaidAmount);
             balanceAfterPayment = subAmt.gt(0) ? subAmt : new Decimal(0);
 
-            await tx.ledgerEntry.create({
-              data: {
-                customerId,
-                entryType: "credit",
-                amount: creditAmount,
-                balanceAfter: creditBalanceAfter,
-                description: `Credit purchase: ${newSale.invoiceNumber}`,
-                referenceId: newSale.id,
-              },
-            });
+            if (creditAmount.gt(0)) {
+              await tx.ledgerEntry.create({
+                data: {
+                  customerId,
+                  entryType: "credit",
+                  amount: creditAmount,
+                  balanceAfter: creditBalanceAfter,
+                  description: `Credit purchase: ${newSale.invoiceNumber}`,
+                  referenceId: newSale.id,
+                },
+              });
+            }
             if (externalPaidAmount.gt(0)) {
               await tx.ledgerEntry.create({
                 data: {
@@ -391,24 +394,25 @@ async function handlePost(request: NextRequest) {
                   entryType: "debit",
                   amount: externalPaidAmount,
                   balanceAfter: balanceAfterPayment,
-                  description: `Partial payment for: ${newSale.invoiceNumber}`,
+                  description: `Payment for sale: ${newSale.invoiceNumber}`,
                   referenceId: newSale.id,
                 },
               });
             }
-          } else if (externalPaidAmount.gt(0) && currentTotalDue.gt(0)) {
-            // Full payment or overpayment with existing due
-            totalDueDecrement = externalPaidAmount;
-            const subAmt = subtractMoney(currentTotalDue, externalPaidAmount);
-            balanceAfterPayment = subAmt.gt(0) ? subAmt : new Decimal(0);
+          }
 
+          if (debtRepaymentAmount.gt(0)) {
+            totalDueDecrement = totalDueDecrement.plus(debtRepaymentAmount);
+            const subAmt = subtractMoney(balanceAfterPayment, debtRepaymentAmount);
+            balanceAfterPayment = subAmt.gt(0) ? subAmt : new Decimal(0);
+            
             await tx.ledgerEntry.create({
               data: {
                 customerId,
                 entryType: "debit",
-                amount: externalPaidAmount,
+                amount: debtRepaymentAmount,
                 balanceAfter: balanceAfterPayment,
-                description: `Payment for sale: ${newSale.invoiceNumber}`,
+                description: `Due clearance during sale: ${newSale.invoiceNumber}`,
                 referenceId: newSale.id,
               },
             });

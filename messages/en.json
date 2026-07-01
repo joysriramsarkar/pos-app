@@ -98,8 +98,11 @@
     "increase_qty": "Increase quantity",
     "order_summary": "Order Summary",
     "clear_cart_confirm": "Clear cart?",
-    "empty_suggestion": "Search products and add to cart",
-    "scan_or_search": "Scan barcode or search products"
+    "empty_suggestion": "Find and add products to cart",
+    "scan_or_search": "Scan barcode or search products",
+    "preset_price": "Preset Price:",
+    "preset_quantity": "Preset Qty:",
+    "custom_price": "Custom Price"
   },
   "Checkout": {
     "title": "Checkout",
@@ -118,7 +121,11 @@
     "upi": "UPI",
     "change": "Change",
     "balance_due": "Balance Due",
-    "add_as_prepayment": "Add {amount} change as prepaid balance?",
+    "add_as_prepayment": "Add {amount} from change as prepayment?",
+    "allocate_change": "Allocate Change",
+    "clear_due": "Clear Due",
+    "add_prepayment": "Add to Prepayment",
+    "allocation_exceeds_change": "Allocated amount cannot exceed total change",
     "return_to_customer": "Return {amount} to customer",
     "due_balance_info": "{amount} will be added as customer's due balance.",
     "complete_sale": "Complete Sale",
@@ -194,7 +201,8 @@
     "export_success": "Export Success",
     "export_failed": "Export Failed",
     "payment": "Payment",
-    "partial": "Partial"
+    "partial": "Partial",
+    "max": "Max"
   },
   "DailyCalculator": {
     "title": "Profit-Loss Calculator",

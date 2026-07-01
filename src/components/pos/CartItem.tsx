@@ -39,8 +39,6 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
   }, [isHighlighted]);
 
   const getStep = (unit: string) => {
-    if (['kg', 'liter'].includes(unit)) return 0.1;
-    if (['gram', 'ml'].includes(unit)) return 50;
     return 1;
   };
 
@@ -240,7 +238,7 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
               onChange={handleInputChange}
               onKeyDown={handleInputKeyDown}
               onBlur={commitInputValue}
-              className="w-14 h-7 text-center px-1 touch-manipulation text-xs"
+              className="w-14 h-7 text-center px-1 touch-manipulation text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               aria-label="Quantity"
               onWheel={(e) => e.currentTarget.blur()}
               min={0}
@@ -282,7 +280,7 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
         {/* Quantity/Price Presets Row */}
         <div className="flex flex-wrap items-center gap-1.5 mt-1.5 pt-1.5 border-t border-dashed border-border/40">
           <span className="text-[9px] font-medium text-muted-foreground mr-0.5">
-            {isWeighted ? "প্রিসেট টাকা:" : "প্রিসেট পরিমাণ:"}
+            {isWeighted ? t('preset_price', { defaultValue: 'Preset Price:' }) : t('preset_quantity', { defaultValue: 'Preset Qty:' })}
           </span>
           {isWeighted ? (
             <>
@@ -297,7 +295,7 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
               ))}
               <Input
                 type="number"
-                placeholder="কাস্টম টাকা"
+                placeholder={t('custom_price', { defaultValue: 'Custom Price' })}
                 className="h-6 w-20 text-[10px] px-1.5 py-0 bg-primary/5 border-primary/20 text-primary focus-visible:ring-1 focus-visible:ring-primary/30"
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {

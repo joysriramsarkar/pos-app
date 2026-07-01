@@ -735,7 +735,8 @@ function POSDashboard() {
       tax: paymentData.tax,
       usePrepaid: paymentData.usePrepaid,
       prepaidAmountUsed: paymentData.prepaidAmountUsed,
-      changeAsPrepayment: (paymentData.addChangeAsPrepayment && paymentData.change > 0) ? paymentData.change : 0,
+      changeAsPrepayment: paymentData.changeAsPrepayment || 0,
+      debtRepaymentAmount: paymentData.debtRepaymentAmount || 0,
       offlineSaleId: sale.id, // ট্র্যাকিংয়ের জন্য
     };
 
@@ -752,13 +753,13 @@ function POSDashboard() {
     };
 
     // Prepare prepayment queue item if applicable
-    const prepaymentQueueItem = (paymentData.addChangeAsPrepayment && paymentData.customerId && paymentData.change > 0) 
+    const prepaymentQueueItem = (paymentData.changeAsPrepayment && paymentData.changeAsPrepayment > 0 && paymentData.customerId) 
       ? {
           id: uuidv4(),
           entityType: 'Prepayment',
           entityId: uuidv4(),
           action: 'create',
-          payload: JSON.stringify({ customerId: paymentData.customerId, amount: paymentData.change }),
+          payload: JSON.stringify({ customerId: paymentData.customerId, amount: paymentData.changeAsPrepayment }),
           synced: false,
           retryCount: 0,
           createdAt: new Date(),

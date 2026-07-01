@@ -348,6 +348,7 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
     const amountPaid = toMoneyDecimal(saleData.amountPaid || 0);
     const prepaidToUse = toMoneyDecimal(saleData.prepaidAmountUsed || 0);
     const changeAsPrepayment = toMoneyDecimal(saleData.changeAsPrepayment || 0);
+    const debtRepaymentAmount = toMoneyDecimal(saleData.debtRepaymentAmount || 0);
     const externalPaidAmount = subtractMoney(amountPaid, prepaidToUse);
 
     if (amountPaid.gt(totalAmount)) {
@@ -488,7 +489,7 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
           let prepaidBalanceDecrement = prepaidToUse;
           let balanceAfterPayment = currentTotalDue;
 
-          if (dueAmount.gt(0)) {
+          if (dueAmount.gt(0) || externalPaidAmount.gt(0)) {
             const creditAmount = subtractMoney(totalAmount, prepaidToUse);
             totalDueIncrement = creditAmount;
             totalDueDecrement = externalPaidAmount;
@@ -497,16 +498,18 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
             const subAmt = subtractMoney(creditBalanceAfter, externalPaidAmount);
             balanceAfterPayment = subAmt.gt(0) ? subAmt : new Decimal(0);
 
-            await tx.ledgerEntry.create({
-              data: {
-                customerId: saleData.customerId,
-                entryType: "credit",
-                amount: creditAmount,
-                balanceAfter: creditBalanceAfter,
-                description: `Offline sync credit purchase: ${saleData.invoiceNumber}`,
-                referenceId: sale.id,
-              },
-            });
+            if (creditAmount.gt(0)) {
+              await tx.ledgerEntry.create({
+                data: {
+                  customerId: saleData.customerId,
+                  entryType: "credit",
+                  amount: creditAmount,
+                  balanceAfter: creditBalanceAfter,
+                  description: `Offline sync credit purchase: ${saleData.invoiceNumber}`,
+                  referenceId: sale.id,
+                },
+              });
+            }
             if (externalPaidAmount.gt(0)) {
               await tx.ledgerEntry.create({
                 data: {
@@ -519,19 +522,20 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
                 },
               });
             }
-          } else if (externalPaidAmount.gt(0) && currentTotalDue.gt(0)) {
-            // Full payment or overpayment with existing due
-            totalDueDecrement = externalPaidAmount;
-            const subAmt = subtractMoney(currentTotalDue, externalPaidAmount);
-            balanceAfterPayment = subAmt.gt(0) ? subAmt : new Decimal(0);
+          }
 
+          if (debtRepaymentAmount.gt(0)) {
+            totalDueDecrement = totalDueDecrement.plus(debtRepaymentAmount);
+            const subAmt = subtractMoney(balanceAfterPayment, debtRepaymentAmount);
+            balanceAfterPayment = subAmt.gt(0) ? subAmt : new Decimal(0);
+            
             await tx.ledgerEntry.create({
               data: {
                 customerId: saleData.customerId,
                 entryType: "debit",
-                amount: externalPaidAmount,
+                amount: debtRepaymentAmount,
                 balanceAfter: balanceAfterPayment,
-                description: `Offline sync payment for: ${saleData.invoiceNumber}`,
+                description: `Offline sync due clearance: ${saleData.invoiceNumber}`,
                 referenceId: sale.id,
               },
             });
