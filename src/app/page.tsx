@@ -98,7 +98,7 @@ import { STORE_CONFIG } from '@/types/pos';
 import type { Product, Sale, SyncQueueItem } from '@/types/pos';
 import { cn } from '@/lib/utils';
 import { refreshProductsFromServer } from '@/lib/products-sync';
-import { convertBengaliToEnglishNumerals } from '@/lib/utils';
+import { convertBengaliToEnglishNumerals, convertEnglishToBengaliNumerals } from '@/lib/utils';
 import { toMoneyNumber } from '@/lib/money';
 import Decimal from 'decimal.js';
 import { v4 as uuidv4 } from 'uuid';
@@ -1756,7 +1756,9 @@ function POSDashboard() {
                   {/* Cart item count badge on the billing button */}
                   {item.id === 'billing' && cartItemCount > 0 && (
                     <Badge className="absolute -top-1.5 -right-2 h-4 min-w-4 p-0 flex items-center justify-center text-[8px] text-white bg-red-500 border border-white dark:border-card">
-                      {cartItemCount > 9 ? '9+' : cartItemCount}
+                      {locale === 'bn' 
+                        ? (cartItemCount > 9 ? '৯+' : convertEnglishToBengaliNumerals(cartItemCount)) 
+                        : (cartItemCount > 9 ? '9+' : cartItemCount)}
                     </Badge>
                   )}
                 </div>

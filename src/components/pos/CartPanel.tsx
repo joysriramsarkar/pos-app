@@ -36,10 +36,10 @@ import {
 import { Capacitor } from '@capacitor/core';
 import type { PaymentMethod, Customer } from '@/types/pos';
 import { useCartStore, useUIStore } from '@/stores/pos-store';
-import { cn, convertBengaliToEnglishNumerals } from '@/lib/utils';
+import { cn, convertBengaliToEnglishNumerals, convertEnglishToBengaliNumerals } from '@/lib/utils';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { useNumberFormat } from '@/hooks/use-number-format';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 
 interface CartPanelProps {
   onCheckout: () => void;
@@ -57,6 +57,7 @@ const paymentMethods: { method: PaymentMethod; icon: React.ReactNode; labelKey: 
 export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps) {
   const t = useTranslations('Cart');
   const tc = useTranslations('Common');
+  const locale = useLocale();
 
   const [showDiscountInput, setShowDiscountInput] = useState(false);
   const [customerSearchOpen, setCustomerSearchOpen] = useState(false);
@@ -226,7 +227,9 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
     : customers.slice(0, 20);
 
   const isCartEmpty = items.length === 0;
-  const itemCountDisplay = itemCount === 0 ? t('empty') : `${itemCount} ${itemCount === 1 ? t('item') : t('items')}`;
+  const isBn = locale === 'bn';
+  const displayCount = isBn ? convertEnglishToBengaliNumerals(itemCount) : itemCount;
+  const itemCountDisplay = itemCount === 0 ? t('empty') : `${displayCount} ${itemCount === 1 ? t('item') : t('items')}`;
 
   const isAndroidApp = typeof Capacitor !== 'undefined' && Capacitor.isNativePlatform();
 

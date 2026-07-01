@@ -1034,8 +1034,8 @@
     "tab_suppliers": "Suppliers",
     "detailed_report": "Detailed Report",
     "today": "Today",
-    "days_7": "7d",
-    "days_30": "30d",
+    "days_7": "7 Days",
+    "days_30": "30 Days",
     "yearly": "Yearly",
     "chart_revenue": "Revenue",
     "chart_profit": "Profit",
@@ -1136,9 +1136,6 @@
     "click_product_details": "Click a product to view details.",
     "total_products": "Total Products",
     "total_items_sold": "Total distinct items sold",
-    "days_7": "7 Days",
-    "days_30": "30 Days",
-    "yearly": "Yearly",
     "year_1": "1 Year",
     "by_sales": "By Sales",
     "by_quantity": "By Quantity",
@@ -1258,7 +1255,8 @@
     "avg_price_col": "Avg Purchase Price",
     "spent_amount_col": "Spent Amount",
     "orders_suffix": "orders",
-    "pending_suffix": "pending"
+    "pending_suffix": "pending",
+    "days_90": "90 Days"
   },
   "Settings": {
     "title": "Settings",

@@ -8,7 +8,7 @@ import { useCartStore, useQuantityUsageStore, useProductsStore } from '@/stores/
 import { cn, convertBengaliToEnglishNumerals } from '@/lib/utils';
 import Decimal from 'decimal.js';
 import { useNumberFormat } from '@/hooks/use-number-format';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 import { useSettingsStore } from '@/stores/settings-store';
 
 const EMPTY_USAGE: Record<number, number> = {};
@@ -30,6 +30,7 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
   const { formatPrice, formatStringNumbers } = useNumberFormat();
   const currencySymbol = useSettingsStore((s) => s.settings.currency_symbol);
   const t = useTranslations('Cart');
+  const locale = useLocale();
 
   // Scroll into view and highlight when newly added
   useEffect(() => {
@@ -168,6 +169,11 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
     updateQuantity(item.id, qty);
   }, [item.id, item.unitPrice, updateQuantity]);
 
+  const isBn = locale === 'bn';
+  const displayName = storeProduct
+    ? (isBn ? (storeProduct.nameBn || storeProduct.name) : (storeProduct.name || storeProduct.nameBn))
+    : item.productName;
+
   return (
     <div
       ref={itemRef}
@@ -178,7 +184,7 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
         isOverStock && 'border-destructive bg-destructive/5'
       )}
       role="listitem"
-      aria-label={`${item.productName}, quantity ${item.quantity}, ${formatPrice(item.totalPrice)}`}
+      aria-label={`${displayName}, quantity ${item.quantity}, ${formatPrice(item.totalPrice)}`}
     >
       {/* Drag Handle (for future reordering) */}
       <div className="text-muted-foreground transition-opacity">
@@ -189,7 +195,7 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <h4 className="font-medium text-xs truncate">{item.productName}</h4>
+            <h4 className="font-medium text-xs truncate">{displayName}</h4>
             <div className="flex items-center gap-1 mt-0">
               <span className="text-[10px] text-muted-foreground">
                 {formatPrice(item.unitPrice)}/{item.unit}

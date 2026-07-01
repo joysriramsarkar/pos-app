@@ -11,7 +11,7 @@ mock.module('@/hooks/use-toast', () => ({
 }));
 
 mock.module('@/stores/pos-store', () => ({
-  useProductsStore: (fn: any) => fn({ categories: ['Groceries'] })
+  useProductsStore: (fn: any) => fn({ categories: ['Groceries'], products: [] })
 }));
 
 mock.module('@capacitor/core', () => ({
