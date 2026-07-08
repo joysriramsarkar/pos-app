@@ -67,10 +67,12 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
   const [showAddPartyDialog, setShowAddPartyDialog] = useState(false);
   const [newParty, setNewParty] = useState({
     name: '',
+    nameEn: '',
     phone: '',
     address: '',
     notes: '',
   });
+  const [isNameEnTouched, setIsNameEnTouched] = useState(false);
 
   const tabs = useCartStore((state) => state.tabs);
   const activeTabId = useCartStore((state) => state.activeTabId);
@@ -94,6 +96,37 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
 
   const setCheckoutOpen = useUIStore((state) => state.setCheckoutOpen);
   const { formatPrice } = useNumberFormat();
+
+  // Auto-translate name to English
+  useEffect(() => {
+    if (!newParty.name.trim()) {
+      setNewParty(prev => ({ ...prev, nameEn: '' }));
+      return;
+    }
+    if (isNameEnTouched) return;
+
+    const timeoutId = setTimeout(async () => {
+      const detected = /^[a-zA-Z\s]+$/.test(newParty.name.trim());
+      if (detected) {
+        setNewParty(prev => ({ ...prev, nameEn: newParty.name.trim() }));
+      } else {
+        try {
+          const res = await fetch(`/api/translate?text=${encodeURIComponent(newParty.name.trim())}&to=en`);
+          const data = await res.json();
+          if (data.success && data.translatedText) {
+            setNewParty(prev => {
+              if (isNameEnTouched) return prev;
+              return { ...prev, nameEn: data.translatedText };
+            });
+          }
+        } catch (err) {
+          console.error("Auto-translate customer name failed:", err);
+        }
+      }
+    }, 800);
+
+    return () => clearTimeout(timeoutId);
+  }, [newParty.name, isNameEnTouched]);
 
   const subtotal = getSubtotal();
   const total = getTotal();
@@ -199,7 +232,8 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
       // Select the newly created customer
       handleCustomerSelect(newCustomer);
       setShowAddPartyDialog(false);
-      setNewParty({ name: '', phone: '', address: '', notes: '' });
+      setNewParty({ name: '', nameEn: '', phone: '', address: '', notes: '' });
+      setIsNameEnTouched(false);
       toast({
         title: t('customer_added'),
         description: t('customer_added_desc', { name: newCustomer.name }),
@@ -541,6 +575,19 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
             </div>
 
             <div className="space-y-2">
+              <Label htmlFor="cart-party-name-en">{t('customer_name_en')}</Label>
+              <Input
+                id="cart-party-name-en"
+                value={newParty.nameEn}
+                onChange={(e) => {
+                  setNewParty(prev => ({ ...prev, nameEn: e.target.value }));
+                  setIsNameEnTouched(true);
+                }}
+                placeholder={t('enter_name_en')}
+              />
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="cart-party-phone">{t('customer_phone')}</Label>
               <Input
                 id="cart-party-phone"
@@ -577,7 +624,8 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
               variant="outline"
               onClick={() => {
                 setShowAddPartyDialog(false);
-                setNewParty({ name: '', phone: '', address: '', notes: '' });
+                setNewParty({ name: '', nameEn: '', phone: '', address: '', notes: '' });
+                setIsNameEnTouched(false);
               }}
             >
               {tc('cancel')}

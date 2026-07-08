@@ -41,7 +41,7 @@ function calculateSupplierBalances(supplier: {
   }
 
   const totalPurchases = basePurchases + extraPurchases;
-  const totalDue = Math.max(0, poDue - manualPayments);
+  const totalDue = poDue - manualPayments;
 
   return { totalPurchases, totalPaid, totalDue };
 }
@@ -97,14 +97,32 @@ export async function GET(request: NextRequest) {
 
 
 
-      const debitEntries = supplier.expenses.map(e => ({
-        id: e.id,
-        entryType: 'debit' as const,
-        amount: Number(e.amount),
-        referenceId: `EXP-${e.id.substring(0, 8)}`,
-        description: e.notes || 'টাকা পরিশোধ (পেমেন্ট)',
-        createdAt: e.date,
-      }));
+      const debitEntries = [];
+
+      for (const e of supplier.expenses) {
+        const amount = Number(e.amount);
+        const notes = e.notes || '';
+        
+        debitEntries.push({
+          id: e.id,
+          entryType: 'debit' as const,
+          amount,
+          referenceId: `EXP-${e.id.substring(0, 8)}`,
+          description: notes || 'টাকা পরিশোধ (পেমেন্ট)',
+          createdAt: e.date,
+        });
+
+        if (!notes.startsWith('Paid supplier:') && !notes.startsWith('Paid for purchase order:') && !notes.startsWith('Paid for direct purchase:')) {
+          creditEntries.push({
+            id: `${e.id}-credit`,
+            entryType: 'credit' as const,
+            amount,
+            referenceId: `EXP-${e.id.substring(0, 8)}`,
+            description: `খরচ ক্রয়: ${e.category} ${notes ? `(${notes})` : ''}`,
+            createdAt: e.date,
+          });
+        }
+      }
 
       const combined = [...creditEntries, ...debitEntries]
         .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());

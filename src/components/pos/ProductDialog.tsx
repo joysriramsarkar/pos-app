@@ -38,7 +38,7 @@ interface ProductDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   product?: Product | null;
-  onSubmit?: (data: ProductFormData) => void;
+  onSubmit?: (data: ProductFormData) => Promise<void> | void;
 }
 
 export interface ProductFormData {
@@ -109,28 +109,35 @@ export function ProductDialog({
   product,
   onSubmit,
 }: ProductDialogProps) {
-  const [name, setName] = useState('');
-  const [nameBn, setNameBn] = useState('');
-  const [barcode, setBarcode] = useState('');
-  const [category, setCategory] = useState('');
+  const [name, setName] = useState(product?.name || '');
+  const [nameBn, setNameBn] = useState(product?.nameBn || '');
+  const [barcode, setBarcode] = useState(product?.barcode || '');
+  const [category, setCategory] = useState(product?.category || '');
   const [newCategory, setNewCategory] = useState('');
-  const [subCategory, setSubCategory] = useState('');
+  const [subCategory, setSubCategory] = useState(product?.subCategory || '');
   const [newSubCategory, setNewSubCategory] = useState('');
-  const [buyingPrice, setBuyingPrice] = useState('');
-  const [sellingPrice, setSellingPrice] = useState('');
-  const [unit, setUnit] = useState('piece');
-  const [currentStock, setCurrentStock] = useState('');
-  const [minStockLevel, setMinStockLevel] = useState('');
-  const [isActive, setIsActive] = useState(true);
+  const [buyingPrice, setBuyingPrice] = useState(product?.buyingPrice.toString() || '');
+  const [sellingPrice, setSellingPrice] = useState(product?.sellingPrice.toString() || '');
+  const [unit, setUnit] = useState(product?.unit || 'piece');
+  const [currentStock, setCurrentStock] = useState(product?.currentStock.toString() || '0');
+  const [minStockLevel, setMinStockLevel] = useState(product?.minStockLevel.toString() || '5');
+  const [isActive, setIsActive] = useState(product ? product.isActive : true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isWebScannerOpen, setIsWebScannerOpen] = useState(false);
-  const [isNameBnTouched, setIsNameBnTouched] = useState(false);
+  const [isNameBnTouched, setIsNameBnTouched] = useState(!!product);
 
   const t = useTranslations('ProductDialog');
   const tc = useTranslations('Common');
   const { formatNumber } = useNumberFormat();
+  const noSpinnersClass = "[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";
+  const blockScrollAndArrowKeys = {
+    onWheel: (e: React.WheelEvent<HTMLInputElement>) => e.currentTarget.blur(),
+    onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'ArrowUp' || e.key === 'ArrowDown') e.preventDefault();
+    },
+  };
 
   const isNativeApp = typeof Capacitor !== 'undefined' && Capacitor.isNativePlatform();
 
@@ -280,7 +287,7 @@ export function ProductDialog({
         isActive,
       };
 
-      onSubmit?.(data);
+      await onSubmit?.(data);
       onOpenChange(false);
     } catch (err) {
       const msg = err instanceof Error ? err.message : t('failed_save');
@@ -528,7 +535,8 @@ export function ProductDialog({
                 placeholder="0"
                 min="0"
                 step="0.01"
-                className={showBuyingPriceError ? 'border-destructive focus-visible:ring-destructive' : ''}
+                className={cn(noSpinnersClass, showBuyingPriceError ? 'border-destructive focus-visible:ring-destructive' : '')}
+                {...blockScrollAndArrowKeys}
               />
             </div>
             <div className="space-y-2">
@@ -541,7 +549,8 @@ export function ProductDialog({
                 placeholder="0"
                 min="0"
                 step="0.01"
-                className={showSellingPriceError ? 'border-destructive focus-visible:ring-destructive' : ''}
+                className={cn(noSpinnersClass, showSellingPriceError ? 'border-destructive focus-visible:ring-destructive' : '')}
+                {...blockScrollAndArrowKeys}
               />
             </div>
           </div>
@@ -572,6 +581,8 @@ export function ProductDialog({
                 placeholder="0"
                 min="0"
                 step={['kg', 'liter'].includes(unit) ? '0.1' : '1'}
+                className={noSpinnersClass}
+                {...blockScrollAndArrowKeys}
               />
             </div>
             <div className="space-y-2">
@@ -584,6 +595,8 @@ export function ProductDialog({
                 placeholder="5"
                 min="0"
                 step={['kg', 'liter'].includes(unit) ? '0.1' : '1'}
+                className={noSpinnersClass}
+                {...blockScrollAndArrowKeys}
               />
             </div>
           </div>

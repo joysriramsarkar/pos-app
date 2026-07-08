@@ -102,6 +102,9 @@ export async function GET(request: NextRequest) {
         customer: {
           select: { id: true, name: true },
         },
+        user: {
+          select: { id: true, name: true, username: true },
+        },
         items: {
           select: {
             productName: true,
@@ -122,6 +125,7 @@ export async function GET(request: NextRequest) {
       status: tx.status === 'Completed' ? 'সম্পন্ন' : tx.status === 'Cancelled' ? 'বাতিল' : 'রিফান্ড',
       createdAt: tx.createdAt.toISOString(),
       customer: tx.customer,
+      user: tx.user,
       items: tx.items.map(item => ({
         productName: item.productName,
         quantity: item.quantity,

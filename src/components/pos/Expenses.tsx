@@ -45,7 +45,7 @@ const CATEGORY_CONFIG: Record<string, { icon: typeof Wallet; color: string; bgCo
   Other: { icon: MoreHorizontal, color: 'text-gray-600', bgColor: 'bg-gray-100', gradient: 'from-gray-500/10 to-gray-500/5' },
 };
 
-type Supplier = { id: string; name: string };
+type Supplier = { id: string; name: string; nameEn?: string | null };
 
 interface Expense {
   id: string;
@@ -648,7 +648,7 @@ export function Expenses({ onReport }: ExpensesProps) {
                           {suppliers.map((supplier) => (
                             <CommandItem
                               key={supplier.id}
-                              value={supplier.name}
+                              value={`${supplier.name} ${supplier.nameEn || ''}`}
                               onSelect={() => {
                                 setSupplierId(supplier.id);
                                 setSupplierOpen(false);
@@ -931,7 +931,7 @@ export function Expenses({ onReport }: ExpensesProps) {
                           {suppliers.map((supplier) => (
                             <CommandItem
                               key={supplier.id}
-                              value={supplier.name}
+                              value={`${supplier.name} ${supplier.nameEn || ''}`}
                               onSelect={() => {
                                 setEditSupplierId(supplier.id);
                                 setEditSupplierOpen(false);

@@ -266,6 +266,11 @@ export function CheckoutDialog({
       return;
     }
 
+    if (customer && dAmt > toMoneyNumber(customer.totalDue)) {
+      setInputError(t('repayment_exceeds_due', { max: formatPrice(toMoneyNumber(customer.totalDue)) }) || `Debt repayment cannot exceed customer's outstanding due balance of ${formatPrice(toMoneyNumber(customer.totalDue))}`);
+      return;
+    }
+
     const productMap = new Map(products.map((p) => [p.id, p]));
     for (const cartItem of items) {
       const product = productMap.get(cartItem.productId);

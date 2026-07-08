@@ -79,6 +79,8 @@
     "add_new_customer": "নতুন ক্রেতা যোগ করুন",
     "enter_customer_details": "ক্রেতার তথ্য লিখুন",
     "customer_name": "নাম *",
+    "customer_name_en": "ইংরেজি নাম",
+    "enter_name_en": "ইংরেজিতে নাম লিখুন",
     "customer_phone": "ফোন",
     "customer_address": "ঠিকানা",
     "customer_notes": "নোট",
@@ -126,6 +128,7 @@
     "clear_due": "বকেয়া শোধ",
     "add_prepayment": "প্রিপেমেন্ট হিসেবে জমা",
     "allocation_exceeds_change": "বরাদ্দকৃত অর্থ ফেরতযোগ্য টাকার চেয়ে বেশি হতে পারে না",
+    "repayment_exceeds_due": "বকেয়া শোধের পরিমাণ ক্রেতার মোট বকেয়া {max} এর বেশি হতে পারে না",
     "return_to_customer": "ক্রেতাকে {amount} ফেরত দিন",
     "due_balance_info": "{amount} ক্রেতার বাকি হিসেবে যোগ হবে।",
     "complete_sale": "বিক্রয় সম্পন্ন করুন",
@@ -751,7 +754,12 @@
     "skip": "এড়িয়ে যান",
     "repay_enter_amount": "অনুগ্রহ করে একটি পরিমাণ লিখুন",
     "repay_invalid_amount": "অনুগ্রহ করে একটি সঠিক পরিমাণ লিখুন",
-    "repay_amount_exceeds": "পরিমাণ {max} এর বেশি হতে পারবে না"
+    "repay_amount_exceeds": "পরিমাণ {max} এর বেশি হতে পারবে না",
+    "purchase_details": "কেনাকাটার বিবরণ",
+    "total_spent": "মোট কেনাকাটা",
+    "orders": "অর্ডার সংখ্যা",
+    "avg_order": "গড় অর্ডার মূল্য",
+    "top_products_label": "শীর্ষ ক্রয়কৃত পণ্য"
   },
   "PasswordChange": {
     "title": "পাসওয়ার্ড পরিবর্তন করুন",

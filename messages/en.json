@@ -79,6 +79,8 @@
     "add_new_customer": "Add New Customer",
     "enter_customer_details": "Enter customer details",
     "customer_name": "Name *",
+    "customer_name_en": "English Name",
+    "enter_name_en": "Enter English name",
     "customer_phone": "Phone",
     "customer_address": "Address",
     "customer_notes": "Notes",
@@ -126,6 +128,7 @@
     "clear_due": "Clear Due",
     "add_prepayment": "Add to Prepayment",
     "allocation_exceeds_change": "Allocated amount cannot exceed total change",
+    "repayment_exceeds_due": "Debt repayment cannot exceed customer's outstanding due balance of {max}",
     "return_to_customer": "Return {amount} to customer",
     "due_balance_info": "{amount} will be added as customer's due balance.",
     "complete_sale": "Complete Sale",
@@ -751,7 +754,12 @@
     "skip": "Skip",
     "repay_enter_amount": "Please enter an amount",
     "repay_invalid_amount": "Please enter a valid amount",
-    "repay_amount_exceeds": "Amount cannot exceed {max}"
+    "repay_amount_exceeds": "Amount cannot exceed {max}",
+    "purchase_details": "Purchase Details",
+    "total_spent": "Total Spent",
+    "orders": "Orders",
+    "avg_order": "Avg Order",
+    "top_products_label": "Top Products"
   },
   "PasswordChange": {
     "title": "Change Password",
