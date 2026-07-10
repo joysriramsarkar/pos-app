@@ -32,6 +32,8 @@ import {
 } from 'lucide-react';
 import PurchaseStatistics from './PurchaseStatistics';
 
+const WEIGHTED_UNITS = new Set(['kg', 'gram', 'liter', 'ml']);
+
 interface PurchaseOrderItem {
   id: string;
   purchaseOrderId: string;
@@ -60,7 +62,7 @@ interface PurchaseOrder {
 
 interface FormItem {
   productId: string;
-  quantity: number;
+  quantity: number | string;
   unitPrice: number | string;
   gstPercentage?: number | string;
 }
@@ -117,7 +119,7 @@ export default function PurchaseOrderManagement() {
   const [formUpiAmount, setFormUpiAmount] = useState('');
 
   // Receive form state
-  const [receiveItems, setReceiveItems] = useState<{ id: string; receivedQty: number; maxQty: number; productName: string }[]>([]);
+  const [receiveItems, setReceiveItems] = useState<{ id: string; receivedQty: number | string; maxQty: number; productName: string; unit: string }[]>([]);
   const [receiveAmountPaid, setReceiveAmountPaid] = useState<string>('');
   const [receivePaymentMethod, setReceivePaymentMethod] = useState('Cash');
   const [receiveCashAmount, setReceiveCashAmount] = useState('');
@@ -157,7 +159,7 @@ export default function PurchaseOrderManagement() {
     if (!selectedOrder) return 0;
     return receiveItems.reduce((sum, item) => {
       const orderItem = selectedOrder.items.find((i) => i.id === item.id);
-      return sum + item.receivedQty * (orderItem?.unitPrice || 0);
+      return sum + (parseFloat(item.receivedQty as string) || 0) * (orderItem?.unitPrice || 0);
     }, 0);
   }, [receiveItems, selectedOrder]);
 
@@ -333,7 +335,7 @@ export default function PurchaseOrderManagement() {
   let formSubtotal = 0;
   let gstAmount = 0;
   formItems.forEach((item) => {
-    const qty = item.quantity;
+    const qty = parseFloat(item.quantity as string) || 0;
     const unitPrice = parseFloat(item.unitPrice as string) || 0;
     const itemSubtotal = Math.round((qty * unitPrice + Number.EPSILON) * 100) / 100;
     formSubtotal += itemSubtotal;
@@ -347,7 +349,7 @@ export default function PurchaseOrderManagement() {
   formSubtotal = Math.round((formSubtotal + Number.EPSILON) * 100) / 100;
   gstAmount = Math.round((gstAmount + Number.EPSILON) * 100) / 100;
   const formTotal = Math.round((formSubtotal + gstAmount + Number.EPSILON) * 100) / 100;
-  const totalItemCount = formItems.reduce((sum, i) => sum + i.quantity, 0);
+  const totalItemCount = formItems.reduce((sum, i) => sum + (parseFloat(i.quantity as string) || 0), 0);
 
   const formPaidVal = parseFloat(formAmountPaid) || 0;
   const formDueAmount = Math.round((formTotal - formPaidVal + Number.EPSILON) * 100) / 100;
@@ -392,7 +394,7 @@ export default function PurchaseOrderManagement() {
           supplierId: (formSupplierId && formSupplierId !== 'none') ? formSupplierId : null,
           items: formItems.map((i) => ({
             productId: i.productId,
-            quantity: i.quantity,
+            quantity: parseFloat(i.quantity as string) || 0,
             unitPrice: parseFloat(i.unitPrice as string) || 0,
             gstPercentage: i.gstPercentage !== undefined && i.gstPercentage !== '' && !isNaN(parseFloat(i.gstPercentage as string)) ? parseFloat(i.gstPercentage as string) : undefined
           })),
@@ -415,8 +417,9 @@ export default function PurchaseOrderManagement() {
             const productsStore = useProductsStore.getState();
             const { ProductsDB } = await import('@/lib/offline/indexeddb');
             for (const item of formItems) {
-              productsStore.updateProductStock(item.productId, item.quantity);
-              await ProductsDB.updateStock(item.productId, item.quantity);
+              const parsedQty = parseFloat(item.quantity as string) || 0;
+              productsStore.updateProductStock(item.productId, parsedQty);
+              await ProductsDB.updateStock(item.productId, parsedQty);
             }
           } catch (dbError) {
             console.error('Failed to update local stock cache:', dbError);
@@ -492,6 +495,7 @@ export default function PurchaseOrderManagement() {
         receivedQty: item.quantity,
         maxQty: item.quantity,
         productName: item.product?.nameBn || item.product?.name || item.productId,
+        unit: item.product?.unit || 'piece',
       }))
     );
     setReceiveAmountPaid('');
@@ -504,7 +508,7 @@ export default function PurchaseOrderManagement() {
 
   const handleReceiveOrder = async () => {
     if (!selectedOrder) return;
-    const validItems = receiveItems.filter((i) => i.receivedQty > 0);
+    const validItems = receiveItems.filter((i) => (parseFloat(i.receivedQty as string) || 0) > 0);
     if (validItems.length === 0) {
       toast.error(t('quantity'));
       return;
@@ -541,8 +545,9 @@ export default function PurchaseOrderManagement() {
           for (const item of validItems) {
             const orderItem = selectedOrder.items.find((i) => i.id === item.id);
             if (orderItem) {
-              productsStore.updateProductStock(orderItem.productId, item.receivedQty);
-              await ProductsDB.updateStock(orderItem.productId, item.receivedQty);
+              const parsedRcvQty = parseFloat(item.receivedQty as string) || 0;
+              productsStore.updateProductStock(orderItem.productId, parsedRcvQty);
+              await ProductsDB.updateStock(orderItem.productId, parsedRcvQty);
             }
           }
         } catch (dbError) {
@@ -940,7 +945,8 @@ export default function PurchaseOrderManagement() {
                         <TableBody>
                           {formItems.map((item) => {
                             const product = products.find((p) => p.id === item.productId);
-                            const qty = item.quantity;
+                            const isWeighted = WEIGHTED_UNITS.has(product?.unit || '');
+                            const qty = parseFloat(item.quantity as string) || 0;
                             const unitPrice = parseFloat(item.unitPrice as string) || 0;
                             const itemSubtotal = Math.round((qty * unitPrice + Number.EPSILON) * 100) / 100;
                             const hasCustomGst = item.gstPercentage !== undefined && item.gstPercentage !== '' && !isNaN(parseFloat(item.gstPercentage as string));
@@ -958,12 +964,22 @@ export default function PurchaseOrderManagement() {
                                     value={item.quantity === 0 ? '' : item.quantity}
                                     onChange={(e) => {
                                       const val = convertBengaliToEnglishNumerals(e.target.value);
-                                      const cleaned = val.replace(/[^0-9]/g, '');
-                                      updateFormItem(item.productId, 'quantity', parseInt(cleaned) || 0);
+                                      if (isWeighted) {
+                                        const cleaned = val.replace(/[^0-9.]/g, '');
+                                        const dotCount = (cleaned.match(/\./g) || []).length;
+                                        if (dotCount > 1) return;
+                                        updateFormItem(item.productId, 'quantity', cleaned);
+                                      } else {
+                                        const cleaned = val.replace(/[^0-9]/g, '');
+                                        updateFormItem(item.productId, 'quantity', parseInt(cleaned) || 0);
+                                      }
                                     }}
                                     onBlur={() => {
-                                      if (item.quantity <= 0) {
+                                      const parsed = parseFloat(item.quantity as string);
+                                      if (isNaN(parsed) || parsed <= 0) {
                                         updateFormItem(item.productId, 'quantity', 1);
+                                      } else {
+                                        updateFormItem(item.productId, 'quantity', parsed);
                                       }
                                     }}
                                     className="h-8 w-20"
@@ -1035,7 +1051,8 @@ export default function PurchaseOrderManagement() {
                 <div className="md:hidden flex flex-col gap-3">
                   {formItems.map((item) => {
                     const product = products.find((p) => p.id === item.productId);
-                    const qty = item.quantity;
+                    const isWeighted = WEIGHTED_UNITS.has(product?.unit || '');
+                    const qty = parseFloat(item.quantity as string) || 0;
                     const unitPrice = parseFloat(item.unitPrice as string) || 0;
                     const itemSubtotal = Math.round((qty * unitPrice + Number.EPSILON) * 100) / 100;
                     const hasCustomGst = item.gstPercentage !== undefined && item.gstPercentage !== '' && !isNaN(parseFloat(item.gstPercentage as string));
@@ -1060,12 +1077,22 @@ export default function PurchaseOrderManagement() {
                               value={item.quantity === 0 ? '' : item.quantity}
                               onChange={(e) => {
                                 const val = convertBengaliToEnglishNumerals(e.target.value);
-                                const cleaned = val.replace(/[^0-9]/g, '');
-                                updateFormItem(item.productId, 'quantity', parseInt(cleaned) || 0);
+                                if (isWeighted) {
+                                  const cleaned = val.replace(/[^0-9.]/g, '');
+                                  const dotCount = (cleaned.match(/\./g) || []).length;
+                                  if (dotCount > 1) return;
+                                  updateFormItem(item.productId, 'quantity', cleaned);
+                                } else {
+                                  const cleaned = val.replace(/[^0-9]/g, '');
+                                  updateFormItem(item.productId, 'quantity', parseInt(cleaned) || 0);
+                                }
                               }}
                               onBlur={() => {
-                                if (item.quantity <= 0) {
+                                const parsed = parseFloat(item.quantity as string);
+                                if (isNaN(parsed) || parsed <= 0) {
                                   updateFormItem(item.productId, 'quantity', 1);
+                                } else {
+                                  updateFormItem(item.productId, 'quantity', parsed);
                                 }
                               }}
                               className="h-8 w-full"
@@ -1433,7 +1460,8 @@ export default function PurchaseOrderManagement() {
                                   setReceiveItems(newItems);
                                 }}
                                 onBlur={() => {
-                                  if (item.receivedQty < 0) {
+                                  const receivedNum = parseFloat(item.receivedQty as string) || 0;
+                                  if (receivedNum < 0) {
                                     const newItems = [...receiveItems];
                                     newItems[idx] = { ...newItems[idx], receivedQty: 0 };
                                     setReceiveItems(newItems);

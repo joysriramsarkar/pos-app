@@ -258,7 +258,7 @@ export function PartiesManagement() {
       !showDueEntryDialog
     ) {
       const timer = setTimeout(() => {
-        searchInputRef.current?.focus();
+        searchInputRef.current?.focus({ preventScroll: true });
       }, 50);
       return () => clearTimeout(timer);
     }

@@ -131,7 +131,8 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
     return Object.entries(productUsage)
       .sort(([, a], [, b]) => b - a)
       .slice(0, 4)
-      .map(([qty]) => parseFloat(qty));
+      .map(([qty]) => parseFloat(qty))
+      .filter((qty) => !isNaN(qty) && qty > 0);
   }, [productUsage]);
 
   const QUANTITY_PRESETS = useMemo(() => {

@@ -32,6 +32,9 @@ import {
   ScanLine,
   Plus,
   X,
+  Phone,
+  MapPin,
+  Languages,
 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import type { PaymentMethod, Customer } from '@/types/pos';
@@ -53,6 +56,17 @@ const paymentMethods: { method: PaymentMethod; icon: React.ReactNode; labelKey: 
   { method: 'Mixed', icon: (<div className="flex items-center gap-1"><Banknote className="w-4 h-4" /><Smartphone className="w-4 h-4" /></div>), labelKey: 'mixed', color: 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100' },
   { method: 'Due', icon: <Clock className="w-4 h-4" />, labelKey: 'due_payment', color: 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100' },
 ];
+
+const normalizeAndValidatePhone = (phone: string): string | null => {
+  if (!phone) return null;
+  let clean = phone.replace(/\s+/g, '');
+  clean = convertBengaliToEnglishNumerals(clean);
+  if (clean.startsWith('+')) clean = clean.slice(1);
+  if (clean.startsWith('091') && clean.length === 13) clean = clean.slice(3);
+  else if (clean.startsWith('91') && clean.length === 12) clean = clean.slice(2);
+  else if (clean.startsWith('0') && clean.length === 11) clean = clean.slice(1);
+  return /^[0-9]{10}$/.test(clean) ? clean : null;
+};
 
 export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps) {
   const t = useTranslations('Cart');
@@ -97,7 +111,7 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
   const setCheckoutOpen = useUIStore((state) => state.setCheckoutOpen);
   const { formatPrice } = useNumberFormat();
 
-  // Auto-translate name to English
+  // Auto-translate name to English using Google Translate API directly
   useEffect(() => {
     if (!newParty.name.trim()) {
       setNewParty(prev => ({ ...prev, nameEn: '' }));
@@ -111,12 +125,15 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
         setNewParty(prev => ({ ...prev, nameEn: newParty.name.trim() }));
       } else {
         try {
-          const res = await fetch(`/api/translate?text=${encodeURIComponent(newParty.name.trim())}&to=en`);
+          const res = await fetch(
+            `https://translate.googleapis.com/translate_a/single?client=gtx&sl=bn&tl=en&dt=t&q=${encodeURIComponent(newParty.name.trim())}`
+          );
           const data = await res.json();
-          if (data.success && data.translatedText) {
+          const translated = data?.[0]?.[0]?.[0];
+          if (translated) {
             setNewParty(prev => {
               if (isNameEnTouched) return prev;
-              return { ...prev, nameEn: data.translatedText };
+              return { ...prev, nameEn: translated };
             });
           }
         } catch (err) {
@@ -206,21 +223,25 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
   const handleAddPartyFromCart = async () => {
     if (!newParty.name) return;
 
-    // Validate phone if provided
-    if (newParty.phone && !/^[0-9]{10}$/.test(newParty.phone)) {
-      toast({
-        title: t('invalid_phone'),
-        description: t('phone_digits'),
-        variant: 'destructive',
-      });
-      return;
+    // Normalize and validate phone number
+    let normalizedPhone: string | null = null;
+    if (newParty.phone.trim()) {
+      normalizedPhone = normalizeAndValidatePhone(newParty.phone);
+      if (!normalizedPhone) {
+        toast({
+          title: t('invalid_phone'),
+          description: t('phone_digits'),
+          variant: 'destructive',
+        });
+        return;
+      }
     }
 
     try {
       const response = await fetch('/api/customers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newParty),
+        body: JSON.stringify({ ...newParty, phone: normalizedPhone || '' }),
       });
 
       if (!response.ok) {
@@ -564,6 +585,7 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
           </DialogHeader>
 
           <div className="space-y-4 py-4">
+            {/* Bengali Name */}
             <div className="space-y-2">
               <Label htmlFor="cart-party-name">{t('customer_name')}</Label>
               <Input
@@ -574,8 +596,12 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
               />
             </div>
 
+            {/* English Name (auto-translated) */}
             <div className="space-y-2">
-              <Label htmlFor="cart-party-name-en">{t('customer_name_en')}</Label>
+              <Label htmlFor="cart-party-name-en" className="flex items-center gap-1.5">
+                <Languages className="w-3.5 h-3.5 text-muted-foreground" />
+                {t('customer_name_en')}
+              </Label>
               <Input
                 id="cart-party-name-en"
                 value={newParty.nameEn}
@@ -587,24 +613,35 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
               />
             </div>
 
+            {/* Phone */}
             <div className="space-y-2">
               <Label htmlFor="cart-party-phone">{t('customer_phone')}</Label>
-              <Input
-                id="cart-party-phone"
-                value={newParty.phone}
-                onChange={(e) => setNewParty(prev => ({ ...prev, phone: e.target.value }))}
-                placeholder={t('enter_phone')}
-              />
+              <div className="relative">
+                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="cart-party-phone"
+                  value={newParty.phone}
+                  onChange={(e) => setNewParty(prev => ({ ...prev, phone: convertBengaliToEnglishNumerals(e.target.value) }))}
+                  placeholder={t('enter_phone')}
+                  className="pl-9"
+                  inputMode="numeric"
+                />
+              </div>
             </div>
 
+            {/* Address */}
             <div className="space-y-2">
               <Label htmlFor="cart-party-address">{t('customer_address')}</Label>
-              <Input
-                id="cart-party-address"
-                value={newParty.address}
-                onChange={(e) => setNewParty(prev => ({ ...prev, address: e.target.value }))}
-                placeholder={t('enter_address')}
-              />
+              <div className="relative">
+                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="cart-party-address"
+                  value={newParty.address}
+                  onChange={(e) => setNewParty(prev => ({ ...prev, address: e.target.value }))}
+                  placeholder={t('enter_address')}
+                  className="pl-9"
+                />
+              </div>
             </div>
 
             <div className="space-y-2">

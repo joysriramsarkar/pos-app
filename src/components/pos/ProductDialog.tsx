@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useTranslations } from 'next-intl';
 import { useNumberFormat } from '@/hooks/use-number-format';
@@ -127,6 +127,11 @@ export function ProductDialog({
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isWebScannerOpen, setIsWebScannerOpen] = useState(false);
   const [isNameBnTouched, setIsNameBnTouched] = useState(!!product);
+  const [isCategoryOpen, setIsCategoryOpen] = useState(false);
+  const [isSubCategoryOpen, setIsSubCategoryOpen] = useState(false);
+  const [isUnitOpen, setIsUnitOpen] = useState(false);
+  const pendingTranslationRef = useRef<string | null>(null);
+  const isAnySelectOpen = isCategoryOpen || isSubCategoryOpen || isUnitOpen;
 
   const t = useTranslations('ProductDialog');
   const tc = useTranslations('Common');
@@ -228,8 +233,14 @@ export function ProductDialog({
           const res = await fetch(`https://inputtools.google.com/request?text=${encodeURIComponent(processedName)}&itc=bn-t-i0-und&num=1&cp=0&cs=1&ie=utf-8&oe=utf-8&app=demopage`);
           const data = await res.json();
           if (data && data[1] && data[1][0] && data[1][0][1] && data[1][0][1][0]) {
-            // Double check if it hasn't been touched while fetching
-            setNameBn((prev) => isNameBnTouched ? prev : data[1][0][1][0]);
+            const translated = data[1][0][1][0];
+            // If any dropdown is currently open, buffer the result
+            if (isAnySelectOpen) {
+              pendingTranslationRef.current = translated;
+            } else {
+              // Double check if it hasn't been touched while fetching
+              setNameBn((prev) => isNameBnTouched ? prev : translated);
+            }
           }
         } catch (err) {
           console.error("Auto-translate failed:", err);
@@ -238,7 +249,16 @@ export function ProductDialog({
     }, 800);
 
     return () => clearTimeout(timeoutId);
-  }, [name, isNameBnTouched]);
+  }, [name, isNameBnTouched, isAnySelectOpen]);
+
+  // Apply buffered translation once all dropdowns close
+  useEffect(() => {
+    if (!isAnySelectOpen && pendingTranslationRef.current !== null) {
+      const pending = pendingTranslationRef.current;
+      pendingTranslationRef.current = null;
+      setNameBn((prev) => isNameBnTouched ? prev : pending);
+    }
+  }, [isAnySelectOpen, isNameBnTouched]);
 
   const handleGenerateBarcode = () => {
     setBarcode(generateBarcode());
@@ -437,6 +457,7 @@ export function ProductDialog({
                   setNewCategory('');
                 }
               }}
+              onOpenChange={setIsCategoryOpen}
             >
               <SelectTrigger id="product-form-category" className={showCategoryError ? 'border-destructive focus-visible:ring-destructive' : ''}>
                 <SelectValue placeholder={t('category_placeholder')} />
@@ -477,6 +498,7 @@ export function ProductDialog({
                   setNewSubCategory('');
                 }
               }}
+              onOpenChange={setIsSubCategoryOpen}
             >
               <SelectTrigger id="product-form-subcategory">
                 <SelectValue placeholder={t('subcategory_placeholder')} />
@@ -509,7 +531,7 @@ export function ProductDialog({
           {/* Unit */}
           <div className="space-y-2">
             <Label htmlFor="product-form-unit">{t('unit')}</Label>
-            <Select value={unit} onValueChange={setUnit}>
+            <Select value={unit} onValueChange={setUnit} onOpenChange={setIsUnitOpen}>
               <SelectTrigger id="product-form-unit">
                 <SelectValue placeholder={t('unit_placeholder')} />
               </SelectTrigger>

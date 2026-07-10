@@ -52,7 +52,7 @@ export function ProductGrid({
 
   useEffect(() => {
     if (searchFocusKey && searchInputRef.current) {
-      searchInputRef.current.focus();
+      searchInputRef.current.focus({ preventScroll: true });
       searchInputRef.current.select();
     }
   }, [searchFocusKey]);
