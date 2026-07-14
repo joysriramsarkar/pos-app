@@ -62,7 +62,7 @@ export interface PaymentData {
   total: number;
   usePrepaid: boolean;
   prepaidAmountUsed: number;
-  addChangeAsPrepayment?: boolean;
+  changeAsPrepayment?: number;
   debtRepaymentAmount?: number;
 }
 
@@ -86,7 +86,7 @@ export function CheckoutDialog({
 
   const t = useTranslations('Checkout');
   const tc = useTranslations('Common');
-  const { formatPrice } = useNumberFormat();
+  const { formatPrice, formatStringNumbers } = useNumberFormat();
   const currencySymbol = useSettingsStore((state) => state.settings.currency_symbol);
   const { data: session } = useSession();
   const cashierName = (session?.user as any)?.name || (session?.user as any)?.username || 'অ্যাডমিন';
@@ -138,7 +138,8 @@ export function CheckoutDialog({
   const [amountReceived, setAmountReceived] = useState<string>('');
   const [cashReceived, setCashReceived] = useState<string>('');
   const [upiReceived, setUpiReceived] = useState<string>('');
-  const [addAsPrePayment, setAddAsPrePayment] = useState(false);
+  const [prepaymentAmount, setPrepaymentAmount] = useState<string>('');
+  const [debtRepaymentAmount, setDebtRepaymentAmount] = useState<string>('');
 
   // Auto-update amount when remainingTotal changes (usePrepaid toggle)
   const updateAmountFields = useCallback(() => {
@@ -188,7 +189,8 @@ export function CheckoutDialog({
     if (isOpen && !prevOpenRef.current) {
       setInputError(null);
       setUsePrepaid(false);
-      setAddAsPrePayment(false);
+      setPrepaymentAmount('');
+      setDebtRepaymentAmount('');
       setIsLocalProcessing(false);
       updateAmountFields();
     }
@@ -257,7 +259,18 @@ export function CheckoutDialog({
       return;
     }
 
-    const insufficientStockItems: Array<{ name: string; qty: number; available: number }> = [];
+    const pAmt = Number(prepaymentAmount) || 0;
+    const dAmt = Number(debtRepaymentAmount) || 0;
+    if (pAmt + dAmt > Math.max(0, change)) {
+      setInputError(t('allocation_exceeds_change') || 'Allocation exceeds change amount');
+      return;
+    }
+
+    if (customer && dAmt > toMoneyNumber(customer.totalDue)) {
+      setInputError(t('repayment_exceeds_due', { max: formatPrice(toMoneyNumber(customer.totalDue)) }) || `Debt repayment cannot exceed customer's outstanding due balance of ${formatPrice(toMoneyNumber(customer.totalDue))}`);
+      return;
+    }
+
     const productMap = new Map(products.map((p) => [p.id, p]));
     for (const cartItem of items) {
       const product = productMap.get(cartItem.productId);
@@ -265,21 +278,6 @@ export function CheckoutDialog({
         setInputError(t('product_no_longer_exists', { name: cartItem.productName }));
         return;
       }
-      if (cartItem.quantity > product.currentStock) {
-        insufficientStockItems.push({
-          name: cartItem.productName,
-          qty: cartItem.quantity,
-          available: product.currentStock,
-        });
-      }
-    }
-
-    if (insufficientStockItems.length > 0) {
-      const itemsText = insufficientStockItems
-        .map((item) => `${item.name} (${t('need')}: ${item.qty}, ${t('available')}: ${item.available})`)
-        .join('\n');
-      setInputError(`${t('insufficient_stock')}\n${itemsText}`);
-      return;
     }
 
     const finalPaymentMethod = remainingTotal === 0 ? 'Prepaid' : paymentMethod;
@@ -318,7 +316,8 @@ export function CheckoutDialog({
       total,
       usePrepaid,
       prepaidAmountUsed: prepaidAmountToUse,
-      addChangeAsPrepayment: addAsPrePayment && change > 0 && !!customerId,
+      changeAsPrepayment: pAmt,
+      debtRepaymentAmount: dAmt,
     };
     
     setIsLocalProcessing(true);
@@ -344,7 +343,8 @@ export function CheckoutDialog({
     prepaidAmountToUse,
     cashReceived,
     upiReceived,
-    addAsPrePayment,
+    prepaymentAmount,
+    debtRepaymentAmount,
   ]);
 
   const [showReceiptPrint, setShowReceiptPrint] = useState(false);
@@ -391,7 +391,15 @@ export function CheckoutDialog({
   return (
     <>
       <Dialog open={isOpen} onOpenChange={isCurrentlyProcessing ? () => {} : handleOpenChange}>
-        <DialogContent className="sm:max-w-106.25 flex flex-col max-h-[90dvh] md:max-h-[85vh] p-0 overflow-hidden" onInteractOutside={isCurrentlyProcessing ? (e) => e.preventDefault() : undefined}>
+        <DialogContent 
+          className="sm:max-w-106.25 flex flex-col max-h-[90dvh] md:max-h-[85vh] p-0 overflow-hidden" 
+          onInteractOutside={isCurrentlyProcessing ? (e) => e.preventDefault() : undefined}
+          onOpenAutoFocus={(e) => {
+            if (typeof window !== 'undefined' && window.innerWidth < 768) {
+              e.preventDefault();
+            }
+          }}
+        >
           {isCurrentlyProcessing && (
             <div className="flex flex-col items-center py-16 gap-4">
               <span className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
@@ -549,9 +557,9 @@ export function CheckoutDialog({
                   </div>
                 )}
 
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-3 gap-2 md:hidden">
                   {QUICK_AMOUNTS.map((amount) => (
-                    <Button key={amount} variant="outline" size="sm" onClick={() => handleQuickAmount(amount)} disabled={isProcessing} className="h-9">{currencySymbol}{amount}</Button>
+                    <Button key={amount} variant="outline" size="sm" onClick={() => handleQuickAmount(amount)} disabled={isProcessing} className="h-9">{currencySymbol}{formatStringNumbers(amount)}</Button>
                   ))}
                 </div>
 
@@ -566,12 +574,50 @@ export function CheckoutDialog({
                 )}
 
                 {change > 0 && customerId && (
-                  <div className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                    <Label htmlFor="add-prepayment" className="font-medium flex items-center gap-2 cursor-pointer">
-                      <Wallet className="w-4 h-4 text-blue-600" />
-                      <span className="text-sm">{t('add_as_prepayment', { amount: formatPrice(change) })}</span>
-                    </Label>
-                    <Switch id="add-prepayment" checked={addAsPrePayment} onCheckedChange={setAddAsPrePayment} />
+                  <div className="space-y-3 mt-4 p-3 bg-blue-50/50 border border-blue-100 rounded-lg">
+                    <p className="text-sm font-medium text-blue-900">{t('allocate_change') || 'Allocate Change'} ({formatPrice(change)})</p>
+                    
+                    {customer && toMoneyNumber(customer.totalDue) > 0 && (
+                      <div className="flex items-center gap-2">
+                        <Label className="flex-1 text-sm">{t('clear_due') || 'Clear Due'} ({tc('max') || 'Max'} {formatPrice(Math.min(change, toMoneyNumber(customer.totalDue)))})</Label>
+                        <Input 
+                          type="text" 
+                          inputMode="numeric"
+                          value={debtRepaymentAmount} 
+                          onChange={(e) => {
+                            const val = convertBengaliToEnglishNumerals(e.target.value);
+                            if (val === '' || /^\d*\.?\d{0,2}$/.test(val)) {
+                              setDebtRepaymentAmount(val);
+                              setInputError(null);
+                            }
+                          }}
+                          className="w-28 text-right bg-white"
+                          placeholder="0"
+                        />
+                      </div>
+                    )}
+                    
+                    <div className="flex items-center gap-2">
+                      <Label className="flex-1 text-sm">{t('add_prepayment') || 'Add to Prepayment'}</Label>
+                      <Input 
+                        type="text" 
+                        inputMode="numeric"
+                        value={prepaymentAmount} 
+                        onChange={(e) => {
+                          const val = convertBengaliToEnglishNumerals(e.target.value);
+                          if (val === '' || /^\d*\.?\d{0,2}$/.test(val)) {
+                            setPrepaymentAmount(val);
+                            setInputError(null);
+                          }
+                        }}
+                        className="w-28 text-right bg-white"
+                        placeholder="0"
+                      />
+                    </div>
+                    
+                    <div className="text-sm text-right font-medium text-blue-800 pt-1 border-t border-blue-200">
+                      {t('return_to_customer', { amount: formatPrice(Math.max(0, change - (Number(debtRepaymentAmount) || 0) - (Number(prepaymentAmount) || 0))) })}
+                    </div>
                   </div>
                 )}
 

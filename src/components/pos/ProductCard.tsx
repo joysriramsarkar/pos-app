@@ -24,9 +24,7 @@ export function ProductCard({ product }: ProductCardProps) {
   const isOutOfStock = product.currentStock <= 0;
 
   const handleAddToCart = () => {
-    if (!isOutOfStock) {
-      addItem(product, 1);
-    }
+    addItem(product, 1);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -43,29 +41,19 @@ export function ProductCard({ product }: ProductCardProps) {
           'group relative overflow-hidden transition-all duration-300 cursor-pointer rounded-xl border-border/50',
           'lg:hover:shadow-xl lg:hover:-translate-y-1 active:scale-[0.98]',
           'focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-          isOutOfStock && 'opacity-60 grayscale cursor-not-allowed'
+          isOutOfStock && 'border-red-200/50 dark:border-red-900/30'
         )}
         tabIndex={0}
         onKeyDown={handleKeyDown}
         onClick={handleAddToCart}
         role="button"
         aria-label={`${t('add_to_cart')} ${product.name}, ${formatPrice(product.sellingPrice)} / ${product.unit}`}
-        aria-disabled={isOutOfStock}
       >
         {/* Low Stock Warning Banner */}
         {isLowStock && !isOutOfStock && (
           <div className="absolute top-0 left-0 right-0 bg-amber-500/90 backdrop-blur-sm text-white text-[10px] font-semibold tracking-wider uppercase py-1 px-2 text-center z-10 shadow-sm flex items-center justify-center gap-1">
             <AlertTriangle className="w-3 h-3" />
             {t('low_stock')}
-          </div>
-        )}
-
-        {/* Out of Stock Overlay */}
-        {isOutOfStock && (
-          <div className="absolute inset-0 bg-background/60 backdrop-blur-[2px] flex items-center justify-center z-10 transition-opacity">
-            <Badge variant="destructive" className="text-sm shadow-md shadow-red-500/20 px-3 py-1 bg-red-500 text-white">
-              {t('out_of_stock')}
-            </Badge>
           </div>
         )}
 
@@ -116,9 +104,9 @@ export function ProductCard({ product }: ProductCardProps) {
                 <div className="flex items-center justify-between text-xs text-muted-foreground mt-0.5">
                   <span className={cn(
                     "font-medium",
-                    isLowStock && !isOutOfStock ? "text-amber-600 dark:text-amber-500" : ""
+                    isOutOfStock ? "text-red-500 font-bold" : isLowStock ? "text-amber-600 dark:text-amber-500" : ""
                   )}>
-                    {t('stock')}: {product.currentStock} {product.unit}
+                    {t('stock')}: {product.currentStock} {product.unit} {isOutOfStock && `(${t('out_of_stock')})`}
                   </span>
                 </div>
               </div>
@@ -132,7 +120,6 @@ export function ProductCard({ product }: ProductCardProps) {
                 "lg:opacity-0 lg:-translate-y-2 lg:group-hover:opacity-100 lg:group-hover:translate-y-0",
                 "opacity-100 translate-y-0 bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground"
               )}
-              disabled={isOutOfStock}
               onClick={(e) => {
                 e.stopPropagation();
                 handleAddToCart();

@@ -10,11 +10,11 @@ import { ArrowLeft, BarChart3, Tag, Truck, TrendingDown, Banknote, CalendarDays,
 import { format, startOfMonth, endOfMonth, startOfWeek, subDays, addDays, subMonths, getWeek, getYear } from 'date-fns';
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  XAxis, YAxis, CartesianGrid,
 } from 'recharts';
+import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent, type ChartConfig } from '@/components/ui/chart';
 import { useTranslations } from 'next-intl';
 import { useNumberFormat } from '@/hooks/use-number-format';
-import { useSettingsStore } from '@/stores/settings-store';
 
 const CATEGORIES = ['Rent', 'Utilities', 'Salaries', 'Maintenance', 'Supplier Payment', 'Other'] as const;
 
@@ -27,7 +27,11 @@ const CATEGORY_COLORS: Record<string, string> = {
   Other: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400',
 };
 
-const CHART_COLORS = ['#ef4444', '#f59e0b', '#8b5cf6', '#3b82f6', '#10b981', '#ec4899', '#f97316', '#14b8a6'];
+const CHART_COLORS = [
+  'var(--chart-5)', 'var(--chart-3)', 'var(--chart-2)',
+  'var(--chart-1)', 'var(--chart-4)', 'var(--chart-5)',
+  'var(--chart-3)', 'var(--chart-1)'
+];
 
 type ViewMode = 'daily' | 'weekly' | 'monthly';
 
@@ -37,8 +41,23 @@ interface ExpensesReportProps {
 
 export function ExpensesReport({ onBack }: ExpensesReportProps) {
   const t = useTranslations('Expenses');
-  const { formatPrice, formatDate, formatStringNumbers } = useNumberFormat();
-  const currencySymbol = useSettingsStore((s) => s.settings.currency_symbol);
+  const { formatPrice, formatDate, formatStringNumbers, formatCompact } = useNumberFormat();
+
+  const parseDateSafe = (dateStr: string | Date | null | undefined): Date => {
+    if (!dateStr) return new Date();
+    if (dateStr instanceof Date) return dateStr;
+    const str = String(dateStr);
+    const datePart = str.substring(0, 10);
+    return new Date(datePart + 'T12:00:00');
+  };
+
+  const expenseChartConfig: ChartConfig = {
+    amount: { label: 'খরচ', color: 'var(--chart-5)' },
+  };
+
+  const pieChartConfig: ChartConfig = {
+    value: { label: 'শ্রেণী', color: 'var(--chart-1)' },
+  };
   const [expenses, setExpenses] = useState<any[]>([]);
   const [filterCategory, setFilterCategory] = useState('All');
   const [viewMode, setViewMode] = useState<ViewMode>('daily');
@@ -104,7 +123,7 @@ export function ExpensesReport({ onBack }: ExpensesReportProps) {
   const dailyData = useMemo(() => {
     const map: Record<string, { amount: number; ts: number }> = {};
     filtered.forEach(e => {
-      const d = new Date(e.date);
+      const d = parseDateSafe(e.date);
       const k = format(d, 'dd MMM');
       if (!map[k]) map[k] = { amount: 0, ts: d.getTime() };
       map[k].amount += Number(e.amount ?? 0);
@@ -115,7 +134,7 @@ export function ExpensesReport({ onBack }: ExpensesReportProps) {
   const weeklyData = useMemo(() => {
     const map: Record<string, { amount: number; ts: number }> = {};
     filtered.forEach(e => {
-      const d = new Date(e.date);
+      const d = parseDateSafe(e.date);
       const k = `W${getWeek(d)} '${String(getYear(d)).slice(2)}`;
       if (!map[k]) map[k] = { amount: 0, ts: startOfWeek(d).getTime() };
       map[k].amount += Number(e.amount ?? 0);
@@ -126,7 +145,7 @@ export function ExpensesReport({ onBack }: ExpensesReportProps) {
   const monthlyData = useMemo(() => {
     const map: Record<string, { amount: number; ts: number }> = {};
     filtered.forEach(e => {
-      const d = new Date(e.date);
+      const d = parseDateSafe(e.date);
       const k = format(d, 'MMM yyyy');
       if (!map[k]) map[k] = { amount: 0, ts: startOfMonth(d).getTime() };
       map[k].amount += Number(e.amount ?? 0);
@@ -157,15 +176,14 @@ export function ExpensesReport({ onBack }: ExpensesReportProps) {
     setDateTo(format(new Date(), 'yyyy-MM-dd'));
   };
 
-  const tooltipStyle = { borderRadius: '8px', fontSize: '12px' };
-  const yFmt = (v: number) => `${currencySymbol}${v >= 1000 ? formatStringNumbers((v / 1000).toFixed(1)) + 'k' : formatStringNumbers(v)}`;
+  const chartColor = viewMode === 'daily' ? 'var(--chart-5)' : viewMode === 'weekly' ? 'var(--chart-3)' : 'var(--chart-1)';
+  const tableColor = viewMode === 'daily' ? 'text-red-600' : viewMode === 'weekly' ? 'text-amber-600' : 'text-purple-600';
 
   const chartData = viewMode === 'daily'
-    ? filtered.map(e => ({ time: format(new Date(e.date), 'HH:mm'), amount: e.amount ?? 0, label: e.notes || e.category }))
+    ? filtered.map(e => ({ time: format(parseDateSafe(e.date), 'HH:mm'), amount: e.amount ?? 0, label: e.notes || e.category, origDate: e.date }))
     : viewMode === 'weekly' ? weeklyData : monthlyData;
   const chartKey = viewMode === 'daily' ? 'time' : viewMode === 'weekly' ? 'week' : 'month';
-  const chartColor = viewMode === 'daily' ? '#ef4444' : viewMode === 'weekly' ? '#f59e0b' : '#8b5cf6';
-  const tableColor = viewMode === 'daily' ? 'text-red-600' : viewMode === 'weekly' ? 'text-amber-600' : 'text-purple-600';
+
   return (
     <div className="flex-1 flex flex-col gap-4 p-4 md:p-6 bg-slate-50/50 overflow-y-auto min-h-0 pb-24 animate-page-enter">
       {/* Header */}
@@ -228,8 +246,8 @@ export function ExpensesReport({ onBack }: ExpensesReportProps) {
             </div>
           ) : (
             <div className="flex items-center gap-2 flex-wrap">
-              {[7, 30, 90].map(d => (
-                <Button key={d} size="sm" variant="outline" className="h-8 text-xs" onClick={() => setRangePreset(d)}>{formatStringNumbers(d)}d</Button>
+              {[7, 30, 365].map(d => (
+                <Button key={d} size="sm" variant="outline" className="h-8 text-xs" onClick={() => setRangePreset(d)}>{d === 365 ? t('yearly') : `${formatStringNumbers(d)}d`}</Button>
               ))}
               <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => {
                 setDateFrom(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
@@ -295,21 +313,43 @@ export function ExpensesReport({ onBack }: ExpensesReportProps) {
           {chartData.length === 0 ? (
             <p className="text-center text-muted-foreground text-sm py-8">{t('no_data')}</p>
           ) : (
-            <ResponsiveContainer width="100%" height={220}>
+            <ChartContainer config={expenseChartConfig} className="h-[220px] w-full">
               <BarChart data={chartData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
-                <XAxis dataKey={chartKey} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-                <YAxis tickFormatter={yFmt} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} width={45} />
-                <Tooltip
-                  formatter={(v: number, _: string, props: any) => [
-                    formatPrice(v),
-                    viewMode === 'daily' ? (props.payload?.label || t('title')) : t('title')
-                  ]}
-                  contentStyle={tooltipStyle}
+                <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="hsl(var(--border) / 0.5)" />
+                <XAxis dataKey={chartKey} tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} tickFormatter={(v) => {
+                  if (viewMode === 'daily') {
+                    // For daily view across multiple days (e.g. 7 days), the XAxis label is the time or date. Wait, if it's multiple days, it's viewMode weekly or monthly.
+                    // Oh, ExpensesReport.tsx daily view means "Today" view! (Because daily means 'hourly' in ExpensesReport if singleDate is selected).
+                    return formatStringNumbers(v);
+                  }
+                  if (viewMode === 'weekly' && dateTo) {
+                     // For weekly view, if the total range is 7 days, we can show weekday names.
+                     const diffDays = Math.ceil((new Date(dateTo).getTime() - new Date(dateFrom).getTime()) / (1000 * 3600 * 24));
+                     // However ExpensesReport weeklyData uses "W12 '26" as key. So let's just return v.
+                     return v;
+                  }
+                  if (viewMode === 'monthly') {
+                    // key is "Feb 2026"
+                    return v;
+                  }
+                  return formatStringNumbers(v);
+                }} />
+                <YAxis tickFormatter={formatCompact} tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} width={55} />
+                <ChartTooltip
+                  content={
+                    <ChartTooltipContent
+                      formatter={(v, _, props) => (
+                        <div className="flex items-center justify-between gap-4 min-w-[140px]">
+                          <span className="text-muted-foreground text-xs">{viewMode === 'daily' ? (props.payload?.label || t('title')) : t('title')}</span>
+                          <span className="font-bold tabular-nums">{formatPrice(Number(v))}</span>
+                        </div>
+                      )}
+                    />
+                  }
                 />
-                <Bar dataKey="amount" name={t('title')} fill={chartColor} radius={[4, 4, 0, 0]} maxBarSize={40} />
+                <Bar dataKey="amount" name="amount" fill={chartColor} radius={[4, 4, 0, 0]} maxBarSize={40} />
               </BarChart>
-            </ResponsiveContainer>
+            </ChartContainer>
           )}
         </CardContent>
       </Card>
@@ -378,7 +418,7 @@ export function ExpensesReport({ onBack }: ExpensesReportProps) {
                   <TableRow><TableCell colSpan={2} className="text-center py-6 text-muted-foreground text-sm">{t('no_data')}</TableCell></TableRow>
                 ) : (chartData as any[]).map((g: any) => (
                   <TableRow key={g[chartKey]}>
-                    <TableCell className="text-sm">{g[chartKey]}</TableCell>
+                    <TableCell className="text-sm">{formatStringNumbers(g[chartKey])}</TableCell>
                     <TableCell className={`text-right font-semibold text-sm ${tableColor}`}>{formatPrice(g.amount)}</TableCell>
                   </TableRow>
                 ))}
@@ -398,14 +438,14 @@ export function ExpensesReport({ onBack }: ExpensesReportProps) {
             {pieData.length === 0 ? (
               <p className="text-center text-muted-foreground text-sm py-8">{t('no_data')}</p>
             ) : (
-              <ResponsiveContainer width="100%" height={200}>
+              <ChartContainer config={expenseChartConfig} className="h-[200px] w-full">
                 <PieChart>
                   <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={75} label={({ name, percent }) => `${t(`categories_map.${name}`)} ${formatStringNumbers((percent * 100).toFixed(0))}%`} labelLine={false}>
                     {pieData.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
                   </Pie>
-                  <Tooltip formatter={(v: number) => formatPrice(v)} contentStyle={tooltipStyle} />
+                  <ChartTooltip content={<ChartTooltipContent />} />
                 </PieChart>
-              </ResponsiveContainer>
+              </ChartContainer>
             )}
           </CardContent>
         </Card>

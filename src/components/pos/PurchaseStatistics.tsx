@@ -15,12 +15,10 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
-} from 'recharts';
-import { useTranslations } from 'next-intl';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
+import { useTranslations, useLocale } from 'next-intl';
 import { useNumberFormat } from '@/hooks/use-number-format';
-import { useSettingsStore } from '@/stores/settings-store';
 import { format, subDays } from 'date-fns';
 
 interface SummaryData {
@@ -70,11 +68,17 @@ interface PurchaseStatisticsProps {
 
 export default function PurchaseStatistics({ onBack }: PurchaseStatisticsProps) {
   const t = useTranslations('Reports');
+  const locale = useLocale();
+  const isBn = locale === 'bn';
   const tp = useTranslations('PurchaseOrders');
   const tc = useTranslations('Common');
   
-  const { formatPrice, formatStringNumbers, formatDate } = useNumberFormat();
-  const currencySymbol = useSettingsStore((s) => s.settings.currency_symbol);
+  const { formatPrice, formatNumber, formatDate, formatStringNumbers, formatCompact } = useNumberFormat();
+  const [chartColor] = useState<string>('var(--chart-1)');
+
+  const purchaseChartConfig: ChartConfig = {
+    amount: { label: 'ক্রয়', color: 'var(--chart-1)' },
+  };
 
   // Supplier Details Dialog States
   const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(null);
@@ -166,8 +170,6 @@ export default function PurchaseStatistics({ onBack }: PurchaseStatisticsProps) 
     return Math.max(0, summary.totalPurchasesAmount - summary.totalPaymentsAmount);
   }, [summary]);
 
-  const chartColor = '#6366f1'; // Indigo
-
   const formattedChartData = useMemo(() => {
     return chartData.map(d => {
       let formattedLabel = d.date;
@@ -185,13 +187,7 @@ export default function PurchaseStatistics({ onBack }: PurchaseStatisticsProps) 
     });
   }, [chartData, days]);
 
-  const yFmt = (v: number) => {
-    if (v >= 100000) return `${currencySymbol}${formatStringNumbers((v / 1000).toFixed(0))}k`;
-    if (v >= 1000) return `${currencySymbol}${formatStringNumbers((v / 1000).toFixed(1))}k`;
-    return `${currencySymbol}${formatStringNumbers(v.toString())}`;
-  };
 
-  const tooltipStyle = { borderRadius: '8px', fontSize: '12px' };
 
   return (
     <>
@@ -229,8 +225,7 @@ export default function PurchaseStatistics({ onBack }: PurchaseStatisticsProps) 
                 <SelectItem value="1">{t('today_sales_option')}</SelectItem>
                 <SelectItem value="7">{t('days_7')}</SelectItem>
                 <SelectItem value="30">{t('days_30')}</SelectItem>
-                <SelectItem value="90">{t('days_90')}</SelectItem>
-                <SelectItem value="365">{t('year_1')}</SelectItem>
+                <SelectItem value="365">{t('yearly')}</SelectItem>
                 <SelectItem value="custom">{t('custom')}</SelectItem>
               </SelectContent>
             </Select>
@@ -356,19 +351,36 @@ export default function PurchaseStatistics({ onBack }: PurchaseStatisticsProps) 
               {formattedChartData.length === 0 ? (
                 <div className="text-center text-muted-foreground text-sm py-12">কোনো ক্রয় তথ্য পাওয়া যায়নি।</div>
               ) : (
-                <ResponsiveContainer width="100%" height={240}>
-                  <BarChart data={formattedChartData} margin={{ top: 10, right: 5, left: -10, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
-                    <XAxis dataKey="displayLabel" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-                    <YAxis tickFormatter={yFmt} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} width={50} />
-                    <Tooltip
-                      formatter={(v: number) => [formatPrice(v), 'ক্রয় মূল্য']}
-                      contentStyle={tooltipStyle}
-                      labelStyle={{ fontWeight: 'bold', color: '#1f2937' }}
+                <ChartContainer config={purchaseChartConfig} className="h-[240px] w-full">
+                  <BarChart data={formattedChartData} margin={{ top: 10, right: 5, left: 0, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="hsl(var(--border) / 0.5)" />
+                    <XAxis dataKey="displayLabel" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} tickFormatter={(v) => {
+                      if (days === '7') {
+                        const d = new Date(v);
+                        if (!isNaN(d.getTime())) return d.toLocaleDateString(isBn ? 'bn-BD' : 'en-IN', { weekday: 'short' });
+                      }
+                      if (days === '365') {
+                        const d = new Date(v);
+                        if (!isNaN(d.getTime())) return d.toLocaleDateString(isBn ? 'bn-BD' : 'en-IN', { month: 'short', year: '2-digit' });
+                      }
+                      return formatStringNumbers(v);
+                    }} />
+                    <YAxis tickFormatter={formatCompact} tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} width={55} />
+                    <ChartTooltip
+                      content={
+                        <ChartTooltipContent
+                          formatter={(v) => (
+                            <div className="flex items-center justify-between gap-4 min-w-[140px]">
+                              <span className="text-muted-foreground text-xs">ক্রয় মূল্য</span>
+                              <span className="font-bold tabular-nums">{formatPrice(Number(v))}</span>
+                            </div>
+                          )}
+                        />
+                      }
                     />
                     <Bar dataKey="amount" name="ক্রয় মূল্য" fill={chartColor} radius={[4, 4, 0, 0]} maxBarSize={40} />
                   </BarChart>
-                </ResponsiveContainer>
+                </ChartContainer>
               )}
             </CardContent>
           </Card>

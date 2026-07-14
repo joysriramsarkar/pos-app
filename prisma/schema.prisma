@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider  = "postgresql"
 }
 
 // ============================================================================
@@ -19,6 +19,7 @@ model Product {
   name          String
   nameBn        String?  @map("name_bn") // Bengali name
   category      String   @default("General")
+  subCategory   String?  @default("") @map("sub_category") // sub-category for grouping products
   buyingPrice   Decimal  @default(0) @map("buying_price")
   sellingPrice  Decimal  @default(0) @map("selling_price")
   unit          String   @default("piece") // piece, kg, gram, liter, packet
@@ -80,6 +81,7 @@ model StockHistory {
 model Customer {
   id             String   @id @default(cuid())
   name           String
+  nameEn         String?  @map("name_en")
   phone          String?  @unique
   address        String?
   totalDue       Decimal  @default(0) @map("total_due") // Running total of outstanding balance (owes store)
@@ -222,6 +224,7 @@ model SaleReturnItem {
 model Supplier {
   id        String   @id @default(cuid())
   name      String
+  nameEn    String?  @map("name_en")
   phone     String?
   address   String?
   email     String?
@@ -425,4 +428,21 @@ model AuditLog {
   @@index([action])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+// ============================================================================
+// DAILY MANUAL CALCULATOR RECORDS
+// ============================================================================
+
+model DailyManualRecord {
+  id        String   @id @default(cuid())
+  date      String   @unique // date format "yyyy-MM-dd"
+  sales     Decimal  @default(0)
+  expenses  Decimal  @default(0)
+  profit    Decimal  @default(0)
+  notes     String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("daily_manual_records")
 }

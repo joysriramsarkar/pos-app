@@ -32,6 +32,8 @@ import {
 } from 'lucide-react';
 import PurchaseStatistics from './PurchaseStatistics';
 
+const WEIGHTED_UNITS = new Set(['kg', 'gram', 'liter', 'ml']);
+
 interface PurchaseOrderItem {
   id: string;
   purchaseOrderId: string;
@@ -60,8 +62,9 @@ interface PurchaseOrder {
 
 interface FormItem {
   productId: string;
-  quantity: number;
+  quantity: number | string;
   unitPrice: number | string;
+  gstPercentage?: number | string;
 }
 
 
@@ -112,12 +115,32 @@ export default function PurchaseOrderManagement() {
   const [supplierOpen, setSupplierOpen] = useState(false);
   const [formPaymentMethod, setFormPaymentMethod] = useState('Cash');
   const [formGstPercentage, setFormGstPercentage] = useState('');
+  const [formCashAmount, setFormCashAmount] = useState('');
+  const [formUpiAmount, setFormUpiAmount] = useState('');
 
   // Receive form state
-  const [receiveItems, setReceiveItems] = useState<{ id: string; receivedQty: number; maxQty: number; productName: string }[]>([]);
+  const [receiveItems, setReceiveItems] = useState<{ id: string; receivedQty: number | string; maxQty: number; productName: string; unit: string }[]>([]);
   const [receiveAmountPaid, setReceiveAmountPaid] = useState<string>('');
   const [receivePaymentMethod, setReceivePaymentMethod] = useState('Cash');
+  const [receiveCashAmount, setReceiveCashAmount] = useState('');
+  const [receiveUpiAmount, setReceiveUpiAmount] = useState('');
   const [lastAddedProductId, setLastAddedProductId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (formPaymentMethod === 'Mixed') {
+      const cash = parseFloat(formCashAmount) || 0;
+      const upi = parseFloat(formUpiAmount) || 0;
+      setFormAmountPaid(String(cash + upi));
+    }
+  }, [formCashAmount, formUpiAmount, formPaymentMethod]);
+
+  useEffect(() => {
+    if (receivePaymentMethod === 'Mixed') {
+      const cash = parseFloat(receiveCashAmount) || 0;
+      const upi = parseFloat(receiveUpiAmount) || 0;
+      setReceiveAmountPaid(String(cash + upi));
+    }
+  }, [receiveCashAmount, receiveUpiAmount, receivePaymentMethod]);
 
   useEffect(() => {
     if (lastAddedProductId) {
@@ -136,7 +159,7 @@ export default function PurchaseOrderManagement() {
     if (!selectedOrder) return 0;
     return receiveItems.reduce((sum, item) => {
       const orderItem = selectedOrder.items.find((i) => i.id === item.id);
-      return sum + item.receivedQty * (orderItem?.unitPrice || 0);
+      return sum + (parseFloat(item.receivedQty as string) || 0) * (orderItem?.unitPrice || 0);
     }, 0);
   }, [receiveItems, selectedOrder]);
 
@@ -292,7 +315,7 @@ export default function PurchaseOrderManagement() {
       toast.error('পণ্য ইতোমধ্যে যোগ করা হয়েছে');
       return;
     }
-    setFormItems([...formItems, { productId: formProductId, quantity: 1, unitPrice: Number(product.buyingPrice) }]);
+    setFormItems([...formItems, { productId: formProductId, quantity: 1, unitPrice: Number(product.buyingPrice), gstPercentage: '' }]);
     setLastAddedProductId(formProductId);
     setFormProductId('');
     setFormProductName('');
@@ -304,14 +327,32 @@ export default function PurchaseOrderManagement() {
     setFormItems(formItems.filter((i) => i.productId !== productId));
   };
 
-  const updateFormItem = (productId: string, field: 'quantity' | 'unitPrice', value: number | string) => {
+  const updateFormItem = (productId: string, field: 'quantity' | 'unitPrice' | 'gstPercentage', value: number | string) => {
     setFormItems(formItems.map((i) => (i.productId === productId ? { ...i, [field]: value } : i)));
   };
 
-  const formSubtotal = formItems.reduce((sum, i) => sum + i.quantity * (parseFloat(i.unitPrice as string) || 0), 0);
-  const gstAmount = formGstPercentage ? formSubtotal * (parseFloat(formGstPercentage) / 100) : 0;
-  const formTotal = formSubtotal + gstAmount;
-  const totalItemCount = formItems.reduce((sum, i) => sum + i.quantity, 0);
+  const generalGstRate = parseFloat(formGstPercentage) || 0;
+  let formSubtotal = 0;
+  let gstAmount = 0;
+  formItems.forEach((item) => {
+    const qty = parseFloat(item.quantity as string) || 0;
+    const unitPrice = parseFloat(item.unitPrice as string) || 0;
+    const itemSubtotal = qty * unitPrice;
+    formSubtotal += itemSubtotal;
+
+    const hasCustomGst = item.gstPercentage !== undefined && item.gstPercentage !== '' && !isNaN(parseFloat(item.gstPercentage as string));
+    const itemGstRate = hasCustomGst ? parseFloat(item.gstPercentage as string) : generalGstRate;
+    const itemGstAmount = itemSubtotal * (itemGstRate / 100);
+    gstAmount += itemGstAmount;
+  });
+
+  formSubtotal = Math.round((formSubtotal + Number.EPSILON) * 100) / 100;
+  gstAmount = Math.round((gstAmount + Number.EPSILON) * 100) / 100;
+  const formTotal = Math.round((formSubtotal + gstAmount + Number.EPSILON) * 100) / 100;
+  const totalItemCount = formItems.reduce((sum, i) => sum + (parseFloat(i.quantity as string) || 0), 0);
+
+  const formPaidVal = parseFloat(formAmountPaid) || 0;
+  const formDueAmount = Math.round((formTotal - formPaidVal + Number.EPSILON) * 100) / 100;
 
   const resetForm = () => {
     setFormSupplierId('');
@@ -328,12 +369,21 @@ export default function PurchaseOrderManagement() {
     setSupplierOpen(false);
     setFormPaymentMethod('Cash');
     setFormGstPercentage('');
+    setFormCashAmount('');
+    setFormUpiAmount('');
   };
 
   const handleCreateOrder = async (directReceive = false) => {
     if (formItems.length === 0) {
       toast.error(t('add_products'));
       return;
+    }
+    if (directReceive && formAmountPaid) {
+      const parsedPaid = parseFloat(formAmountPaid);
+      if (!isNaN(parsedPaid) && parsedPaid > formTotal) {
+        toast.error('পরিশোধিত টাকা ক্রয়ের মোট পরিমাণের চেয়ে বেশি হতে পারবে না।');
+        return;
+      }
     }
     setSaving(true);
     try {
@@ -342,12 +392,19 @@ export default function PurchaseOrderManagement() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           supplierId: (formSupplierId && formSupplierId !== 'none') ? formSupplierId : null,
-          items: formItems.map((i) => ({ productId: i.productId, quantity: i.quantity, unitPrice: parseFloat(i.unitPrice as string) || 0 })),
+          items: formItems.map((i) => ({
+            productId: i.productId,
+            quantity: parseFloat(i.quantity as string) || 0,
+            unitPrice: parseFloat(i.unitPrice as string) || 0,
+            gstPercentage: i.gstPercentage !== undefined && i.gstPercentage !== '' && !isNaN(parseFloat(i.gstPercentage as string)) ? parseFloat(i.gstPercentage as string) : undefined
+          })),
           expectedDate: formExpectedDate || null,
           notes: formNotes || null,
           directReceive,
           amountPaid: (directReceive && formAmountPaid) ? parseFloat(formAmountPaid) : undefined,
           paymentMethod: directReceive ? formPaymentMethod : undefined,
+          cashAmount: (directReceive && formPaymentMethod === 'Mixed') ? (parseFloat(formCashAmount) || 0) : undefined,
+          upiAmount: (directReceive && formPaymentMethod === 'Mixed') ? (parseFloat(formUpiAmount) || 0) : undefined,
           gstPercentage: formGstPercentage ? parseFloat(formGstPercentage) : undefined,
         }),
       });
@@ -360,8 +417,9 @@ export default function PurchaseOrderManagement() {
             const productsStore = useProductsStore.getState();
             const { ProductsDB } = await import('@/lib/offline/indexeddb');
             for (const item of formItems) {
-              productsStore.updateProductStock(item.productId, item.quantity);
-              await ProductsDB.updateStock(item.productId, item.quantity);
+              const parsedQty = parseFloat(item.quantity as string) || 0;
+              productsStore.updateProductStock(item.productId, parsedQty);
+              await ProductsDB.updateStock(item.productId, parsedQty);
             }
           } catch (dbError) {
             console.error('Failed to update local stock cache:', dbError);
@@ -437,20 +495,31 @@ export default function PurchaseOrderManagement() {
         receivedQty: item.quantity,
         maxQty: item.quantity,
         productName: item.product?.nameBn || item.product?.name || item.productId,
+        unit: item.product?.unit || 'piece',
       }))
     );
     setReceiveAmountPaid('');
     setReceivePaymentMethod('Cash');
+    setReceiveCashAmount('');
+    setReceiveUpiAmount('');
     setSelectedOrder(order);
     setShowReceiveDialog(true);
   };
 
   const handleReceiveOrder = async () => {
     if (!selectedOrder) return;
-    const validItems = receiveItems.filter((i) => i.receivedQty > 0);
+    const validItems = receiveItems.filter((i) => (parseFloat(i.receivedQty as string) || 0) > 0);
     if (validItems.length === 0) {
       toast.error(t('quantity'));
       return;
+    }
+    if (receiveAmountPaid) {
+      const parsedPaid = parseFloat(receiveAmountPaid);
+      const maxAllowed = selectedOrder.totalAmount - selectedOrder.paidAmount;
+      if (!isNaN(parsedPaid) && parsedPaid > maxAllowed) {
+        toast.error(`পরিশোধিত টাকা বকেয়া পরিমাণের (৳${maxAllowed}) চেয়ে বেশি হতে পারবে না।`);
+        return;
+      }
     }
     setSaving(true);
     try {
@@ -461,6 +530,8 @@ export default function PurchaseOrderManagement() {
           receivedItems: validItems.map((i) => ({ id: i.id, receivedQty: i.receivedQty })),
           amountPaid: receiveAmountPaid ? parseFloat(receiveAmountPaid) : undefined,
           paymentMethod: receivePaymentMethod,
+          cashAmount: receivePaymentMethod === 'Mixed' ? (parseFloat(receiveCashAmount) || 0) : undefined,
+          upiAmount: receivePaymentMethod === 'Mixed' ? (parseFloat(receiveUpiAmount) || 0) : undefined,
         }),
       });
       const data = await res.json();
@@ -474,8 +545,9 @@ export default function PurchaseOrderManagement() {
           for (const item of validItems) {
             const orderItem = selectedOrder.items.find((i) => i.id === item.id);
             if (orderItem) {
-              productsStore.updateProductStock(orderItem.productId, item.receivedQty);
-              await ProductsDB.updateStock(orderItem.productId, item.receivedQty);
+              const parsedRcvQty = parseFloat(item.receivedQty as string) || 0;
+              productsStore.updateProductStock(orderItem.productId, parsedRcvQty);
+              await ProductsDB.updateStock(orderItem.productId, parsedRcvQty);
             }
           }
         } catch (dbError) {
@@ -865,6 +937,7 @@ export default function PurchaseOrderManagement() {
                             <TableHead>{tc('name')}</TableHead>
                             <TableHead className="w-24">{t('quantity')}</TableHead>
                             <TableHead className="w-28">{t('unit_price')}</TableHead>
+                            <TableHead className="w-24">জিএসটি (%)</TableHead>
                             <TableHead className="w-28">{t('total_price')}</TableHead>
                             <TableHead className="w-12"></TableHead>
                           </TableRow>
@@ -872,6 +945,15 @@ export default function PurchaseOrderManagement() {
                         <TableBody>
                           {formItems.map((item) => {
                             const product = products.find((p) => p.id === item.productId);
+                            const isWeighted = WEIGHTED_UNITS.has(product?.unit || '');
+                            const qty = parseFloat(item.quantity as string) || 0;
+                            const unitPrice = parseFloat(item.unitPrice as string) || 0;
+                            const itemSubtotal = qty * unitPrice;
+                            const hasCustomGst = item.gstPercentage !== undefined && item.gstPercentage !== '' && !isNaN(parseFloat(item.gstPercentage as string));
+                            const itemGstRate = hasCustomGst ? parseFloat(item.gstPercentage as string) : (parseFloat(formGstPercentage) || 0);
+                            const itemGstAmount = itemSubtotal * (itemGstRate / 100);
+                            const itemTotalIncludingGst = itemSubtotal + itemGstAmount;
+
                             return (
                               <TableRow key={item.productId}>
                                 <TableCell className="text-sm">{product?.nameBn || product?.name}</TableCell>
@@ -882,12 +964,22 @@ export default function PurchaseOrderManagement() {
                                     value={item.quantity === 0 ? '' : item.quantity}
                                     onChange={(e) => {
                                       const val = convertBengaliToEnglishNumerals(e.target.value);
-                                      const cleaned = val.replace(/[^0-9]/g, '');
-                                      updateFormItem(item.productId, 'quantity', parseInt(cleaned) || 0);
+                                      if (isWeighted) {
+                                        const cleaned = val.replace(/[^0-9.]/g, '');
+                                        const dotCount = (cleaned.match(/\./g) || []).length;
+                                        if (dotCount > 1) return;
+                                        updateFormItem(item.productId, 'quantity', cleaned);
+                                      } else {
+                                        const cleaned = val.replace(/[^0-9]/g, '');
+                                        updateFormItem(item.productId, 'quantity', parseInt(cleaned) || 0);
+                                      }
                                     }}
                                     onBlur={() => {
-                                      if (item.quantity <= 0) {
+                                      const parsed = parseFloat(item.quantity as string);
+                                      if (isNaN(parsed) || parsed <= 0) {
                                         updateFormItem(item.productId, 'quantity', 1);
+                                      } else {
+                                        updateFormItem(item.productId, 'quantity', parsed);
                                       }
                                     }}
                                     className="h-8 w-20"
@@ -915,7 +1007,32 @@ export default function PurchaseOrderManagement() {
                                     className="h-8 w-24"
                                   />
                                 </TableCell>
-                                <TableCell className="font-medium">{formatPrice(item.quantity * (parseFloat(item.unitPrice as string) || 0))}</TableCell>
+                                <TableCell>
+                                  <Input
+                                    type="text"
+                                    value={item.gstPercentage === undefined ? '' : item.gstPercentage}
+                                    onChange={(e) => {
+                                      const val = convertBengaliToEnglishNumerals(e.target.value);
+                                      const cleaned = val.replace(/[^0-9.]/g, '');
+                                      const dotCount = (cleaned.match(/\./g) || []).length;
+                                      if (dotCount > 1) return;
+                                      updateFormItem(item.productId, 'gstPercentage', cleaned);
+                                    }}
+                                    onBlur={() => {
+                                      const parsedGst = parseFloat(item.gstPercentage as string);
+                                      if (isNaN(parsedGst)) {
+                                        updateFormItem(item.productId, 'gstPercentage', '');
+                                      } else if (parsedGst < 0) {
+                                        updateFormItem(item.productId, 'gstPercentage', 0);
+                                      } else {
+                                        updateFormItem(item.productId, 'gstPercentage', parsedGst);
+                                      }
+                                    }}
+                                    placeholder={formGstPercentage || "0"}
+                                    className="h-8 w-20"
+                                  />
+                                </TableCell>
+                                <TableCell className="font-medium">{formatPrice(itemTotalIncludingGst)}</TableCell>
                                 <TableCell>
                                   <Button variant="ghost" size="sm" onClick={() => removeFormItem(item.productId)}>
                                     <Trash2 className="h-3.5 w-3.5 text-red-500" />
@@ -934,6 +1051,15 @@ export default function PurchaseOrderManagement() {
                 <div className="md:hidden flex flex-col gap-3">
                   {formItems.map((item) => {
                     const product = products.find((p) => p.id === item.productId);
+                    const isWeighted = WEIGHTED_UNITS.has(product?.unit || '');
+                    const qty = parseFloat(item.quantity as string) || 0;
+                    const unitPrice = parseFloat(item.unitPrice as string) || 0;
+                    const itemSubtotal = qty * unitPrice;
+                    const hasCustomGst = item.gstPercentage !== undefined && item.gstPercentage !== '' && !isNaN(parseFloat(item.gstPercentage as string));
+                    const itemGstRate = hasCustomGst ? parseFloat(item.gstPercentage as string) : (parseFloat(formGstPercentage) || 0);
+                    const itemGstAmount = itemSubtotal * (itemGstRate / 100);
+                    const itemTotalIncludingGst = itemSubtotal + itemGstAmount;
+
                     return (
                       <Card key={`mobile-${item.productId}`} className="p-3">
                         <div className="flex justify-between items-start mb-3 gap-2">
@@ -942,7 +1068,7 @@ export default function PurchaseOrderManagement() {
                             <Trash2 className="h-4 w-4 text-red-500" />
                           </Button>
                         </div>
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-3 gap-2">
                           <div className="space-y-1">
                             <Label className="text-xs text-muted-foreground">{t('quantity')}</Label>
                             <Input
@@ -951,12 +1077,22 @@ export default function PurchaseOrderManagement() {
                               value={item.quantity === 0 ? '' : item.quantity}
                               onChange={(e) => {
                                 const val = convertBengaliToEnglishNumerals(e.target.value);
-                                const cleaned = val.replace(/[^0-9]/g, '');
-                                updateFormItem(item.productId, 'quantity', parseInt(cleaned) || 0);
+                                if (isWeighted) {
+                                  const cleaned = val.replace(/[^0-9.]/g, '');
+                                  const dotCount = (cleaned.match(/\./g) || []).length;
+                                  if (dotCount > 1) return;
+                                  updateFormItem(item.productId, 'quantity', cleaned);
+                                } else {
+                                  const cleaned = val.replace(/[^0-9]/g, '');
+                                  updateFormItem(item.productId, 'quantity', parseInt(cleaned) || 0);
+                                }
                               }}
                               onBlur={() => {
-                                if (item.quantity <= 0) {
+                                const parsed = parseFloat(item.quantity as string);
+                                if (isNaN(parsed) || parsed <= 0) {
                                   updateFormItem(item.productId, 'quantity', 1);
+                                } else {
+                                  updateFormItem(item.productId, 'quantity', parsed);
                                 }
                               }}
                               className="h-8 w-full"
@@ -985,10 +1121,36 @@ export default function PurchaseOrderManagement() {
                               className="h-8 w-full"
                             />
                           </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">জিএসটি (%)</Label>
+                            <Input
+                              type="text"
+                              value={item.gstPercentage === undefined ? '' : item.gstPercentage}
+                              onChange={(e) => {
+                                const val = convertBengaliToEnglishNumerals(e.target.value);
+                                const cleaned = val.replace(/[^0-9.]/g, '');
+                                const dotCount = (cleaned.match(/\./g) || []).length;
+                                if (dotCount > 1) return;
+                                updateFormItem(item.productId, 'gstPercentage', cleaned);
+                              }}
+                              onBlur={() => {
+                                const parsedGst = parseFloat(item.gstPercentage as string);
+                                if (isNaN(parsedGst)) {
+                                  updateFormItem(item.productId, 'gstPercentage', '');
+                                } else if (parsedGst < 0) {
+                                  updateFormItem(item.productId, 'gstPercentage', 0);
+                                } else {
+                                  updateFormItem(item.productId, 'gstPercentage', parsedGst);
+                                }
+                              }}
+                              placeholder={formGstPercentage || "0"}
+                              className="h-8 w-full"
+                            />
+                          </div>
                         </div>
                         <div className="flex justify-between items-center mt-3 pt-2 border-t text-sm">
                           <span className="text-muted-foreground">{t('total_price')}:</span>
-                          <span className="font-bold">{formatPrice(item.quantity * (parseFloat(item.unitPrice as string) || 0))}</span>
+                          <span className="font-bold">{formatPrice(itemTotalIncludingGst)}</span>
                         </div>
                       </Card>
                     );
@@ -1030,6 +1192,19 @@ export default function PurchaseOrderManagement() {
                   <span className="font-bold text-base">মোট:</span>
                   <span className="font-bold text-xl text-primary">{formatPrice(formTotal)}</span>
                 </div>
+
+                {formPaidVal > 0 && (
+                  <div className="flex justify-between items-center text-sm border-t pt-1 border-dashed border-border/50">
+                    <span className="text-muted-foreground">পরিশোধিত টাকা:</span>
+                    <span className="font-medium text-green-600 dark:text-green-400">{formatPrice(formPaidVal)}</span>
+                  </div>
+                )}
+                {formDueAmount > 0 && (
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-red-500 font-medium">বকেয়া (Due):</span>
+                    <span className="font-bold text-red-600 dark:text-red-400">{formatPrice(formDueAmount)}</span>
+                  </div>
+                )}
               </div>
             )}
 
@@ -1053,24 +1228,24 @@ export default function PurchaseOrderManagement() {
               />
             </div>
 
-            {/* Amount Paid (Optional) */}
-            <div className="border-t pt-3 border-border/40">
-              <Label className="font-semibold text-slate-800 dark:text-slate-200">পরিশোধিত টাকা (ঐচ্ছিক)</Label>
-              <p className="text-xs text-muted-foreground mb-1">সরাসরি ক্রয়ের ক্ষেত্রে প্রযোজ্য। ফাঁকা রাখলে পুরো টাকা পরিশোধ ধরা হবে। আংশিক পরিশোধ হলে এখানে লিখুন।</p>
-              <div className="relative mt-1">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">৳</span>
+            {/* Amount Paid */}
+            <div className="space-y-1.5">
+              <Label htmlFor="form-amount-paid" className="text-sm font-medium">পরিশোধিত টাকা (ঐচ্ছিক)</Label>
+              <div className="relative">
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium">৳</span>
                 <Input
-                  type="text"
+                  id="form-amount-paid"
+                  type="number"
+                  min="0"
+                  step="0.01"
                   value={formAmountPaid}
                   onChange={(e) => {
-                    const val = convertBengaliToEnglishNumerals(e.target.value);
-                    const cleaned = val.replace(/[^0-9.]/g, '');
-                    const dotCount = (cleaned.match(/\./g) || []).length;
-                    if (dotCount > 1) return;
+                    const cleaned = convertBengaliToEnglishNumerals(e.target.value);
                     setFormAmountPaid(cleaned);
                   }}
-                  placeholder={formTotal.toString()}
+                  placeholder={Math.round(formTotal).toString()}
                   className="pl-8"
+                  readOnly={formPaymentMethod === 'Mixed'}
                 />
               </div>
             </div>
@@ -1089,6 +1264,37 @@ export default function PurchaseOrderManagement() {
                 </SelectContent>
               </Select>
             </div>
+
+            {formPaymentMethod === 'Mixed' && (
+              <div className="grid grid-cols-2 gap-2 mt-1">
+                <div className="space-y-1">
+                  <Label htmlFor="form-cash-amount" className="text-xs">নগদ পরিমাণ</Label>
+                  <Input
+                    id="form-cash-amount"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={formCashAmount}
+                    onChange={(e) => setFormCashAmount(e.target.value)}
+                    placeholder="নগদ"
+                    className="h-8 text-xs"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="form-upi-amount" className="text-xs">ইউপিআই পরিমাণ</Label>
+                  <Input
+                    id="form-upi-amount"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={formUpiAmount}
+                    onChange={(e) => setFormUpiAmount(e.target.value)}
+                    placeholder="ইউপিআই"
+                    className="h-8 text-xs"
+                  />
+                </div>
+              </div>
+            )}
           </div>
           <DialogFooter className="gap-2 flex-wrap sm:justify-end">
             <Button variant="outline" onClick={() => setShowCreateDialog(false)}>{tc('cancel')}</Button>
@@ -1254,7 +1460,8 @@ export default function PurchaseOrderManagement() {
                                   setReceiveItems(newItems);
                                 }}
                                 onBlur={() => {
-                                  if (item.receivedQty < 0) {
+                                  const receivedNum = parseFloat(item.receivedQty as string) || 0;
+                                  if (receivedNum < 0) {
                                     const newItems = [...receiveItems];
                                     newItems[idx] = { ...newItems[idx], receivedQty: 0 };
                                     setReceiveItems(newItems);
@@ -1272,37 +1479,51 @@ export default function PurchaseOrderManagement() {
               </Card>
 
               {/* Running Total & Amount Paid for Receive Dialog */}
-              {receiveTotal > 0 && (
-                <div className="space-y-3 p-3 bg-muted rounded-lg">
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-muted-foreground">প্রাপ্ত মালপত্রের মোট মূল্য:</span>
-                    <span className="font-bold">{formatPrice(receiveTotal)}</span>
-                  </div>
-                  {selectedOrder.supplierId && (
-                    <div className="space-y-1.5 border-t pt-2.5">
-                      <Label htmlFor="receive-amount-paid" className="text-xs">পরিশোধিত টাকা (ঐচ্ছিক)</Label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">৳</span>
-                        <Input
-                          id="receive-amount-paid"
-                          type="text"
-                          value={receiveAmountPaid}
-                          onChange={(e) => {
-                            const val = convertBengaliToEnglishNumerals(e.target.value);
-                            const cleaned = val.replace(/[^0-9.]/g, '');
-                            const dotCount = (cleaned.match(/\./g) || []).length;
-                            if (dotCount > 1) return;
-                            setReceiveAmountPaid(cleaned);
-                          }}
-                          placeholder="সম্পূর্ণ পরিশোধিত হলে ফাঁকা রাখুন"
-                          className="pl-9 h-8 text-sm bg-background"
-                        />
-                      </div>
-                      <p className="text-[10px] text-muted-foreground">
-                        বাকি রাখতে চাইলে পরিশোধের পরিমাণ লিখুন। ফাঁকা রাখলে সম্পূর্ণ পরিশোধিত ধরা হবে।
-                      </p>
+              {receiveTotal > 0 && (() => {
+                const receivePaidVal = parseFloat(receiveAmountPaid) || 0;
+                const receiveDueAmount = Math.round((receiveTotal - receivePaidVal + Number.EPSILON) * 100) / 100;
+                return (
+                  <div className="space-y-3 p-3 bg-muted rounded-lg">
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-muted-foreground">প্রাপ্ত মালপত্রের মোট মূল্য:</span>
+                      <span className="font-bold">{formatPrice(receiveTotal)}</span>
                     </div>
-                  )}
+                    {selectedOrder.supplierId && (
+                      <div className="space-y-1.5 border-t pt-2.5">
+                        <Label htmlFor="receive-amount-paid" className="text-xs">পরিশোধিত টাকা (ঐচ্ছিক)</Label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">৳</span>
+                          <Input
+                            id="receive-amount-paid"
+                            type="text"
+                            value={receiveAmountPaid}
+                            onChange={(e) => {
+                              const val = convertBengaliToEnglishNumerals(e.target.value);
+                              const cleaned = val.replace(/[^0-9.]/g, '');
+                              const dotCount = (cleaned.match(/\./g) || []).length;
+                              if (dotCount > 1) return;
+                              setReceiveAmountPaid(cleaned);
+                            }}
+                            placeholder="সম্পূর্ণ পরিশোধিত হলে ফাঁকা রাখুন"
+                            className="pl-9 h-8 text-sm bg-background"
+                            readOnly={receivePaymentMethod === 'Mixed'}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {receivePaidVal > 0 && (
+                      <div className="flex justify-between items-center text-sm border-t pt-1 border-dashed border-border/50">
+                        <span className="text-muted-foreground">পরিশোধিত টাকা:</span>
+                        <span className="font-medium text-green-600 dark:text-green-400">{formatPrice(receivePaidVal)}</span>
+                      </div>
+                    )}
+                    {receiveDueAmount > 0 && (
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-red-500 font-medium">বকেয়া (Due):</span>
+                        <span className="font-bold text-red-600 dark:text-red-400">{formatPrice(receiveDueAmount)}</span>
+                      </div>
+                    )}
 
                   {/* Payment Method for Receive Dialog */}
                   {selectedOrder.supplierId && (
@@ -1320,8 +1541,39 @@ export default function PurchaseOrderManagement() {
                       </Select>
                     </div>
                   )}
+
+                  {receivePaymentMethod === 'Mixed' && (
+                    <div className="grid grid-cols-2 gap-2 mt-1">
+                      <div className="space-y-1">
+                        <Label htmlFor="receive-cash-amount" className="text-xs">নগদ পরিমাণ</Label>
+                        <Input
+                          id="receive-cash-amount"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={receiveCashAmount}
+                          onChange={(e) => setReceiveCashAmount(e.target.value)}
+                          placeholder="নগদ"
+                          className="h-8 text-xs"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="receive-upi-amount" className="text-xs">ইউপিআই পরিমাণ</Label>
+                        <Input
+                          id="receive-upi-amount"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={receiveUpiAmount}
+                          onChange={(e) => setReceiveUpiAmount(e.target.value)}
+                          placeholder="ইউপিআই"
+                          className="h-8 text-xs"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
+              ) })()}
             </div>
           )}
           <DialogFooter>

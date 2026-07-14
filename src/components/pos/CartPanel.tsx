@@ -32,14 +32,17 @@ import {
   ScanLine,
   Plus,
   X,
+  Phone,
+  MapPin,
+  Languages,
 } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
 import type { PaymentMethod, Customer } from '@/types/pos';
 import { useCartStore, useUIStore } from '@/stores/pos-store';
-import { cn, convertBengaliToEnglishNumerals } from '@/lib/utils';
+import { cn, convertBengaliToEnglishNumerals, convertEnglishToBengaliNumerals } from '@/lib/utils';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { useNumberFormat } from '@/hooks/use-number-format';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 
 interface CartPanelProps {
   onCheckout: () => void;
@@ -54,9 +57,21 @@ const paymentMethods: { method: PaymentMethod; icon: React.ReactNode; labelKey: 
   { method: 'Due', icon: <Clock className="w-4 h-4" />, labelKey: 'due_payment', color: 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100' },
 ];
 
+const normalizeAndValidatePhone = (phone: string): string | null => {
+  if (!phone) return null;
+  let clean = phone.replace(/\s+/g, '');
+  clean = convertBengaliToEnglishNumerals(clean);
+  if (clean.startsWith('+')) clean = clean.slice(1);
+  if (clean.startsWith('091') && clean.length === 13) clean = clean.slice(3);
+  else if (clean.startsWith('91') && clean.length === 12) clean = clean.slice(2);
+  else if (clean.startsWith('0') && clean.length === 11) clean = clean.slice(1);
+  return /^[0-9]{10}$/.test(clean) ? clean : null;
+};
+
 export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps) {
   const t = useTranslations('Cart');
   const tc = useTranslations('Common');
+  const locale = useLocale();
 
   const [showDiscountInput, setShowDiscountInput] = useState(false);
   const [customerSearchOpen, setCustomerSearchOpen] = useState(false);
@@ -66,10 +81,12 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
   const [showAddPartyDialog, setShowAddPartyDialog] = useState(false);
   const [newParty, setNewParty] = useState({
     name: '',
+    nameEn: '',
     phone: '',
     address: '',
     notes: '',
   });
+  const [isNameEnTouched, setIsNameEnTouched] = useState(false);
 
   const tabs = useCartStore((state) => state.tabs);
   const activeTabId = useCartStore((state) => state.activeTabId);
@@ -93,6 +110,40 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
 
   const setCheckoutOpen = useUIStore((state) => state.setCheckoutOpen);
   const { formatPrice } = useNumberFormat();
+
+  // Auto-translate name to English using Google Translate API directly
+  useEffect(() => {
+    if (!newParty.name.trim()) {
+      setNewParty(prev => ({ ...prev, nameEn: '' }));
+      return;
+    }
+    if (isNameEnTouched) return;
+
+    const timeoutId = setTimeout(async () => {
+      const detected = /^[a-zA-Z\s]+$/.test(newParty.name.trim());
+      if (detected) {
+        setNewParty(prev => ({ ...prev, nameEn: newParty.name.trim() }));
+      } else {
+        try {
+          const res = await fetch(
+            `https://translate.googleapis.com/translate_a/single?client=gtx&sl=bn&tl=en&dt=t&q=${encodeURIComponent(newParty.name.trim())}`
+          );
+          const data = await res.json();
+          const translated = data?.[0]?.[0]?.[0];
+          if (translated) {
+            setNewParty(prev => {
+              if (isNameEnTouched) return prev;
+              return { ...prev, nameEn: translated };
+            });
+          }
+        } catch (err) {
+          console.error("Auto-translate customer name failed:", err);
+        }
+      }
+    }, 800);
+
+    return () => clearTimeout(timeoutId);
+  }, [newParty.name, isNameEnTouched]);
 
   const subtotal = getSubtotal();
   const total = getTotal();
@@ -143,6 +194,7 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
       const normalizedPhoneQuery = convertBengaliToEnglishNumerals(query);
       const localResults = customers.filter((c) =>
         c.name.toLowerCase().includes(query.toLowerCase()) ||
+        (c.nameEn && c.nameEn.toLowerCase().includes(query.toLowerCase())) ||
         c.phone?.includes(normalizedPhoneQuery)
       );
 
@@ -171,21 +223,25 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
   const handleAddPartyFromCart = async () => {
     if (!newParty.name) return;
 
-    // Validate phone if provided
-    if (newParty.phone && !/^[0-9]{10}$/.test(newParty.phone)) {
-      toast({
-        title: t('invalid_phone'),
-        description: t('phone_digits'),
-        variant: 'destructive',
-      });
-      return;
+    // Normalize and validate phone number
+    let normalizedPhone: string | null = null;
+    if (newParty.phone.trim()) {
+      normalizedPhone = normalizeAndValidatePhone(newParty.phone);
+      if (!normalizedPhone) {
+        toast({
+          title: t('invalid_phone'),
+          description: t('phone_digits'),
+          variant: 'destructive',
+        });
+        return;
+      }
     }
 
     try {
       const response = await fetch('/api/customers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newParty),
+        body: JSON.stringify({ ...newParty, phone: normalizedPhone || '' }),
       });
 
       if (!response.ok) {
@@ -197,7 +253,8 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
       // Select the newly created customer
       handleCustomerSelect(newCustomer);
       setShowAddPartyDialog(false);
-      setNewParty({ name: '', phone: '', address: '', notes: '' });
+      setNewParty({ name: '', nameEn: '', phone: '', address: '', notes: '' });
+      setIsNameEnTouched(false);
       toast({
         title: t('customer_added'),
         description: t('customer_added_desc', { name: newCustomer.name }),
@@ -218,13 +275,16 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
         : customers.filter(
             (c) =>
               c.name.toLowerCase().includes(customerSearchQuery.toLowerCase()) ||
+              (c.nameEn && c.nameEn.toLowerCase().includes(customerSearchQuery.toLowerCase())) ||
               c.phone?.includes(customerSearchQuery)
           )
       )
     : customers.slice(0, 20);
 
   const isCartEmpty = items.length === 0;
-  const itemCountDisplay = itemCount === 0 ? t('empty') : `${itemCount} ${itemCount === 1 ? t('item') : t('items')}`;
+  const isBn = locale === 'bn';
+  const displayCount = isBn ? convertEnglishToBengaliNumerals(itemCount) : itemCount;
+  const itemCountDisplay = itemCount === 0 ? t('empty') : `${displayCount} ${itemCount === 1 ? t('item') : t('items')}`;
 
   const isAndroidApp = typeof Capacitor !== 'undefined' && Capacitor.isNativePlatform();
 
@@ -338,13 +398,16 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
                     <Button
                       key={customer.id}
                       variant="ghost"
-                      className="w-full justify-start h-9 text-sm"
+                      className="w-full justify-start h-auto py-1.5 text-sm"
                       onClick={() => handleCustomerSelect(customer)}
                     >
-                      <div className="flex flex-col items-start">
+                      <div className="flex flex-col items-start leading-tight">
                         <span>{customer.name}</span>
+                        {customer.nameEn && customer.nameEn !== customer.name && (
+                          <span className="text-[10px] text-muted-foreground/80 font-medium">{customer.nameEn}</span>
+                        )}
                         {customer.phone && (
-                          <span className="text-xs text-muted-foreground">{customer.phone}</span>
+                          <span className="text-[10px] text-muted-foreground mt-0.5">{customer.phone}</span>
                         )}
                       </div>
                       {toMoneyNumber(customer.totalDue) > 0 && (
@@ -522,6 +585,7 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
           </DialogHeader>
 
           <div className="space-y-4 py-4">
+            {/* Bengali Name */}
             <div className="space-y-2">
               <Label htmlFor="cart-party-name">{t('customer_name')}</Label>
               <Input
@@ -532,24 +596,52 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
               />
             </div>
 
+            {/* English Name (auto-translated) */}
             <div className="space-y-2">
-              <Label htmlFor="cart-party-phone">{t('customer_phone')}</Label>
+              <Label htmlFor="cart-party-name-en" className="flex items-center gap-1.5">
+                <Languages className="w-3.5 h-3.5 text-muted-foreground" />
+                {t('customer_name_en')}
+              </Label>
               <Input
-                id="cart-party-phone"
-                value={newParty.phone}
-                onChange={(e) => setNewParty(prev => ({ ...prev, phone: e.target.value }))}
-                placeholder={t('enter_phone')}
+                id="cart-party-name-en"
+                value={newParty.nameEn}
+                onChange={(e) => {
+                  setNewParty(prev => ({ ...prev, nameEn: e.target.value }));
+                  setIsNameEnTouched(true);
+                }}
+                placeholder={t('enter_name_en')}
               />
             </div>
 
+            {/* Phone */}
+            <div className="space-y-2">
+              <Label htmlFor="cart-party-phone">{t('customer_phone')}</Label>
+              <div className="relative">
+                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="cart-party-phone"
+                  value={newParty.phone}
+                  onChange={(e) => setNewParty(prev => ({ ...prev, phone: convertBengaliToEnglishNumerals(e.target.value) }))}
+                  placeholder={t('enter_phone')}
+                  className="pl-9"
+                  inputMode="numeric"
+                />
+              </div>
+            </div>
+
+            {/* Address */}
             <div className="space-y-2">
               <Label htmlFor="cart-party-address">{t('customer_address')}</Label>
-              <Input
-                id="cart-party-address"
-                value={newParty.address}
-                onChange={(e) => setNewParty(prev => ({ ...prev, address: e.target.value }))}
-                placeholder={t('enter_address')}
-              />
+              <div className="relative">
+                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="cart-party-address"
+                  value={newParty.address}
+                  onChange={(e) => setNewParty(prev => ({ ...prev, address: e.target.value }))}
+                  placeholder={t('enter_address')}
+                  className="pl-9"
+                />
+              </div>
             </div>
 
             <div className="space-y-2">
@@ -569,7 +661,8 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
               variant="outline"
               onClick={() => {
                 setShowAddPartyDialog(false);
-                setNewParty({ name: '', phone: '', address: '', notes: '' });
+                setNewParty({ name: '', nameEn: '', phone: '', address: '', notes: '' });
+                setIsNameEnTouched(false);
               }}
             >
               {tc('cancel')}

@@ -1,4 +1,5 @@
-export const dynamic = 'force-dynamic';
+// প্রতি ৩০ সেকেন্ডে একবার কাস্টমার তালিকা ডেটাবেস থেকে রিফ্রেশ হবে
+export const revalidate = 30;
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { CustomerInputSchema } from '@/schemas';
@@ -36,6 +37,7 @@ export async function GET(request: NextRequest) {
     if (search) {
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
+        { nameEn: { contains: search, mode: 'insensitive' } },
         { phone: { contains: search } },
       ];
     }
@@ -73,6 +75,7 @@ export async function POST(request: NextRequest) {
     const customer = await db.customer.create({
       data: {
         name: validatedData.name,
+        nameEn: validatedData.nameEn || null,
         phone: validatedData.phone || null,
         address: validatedData.address || null,
         notes: validatedData.notes || null,

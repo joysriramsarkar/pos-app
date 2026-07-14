@@ -57,7 +57,7 @@ export function AuditLogs() {
           <CardContent>
             {error && <div className="text-red-500 mb-4">{error}</div>}
 
-            <div className="rounded-md border">
+            <div className="rounded-md border hidden md:block">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -108,6 +108,39 @@ export function AuditLogs() {
                   )}
                 </TableBody>
               </Table>
+            </div>
+
+            {/* Mobile View */}
+            <div className="grid grid-cols-1 gap-4 md:hidden">
+              {loading && logs.length === 0 ? (
+                <div className="flex justify-center p-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : logs.length === 0 ? (
+                <div className="text-center p-8 text-muted-foreground">
+                  {t('no_logs')}
+                </div>
+              ) : (
+                logs.map((log) => (
+                  <div key={log.id} className="rounded-lg border bg-card text-card-foreground shadow-sm p-4 flex flex-col gap-2">
+                    <div className="flex justify-between items-start">
+                      <span className="text-sm font-semibold">
+                        {log.user ? `${log.user.name} (${log.user.username})` : t('system_unknown')}
+                      </span>
+                      <Badge variant="secondary" className="text-[10px]">{log.action}</Badge>
+                    </div>
+                    <div className="text-xs text-muted-foreground font-medium">
+                      {format(new Date(log.createdAt), 'MMM d, yyyy h:mm a')}
+                    </div>
+                    <div className="text-sm mt-1">
+                      <span className="text-muted-foreground">{t('entity')}:</span> <span className="font-medium">{log.entityType} {log.entityId ? `(#${log.entityId.slice(-6)})` : ''}</span>
+                    </div>
+                    <div className="text-xs bg-muted/50 p-2 rounded mt-1 truncate" title={typeof log.details === 'object' ? JSON.stringify(log.details) : log.details}>
+                      {typeof log.details === 'object' ? JSON.stringify(log.details) : (log.details || '-')}
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
 
             <div className="flex items-center justify-between mt-4">

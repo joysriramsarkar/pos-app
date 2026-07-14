@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { db as prisma } from "@/lib/db";
-import { format, eachDayOfInterval, parseISO, subDays } from "date-fns";
+import { format, eachDayOfInterval, eachMonthOfInterval, parseISO, subDays } from "date-fns";
 import { toZonedTime } from "date-fns-tz";
 import { requirePermission } from "@/lib/api-middleware";
 
@@ -38,6 +38,7 @@ export async function GET(request: NextRequest) {
       endDate = toLocalBounds(parseISO(sp.get("to")!), tzOffset).end;
     } else {
       const days = parseInt(sp.get("days") || "30");
+      const isYearly = days === 365;
       const nowUtc = new Date();
       const localNow = new Date(nowUtc.getTime() + offsetMs);
       const endLocal = new Date(Date.UTC(
@@ -134,11 +135,15 @@ export async function GET(request: NextRequest) {
       });
     } else {
 
-      // Build day map from interval
-      const dayList = eachDayOfInterval({ start: startDate, end: endDate });
+      // Build day/month map from interval
+      const isYearly = parseInt(sp.get("days") || "30") === 365;
+      const intervalList = isYearly 
+        ? eachMonthOfInterval({ start: startDate, end: endDate })
+        : eachDayOfInterval({ start: startDate, end: endDate });
+      
       const salesByDay = new Map<string, { date: string; revenue: number; profit: number; count: number }>();
-      dayList.forEach((d) => {
-        const key = format(toZonedTime(d, TZ), "yyyy-MM-dd");
+      intervalList.forEach((d) => {
+        const key = format(toZonedTime(d, TZ), isYearly ? "yyyy-MM" : "yyyy-MM-dd");
         salesByDay.set(key, { date: key, revenue: 0, profit: 0, count: 0 });
       });
 
@@ -149,7 +154,8 @@ export async function GET(request: NextRequest) {
       });
 
       dailySales.forEach((sale) => {
-        const key = format(toZonedTime(sale.createdAt, TZ), "yyyy-MM-dd");
+        const isYearly = parseInt(sp.get("days") || "30") === 365;
+        const key = format(toZonedTime(sale.createdAt, TZ), isYearly ? "yyyy-MM" : "yyyy-MM-dd");
         const day = salesByDay.get(key);
         if (day) {
           const cost = sale.items.reduce(
@@ -172,6 +178,32 @@ export async function GET(request: NextRequest) {
           ? 100
           : 0;
 
+    // If compare=true, build previous period day-by-day time-series for chart overlay
+    let prevChartData: { date: string; prevRevenue: number }[] | undefined;
+    if (sp.get("compare") === "true" && !isHourly) {
+      const prevDayList = eachDayOfInterval({ start: prevStart, end: prevEnd });
+      const prevByDay = new Map<string, number>();
+      prevDayList.forEach((d) => {
+        prevByDay.set(format(toZonedTime(d, TZ), "yyyy-MM-dd"), 0);
+      });
+
+      const prevDailySales = await prisma.sale.findMany({
+        where: { createdAt: { gte: prevStart, lte: prevEnd }, status: "Completed" },
+        select: { createdAt: true, totalAmount: true },
+      });
+      prevDailySales.forEach((sale) => {
+        const key = format(toZonedTime(sale.createdAt, TZ), "yyyy-MM-dd");
+        prevByDay.set(key, (prevByDay.get(key) || 0) + Number(sale.totalAmount));
+      });
+
+      // Align prev dates to current period dates positionally (same index = same relative day)
+      const prevValues = Array.from(prevByDay.values());
+      prevChartData = chartData.map((d, i) => ({
+        date: d.date,
+        prevRevenue: prevValues[i] ?? 0,
+      }));
+    }
+
     return NextResponse.json({
       summary: {
         totalRevenue,
@@ -183,6 +215,7 @@ export async function GET(request: NextRequest) {
         paymentBreakdown,
       },
       chartData,
+      ...(prevChartData ? { prevChartData } : {}),
     });
   } catch (error: unknown) {
     console.error("Failed to fetch sales report:", error);

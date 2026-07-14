@@ -11,13 +11,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, CreditCard, CalendarDays, Calendar, CalendarRange, ChevronLeft, ChevronRight, Download, Search } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, subDays, addDays, subMonths, getWeek, getYear } from 'date-fns';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { PieChart, Pie, Cell, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent, type ChartConfig } from '@/components/ui/chart';
 import { useTranslations } from 'next-intl';
 import { useNumberFormat } from '@/hooks/use-number-format';
-import { useSettingsStore } from '@/stores/settings-store';
 
 type ViewMode = 'daily' | 'weekly' | 'monthly';
-const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ef4444', '#ec4899', '#f97316', '#14b8a6'];
+const COLORS = [
+  'var(--chart-2)', 'var(--chart-1)', 'var(--chart-3)',
+  'var(--chart-4)', 'var(--chart-5)', 'var(--chart-2)',
+  'var(--chart-3)', 'var(--chart-1)'
+];
 
 interface PaymentReportProps {
   onBack: () => void;
@@ -25,8 +29,16 @@ interface PaymentReportProps {
 
 export function PaymentReport({ onBack }: PaymentReportProps) {
   const t = useTranslations('Reports');
-  const { formatPrice, formatDate, formatNumber, formatStringNumbers } = useNumberFormat();
-  const currencySymbol = useSettingsStore((s) => s.settings.currency_symbol);
+  const { formatPrice, formatDate, formatNumber, formatStringNumbers, formatCompact } = useNumberFormat();
+
+  const payPieConfig: ChartConfig = {
+    value: { label: 'পেমেন্ট', color: 'var(--chart-1)' },
+  };
+  const payBarConfig: ChartConfig = {
+    cash: { label: 'নগদ', color: 'var(--chart-2)' },
+    upi: { label: 'UPI', color: 'var(--chart-1)' },
+    prepaid: { label: 'Prepaid', color: 'var(--chart-3)' },
+  };
   
   const [sales, setSales] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -197,8 +209,7 @@ export function PaymentReport({ onBack }: PaymentReportProps) {
     setDateTo(format(new Date(), 'yyyy-MM-dd'));
   };
 
-  const yFmt = (v: number) => `${currencySymbol}${v >= 1000 ? formatStringNumbers((v / 1000).toFixed(1)) + 'k' : formatStringNumbers(v)}`;
-  const tooltipStyle = { borderRadius: '8px', fontSize: '12px' };
+
 
   return (
     <div className="flex-1 flex flex-col gap-4 p-4 md:p-6 bg-slate-50/50 overflow-y-auto min-h-0 pb-24 animate-page-enter">
@@ -359,19 +370,17 @@ export function PaymentReport({ onBack }: PaymentReportProps) {
             ) : pieData.length === 0 ? (
               <p className="text-center text-muted-foreground text-sm py-12">{t('no_data')}</p>
             ) : (
-              <div className="w-full h-48">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={65}>
-                      {pieData.map((_, i) => (
-                        <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={(v: number) => formatPrice(v)} contentStyle={tooltipStyle} />
-                    <Legend wrapperStyle={{ fontSize: '10px' }} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
+              <ChartContainer config={payPieConfig} className="h-[192px] w-full">
+                <PieChart>
+                  <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={65}>
+                    {pieData.map((_, i) => (
+                      <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <ChartTooltip content={<ChartTooltipContent formatter={(v) => <span className="font-bold tabular-nums">{formatPrice(Number(v))}</span>} />} />
+                  <ChartLegend content={<ChartLegendContent />} />
+                </PieChart>
+              </ChartContainer>
             )}
           </CardContent>
         </Card>
@@ -387,20 +396,18 @@ export function PaymentReport({ onBack }: PaymentReportProps) {
             ) : trendData.length === 0 ? (
               <p className="text-center text-muted-foreground text-sm py-12">{t('no_data')}</p>
             ) : (
-              <div className="w-full h-48">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={trendData} margin={{ top: 10, right: 5, left: -20, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
-                    <XAxis dataKey="label" tick={{ fontSize: 9 }} tickLine={false} axisLine={false} />
-                    <YAxis tickFormatter={yFmt} tick={{ fontSize: 9 }} tickLine={false} axisLine={false} />
-                    <Tooltip formatter={(v: any) => [formatPrice(v)]} contentStyle={tooltipStyle} />
-                    <Legend wrapperStyle={{ fontSize: '9px' }} />
-                    <Bar dataKey="cash" name="Cash" fill="#10b981" stackId="a" radius={[0, 0, 0, 0]} maxBarSize={20} />
-                    <Bar dataKey="upi" name="UPI" fill="#3b82f6" stackId="a" radius={[0, 0, 0, 0]} maxBarSize={20} />
-                    <Bar dataKey="prepaid" name="Prepaid" fill="#f59e0b" stackId="a" radius={[4, 4, 0, 0]} maxBarSize={20} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+              <ChartContainer config={payBarConfig} className="h-[192px] w-full">
+                <BarChart data={trendData} margin={{ top: 10, right: 5, left: 0, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="hsl(var(--border) / 0.5)" />
+                  <XAxis dataKey="label" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} tickFormatter={formatStringNumbers} />
+                  <YAxis tickFormatter={formatCompact} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} width={55} />
+                  <ChartTooltip content={<ChartTooltipContent formatter={(v) => <span className="font-bold tabular-nums">{formatPrice(Number(v))}</span>} />} />
+                  <ChartLegend content={<ChartLegendContent />} />
+                  <Bar dataKey="cash" name="cash" fill="var(--chart-2)" stackId="a" radius={[0, 0, 0, 0]} maxBarSize={20} />
+                  <Bar dataKey="upi" name="upi" fill="var(--chart-1)" stackId="a" radius={[0, 0, 0, 0]} maxBarSize={20} />
+                  <Bar dataKey="prepaid" name="prepaid" fill="var(--chart-3)" stackId="a" radius={[4, 4, 0, 0]} maxBarSize={20} />
+                </BarChart>
+              </ChartContainer>
             )}
           </CardContent>
         </Card>

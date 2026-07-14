@@ -1,7 +1,6 @@
 'use client';
-
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 import { useUserRole } from '@/hooks/use-permissions';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -65,7 +64,7 @@ import {
 } from 'lucide-react';
 import type { Product } from '@/types/pos';
 import { useProductsStore } from '@/stores/pos-store';
-import { cn, convertBengaliToEnglishNumerals } from '@/lib/utils';
+import { cn, convertBengaliToEnglishNumerals, convertEnglishToBengaliNumerals } from '@/lib/utils';
 import { toast } from 'sonner';
 import { ProductsDB } from '@/lib/offline/indexeddb';
 import { useNumberFormat } from '@/hooks/use-number-format';
@@ -91,9 +90,11 @@ export function StockManagement({
   const t = useTranslations('Stock');
   const tc = useTranslations('Common');
   const tp = useTranslations('ProductDialog');
+  const locale = useLocale();
   const userRole = useUserRole();
   const canDelete = userRole === 'ADMIN' || userRole === 'MANAGER';
   const { formatPrice } = useNumberFormat();
+  const formatNum = (num: number) => locale === 'bn' ? convertEnglishToBengaliNumerals(num) : num;
 
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
@@ -156,7 +157,7 @@ export function StockManagement({
         const prev = prevStoreCountRef.current;
         if (storeProducts.length > prev) {
           const lowerQuery = searchQuery.toLowerCase();
-          const normalizedQuery = convertBengaliToEnglishNumerals(searchQuery);
+          const normalizedBarcode = convertBengaliToEnglishNumerals(searchQuery);
           const newlyAdded = storeProducts.filter(
             (p) =>
               !syncedResults.some((r) => r.id === p.id) &&
@@ -164,7 +165,7 @@ export function StockManagement({
               (p.name.toLowerCase().includes(lowerQuery) ||
                 p.nameBn?.includes(searchQuery) ||
                 p.barcode?.includes(searchQuery) ||
-                convertBengaliToEnglishNumerals(p.barcode || '').includes(normalizedQuery))
+                convertBengaliToEnglishNumerals(p.barcode || '').includes(normalizedBarcode))
           );
 
           if (newlyAdded.length > 0) {
@@ -192,14 +193,14 @@ export function StockManagement({
       }
 
       const lowerQuery = query.toLowerCase();
-      const normalizedQuery = convertBengaliToEnglishNumerals(query);
+      const normalizedBarcode = convertBengaliToEnglishNumerals(query);
       const localMatches = storeProducts.filter(
         (p) =>
           p.isActive &&
           (p.name.toLowerCase().includes(lowerQuery) ||
             p.nameBn?.includes(query) ||
             p.barcode?.includes(query) ||
-            convertBengaliToEnglishNumerals(p.barcode || '').includes(normalizedQuery))
+            convertBengaliToEnglishNumerals(p.barcode || '').includes(normalizedBarcode))
       );
       setSearchResults(localMatches);
       setIsSearching(true);
@@ -467,7 +468,7 @@ export function StockManagement({
 
   return (
     <>
-      <div className="flex flex-col h-[calc(100vh-4rem)] md:h-screen w-full gap-2 md:gap-4 p-2 md:p-4 animate-page-enter">
+      <div className="flex flex-col h-full md:h-screen w-full gap-2 md:gap-4 px-2 pt-2 pb-0 md:p-4 animate-page-enter">
         <div className="flex flex-col gap-2 shrink-0">
           {/* Header */}
           <div className="flex items-center justify-between gap-2">
@@ -526,64 +527,64 @@ export function StockManagement({
 
           {/* Summary Value Cards — compact/scrollable on mobile */}
           <div className="flex overflow-x-auto snap-x gap-2 no-scrollbar scrollbar-none pb-1 md:grid md:grid-cols-2 lg:grid-cols-4 shrink-0">
-            <Card className="min-w-[140px] shrink-0 snap-start md:min-w-0 md:shrink overflow-hidden border-green-200 dark:border-green-900/50">
-              <CardContent className="p-2 bg-gradient-to-br from-green-50/80 to-green-100/30 dark:from-green-950/40 dark:to-green-900/20">
-                <div className="flex items-center gap-1.5">
-                  <div className="flex h-5 w-5 md:h-6 md:w-6 items-center justify-center rounded-md bg-green-500/10 shrink-0">
-                    <DollarSign className="h-4 w-4 text-green-600 dark:text-green-400" />
+            <Card className="min-w-[120px] shrink-0 snap-start md:min-w-0 md:shrink overflow-hidden border-green-200 dark:border-green-900/50 !py-0 !gap-0">
+              <CardContent className="!p-1.5 md:!p-2 bg-gradient-to-br from-green-50/80 to-green-100/30 dark:from-green-950/40 dark:to-green-900/20">
+                <div className="flex items-center gap-1">
+                  <div className="flex h-3.5 w-3.5 md:h-6 md:w-6 items-center justify-center rounded bg-green-500/10 shrink-0">
+                    <DollarSign className="h-2.5 w-2.5 md:h-4 md:w-4 text-green-600 dark:text-green-400" />
                   </div>
-                  <span className="text-xs md:text-[10px] text-muted-foreground leading-tight">{t('total_stock_value')}</span>
+                  <span className="text-[10px] text-muted-foreground leading-tight">{t('total_stock_value')}</span>
                 </div>
-                <p className="text-lg md:text-sm lg:text-base font-bold mt-1 text-green-700 dark:text-green-400 tabular-nums">
+                <p className="text-sm font-bold text-green-700 dark:text-green-400 tabular-nums">
                   {formatPrice(totalStockValue)}
                 </p>
-                <p className="text-[10px] text-green-600/70 dark:text-green-500/70">
+                <p className="text-[9px] text-green-600/70 dark:text-green-500/70">
                   {activeProducts.length} {t('items')}
                 </p>
               </CardContent>
             </Card>
-            <Card className="min-w-[140px] shrink-0 snap-start md:min-w-0 md:shrink overflow-hidden border-emerald-200 dark:border-emerald-900/50">
-              <CardContent className="p-2 bg-gradient-to-br from-emerald-50/80 to-emerald-100/30 dark:from-emerald-950/40 dark:to-emerald-900/20">
-                <div className="flex items-center gap-1.5">
-                  <div className="flex h-5 w-5 md:h-6 md:w-6 items-center justify-center rounded-md bg-emerald-500/10 shrink-0">
-                    <TrendingUp className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            <Card className="min-w-[120px] shrink-0 snap-start md:min-w-0 md:shrink overflow-hidden border-emerald-200 dark:border-emerald-900/50 !py-0 !gap-0">
+              <CardContent className="!p-1.5 md:!p-2 bg-gradient-to-br from-emerald-50/80 to-emerald-100/30 dark:from-emerald-950/40 dark:to-emerald-900/20">
+                <div className="flex items-center gap-1">
+                  <div className="flex h-3.5 w-3.5 md:h-6 md:w-6 items-center justify-center rounded bg-emerald-500/10 shrink-0">
+                    <TrendingUp className="h-2.5 w-2.5 md:h-4 md:w-4 text-emerald-600 dark:text-emerald-400" />
                   </div>
-                  <span className="text-xs md:text-[10px] text-muted-foreground leading-tight">{t('total_retail_value')}</span>
+                  <span className="text-[10px] text-muted-foreground leading-tight">{t('total_retail_value')}</span>
                 </div>
-                <p className="text-lg md:text-sm lg:text-base font-bold mt-1 text-emerald-700 dark:text-emerald-400 tabular-nums">
+                <p className="text-sm font-bold text-emerald-700 dark:text-emerald-400 tabular-nums">
                   {formatPrice(totalRetailValue)}
                 </p>
-                <p className="text-[10px] text-emerald-600/70 dark:text-emerald-500/70">{t('selling')}</p>
+                <p className="text-[9px] text-emerald-600/70 dark:text-emerald-500/70">{t('selling')}</p>
               </CardContent>
             </Card>
-            <Card className="min-w-[140px] shrink-0 snap-start md:min-w-0 md:shrink overflow-hidden border-teal-200 dark:border-teal-900/50">
-              <CardContent className="p-2 bg-gradient-to-br from-teal-50/80 to-teal-100/30 dark:from-teal-950/40 dark:to-teal-900/20">
-                <div className="flex items-center gap-1.5">
-                  <div className="flex h-5 w-5 md:h-6 md:w-6 items-center justify-center rounded-md bg-teal-500/10 shrink-0">
-                    <TrendingUp className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+            <Card className="min-w-[120px] shrink-0 snap-start md:min-w-0 md:shrink overflow-hidden border-teal-200 dark:border-teal-900/50 !py-0 !gap-0">
+              <CardContent className="!p-1.5 md:!p-2 bg-gradient-to-br from-teal-50/80 to-teal-100/30 dark:from-teal-950/40 dark:to-teal-900/20">
+                <div className="flex items-center gap-1">
+                  <div className="flex h-3.5 w-3.5 md:h-6 md:w-6 items-center justify-center rounded bg-teal-500/10 shrink-0">
+                    <TrendingUp className="h-2.5 w-2.5 md:h-4 md:w-4 text-teal-600 dark:text-teal-400" />
                   </div>
-                  <span className="text-xs md:text-[10px] text-muted-foreground leading-tight">{t('potential_profit')}</span>
+                  <span className="text-[10px] text-muted-foreground leading-tight">{t('potential_profit')}</span>
                 </div>
-                <p className="text-lg md:text-sm lg:text-base font-bold mt-1 text-teal-700 dark:text-teal-400 tabular-nums">
+                <p className="text-sm font-bold text-teal-700 dark:text-teal-400 tabular-nums">
                   {formatPrice(potentialProfit)}
                 </p>
-                <p className="text-[10px] text-teal-600/70 dark:text-teal-500/70">
+                <p className="text-[9px] text-teal-600/70 dark:text-teal-500/70">
                   {totalRetailValue > 0 ? ((potentialProfit / totalRetailValue) * 100).toFixed(1) : '0'}% {t('profit_margin')}
                 </p>
               </CardContent>
             </Card>
-            <Card className="min-w-[140px] shrink-0 snap-start md:min-w-0 md:shrink overflow-hidden border-red-200 dark:border-red-900/50">
-              <CardContent className="p-2 bg-gradient-to-br from-red-50/80 to-red-100/30 dark:from-red-950/40 dark:to-red-900/20">
-                <div className="flex items-center gap-1.5">
-                  <div className="flex h-5 w-5 md:h-6 md:w-6 items-center justify-center rounded-md bg-red-500/10 shrink-0">
-                    <X className="h-4 w-4 text-red-500 dark:text-red-400" />
+            <Card className="min-w-[120px] shrink-0 snap-start md:min-w-0 md:shrink overflow-hidden border-red-200 dark:border-red-900/50 !py-0 !gap-0">
+              <CardContent className="!p-1.5 md:!p-2 bg-gradient-to-br from-red-50/80 to-red-100/30 dark:from-red-950/40 dark:to-red-900/20">
+                <div className="flex items-center gap-1">
+                  <div className="flex h-3.5 w-3.5 md:h-6 md:w-6 items-center justify-center rounded bg-red-500/10 shrink-0">
+                    <X className="h-2.5 w-2.5 md:h-4 md:w-4 text-red-500 dark:text-red-400" />
                   </div>
-                  <span className="text-xs md:text-[10px] text-muted-foreground leading-tight">{t('out_of_stock')}</span>
+                  <span className="text-[10px] text-muted-foreground leading-tight">{t('out_of_stock')}</span>
                 </div>
-                <p className="text-lg md:text-sm lg:text-base font-bold mt-1 text-red-600 dark:text-red-400 tabular-nums">
+                <p className="text-sm font-bold text-red-600 dark:text-red-400 tabular-nums">
                   {outOfStockCount}
                 </p>
-                <p className="text-[10px] text-red-500/70 dark:text-red-400/70">
+                <p className="text-[9px] text-red-500/70 dark:text-red-400/70">
                   {lowStockCount} {t('low_stock')}
                 </p>
               </CardContent>
@@ -598,7 +599,7 @@ export function StockManagement({
               <Input
                 placeholder={t('search_placeholder')}
                 value={searchQuery}
-                onChange={(e) => handleSearchChange(convertBengaliToEnglishNumerals(e.target.value))}
+                onChange={(e) => handleSearchChange(e.target.value)}
                 className="pl-9 h-9 w-full"
               />
               {searchQuery && (
@@ -716,19 +717,29 @@ export function StockManagement({
                         <div className="flex justify-between items-start mb-1.5 gap-2">
                           <div className="min-w-0">
                             <span className="font-semibold text-sm truncate block">
-                              {product.nameBn || product.name}
+                              {locale === 'bn' ? (product.nameBn || product.name) : (product.name || product.nameBn)}
                             </span>
-                            {product.nameBn && product.nameBn !== product.name && (
-                              <span className="text-xs text-muted-foreground truncate block">{product.name}</span>
+                            {((locale === 'bn' && product.nameBn && product.nameBn !== product.name) ||
+                              (locale !== 'bn' && product.name && product.name !== product.nameBn)) && (
+                              <span className="text-xs text-muted-foreground truncate block">
+                                {locale === 'bn' ? product.name : product.nameBn}
+                              </span>
                             )}
                             {product.barcode && (
                               <span className="text-[10px] font-mono text-muted-foreground block">
                                 {product.barcode}
                               </span>
                             )}
-                            <Badge variant="outline" className="text-[9px] px-1 h-4 mt-1">
-                              {product.category}
-                            </Badge>
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              <Badge variant="outline" className="text-[9px] px-1 h-4">
+                                {product.category}
+                              </Badge>
+                              {product.subCategory && (
+                                <Badge variant="secondary" className="text-[9px] px-1 h-4 font-normal">
+                                  {product.subCategory}
+                                </Badge>
+                              )}
+                            </div>
                           </div>
                           <div className="flex flex-col items-end shrink-0 gap-1">
                             <Badge variant={status.variant} className="text-[10px] h-4.5 px-1.5">
@@ -869,9 +880,14 @@ export function StockManagement({
                           </TableCell>
                           <TableCell>
                             <div>
-                              <p className="font-medium">{product.nameBn || product.name}</p>
-                              {product.nameBn && product.nameBn !== product.name && (
-                                <p className="text-xs text-muted-foreground">{product.name}</p>
+                              <p className="font-medium">
+                                {locale === 'bn' ? (product.nameBn || product.name) : (product.name || product.nameBn)}
+                              </p>
+                              {((locale === 'bn' && product.nameBn && product.nameBn !== product.name) ||
+                                (locale !== 'bn' && product.name && product.name !== product.nameBn)) && (
+                                <p className="text-xs text-muted-foreground">
+                                  {locale === 'bn' ? product.name : product.nameBn}
+                                </p>
                               )}
                               {product.barcode && (
                                 <p className="text-xs text-muted-foreground font-mono">{product.barcode}</p>
@@ -879,9 +895,16 @@ export function StockManagement({
                             </div>
                           </TableCell>
                           <TableCell>
-                            <Badge variant="outline" className="text-xs">
-                              {product.category}
-                            </Badge>
+                            <div className="flex flex-col gap-1 items-start">
+                              <Badge variant="outline" className="text-xs">
+                                {product.category}
+                              </Badge>
+                              {product.subCategory && (
+                                <Badge variant="secondary" className="text-[10px] font-normal px-1 py-0">
+                                  {product.subCategory}
+                                </Badge>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell className="text-right">{formatPrice(product.buyingPrice)}</TableCell>
                           <TableCell className="text-right font-medium">{formatPrice(product.sellingPrice)}</TableCell>
@@ -974,34 +997,34 @@ export function StockManagement({
             </>
           )}
           {/* Infinite scroll sentinel */}
-          <div ref={sentinelRef} className="py-2 text-center text-sm text-muted-foreground shrink-0">
+          <div ref={sentinelRef} className="text-center text-xs text-muted-foreground shrink-0">
             {isLoadingMore && t('loading_more')}
           </div>
         </div>
 
         {/* Summary Footer */}
-        <div className="shrink-0 border-t bg-muted/30 p-3 rounded-lg flex items-center justify-between text-xs sm:text-sm">
+        <div className="shrink-0 border-t bg-muted/30 px-2 py-1.5 md:p-3 rounded-lg flex items-center justify-between text-xs sm:text-sm flex-wrap gap-y-1">
           <span className="text-muted-foreground">
-            {t('showing')} {filteredProducts.length}{' '}
-            {searchResults !== null ? t('results') : `${t('of')} ${storeProducts.length}`}
+            {t('showing')} {formatNum(filteredProducts.length)}{' '}
+            {searchResults !== null ? t('results') : `${t('of')} ${formatNum(storeProducts.length)}`}
           </span>
-          <div className="flex items-center gap-3.5 flex-wrap">
-            <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-green-500" />
-              {t('in_stock')}: {storeProducts.filter((p) => p.currentStock > p.minStockLevel).length}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-green-500" />
+              {t('in_stock')}: {formatNum(storeProducts.filter((p) => p.currentStock > p.minStockLevel).length)}
             </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-              {t('low_stock')}: {lowStockCount}
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-amber-500" />
+              {t('low_stock')}: {formatNum(lowStockCount)}
             </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-red-500" />
-              {t('out_of_stock')}: {outOfStockCount}
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-red-500" />
+              {t('out_of_stock')}: {formatNum(outOfStockCount)}
             </span>
             {negativeStockCount > 0 && (
-              <span className="flex items-center gap-1.5 text-red-600 font-semibold">
-                <span className="w-2.5 h-2.5 rounded-full bg-red-700 animate-pulse" />
-                {t('negative_stock')}: {negativeStockCount}
+              <span className="flex items-center gap-1 text-red-600 font-semibold">
+                <span className="w-2 h-2 rounded-full bg-red-700 animate-pulse" />
+                {t('negative_stock')}: {formatNum(negativeStockCount)}
               </span>
             )}
           </div>
@@ -1071,7 +1094,7 @@ export function StockManagement({
           <AlertDialogHeader>
             <AlertDialogTitle>{t('delete_selected')}</AlertDialogTitle>
             <AlertDialogDescription>
-              {selectedIds.size} {t('selected_count')} — {tp('delete_confirm', { name: '' })}
+              {t('batch_delete_confirm', { count: formatNum(selectedIds.size) })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -124,9 +124,17 @@ export function CameraScannerDialog({
     if (!open || !isNativeApp) return;
 
     let isScanningActive = true;
+    let timeoutId: NodeJS.Timeout;
 
     const startScanner = async () => {
       try {
+        // Wait for UI transit animation to finish before blocking main thread with native calls
+        await new Promise(resolve => {
+          timeoutId = setTimeout(resolve, 400);
+        });
+        
+        if (!isScanningActive) return;
+
         const { camera } = await BarcodeScanner.requestPermissions();
         if (!isScanningActive) return;
 
@@ -172,6 +180,7 @@ export function CameraScannerDialog({
 
     return () => {
       isScanningActive = false;
+      if (timeoutId) clearTimeout(timeoutId);
       stopNativeScannerRef.current();
     };
   }, [open, isNativeApp, singleScan]);

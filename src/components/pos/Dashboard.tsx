@@ -115,11 +115,11 @@ interface StatsData {
 const chartConfig = {
   sales: {
     label: 'বিক্রয়',
-    color: 'hsl(var(--chart-1))',
+    color: 'var(--chart-1)',
   },
   expenses: {
     label: 'খরচ',
-    color: 'hsl(var(--chart-3))',
+    color: 'var(--chart-3)',
   },
 } satisfies ChartConfig;
 
@@ -130,7 +130,7 @@ interface DashboardProps {
 export function Dashboard({ onNavigate }: DashboardProps) {
   const t = useTranslations('Dashboard');
   const tBilling = useTranslations('Billing');
-  const { formatPrice, formatDate, formatNumber } = useNumberFormat();
+  const { formatPrice, formatDate, formatNumber, formatStringNumbers } = useNumberFormat();
   const { settings } = useSettingsStore();
   const products = useProductsStore((state) => state.products);
   const sales = useSalesStore((state) => state.sales);
@@ -155,10 +155,8 @@ export function Dashboard({ onNavigate }: DashboardProps) {
     fetchStats();
   }, []);
 
-  // Sync refresh on transaction history update
-  useEffect(() => {
-    fetchStats();
-  }, [sales]);
+  // Stats are fetched once on mount. Manual refresh can be triggered via the refresh button.
+  // Removed: automatic refetch on every sales update — this was causing excessive API calls.
 
   // Number pop animation when stats change
   useEffect(() => {
@@ -515,15 +513,15 @@ export function Dashboard({ onNavigate }: DashboardProps) {
               <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="salesGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="hsl(var(--chart-1))" stopOpacity={1} />
-                    <stop offset="100%" stopColor="hsl(var(--chart-1))" stopOpacity={0.7} />
+                    <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={1} />
+                    <stop offset="100%" stopColor="var(--chart-1)" stopOpacity={0.7} />
                   </linearGradient>
                   <linearGradient id="expensesGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="hsl(var(--chart-3))" stopOpacity={1} />
-                    <stop offset="100%" stopColor="hsl(var(--chart-3))" stopOpacity={0.7} />
+                    <stop offset="0%" stopColor="var(--chart-3)" stopOpacity={1} />
+                    <stop offset="100%" stopColor="var(--chart-3)" stopOpacity={0.7} />
                   </linearGradient>
                   <filter id="barShadow" x="-10%" y="-5%" width="120%" height="115%">
-                    <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="hsl(var(--chart-1))" floodOpacity={0.2} />
+                    <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="var(--chart-1)" floodOpacity={0.2} />
                   </filter>
                 </defs>
                 <CartesianGrid
@@ -534,7 +532,8 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                 {chartData.length > 0 && stats?.todaySales && stats.todaySales > 0 && (
                   <ReferenceLine
                     y={Math.round(chartData.reduce((sum, d) => sum + d.sales, 0) / chartData.length)}
-                    stroke="hsl(var(--chart-1) / 0.4)"
+                    stroke="var(--chart-1)"
+                    strokeOpacity={0.4}
                     strokeDasharray="6 3"
                     strokeWidth={1.5}
                     label={{
@@ -552,6 +551,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                   tickMargin={8}
                   fontSize={12}
                   tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                  tickFormatter={formatStringNumbers}
                 />
                 <YAxis
                   tickLine={false}

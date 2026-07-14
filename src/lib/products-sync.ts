@@ -1,9 +1,11 @@
 import { useProductsStore } from '@/stores/pos-store';
 import { ProductsDB } from '@/lib/offline/indexeddb';
 
-export async function refreshProductsFromServer(): Promise<boolean> {
+export async function refreshProductsFromServer(showLoadingState = false): Promise<boolean> {
   const { setProducts, setLoading } = useProductsStore.getState();
-  setLoading(true);
+  if (showLoadingState) {
+    setLoading(true);
+  }
 
   try {
     const res = await fetch('/api/products?limit=10000');
@@ -17,6 +19,8 @@ export async function refreshProductsFromServer(): Promise<boolean> {
     console.error('Failed to refresh products from server:', error);
     return false;
   } finally {
-    setLoading(false);
+    if (showLoadingState) {
+      setLoading(false);
+    }
   }
 }

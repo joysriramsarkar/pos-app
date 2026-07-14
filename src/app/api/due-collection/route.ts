@@ -14,6 +14,7 @@ export async function GET() {
       select: {
         id: true,
         name: true,
+        nameEn: true,
         phone: true,
         totalDue: true,
         updatedAt: true,
@@ -36,6 +37,7 @@ export async function GET() {
         return {
           id: customer.id,
           name: customer.name,
+          nameEn: customer.nameEn,
           phone: customer.phone,
           dueAmount: Number(customer.totalDue),
           updatedAt: customer.updatedAt,

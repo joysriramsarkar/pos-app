@@ -1,7 +1,8 @@
 import { z } from 'zod';
-import { toMoneyNumber } from '@/lib/money';
+import { toMoneyNumber, toUnitPriceNumber } from '@/lib/money';
 
 const money = () => z.coerce.number().finite().transform((value) => toMoneyNumber(value));
+const unitPrice = () => z.coerce.number().finite().transform((value) => toUnitPriceNumber(value));
 
 export const ProductInputSchema = z.object({
   id: z.string().optional(),
@@ -9,8 +10,9 @@ export const ProductInputSchema = z.object({
   name: z.string().min(1, 'Product name is required'),
   nameBn: z.string().nullable().optional(),
   category: z.string().min(1, 'Category is required'),
-  buyingPrice: money().pipe(z.number().min(0, 'Valid buying price is required')),
-  sellingPrice: money().pipe(z.number().min(0, 'Valid selling price is required')),
+  subCategory: z.string().nullable().optional(),
+  buyingPrice: unitPrice().pipe(z.number().min(0, 'Valid buying price is required')),
+  sellingPrice: unitPrice().pipe(z.number().min(0, 'Valid selling price is required')),
   unit: z.string().default('piece'),
   currentStock: z.coerce.number().default(0),
   minStockLevel: z.coerce.number().default(5),
@@ -23,7 +25,7 @@ export const SaleItemInputSchema = z.object({
   productId: z.string(),
   productName: z.string(),
   quantity: z.coerce.number().positive(),
-  unitPrice: money().pipe(z.number().nonnegative()),
+  unitPrice: unitPrice().pipe(z.number().nonnegative()),
   totalPrice: money().pipe(z.number().nonnegative()),
 });
 
@@ -48,6 +50,7 @@ export const SaleInputSchema = z.object({
   usePrepaid: z.boolean().optional().default(false),
   prepaidAmountUsed: money().pipe(z.number().nonnegative()).optional().default(0),
   changeAsPrepayment: money().pipe(z.number().nonnegative()).optional().default(0),
+  debtRepaymentAmount: money().pipe(z.number().nonnegative()).optional().default(0),
 });
 
 export type SaleItemInput = z.infer<typeof SaleItemInputSchema>;
@@ -56,6 +59,7 @@ export type SaleInput = z.infer<typeof SaleInputSchema>;
 export const CustomerInputSchema = z.object({
   id: z.string().optional(),
   name: z.string().min(1, 'Customer name is required'),
+  nameEn: z.string().nullable().optional().transform(v => v === '' ? null : v),
   phone: z.string().nullable().optional().transform(v => v === '' ? null : v),
   address: z.string().nullable().optional().transform(v => v === '' ? null : v),
   notes: z.string().nullable().optional().transform(v => v === '' ? null : v),
@@ -77,7 +81,7 @@ export type StockAdjustmentInput = z.infer<typeof StockAdjustmentInputSchema>;
 export const StockEntryInputSchema = z.object({
   productId: z.string().min(1, 'Product ID is required'),
   quantity: z.coerce.number().positive('Quantity must be positive'),
-  purchasePrice: money().pipe(z.number().nonnegative('Purchase price must be non-negative')),
+  purchasePrice: unitPrice().pipe(z.number().nonnegative('Purchase price must be non-negative')),
   date: z.string().optional(),
   supplierId: z.string().optional(),
   amountPaid: money().pipe(z.number().nonnegative('Amount paid must be non-negative')).optional(),
@@ -88,6 +92,7 @@ export type StockEntryInput = z.infer<typeof StockEntryInputSchema>;
 
 export const SupplierInputSchema = z.object({
   name: z.string().min(1, 'Supplier name is required'),
+  nameEn: z.string().nullable().optional().transform(v => v === '' ? null : v),
   phone: z.string().nullable().optional().transform(v => v === '' ? null : v),
   address: z.string().nullable().optional().transform(v => v === '' ? null : v),
   email: z.string().email('Invalid email').nullable().optional().transform(v => v === '' ? null : v),

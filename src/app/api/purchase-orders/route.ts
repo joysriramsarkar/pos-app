@@ -4,7 +4,7 @@ import { db } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthenticatedUser, requirePermission } from "@/lib/api-middleware";
 import { logAudit } from "@/lib/audit";
-import { toMoneyNumber } from '@/lib/money';
+import { toMoneyNumber, toUnitPriceNumber } from '@/lib/money';
 
 const getIp = (req: NextRequest) => req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || undefined;
 
@@ -133,16 +133,33 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    let totalAmount = items.reduce(
-      (sum: number, item: { quantity: number; unitPrice: number }) => sum + item.quantity * item.unitPrice,
-      0
-    );
+    const generalGstRate = gstPercentage ? Number(gstPercentage) : 0;
+    let totalAmount = 0;
+    let totalGstAmount = 0;
+
+    const processedItems = items.map((item: { productId: string; quantity: number; unitPrice: number; gstPercentage?: number }) => {
+      const qty = item.quantity;
+      const price = item.unitPrice;
+      const itemSubtotal = qty * price;
+      const itemGstRate = item.gstPercentage !== undefined && item.gstPercentage !== null && !isNaN(Number(item.gstPercentage))
+        ? Number(item.gstPercentage)
+        : generalGstRate;
+      const itemGstAmount = toMoneyNumber(itemSubtotal * (itemGstRate / 100));
+      totalGstAmount += itemGstAmount;
+      const itemTotalPrice = toMoneyNumber(itemSubtotal + itemGstAmount);
+      totalAmount += itemTotalPrice;
+
+      return {
+        ...item,
+        totalPrice: itemTotalPrice
+      };
+    });
+
+    totalAmount = toMoneyNumber(totalAmount);
 
     let finalNotes = notes || '';
-    if (gstPercentage && !isNaN(Number(gstPercentage))) {
-      const gstAmt = totalAmount * Number(gstPercentage) / 100;
-      totalAmount = totalAmount + gstAmt;
-      const gstNote = `জিএসটি: ${gstPercentage}% (৳${gstAmt.toFixed(2)})`;
+    if (totalGstAmount > 0) {
+      const gstNote = `মোট জিএসটি: ৳${totalGstAmount.toFixed(2)}`;
       finalNotes = finalNotes ? `${finalNotes}\n${gstNote}` : gstNote;
     }
 
@@ -193,7 +210,7 @@ export async function POST(request: NextRequest) {
 
           if (directReceive) {
             let paymentStatus = 'Paid';
-            const actualAmountPaid = amountPaid !== undefined ? amountPaid : totalAmount;
+            const actualAmountPaid = amountPaid !== undefined ? amountPaid : Math.round(totalAmount);
             if (actualAmountPaid === 0) {
               paymentStatus = 'Pending';
             } else if (actualAmountPaid < totalAmount) {
@@ -212,8 +229,8 @@ export async function POST(request: NextRequest) {
                 deliveryStatus: 'Received',
                 notes: finalNotes || null,
                 createdAt: purchaseDate,
-                items: {
-                  create: await Promise.all(items.map(async (item: { productId: string; quantity: number; unitPrice: number }) => {
+                 items: {
+                  create: await Promise.all(processedItems.map(async (item: any) => {
                     const product = await tx.product.findUnique({ where: { id: item.productId } });
                     return {
                       productId: item.productId,
@@ -221,7 +238,7 @@ export async function POST(request: NextRequest) {
                       quantity: item.quantity,
                       receivedQty: item.quantity,
                       buyingPrice: item.unitPrice,
-                      totalPrice: item.quantity * item.unitPrice,
+                      totalPrice: item.totalPrice,
                     };
                   })),
                 },
@@ -256,11 +273,13 @@ export async function POST(request: NextRequest) {
                 const currentStock = Number(product?.currentStock) || 0;
                 const newStock = currentStock + qty;
                 if (newStock > 0) {
-                  const currentPrice = Number(product?.buyingPrice) || unitPrice;
+                  const currentPrice = product?.buyingPrice !== null && product?.buyingPrice !== undefined
+                    ? Number(product.buyingPrice)
+                    : unitPrice;
                   const wac = ((currentStock * currentPrice) + (qty * unitPrice)) / newStock;
-                  updateData.buyingPrice = toMoneyNumber(wac);
+                  updateData.buyingPrice = toUnitPriceNumber(wac);
                 } else {
-                  updateData.buyingPrice = toMoneyNumber(unitPrice);
+                  updateData.buyingPrice = toUnitPriceNumber(unitPrice);
                 }
               }
 
@@ -314,8 +333,8 @@ export async function POST(request: NextRequest) {
                 deliveryStatus: 'Pending',
                 notes: finalNotes || null,
                 createdAt: purchaseDate,
-                items: {
-                  create: await Promise.all(items.map(async (item: { productId: string; quantity: number; unitPrice: number }) => {
+                 items: {
+                  create: await Promise.all(processedItems.map(async (item: any) => {
                     const product = await tx.product.findUnique({ where: { id: item.productId } });
                     return {
                       productId: item.productId,
@@ -323,7 +342,7 @@ export async function POST(request: NextRequest) {
                       quantity: item.quantity,
                       receivedQty: 0,
                       buyingPrice: item.unitPrice,
-                      totalPrice: item.quantity * item.unitPrice,
+                      totalPrice: item.totalPrice,
                     };
                   })),
                 },

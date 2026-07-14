@@ -48,7 +48,39 @@ export function makeFormatters(isBn: boolean, currencySymbol: string = '₹') {
     return convertEnglishToBengaliNumerals(str);
   };
 
-  return { formatNumber, formatPrice, formatDate, formatStringNumbers, isBn };
+  /**
+   * Compact axis formatter — understands Indian number system.
+   * 1,00,00,000+ → Cr | 1,00,000+ → L | 1,000+ → k | else raw
+   * Prepends currency symbol. Use for chart Y-axis tickFormatter.
+   */
+  const formatCompact = (v: number): string => {
+    const a = Math.abs(v);
+    const sign = v < 0 ? '-' : '';
+    let out: string;
+    if (a >= 1_00_00_000) out = `${(a / 1_00_00_000).toFixed(1)}${isBn ? 'কোটি' : 'Cr'}`;
+    else if (a >= 1_00_000) out = `${(a / 1_00_000).toFixed(1)}${isBn ? 'লাখ' : 'L'}`;
+    else if (a >= 1_000) out = `${(a / 1_000).toFixed(1)}${isBn ? 'হা' : 'k'}`;
+    else out = a.toFixed(0);
+    const formatted = isBn ? convertEnglishToBengaliNumerals(out) : out;
+    return `${sign}${currencySymbol}${formatted}`;
+  };
+
+  /**
+   * Compact unit formatter (no currency symbol) — for quantity/count axes.
+   */
+  const formatCompactUnit = (v: number): string => {
+    const a = Math.abs(v);
+    const sign = v < 0 ? '-' : '';
+    let out: string;
+    if (a >= 1_00_00_000) out = `${(a / 1_00_00_000).toFixed(1)}${isBn ? 'কোটি' : 'Cr'}`;
+    else if (a >= 1_00_000) out = `${(a / 1_00_000).toFixed(1)}${isBn ? 'লাখ' : 'L'}`;
+    else if (a >= 1_000) out = `${(a / 1_000).toFixed(1)}${isBn ? 'হা' : 'k'}`;
+    else out = a.toFixed(0);
+    const formatted = isBn ? convertEnglishToBengaliNumerals(out) : out;
+    return `${sign}${formatted}`;
+  };
+
+  return { formatNumber, formatPrice, formatDate, formatStringNumbers, formatCompact, formatCompactUnit, isBn, currencySymbol };
 }
 
 export function useNumberFormat() {

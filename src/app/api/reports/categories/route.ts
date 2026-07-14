@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { db as prisma } from "@/lib/db";
-import { startOfDay, endOfDay, parseISO, subDays } from "date-fns";
+import { parseISO } from "date-fns";
 import { requirePermission } from "@/lib/api-middleware";
 
 export async function GET(request: NextRequest) {
@@ -10,6 +10,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const sp = request.nextUrl.searchParams;
+    const useSubCategory = sp.get("subCategory") === "true";
 
     const tzOffset = parseInt(sp.get("tzOffset") || "-330");
     const offsetMs = -tzOffset * 60 * 1000;
@@ -43,8 +44,6 @@ export async function GET(request: NextRequest) {
       startDate = new Date(startLocal.getTime() - offsetMs);
     }
 
-    const catMap = new Map<string, { revenue: number; qty: number; profit: number; orders: Set<string> }>();
-
     const saleItemsWithSale = await prisma.saleItem.findMany({
       where: {
         createdAt: { gte: startDate, lte: endDate },
@@ -54,13 +53,50 @@ export async function GET(request: NextRequest) {
         saleId: true,
         quantity: true,
         totalPrice: true,
-        product: { select: { category: true, buyingPrice: true } },
+        product: { select: { category: true, subCategory: true, buyingPrice: true } },
       },
     });
 
+    if (useSubCategory) {
+      // Group by sub-category
+      const subCatMap = new Map<string, { name: string; parentCategory: string; revenue: number; qty: number; profit: number; orders: Set<string> }>();
+
+      saleItemsWithSale.forEach((item) => {
+        const subCat = (item.product?.subCategory || "").trim();
+        if (!subCat) return; // Skip items without sub-category
+        const parentCat = item.product?.category || "General";
+        const key = `${parentCat}::${subCat}`;
+        const existing = subCatMap.get(key) || { name: subCat, parentCategory: parentCat, revenue: 0, qty: 0, profit: 0, orders: new Set<string>() };
+        existing.revenue += Number(item.totalPrice);
+        existing.qty += Number(item.quantity);
+        existing.profit += Number(item.totalPrice) - Number(item.product?.buyingPrice || 0) * Number(item.quantity);
+        existing.orders.add(item.saleId);
+        subCatMap.set(key, existing);
+      });
+
+      const subCategories = Array.from(subCatMap.values())
+        .sort((a, b) => b.revenue - a.revenue);
+      const totalRevenue = subCategories.reduce((s, c) => s + c.revenue, 0);
+      const result = subCategories.map((c) => ({
+        name: c.name,
+        parentCategory: c.parentCategory,
+        revenue: c.revenue,
+        qty: c.qty,
+        profit: c.profit,
+        orderCount: c.orders.size,
+        margin: c.revenue > 0 ? ((c.profit / c.revenue) * 100).toFixed(1) : "0",
+        percentage: totalRevenue > 0 ? ((c.revenue / totalRevenue) * 100).toFixed(1) : "0",
+      }));
+
+      return NextResponse.json({ categories: result, totalRevenue });
+    }
+
+    // Default: group by category
+    const catMap = new Map<string, { revenue: number; qty: number; profit: number; orders: Set<string> }>();
+
     saleItemsWithSale.forEach((item) => {
       const cat = item.product?.category || "General";
-      const existing = catMap.get(cat) || { revenue: 0, qty: 0, profit: 0, orders: new Set() };
+      const existing = catMap.get(cat) || { revenue: 0, qty: 0, profit: 0, orders: new Set<string>() };
       existing.revenue += Number(Number(item.totalPrice));
       existing.qty += Number(item.quantity);
       existing.profit += Number(Number(item.totalPrice)) - Number(item.product?.buyingPrice || 0) * Number(item.quantity);

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useTranslations } from 'next-intl';
 import { useNumberFormat } from '@/hooks/use-number-format';
@@ -38,7 +38,7 @@ interface ProductDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   product?: Product | null;
-  onSubmit?: (data: ProductFormData) => void;
+  onSubmit?: (data: ProductFormData) => Promise<void> | void;
 }
 
 export interface ProductFormData {
@@ -47,6 +47,7 @@ export interface ProductFormData {
   nameBn?: string;
   barcode?: string;
   category: string;
+  subCategory?: string;
   buyingPrice: number;
   sellingPrice: number;
   unit: string;
@@ -69,16 +70,13 @@ const UNITS = [
 
 const DEFAULT_CATEGORIES = [
   'Groceries',
-  'Dairy',
-  'Vegetables',
-  'Fruits',
-  'Pulses',
-  'Oils',
-  'Snacks',
+  'Packaged Snacks',
   'Beverages',
-  'Household',
+  'Dairy & Frozen',
   'Personal Care',
-  'Other',
+  'Household & Cleaning',
+  'Confectionery',
+  'General',
 ];
 
 // Helper to generate barcode
@@ -111,26 +109,40 @@ export function ProductDialog({
   product,
   onSubmit,
 }: ProductDialogProps) {
-  const [name, setName] = useState('');
-  const [nameBn, setNameBn] = useState('');
-  const [barcode, setBarcode] = useState('');
-  const [category, setCategory] = useState('');
+  const [name, setName] = useState(product?.name || '');
+  const [nameBn, setNameBn] = useState(product?.nameBn || '');
+  const [barcode, setBarcode] = useState(product?.barcode || '');
+  const [category, setCategory] = useState(product?.category || '');
   const [newCategory, setNewCategory] = useState('');
-  const [buyingPrice, setBuyingPrice] = useState('');
-  const [sellingPrice, setSellingPrice] = useState('');
-  const [unit, setUnit] = useState('piece');
-  const [currentStock, setCurrentStock] = useState('');
-  const [minStockLevel, setMinStockLevel] = useState('');
-  const [isActive, setIsActive] = useState(true);
+  const [subCategory, setSubCategory] = useState(product?.subCategory || '');
+  const [newSubCategory, setNewSubCategory] = useState('');
+  const [buyingPrice, setBuyingPrice] = useState(product?.buyingPrice.toString() || '');
+  const [sellingPrice, setSellingPrice] = useState(product?.sellingPrice.toString() || '');
+  const [unit, setUnit] = useState(product?.unit || 'piece');
+  const [currentStock, setCurrentStock] = useState(product?.currentStock.toString() || '0');
+  const [minStockLevel, setMinStockLevel] = useState(product?.minStockLevel.toString() || '5');
+  const [isActive, setIsActive] = useState(product ? product.isActive : true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isWebScannerOpen, setIsWebScannerOpen] = useState(false);
-  const [isNameBnTouched, setIsNameBnTouched] = useState(false);
+  const [isNameBnTouched, setIsNameBnTouched] = useState(!!product);
+  const [isCategoryOpen, setIsCategoryOpen] = useState(false);
+  const [isSubCategoryOpen, setIsSubCategoryOpen] = useState(false);
+  const [isUnitOpen, setIsUnitOpen] = useState(false);
+  const pendingTranslationRef = useRef<string | null>(null);
+  const isAnySelectOpen = isCategoryOpen || isSubCategoryOpen || isUnitOpen;
 
   const t = useTranslations('ProductDialog');
   const tc = useTranslations('Common');
   const { formatNumber } = useNumberFormat();
+  const noSpinnersClass = "[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";
+  const blockScrollAndArrowKeys = {
+    onWheel: (e: React.WheelEvent<HTMLInputElement>) => e.currentTarget.blur(),
+    onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'ArrowUp' || e.key === 'ArrowDown') e.preventDefault();
+    },
+  };
 
   const isNativeApp = typeof Capacitor !== 'undefined' && Capacitor.isNativePlatform();
 
@@ -145,7 +157,12 @@ export function ProductDialog({
 
   const { toast } = useToast();
   const categories = useProductsStore((state) => state.categories);
-  const allCategories = [...new Set([...DEFAULT_CATEGORIES, ...categories])].sort();
+  const products = useProductsStore((state) => state.products);
+  const allCategories = useMemo(() => [...new Set([...DEFAULT_CATEGORIES, ...categories])].sort(), [categories]);
+  const allSubCategories = useMemo(() =>
+    [...new Set(products.map((p) => p.subCategory).filter(Boolean) as string[])].sort(),
+    [products]
+  );
 
   const isEditing = !!product;
 
@@ -157,6 +174,7 @@ export function ProductDialog({
         setNameBn(product.nameBn || '');
         setBarcode(product.barcode || '');
         setCategory(product.category);
+        setSubCategory(product.subCategory || '');
         setBuyingPrice(product.buyingPrice.toString());
         setSellingPrice(product.sellingPrice.toString());
         setUnit(product.unit);
@@ -171,6 +189,8 @@ export function ProductDialog({
         setBarcode('');
         setCategory('');
         setNewCategory('');
+        setSubCategory('');
+        setNewSubCategory('');
         setBuyingPrice('');
         setSellingPrice('');
         setUnit('piece');
@@ -213,8 +233,14 @@ export function ProductDialog({
           const res = await fetch(`https://inputtools.google.com/request?text=${encodeURIComponent(processedName)}&itc=bn-t-i0-und&num=1&cp=0&cs=1&ie=utf-8&oe=utf-8&app=demopage`);
           const data = await res.json();
           if (data && data[1] && data[1][0] && data[1][0][1] && data[1][0][1][0]) {
-            // Double check if it hasn't been touched while fetching
-            setNameBn((prev) => isNameBnTouched ? prev : data[1][0][1][0]);
+            const translated = data[1][0][1][0];
+            // If any dropdown is currently open, buffer the result
+            if (isAnySelectOpen) {
+              pendingTranslationRef.current = translated;
+            } else {
+              // Double check if it hasn't been touched while fetching
+              setNameBn((prev) => isNameBnTouched ? prev : translated);
+            }
           }
         } catch (err) {
           console.error("Auto-translate failed:", err);
@@ -223,7 +249,16 @@ export function ProductDialog({
     }, 800);
 
     return () => clearTimeout(timeoutId);
-  }, [name, isNameBnTouched]);
+  }, [name, isNameBnTouched, isAnySelectOpen]);
+
+  // Apply buffered translation once all dropdowns close
+  useEffect(() => {
+    if (!isAnySelectOpen && pendingTranslationRef.current !== null) {
+      const pending = pendingTranslationRef.current;
+      pendingTranslationRef.current = null;
+      setNameBn((prev) => isNameBnTouched ? prev : pending);
+    }
+  }, [isAnySelectOpen, isNameBnTouched]);
 
   const handleGenerateBarcode = () => {
     setBarcode(generateBarcode());
@@ -258,6 +293,12 @@ export function ProductDialog({
         nameBn: nameBn || undefined,
         barcode: barcode || undefined,
         category: category === 'new_category_custom_value' ? newCategory.trim() : category,
+        subCategory:
+          subCategory === '__none__' || subCategory === ''
+            ? undefined
+            : subCategory === 'new_subcat_custom_value'
+            ? newSubCategory.trim() || undefined
+            : subCategory.trim() || undefined,
         buyingPrice: bp,
         sellingPrice: sp,
         unit,
@@ -266,7 +307,7 @@ export function ProductDialog({
         isActive,
       };
 
-      onSubmit?.(data);
+      await onSubmit?.(data);
       onOpenChange(false);
     } catch (err) {
       const msg = err instanceof Error ? err.message : t('failed_save');
@@ -284,6 +325,7 @@ export function ProductDialog({
     nameBn !== (product?.nameBn || '') ||
     barcode !== (product?.barcode || '') ||
     category !== product?.category ||
+    subCategory !== (product?.subCategory || '') ||
     buyingPrice !== product?.buyingPrice.toString() ||
     sellingPrice !== product?.sellingPrice.toString() ||
     unit !== product?.unit ||
@@ -415,6 +457,7 @@ export function ProductDialog({
                   setNewCategory('');
                 }
               }}
+              onOpenChange={setIsCategoryOpen}
             >
               <SelectTrigger id="product-form-category" className={showCategoryError ? 'border-destructive focus-visible:ring-destructive' : ''}>
                 <SelectValue placeholder={t('category_placeholder')} />
@@ -444,10 +487,51 @@ export function ProductDialog({
             )}
           </div>
 
+          {/* Subcategory */}
+          <div className="space-y-2">
+            <Label htmlFor="product-form-subcategory">{t('subcategory')}</Label>
+            <Select
+              value={subCategory}
+              onValueChange={(val) => {
+                setSubCategory(val);
+                if (val !== 'new_subcat_custom_value') {
+                  setNewSubCategory('');
+                }
+              }}
+              onOpenChange={setIsSubCategoryOpen}
+            >
+              <SelectTrigger id="product-form-subcategory">
+                <SelectValue placeholder={t('subcategory_placeholder')} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">{t('no_subcategory')}</SelectItem>
+                {allSubCategories.map((sc) => (
+                  <SelectItem key={sc} value={sc}>{sc}</SelectItem>
+                ))}
+                <SelectItem value="new_subcat_custom_value" className="text-primary font-medium">
+                  {t('add_new_subcategory')}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            {subCategory === 'new_subcat_custom_value' && (
+              <div className="animate-in fade-in slide-in-from-top-1 pt-2">
+                <label htmlFor="product-form-newSubCategory" className="sr-only">New subcategory name</label>
+                <Input
+                  id="product-form-newSubCategory"
+                  value={newSubCategory}
+                  onChange={(e) => setNewSubCategory(e.target.value)}
+                  placeholder={t('new_subcategory_placeholder')}
+                  className="h-9 text-sm"
+                  autoFocus
+                />
+              </div>
+            )}
+          </div>
+
           {/* Unit */}
           <div className="space-y-2">
             <Label htmlFor="product-form-unit">{t('unit')}</Label>
-            <Select value={unit} onValueChange={setUnit}>
+            <Select value={unit} onValueChange={setUnit} onOpenChange={setIsUnitOpen}>
               <SelectTrigger id="product-form-unit">
                 <SelectValue placeholder={t('unit_placeholder')} />
               </SelectTrigger>
@@ -473,7 +557,8 @@ export function ProductDialog({
                 placeholder="0"
                 min="0"
                 step="0.01"
-                className={showBuyingPriceError ? 'border-destructive focus-visible:ring-destructive' : ''}
+                className={cn(noSpinnersClass, showBuyingPriceError ? 'border-destructive focus-visible:ring-destructive' : '')}
+                {...blockScrollAndArrowKeys}
               />
             </div>
             <div className="space-y-2">
@@ -486,7 +571,8 @@ export function ProductDialog({
                 placeholder="0"
                 min="0"
                 step="0.01"
-                className={showSellingPriceError ? 'border-destructive focus-visible:ring-destructive' : ''}
+                className={cn(noSpinnersClass, showSellingPriceError ? 'border-destructive focus-visible:ring-destructive' : '')}
+                {...blockScrollAndArrowKeys}
               />
             </div>
           </div>
@@ -517,6 +603,8 @@ export function ProductDialog({
                 placeholder="0"
                 min="0"
                 step={['kg', 'liter'].includes(unit) ? '0.1' : '1'}
+                className={noSpinnersClass}
+                {...blockScrollAndArrowKeys}
               />
             </div>
             <div className="space-y-2">
@@ -529,6 +617,8 @@ export function ProductDialog({
                 placeholder="5"
                 min="0"
                 step={['kg', 'liter'].includes(unit) ? '0.1' : '1'}
+                className={noSpinnersClass}
+                {...blockScrollAndArrowKeys}
               />
             </div>
           </div>

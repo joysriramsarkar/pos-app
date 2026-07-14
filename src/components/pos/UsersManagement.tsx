@@ -39,6 +39,8 @@ const AddUserDialog = React.lazy(() =>
 );
 
 import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
 export interface User {
   id: string;
@@ -58,6 +60,7 @@ interface UsersManagementProps {
 
 export function UsersManagement({ currentUserRole }: UsersManagementProps) {
   const t = useTranslations("Users");
+  const tc = useTranslations("Common");
   const isAdmin = useIsAdmin();
   const router = useRouter();
   const { toast } = useToast();
@@ -182,63 +185,130 @@ export function UsersManagement({ currentUserRole }: UsersManagementProps) {
           <p className="text-muted-foreground">{t("no_users")}</p>
         </div>
       ) : (
-        <div className="border rounded-lg overflow-hidden">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/50">
-                <TableHead>{t("username")}</TableHead>
-                <TableHead>{t("name")}</TableHead>
-                <TableHead>{t("email")}</TableHead>
-                <TableHead>{t("phone")}</TableHead>
-                <TableHead>{t("role")}</TableHead>
-                <TableHead>{t("status")}</TableHead>
-                <TableHead className="text-right">{t("actions")}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {users.map((user) => (
-                <TableRow key={user.id}>
-                  <TableCell className="font-medium">{user.username}</TableCell>
-                  <TableCell>{user.name}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{user.email || "-"}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{user.phone || "-"}</TableCell>
-                  <TableCell>
-                    <Badge className={getRoleColor(user.role)}>{user.role}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1">
-                      {user.isActive
-                        ? <Check className="h-4 w-4 text-green-600" />
-                        : <X className="h-4 w-4 text-red-600" />}
-                      <span className={user.isActive ? "text-green-600" : "text-red-600"}>
-                        {user.isActive ? t("active") : t("inactive")}
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right space-x-2">
+        <>
+          {/* Desktop View */}
+          <div className="hidden md:block border rounded-lg overflow-hidden">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50">
+                    <TableHead>{t("username")}</TableHead>
+                    <TableHead>{t("name")}</TableHead>
+                    <TableHead>{t("email")}</TableHead>
+                    <TableHead>{t("phone")}</TableHead>
+                    <TableHead>{t("role")}</TableHead>
+                    <TableHead>{t("status")}</TableHead>
+                    <TableHead className="text-right">{t("actions")}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {users.map((user) => (
+                    <TableRow key={user.id}>
+                      <TableCell className="font-medium">{user.username}</TableCell>
+                      <TableCell>{user.name}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{user.email || "-"}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{user.phone || "-"}</TableCell>
+                      <TableCell>
+                        <Badge className={getRoleColor(user.role)}>{user.role}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          {user.isActive
+                            ? <Check className="h-4 w-4 text-green-600" />
+                            : <X className="h-4 w-4 text-red-600" />}
+                          <span className={user.isActive ? "text-green-600" : "text-red-600"}>
+                            {user.isActive ? t("active") : t("inactive")}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right space-x-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => { setEditingUser(user); setShowAddDialog(true); }}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setDeleteConfirm(user)}
+                          className="text-destructive hover:text-destructive"
+                          disabled={user.role === "ADMIN"}
+                          title={user.role === "ADMIN" ? t("admin_cannot_delete") : t("delete_user_tooltip")}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+
+          {/* Mobile View */}
+          <div className="md:hidden space-y-3">
+            {users.map((user) => (
+              <Card key={user.id} className="p-4 border rounded-lg shadow-sm bg-card space-y-3">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h3 className="font-semibold text-base text-foreground leading-tight">{user.name}</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">@{user.username}</p>
+                  </div>
+                  <Badge className={getRoleColor(user.role)}>{user.role}</Badge>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-3 text-xs py-2.5 border-t border-b border-border/50">
+                  <div className="min-w-0">
+                    <span className="text-muted-foreground block mb-0.5">{t("email")}</span>
+                    <span className="font-medium text-foreground truncate block">{user.email || "-"}</span>
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-muted-foreground block mb-0.5">{t("phone")}</span>
+                    <span className="font-medium text-foreground block truncate">{user.phone || "-"}</span>
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center pt-1.5 gap-2">
+                  <div className="flex items-center">
+                    {user.isActive ? (
+                      <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 dark:bg-green-950/20 dark:text-green-400 py-0.5 px-1.5 text-[10px]">
+                        <Check className="h-3 w-3 mr-1 shrink-0" /> {t("active")}
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 dark:bg-red-950/20 dark:text-red-400 py-0.5 px-1.5 text-[10px]">
+                        <X className="h-3 w-3 mr-1 shrink-0" /> {t("inactive")}
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="flex gap-2 shrink-0">
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="sm"
+                      className="h-8 px-2 text-xs"
                       onClick={() => { setEditingUser(user); setShowAddDialog(true); }}
                     >
-                      <Edit className="h-4 w-4" />
+                      <Edit className="h-3.5 w-3.5 mr-1 text-blue-600 dark:text-blue-400" />
+                      {tc("edit")}
                     </Button>
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="sm"
+                      className="h-8 px-2 text-xs text-destructive hover:bg-destructive/5"
                       onClick={() => setDeleteConfirm(user)}
-                      className="text-destructive hover:text-destructive"
                       disabled={user.role === "ADMIN"}
                       title={user.role === "ADMIN" ? t("admin_cannot_delete") : t("delete_user_tooltip")}
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="h-3.5 w-3.5 mr-1" />
+                      {tc("delete")}
                     </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </>
       )}
 
       {showAddDialog && (
