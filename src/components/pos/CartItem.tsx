@@ -39,6 +39,8 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
     }
   }, [isHighlighted]);
 
+  const isWeighted = ['kg', 'liter', 'gram', 'ml'].includes(item.unit);
+
   const getStep = (unit: string) => {
     return 1;
   };
@@ -93,8 +95,13 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
 
   const commitInputValue = () => {
     const converted = convertBengaliToEnglishNumerals(inputValue);
-    const value = parseFloat(converted);
+    let value = parseFloat(converted);
+    
     if (!isNaN(value) && value > 0) {
+      if (!isWeighted) {
+        value = Math.floor(value);
+      }
+      
       const currentFormatted = parseFloat(item.quantity.toFixed(3));
       if (value === currentFormatted) {
         setInputValue(formatQtyForInput(item.quantity));
@@ -127,7 +134,6 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
   const isOverStock = item.quantity > availableStock;
   const isAtStockLimit = item.quantity >= availableStock;
 
-  const isWeighted = ['kg', 'liter', 'gram', 'ml'].includes(item.unit);
   const productUsage = useQuantityUsageStore((state) => state.usage[item.productId] ?? EMPTY_USAGE);
   const popularQuantities = useMemo(() => {
     return Object.entries(productUsage)
