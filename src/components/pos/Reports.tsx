@@ -1059,8 +1059,8 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
             <Card className="rounded-xl">
               <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
                 <div>
-                  <CardTitle>Supplier Purchases</CardTitle>
-                  <CardDescription>Valuation and ordering from suppliers</CardDescription>
+                  <CardTitle>{t('supplier_purchases')}</CardTitle>
+                  <CardDescription>{t('supplier_report_desc')}</CardDescription>
                 </div>
                 <div className="flex flex-wrap gap-2 items-center">
                   {DateFilter}
@@ -1080,10 +1080,10 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>#</TableHead>
-                        <TableHead>Supplier Name</TableHead>
-                        <TableHead className="text-right">Orders</TableHead>
-                        <TableHead className="text-right">Spent Amount</TableHead>
+                        <TableHead>{t('rank_col')}</TableHead>
+                        <TableHead>{t('supplier_name_col')}</TableHead>
+                        <TableHead className="text-right">{t('orders_placed_col')}</TableHead>
+                        <TableHead className="text-right">{t('spent_amount_col')}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1101,7 +1101,7 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
                       ))) : (
                         <TableRow>
                           <TableCell colSpan={4} className="text-center py-6 text-muted-foreground">
-                            No suppliers purchase data.
+                            {t('no_data')}
                           </TableCell>
                         </TableRow>
                       )}
@@ -1400,6 +1400,14 @@ function ExpensesTabContent({ expenses, dateParams, onNavigate, isLoading }: {
   onNavigate?: (page: string) => void;
   isLoading?: boolean;
 }) {
+  const parseDateSafe = (dateStr: string | Date | null | undefined): Date => {
+    if (!dateStr) return new Date();
+    if (dateStr instanceof Date) return dateStr;
+    const str = String(dateStr);
+    const datePart = str.substring(0, 10);
+    return new Date(datePart + 'T12:00:00');
+  };
+
   const { formatPrice: fp, formatCompact, formatStringNumbers } = useNumberFormat();
 
   // Filter expenses by dateParams range
@@ -1409,7 +1417,7 @@ function ExpensesTabContent({ expenses, dateParams, onNavigate, isLoading }: {
     const to = p.get('to') ? new Date(p.get('to')!) : null;
     if (to) to.setHours(23, 59, 59, 999);
     return expenses.filter(e => {
-      const d = new Date(e.date);
+      const d = parseDateSafe(e.date);
       return (!from || d >= from) && (!to || d <= to);
     });
   }, [expenses, dateParams]);
@@ -1436,10 +1444,10 @@ function ExpensesTabContent({ expenses, dateParams, onNavigate, isLoading }: {
     const map: Record<string, number> = {};
     filtered.forEach(e => {
       const k = daysDiff <= 1
-        ? format(new Date(e.date), 'HH:00')
+        ? format(parseDateSafe(e.date), 'HH:00')
         : daysDiff <= 60
-        ? format(new Date(e.date), 'dd MMM')
-        : format(new Date(e.date), 'MMM yy');
+        ? format(parseDateSafe(e.date), 'dd MMM')
+        : format(parseDateSafe(e.date), 'MMM yy');
       map[k] = (map[k] ?? 0) + Number(e.amount ?? 0);
     });
     return Object.entries(map).map(([label, amount]) => ({ label, amount }));
@@ -1453,7 +1461,7 @@ function ExpensesTabContent({ expenses, dateParams, onNavigate, isLoading }: {
     const rows = [
       ['Date', 'Category', 'Supplier', 'Notes', 'Amount'],
       ...filtered.map(e => [
-        format(new Date(e.date), 'dd/MM/yyyy'),
+        format(parseDateSafe(e.date), 'dd/MM/yyyy'),
         e.category,
         e.supplierName || '',
         e.notes || '',

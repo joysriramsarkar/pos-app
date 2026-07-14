@@ -87,11 +87,13 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
   }, [item.quantity]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setInputValue(convertBengaliToEnglishNumerals(e.target.value));
+    // Allow Bengali and English digits, decimal point
+    setInputValue(e.target.value);
   };
 
   const commitInputValue = () => {
-    const value = parseFloat(inputValue);
+    const converted = convertBengaliToEnglishNumerals(inputValue);
+    const value = parseFloat(converted);
     if (!isNaN(value) && value > 0) {
       const currentFormatted = parseFloat(item.quantity.toFixed(3));
       if (value === currentFormatted) {
@@ -239,13 +241,13 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
               ref={inputRef}
               id={`quantity-${item.id}`}
               name={`quantity-${item.id}`}
-              type="number"
+              type="text"
               inputMode="decimal"
               value={inputValue}
               onChange={handleInputChange}
               onKeyDown={handleInputKeyDown}
               onBlur={commitInputValue}
-              className="w-14 h-7 text-center px-1 touch-manipulation text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              className="w-14 h-7 text-center px-1 touch-manipulation text-xs"
               aria-label="Quantity"
               onWheel={(e) => e.currentTarget.blur()}
               min={0}

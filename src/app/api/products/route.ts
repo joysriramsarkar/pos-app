@@ -50,11 +50,12 @@ export async function GET(request: NextRequest) {
     }
     
     if (search) {
+      const engSearch = search.replace(/[০-৯]/g, (d) => String.fromCharCode(d.charCodeAt(0) - 2534 + 48));
       where.OR = [
-
         { name: { contains: search, mode: 'insensitive' } },
         { nameBn: { contains: search, mode: 'insensitive' } },
         { barcode: { contains: search, mode: 'insensitive' } },
+        { barcode: { contains: engSearch, mode: 'insensitive' } },
       ];
     }
 

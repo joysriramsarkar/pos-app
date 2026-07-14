@@ -337,12 +337,12 @@ export default function PurchaseOrderManagement() {
   formItems.forEach((item) => {
     const qty = parseFloat(item.quantity as string) || 0;
     const unitPrice = parseFloat(item.unitPrice as string) || 0;
-    const itemSubtotal = Math.round((qty * unitPrice + Number.EPSILON) * 100) / 100;
+    const itemSubtotal = qty * unitPrice;
     formSubtotal += itemSubtotal;
 
     const hasCustomGst = item.gstPercentage !== undefined && item.gstPercentage !== '' && !isNaN(parseFloat(item.gstPercentage as string));
     const itemGstRate = hasCustomGst ? parseFloat(item.gstPercentage as string) : generalGstRate;
-    const itemGstAmount = Math.round((itemSubtotal * (itemGstRate / 100) + Number.EPSILON) * 100) / 100;
+    const itemGstAmount = itemSubtotal * (itemGstRate / 100);
     gstAmount += itemGstAmount;
   });
 
@@ -948,11 +948,11 @@ export default function PurchaseOrderManagement() {
                             const isWeighted = WEIGHTED_UNITS.has(product?.unit || '');
                             const qty = parseFloat(item.quantity as string) || 0;
                             const unitPrice = parseFloat(item.unitPrice as string) || 0;
-                            const itemSubtotal = Math.round((qty * unitPrice + Number.EPSILON) * 100) / 100;
+                            const itemSubtotal = qty * unitPrice;
                             const hasCustomGst = item.gstPercentage !== undefined && item.gstPercentage !== '' && !isNaN(parseFloat(item.gstPercentage as string));
                             const itemGstRate = hasCustomGst ? parseFloat(item.gstPercentage as string) : (parseFloat(formGstPercentage) || 0);
-                            const itemGstAmount = Math.round((itemSubtotal * (itemGstRate / 100) + Number.EPSILON) * 100) / 100;
-                            const itemTotalIncludingGst = Math.round((itemSubtotal + itemGstAmount + Number.EPSILON) * 100) / 100;
+                            const itemGstAmount = itemSubtotal * (itemGstRate / 100);
+                            const itemTotalIncludingGst = itemSubtotal + itemGstAmount;
 
                             return (
                               <TableRow key={item.productId}>
@@ -1054,11 +1054,11 @@ export default function PurchaseOrderManagement() {
                     const isWeighted = WEIGHTED_UNITS.has(product?.unit || '');
                     const qty = parseFloat(item.quantity as string) || 0;
                     const unitPrice = parseFloat(item.unitPrice as string) || 0;
-                    const itemSubtotal = Math.round((qty * unitPrice + Number.EPSILON) * 100) / 100;
+                    const itemSubtotal = qty * unitPrice;
                     const hasCustomGst = item.gstPercentage !== undefined && item.gstPercentage !== '' && !isNaN(parseFloat(item.gstPercentage as string));
                     const itemGstRate = hasCustomGst ? parseFloat(item.gstPercentage as string) : (parseFloat(formGstPercentage) || 0);
-                    const itemGstAmount = Math.round((itemSubtotal * (itemGstRate / 100) + Number.EPSILON) * 100) / 100;
-                    const itemTotalIncludingGst = Math.round((itemSubtotal + itemGstAmount + Number.EPSILON) * 100) / 100;
+                    const itemGstAmount = itemSubtotal * (itemGstRate / 100);
+                    const itemTotalIncludingGst = itemSubtotal + itemGstAmount;
 
                     return (
                       <Card key={`mobile-${item.productId}`} className="p-3">

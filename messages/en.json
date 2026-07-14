@@ -1264,7 +1264,15 @@
     "spent_amount_col": "Spent Amount",
     "orders_suffix": "orders",
     "pending_suffix": "pending",
-    "days_90": "90 Days"
+    "days_90": "90 Days",
+    "time": "Time",
+    "compare_prev": "Compare Prev Period",
+    "prev_period": "Prev Period",
+    "date": "Date",
+    "sub_categories": "Sub-Category Report",
+    "sub_category_breakdown": "Sub-Category Wise Sales",
+    "sub_category_name": "Sub-Category Name",
+    "no_sub_category_data": "No sub-category data available."
   },
   "Settings": {
     "title": "Settings",
@@ -1462,6 +1470,7 @@
     "select_all": "Select All",
     "batch_deactivate_success": "Selected products deactivated",
     "batch_delete_success": "Selected products deleted",
+    "batch_delete_confirm": "Are you sure you want to delete these {count} products? They won't appear in billing or stock.",
     "batch_operation_failed": "Batch operation failed",
     "no_products_selected": "No products selected",
     "categories": "Categories",

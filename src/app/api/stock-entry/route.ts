@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { StockEntryInputSchema } from '@/schemas';
 import { requirePermission, getAuthenticatedUser } from '@/lib/api-middleware';
-import { multiplyMoney, toMoneyNumber } from '@/lib/money';
+import { multiplyMoney, toMoneyNumber, toUnitPriceNumber } from '@/lib/money';
 import { logAudit } from '@/lib/audit';
 import Decimal from 'decimal.js';
 
@@ -68,11 +68,13 @@ export async function POST(request: NextRequest) {
 
         // Handle division by zero edge case (though newStock should be > 0 since quantity > 0)
         if (newStock > 0) {
-          const currentPrice = Number(product.buyingPrice) || purchasePrice; // Fallback to new price if old is null
+          const currentPrice = product.buyingPrice !== null && product.buyingPrice !== undefined
+            ? Number(product.buyingPrice)
+            : purchasePrice;
           const wac = ((currentStock * currentPrice) + (quantity * purchasePrice)) / newStock;
-          updateData.buyingPrice = toMoneyNumber(wac);
+          updateData.buyingPrice = toUnitPriceNumber(wac);
         } else {
-          updateData.buyingPrice = toMoneyNumber(purchasePrice);
+          updateData.buyingPrice = toUnitPriceNumber(purchasePrice);
         }
       }
 

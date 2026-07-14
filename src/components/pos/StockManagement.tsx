@@ -157,7 +157,7 @@ export function StockManagement({
         const prev = prevStoreCountRef.current;
         if (storeProducts.length > prev) {
           const lowerQuery = searchQuery.toLowerCase();
-          const normalizedQuery = convertBengaliToEnglishNumerals(searchQuery);
+          const normalizedBarcode = convertBengaliToEnglishNumerals(searchQuery);
           const newlyAdded = storeProducts.filter(
             (p) =>
               !syncedResults.some((r) => r.id === p.id) &&
@@ -165,7 +165,7 @@ export function StockManagement({
               (p.name.toLowerCase().includes(lowerQuery) ||
                 p.nameBn?.includes(searchQuery) ||
                 p.barcode?.includes(searchQuery) ||
-                convertBengaliToEnglishNumerals(p.barcode || '').includes(normalizedQuery))
+                convertBengaliToEnglishNumerals(p.barcode || '').includes(normalizedBarcode))
           );
 
           if (newlyAdded.length > 0) {
@@ -193,14 +193,14 @@ export function StockManagement({
       }
 
       const lowerQuery = query.toLowerCase();
-      const normalizedQuery = convertBengaliToEnglishNumerals(query);
+      const normalizedBarcode = convertBengaliToEnglishNumerals(query);
       const localMatches = storeProducts.filter(
         (p) =>
           p.isActive &&
           (p.name.toLowerCase().includes(lowerQuery) ||
             p.nameBn?.includes(query) ||
             p.barcode?.includes(query) ||
-            convertBengaliToEnglishNumerals(p.barcode || '').includes(normalizedQuery))
+            convertBengaliToEnglishNumerals(p.barcode || '').includes(normalizedBarcode))
       );
       setSearchResults(localMatches);
       setIsSearching(true);
@@ -599,7 +599,7 @@ export function StockManagement({
               <Input
                 placeholder={t('search_placeholder')}
                 value={searchQuery}
-                onChange={(e) => handleSearchChange(convertBengaliToEnglishNumerals(e.target.value))}
+                onChange={(e) => handleSearchChange(e.target.value)}
                 className="pl-9 h-9 w-full"
               />
               {searchQuery && (
@@ -1094,7 +1094,7 @@ export function StockManagement({
           <AlertDialogHeader>
             <AlertDialogTitle>{t('delete_selected')}</AlertDialogTitle>
             <AlertDialogDescription>
-              {selectedIds.size} {t('selected_count')} — {tp('delete_confirm', { name: '' })}
+              {t('batch_delete_confirm', { count: formatNum(selectedIds.size) })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

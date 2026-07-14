@@ -104,6 +104,14 @@ export function Expenses({ onReport }: ExpensesProps) {
   const { toast } = useToast();
   const currency = useSettingsStore((s) => s.settings.currency_symbol || '৳');
 
+  const parseDateSafe = (dateStr: string | Date | null | undefined): Date => {
+    if (!dateStr) return new Date();
+    if (dateStr instanceof Date) return dateStr;
+    const str = String(dateStr);
+    const datePart = str.substring(0, 10);
+    return new Date(datePart + 'T12:00:00');
+  };
+
   const today = format(new Date(), 'yyyy-MM-dd');
   const yesterday = useMemo(() => format(new Date(Date.now() - 24 * 60 * 60 * 1000), 'yyyy-MM-dd'), []);
 
@@ -114,7 +122,7 @@ export function Expenses({ onReport }: ExpensesProps) {
   }, [dateFilterMode, customDate, today, yesterday]);
 
   const todayExpenses = useMemo(
-    () => expenses.filter(e => format(new Date(e.date), 'yyyy-MM-dd') === today),
+    () => expenses.filter(e => format(parseDateSafe(e.date), 'yyyy-MM-dd') === today),
     [expenses, today]
   );
 
@@ -205,7 +213,7 @@ export function Expenses({ onReport }: ExpensesProps) {
 
   // Selected date expenses
   const filteredExpenses = useMemo(() => {
-    return expenses.filter(e => format(new Date(e.date), 'yyyy-MM-dd') === selectedDate);
+    return expenses.filter(e => format(parseDateSafe(e.date), 'yyyy-MM-dd') === selectedDate);
   }, [expenses, selectedDate]);
 
   const filteredTotal = useMemo(() => filteredExpenses.reduce((s, e) => s + Number(e.amount ?? 0), 0), [filteredExpenses]);
@@ -326,7 +334,7 @@ export function Expenses({ onReport }: ExpensesProps) {
     setEditNotes(rawNotes);
     setEditPaymentMethod(expense.paymentMethod || 'Cash');
     setEditSupplierId(expense.supplierId ?? '');
-    setEditDate(format(new Date(expense.date), 'yyyy-MM-dd'));
+    setEditDate(format(parseDateSafe(expense.date), 'yyyy-MM-dd'));
     setShowEditDialog(true);
   };
 
@@ -401,7 +409,7 @@ export function Expenses({ onReport }: ExpensesProps) {
         amount: e.amount,
         supplier: e.supplierName || '—',
         notes: e.notes || '—',
-        date: format(new Date(e.date), 'dd/MM/yyyy'),
+        date: format(parseDateSafe(e.date), 'dd/MM/yyyy'),
       }));
       exportToCSV(exportData, `খরচ_রিপোর্ট_${getExportDate()}`, headers);
       toast({ title: tc('export_success') });

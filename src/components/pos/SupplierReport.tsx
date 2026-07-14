@@ -31,6 +31,14 @@ export function SupplierReport({ onBack }: SupplierReportProps) {
     amount: { label: 'কেনাকাটা', color: 'var(--chart-1)' },
   };
   
+  const parseDateSafe = (dateStr: string | Date | null | undefined): Date => {
+    if (!dateStr) return new Date();
+    if (dateStr instanceof Date) return dateStr;
+    const str = String(dateStr);
+    const datePart = str.substring(0, 10);
+    return new Date(datePart + 'T12:00:00');
+  };
+
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   
@@ -86,7 +94,7 @@ export function SupplierReport({ onBack }: SupplierReportProps) {
     const map: Record<string, { label: string; amount: number; count: number; ts: number }> = {};
     
     rawChartData.forEach((e: any) => {
-      const d = new Date(e.date);
+      const d = parseDateSafe(e.date);
       let k = '';
       let ts = 0;
       

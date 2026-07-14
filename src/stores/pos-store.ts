@@ -8,7 +8,7 @@ import type { CartItem, PaymentMethod, Product, Customer, Sale } from '@/types/p
 import { v4 as uuidv4 } from 'uuid';
 import { convertBengaliToEnglishNumerals } from '@/lib/utils';
 import Decimal from 'decimal.js';
-import { toMoneyNumber } from '@/lib/money';
+import { toMoneyNumber, toUnitPriceNumber } from '@/lib/money';
 
 // ============================================================================
 // CART STORE
@@ -156,7 +156,7 @@ export const useCartStore = create<CartState & CartActions>()(
           updatedItems[existingItemIndex] = {
             ...existingItem,
             quantity: newQuantity,
-            totalPrice: toMoneyNumber(new Decimal(newQuantity).times(new Decimal(existingItem.unitPrice))),
+            totalPrice: toUnitPriceNumber(new Decimal(newQuantity).times(new Decimal(existingItem.unitPrice))),
           };
           get()._updateActiveTab({ items: updatedItems });
         } else {
@@ -167,7 +167,7 @@ export const useCartStore = create<CartState & CartActions>()(
             barcode: product.barcode || undefined,
             quantity: actualQuantity,
             unitPrice: product.sellingPrice,
-            totalPrice: toMoneyNumber(new Decimal(actualQuantity).times(new Decimal(product.sellingPrice))),
+            totalPrice: toUnitPriceNumber(new Decimal(actualQuantity).times(new Decimal(product.sellingPrice))),
             unit: product.unit,
             availableStock: product.currentStock,
           };
@@ -189,7 +189,7 @@ export const useCartStore = create<CartState & CartActions>()(
         get()._updateActiveTab({
           items: get().getActiveTab().items.map((item) =>
             item.id === itemId
-              ? { ...item, quantity, totalPrice: toMoneyNumber(new Decimal(quantity).times(new Decimal(item.unitPrice))) }
+              ? { ...item, quantity, totalPrice: toUnitPriceNumber(new Decimal(quantity).times(new Decimal(item.unitPrice))) }
               : item
           ),
         });

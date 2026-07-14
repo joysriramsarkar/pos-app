@@ -43,6 +43,14 @@ export function ExpensesReport({ onBack }: ExpensesReportProps) {
   const t = useTranslations('Expenses');
   const { formatPrice, formatDate, formatStringNumbers, formatCompact } = useNumberFormat();
 
+  const parseDateSafe = (dateStr: string | Date | null | undefined): Date => {
+    if (!dateStr) return new Date();
+    if (dateStr instanceof Date) return dateStr;
+    const str = String(dateStr);
+    const datePart = str.substring(0, 10);
+    return new Date(datePart + 'T12:00:00');
+  };
+
   const expenseChartConfig: ChartConfig = {
     amount: { label: 'খরচ', color: 'var(--chart-5)' },
   };
@@ -115,7 +123,7 @@ export function ExpensesReport({ onBack }: ExpensesReportProps) {
   const dailyData = useMemo(() => {
     const map: Record<string, { amount: number; ts: number }> = {};
     filtered.forEach(e => {
-      const d = new Date(e.date);
+      const d = parseDateSafe(e.date);
       const k = format(d, 'dd MMM');
       if (!map[k]) map[k] = { amount: 0, ts: d.getTime() };
       map[k].amount += Number(e.amount ?? 0);
@@ -126,7 +134,7 @@ export function ExpensesReport({ onBack }: ExpensesReportProps) {
   const weeklyData = useMemo(() => {
     const map: Record<string, { amount: number; ts: number }> = {};
     filtered.forEach(e => {
-      const d = new Date(e.date);
+      const d = parseDateSafe(e.date);
       const k = `W${getWeek(d)} '${String(getYear(d)).slice(2)}`;
       if (!map[k]) map[k] = { amount: 0, ts: startOfWeek(d).getTime() };
       map[k].amount += Number(e.amount ?? 0);
@@ -137,7 +145,7 @@ export function ExpensesReport({ onBack }: ExpensesReportProps) {
   const monthlyData = useMemo(() => {
     const map: Record<string, { amount: number; ts: number }> = {};
     filtered.forEach(e => {
-      const d = new Date(e.date);
+      const d = parseDateSafe(e.date);
       const k = format(d, 'MMM yyyy');
       if (!map[k]) map[k] = { amount: 0, ts: startOfMonth(d).getTime() };
       map[k].amount += Number(e.amount ?? 0);
@@ -172,7 +180,7 @@ export function ExpensesReport({ onBack }: ExpensesReportProps) {
   const tableColor = viewMode === 'daily' ? 'text-red-600' : viewMode === 'weekly' ? 'text-amber-600' : 'text-purple-600';
 
   const chartData = viewMode === 'daily'
-    ? filtered.map(e => ({ time: format(new Date(e.date), 'HH:mm'), amount: e.amount ?? 0, label: e.notes || e.category, origDate: e.date }))
+    ? filtered.map(e => ({ time: format(parseDateSafe(e.date), 'HH:mm'), amount: e.amount ?? 0, label: e.notes || e.category, origDate: e.date }))
     : viewMode === 'weekly' ? weeklyData : monthlyData;
   const chartKey = viewMode === 'daily' ? 'time' : viewMode === 'weekly' ? 'week' : 'month';
 

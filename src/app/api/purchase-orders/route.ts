@@ -4,7 +4,7 @@ import { db } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthenticatedUser, requirePermission } from "@/lib/api-middleware";
 import { logAudit } from "@/lib/audit";
-import { toMoneyNumber } from '@/lib/money';
+import { toMoneyNumber, toUnitPriceNumber } from '@/lib/money';
 
 const getIp = (req: NextRequest) => req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || undefined;
 
@@ -273,11 +273,13 @@ export async function POST(request: NextRequest) {
                 const currentStock = Number(product?.currentStock) || 0;
                 const newStock = currentStock + qty;
                 if (newStock > 0) {
-                  const currentPrice = Number(product?.buyingPrice) || unitPrice;
+                  const currentPrice = product?.buyingPrice !== null && product?.buyingPrice !== undefined
+                    ? Number(product.buyingPrice)
+                    : unitPrice;
                   const wac = ((currentStock * currentPrice) + (qty * unitPrice)) / newStock;
-                  updateData.buyingPrice = toMoneyNumber(wac);
+                  updateData.buyingPrice = toUnitPriceNumber(wac);
                 } else {
-                  updateData.buyingPrice = toMoneyNumber(unitPrice);
+                  updateData.buyingPrice = toUnitPriceNumber(unitPrice);
                 }
               }
 

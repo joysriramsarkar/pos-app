@@ -48,6 +48,7 @@ export function CategoriesReport({ onBack }: CategoriesReportProps) {
   const { formatPrice, formatNumber, formatStringNumbers, formatCompact } = useNumberFormat();
   
   const [categories, setCategories] = useState<any[]>([]);
+  const [subCategories, setSubCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   
   // Date states
@@ -71,6 +72,15 @@ export function CategoriesReport({ onBack }: CategoriesReportProps) {
       })
       .catch((err) => console.error('Failed to fetch category stats:', err))
       .finally(() => setLoading(false));
+
+    // Also fetch sub-categories
+    const subUrl = preset !== 'custom'
+      ? `/api/reports/categories?days=${preset}&subCategory=true&tzOffset=${new Date().getTimezoneOffset()}`
+      : `/api/reports/categories?from=${dateFrom}&to=${dateTo}T23:59:59&subCategory=true&tzOffset=${new Date().getTimezoneOffset()}`;
+    fetch(subUrl)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((res) => { if (res && res.categories) setSubCategories(res.categories ?? []); })
+      .catch((err) => console.error('Failed to fetch sub-category stats:', err));
   }, [preset, dateFrom, dateTo]);
 
   // Summary Metrics
@@ -217,7 +227,7 @@ export function CategoriesReport({ onBack }: CategoriesReportProps) {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Card className="rounded-2xl shadow-sm bg-blue-50/50 dark:bg-blue-950/10 border-blue-100 dark:border-blue-900/30">
           <CardContent className="p-3.5 flex flex-col justify-between h-full">
-            <p className="text-[10px] uppercase font-bold text-blue-600 tracking-wider">Top Category (Sales)</p>
+            <p className="text-[10px] uppercase font-bold text-blue-600 tracking-wider">{t('top_category_sales')}</p>
             <p className="text-sm font-semibold text-blue-700 truncate mt-1">{stats.topCategory.name}</p>
             <p className="text-sm font-bold text-blue-600">{formatPrice(stats.topCategory.value)}</p>
           </CardContent>
@@ -225,22 +235,22 @@ export function CategoriesReport({ onBack }: CategoriesReportProps) {
 
         <Card className="rounded-2xl shadow-sm bg-emerald-50/50 dark:bg-emerald-950/10 border-emerald-100 dark:border-emerald-900/30">
           <CardContent className="p-3.5 flex flex-col justify-between h-full">
-            <p className="text-[10px] uppercase font-bold text-emerald-600 tracking-wider">Average Profit Margin</p>
+            <p className="text-[10px] uppercase font-bold text-emerald-600 tracking-wider">{t('avg_profit_margin')}</p>
             <p className="text-lg md:text-xl font-extrabold text-emerald-700 mt-1">{formatNumber(Number(stats.averageMargin.toFixed(1)))}%</p>
           </CardContent>
         </Card>
 
         <Card className="rounded-2xl shadow-sm">
           <CardContent className="p-3.5 flex flex-col justify-between h-full">
-            <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Total Category Revenue</p>
+            <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">{t('total_category_revenue')}</p>
             <p className="text-lg md:text-xl font-extrabold mt-1">{formatPrice(stats.totalRevenue)}</p>
           </CardContent>
         </Card>
 
         <Card className="rounded-2xl shadow-sm">
           <CardContent className="p-3.5 flex flex-col justify-between h-full">
-            <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Active Categories</p>
-            <p className="text-lg md:text-xl font-extrabold mt-1">{formatNumber(stats.count)} types</p>
+            <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">{t('active_categories_label')}</p>
+            <p className="text-lg md:text-xl font-extrabold mt-1">{formatNumber(stats.count)} {t('category')}</p>
           </CardContent>
         </Card>
       </div>
@@ -250,7 +260,7 @@ export function CategoriesReport({ onBack }: CategoriesReportProps) {
         {/* Pie Chart: Revenue shares */}
         <Card className="rounded-2xl shadow-sm col-span-1">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold">Revenue Distribution share</CardTitle>
+            <CardTitle className="text-sm font-semibold">{t('rev_dist_share')}</CardTitle>
           </CardHeader>
           <CardContent>
             {loading ? (
@@ -280,7 +290,7 @@ export function CategoriesReport({ onBack }: CategoriesReportProps) {
         {/* Bar Chart: Profit comparison */}
         <Card className="rounded-2xl shadow-sm col-span-1 lg:col-span-2">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold">Net Profit Contribution</CardTitle>
+            <CardTitle className="text-sm font-semibold">{t('net_profit_contrib')}</CardTitle>
           </CardHeader>
           <CardContent>
             {loading ? (
@@ -344,6 +354,52 @@ export function CategoriesReport({ onBack }: CategoriesReportProps) {
                     <TableCell className="text-right text-xs font-semibold text-emerald-600 dark:text-emerald-400">{formatPrice(c.profit)}</TableCell>
                     <TableCell className="text-right text-xs text-muted-foreground">{formatNumber(Number(c.margin))}%</TableCell>
                     <TableCell className="text-right text-xs text-muted-foreground font-medium">{formatNumber(Number(c.percentage))}%</TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {/* Sub-Category Report */}
+      <Card className="rounded-2xl shadow-sm">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-semibold">{t('sub_category_breakdown')}</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="text-xs">{t('category')}</TableHead>
+                <TableHead className="text-xs">{t('sub_category_name')}</TableHead>
+                <TableHead className="text-right text-xs">Items Sold</TableHead>
+                <TableHead className="text-right text-xs">{t('revenue')}</TableHead>
+                <TableHead className="text-right text-xs">{t('profit')}</TableHead>
+                <TableHead className="text-right text-xs">{t('margin_col')}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-6 text-muted-foreground text-xs">{t('loading')}</TableCell>
+                </TableRow>
+              ) : subCategories.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-6 text-muted-foreground text-xs">{t('no_sub_category_data')}</TableCell>
+                </TableRow>
+              ) : (
+                subCategories.map((c, index) => (
+                  <TableRow key={`${c.parentCategory}-${c.name}`} className="hover:bg-muted/30">
+                    <TableCell className="text-xs text-muted-foreground">{c.parentCategory}</TableCell>
+                    <TableCell className="text-xs font-semibold flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: CHART_COLORS[index % CHART_COLORS.length] }} />
+                      {c.name}
+                    </TableCell>
+                    <TableCell className="text-right text-xs">{formatNumber(c.qty)}</TableCell>
+                    <TableCell className="text-right text-xs font-semibold">{formatPrice(c.revenue)}</TableCell>
+                    <TableCell className="text-right text-xs font-semibold text-emerald-600 dark:text-emerald-400">{formatPrice(c.profit)}</TableCell>
+                    <TableCell className="text-right text-xs text-muted-foreground">{formatNumber(Number(c.margin))}%</TableCell>
                   </TableRow>
                 ))
               )}

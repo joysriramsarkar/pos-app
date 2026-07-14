@@ -46,7 +46,6 @@ const SupplierReport = dynamic(() => import('@/components/pos/SupplierReport').t
 import { AddStockDialog, type StockEntryData } from '@/components/pos/AddStockDialog';
 import type { ProductFormData } from '@/components/pos/ProductDialog';
 const ProductDialog = dynamic(() => import('@/components/pos/ProductDialog').then(m => m.ProductDialog), { ssr: false });
-const DailyProfitCalculator = dynamic(() => import('@/components/pos/DailyProfitCalculator').then(m => ({ default: m.DailyProfitCalculator })), { ssr: false });
 import { CameraScannerDialog } from '@/components/pos/CameraScannerDialog';
 import { CheckoutDialog, type PaymentData } from '@/components/pos/CheckoutDialog';
 import { PrintDialog } from '@/components/pos/PrintDialog';
@@ -87,7 +86,6 @@ import {
   Sun,
   Moon,
   Truck,
-  Calculator,
 } from 'lucide-react';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useCartStore, useProductsStore, useSyncStore, useUIStore, useCustomersStore, useSalesStore, useQuantityUsageStore } from '@/stores/pos-store';
@@ -109,7 +107,7 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning';
 
 
-type PageType = 'dashboard' | 'billing' | 'stock' | 'stock-statistics' | 'parties' | 'reports' | 'transactions' | 'expenses' | 'expenses-report' | 'settings' | 'users' | 'menu' | 'audit' | 'due-collection' | 'purchase-orders' | 'sales-report' | 'payment-report' | 'stock-report' | 'dues-report' | 'products-report' | 'categories-report' | 'customers-report' | 'supplier-report' | 'daily-profit-calculator';
+type PageType = 'dashboard' | 'billing' | 'stock' | 'stock-statistics' | 'parties' | 'reports' | 'transactions' | 'expenses' | 'expenses-report' | 'settings' | 'users' | 'menu' | 'audit' | 'due-collection' | 'purchase-orders' | 'sales-report' | 'payment-report' | 'stock-report' | 'dues-report' | 'products-report' | 'categories-report' | 'customers-report' | 'supplier-report';
 
 const navItems: { id: Exclude<PageType, 'menu' | 'stock-statistics' | 'expenses-report' | 'sales-report' | 'payment-report' | 'stock-report' | 'dues-report' | 'products-report' | 'categories-report' | 'customers-report' | 'supplier-report'>; label: string; icon: React.ReactNode }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
@@ -120,7 +118,6 @@ const navItems: { id: Exclude<PageType, 'menu' | 'stock-statistics' | 'expenses-
   { id: 'reports', label: 'Reports', icon: <FileText className="w-5 h-5" /> },
   { id: 'transactions', label: 'Transactions', icon: <History className="w-5 h-5" /> },
   { id: 'expenses', label: 'Expenses', icon: <Banknote className="w-5 h-5" /> },
-  { id: 'daily-profit-calculator', label: 'Daily Profit Calculator', icon: <Calculator className="w-5 h-5" /> },
   { id: 'settings', label: 'Settings', icon: <Settings className="w-5 h-5" /> },
   { id: 'audit', label: 'Audit Logs', icon: <ClipboardList className="w-5 h-5" /> },
   { id: 'purchase-orders', label: 'Purchase Orders', icon: <Truck className="w-5 h-5" /> },
@@ -149,7 +146,6 @@ function POSDashboard() {
   const [isSettingsMounted, setIsSettingsMounted] = useState(false);
   const [isTransactionsPageMounted, setIsTransactionsPageMounted] = useState(false);
   const [isAuditPageMounted, setIsAuditPageMounted] = useState(false);
-  const [isDailyCalculatorMounted, setIsDailyCalculatorMounted] = useState(false);
   const [mobileCartOpen, setMobileCartOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [searchFocusKey, setSearchFocusKey] = useState(0);
@@ -191,7 +187,6 @@ function POSDashboard() {
     if (currentPage === 'settings' && !isSettingsMounted) setIsSettingsMounted(true);
     if (currentPage === 'transactions' && !isTransactionsPageMounted) setIsTransactionsPageMounted(true);
     if (currentPage === 'audit' && !isAuditPageMounted) setIsAuditPageMounted(true);
-    if (currentPage === 'daily-profit-calculator' && !isDailyCalculatorMounted) setIsDailyCalculatorMounted(true);
   }, [
     currentPage,
     isDashboardMounted,
@@ -204,7 +199,6 @@ function POSDashboard() {
     isSettingsMounted,
     isTransactionsPageMounted,
     isAuditPageMounted,
-    isDailyCalculatorMounted,
   ]);
 
   // Settings store
@@ -1404,8 +1398,6 @@ function POSDashboard() {
         return null;
       case 'settings':
         return <SettingsManagement />;
-      case 'daily-profit-calculator':
-        return <DailyProfitCalculator />;
       default:
         return null;
     }
@@ -1673,18 +1665,6 @@ function POSDashboard() {
               className={cn("flex-1 min-h-0 min-w-0 flex flex-col", currentPage !== 'settings' && "hidden")}
             >
               <SettingsManagement />
-            </motion.div>
-          )}
-
-          {/* Daily Profit Calculator Page */}
-          {(currentPage === 'daily-profit-calculator' || isDailyCalculatorMounted) && (
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: currentPage === 'daily-profit-calculator' ? 1 : 0, y: currentPage === 'daily-profit-calculator' ? 0 : 8 }}
-              transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className={cn("flex-1 min-h-0 min-w-0 flex flex-col", currentPage !== 'daily-profit-calculator' && "hidden")}
-            >
-              <DailyProfitCalculator />
             </motion.div>
           )}
 

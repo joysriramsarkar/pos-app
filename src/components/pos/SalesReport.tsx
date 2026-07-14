@@ -55,6 +55,14 @@ export function SalesReport({ onBack }: SalesReportProps) {
   const t = useTranslations('Reports');
   const { formatPrice, formatDate, formatNumber, formatStringNumbers, formatCompact } = useNumberFormat();
 
+  const parseDateSafe = (dateStr: string | Date | null | undefined): Date => {
+    if (!dateStr) return new Date();
+    if (dateStr instanceof Date) return dateStr;
+    const str = String(dateStr);
+    const datePart = str.substring(0, 10);
+    return new Date(datePart + 'T12:00:00');
+  };
+
   const [data, setData] = useState<any[]>([]);
   const [prevData, setPrevData] = useState<any[]>([]);
   const [summary, setSummary] = useState<any>(null);
@@ -106,7 +114,7 @@ export function SalesReport({ onBack }: SalesReportProps) {
     const map: Record<string, { label: string; revenue: number; profit: number; count: number; ts: number }> = {};
 
     data.forEach((e) => {
-      const d = new Date(e.date);
+      const d = parseDateSafe(e.date);
       let k = '';
       let ts = 0;
 
@@ -289,8 +297,8 @@ export function SalesReport({ onBack }: SalesReportProps) {
             </linearGradient>
           </defs>
           {commonAxes}
-          <Bar dataKey="revenue" name="revenue" fill="url(#sr-revGrad)" radius={[4, 4, 0, 0]} maxBarSize={28} />
-          <Bar dataKey="profit" name="profit" fill="url(#sr-profGrad)" radius={[4, 4, 0, 0]} maxBarSize={28} />
+          <Bar dataKey="revenue" name="revenue" fill="url(#sr-revGrad)" radius={[4, 4, 0, 0]} maxBarSize={28} minPointSize={2} />
+          <Bar dataKey="profit" name="profit" fill="url(#sr-profGrad)" radius={[4, 4, 0, 0]} maxBarSize={28} minPointSize={2} />
           {showComparison && viewMode !== 'daily' && (
             <Bar dataKey="prevRevenue" name="prevRevenue" fill="var(--chart-4)" fillOpacity={0.4} radius={[4, 4, 0, 0]} maxBarSize={28} />
           )}
@@ -316,17 +324,17 @@ export function SalesReport({ onBack }: SalesReportProps) {
       <AreaChart {...commonProps}>
         <defs>
           <linearGradient id="sr-areaRev" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="var(--chart-1)" stopOpacity={0.2} />
-            <stop offset="95%" stopColor="var(--chart-1)" stopOpacity={0} />
+            <stop offset="5%" stopColor="var(--chart-1)" stopOpacity={0.5} />
+            <stop offset="95%" stopColor="var(--chart-1)" stopOpacity={0.05} />
           </linearGradient>
           <linearGradient id="sr-areaProf" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="var(--chart-2)" stopOpacity={0.2} />
-            <stop offset="95%" stopColor="var(--chart-2)" stopOpacity={0} />
+            <stop offset="5%" stopColor="var(--chart-2)" stopOpacity={0.5} />
+            <stop offset="95%" stopColor="var(--chart-2)" stopOpacity={0.05} />
           </linearGradient>
         </defs>
         {commonAxes}
-        <Area type="monotone" dataKey="revenue" name="revenue" stroke="var(--chart-1)" fill="url(#sr-areaRev)" strokeWidth={2} />
-        <Area type="monotone" dataKey="profit" name="profit" stroke="var(--chart-2)" fill="url(#sr-areaProf)" strokeWidth={2} />
+        <Area type="monotone" dataKey="revenue" name="revenue" stroke="var(--chart-1)" fill="url(#sr-areaRev)" strokeWidth={2.5} />
+        <Area type="monotone" dataKey="profit" name="profit" stroke="var(--chart-2)" fill="url(#sr-areaProf)" strokeWidth={2.5} />
         {showComparison && viewMode !== 'daily' && (
           <Area type="monotone" dataKey="prevRevenue" name="prevRevenue" stroke="var(--chart-4)" fill="none" strokeWidth={1.5} strokeDasharray="5 3" />
         )}
@@ -412,34 +420,6 @@ export function SalesReport({ onBack }: SalesReportProps) {
             </div>
           ) : (
             <div className="flex items-center gap-2 flex-wrap">
-              {[7, 30, 90].map((d) => (
-                <Button key={d} size="sm" variant="outline" className="h-8 text-xs" onClick={() => setRangePreset(d)}>
-                  {formatStringNumbers(d)}d
-                </Button>
-              ))}
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 text-xs"
-                onClick={() => {
-                  setDateFrom(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
-                  setDateTo(format(new Date(), 'yyyy-MM-dd'));
-                }}
-              >
-                {t('this_month') || 'This Month'}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 text-xs"
-                onClick={() => {
-                  const last = subMonths(new Date(), 1);
-                  setDateFrom(format(startOfMonth(last), 'yyyy-MM-dd'));
-                  setDateTo(format(endOfMonth(last), 'yyyy-MM-dd'));
-                }}
-              >
-                {t('last_month') || 'Last Month'}
-              </Button>
               <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-8 text-xs w-36" />
               <span className="text-xs text-muted-foreground">–</span>
               <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-8 text-xs w-36" />

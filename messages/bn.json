@@ -1264,7 +1264,15 @@
     "avg_price_col": "গড় ক্রয় মূল্য",
     "spent_amount_col": "ব্যয়কৃত পরিমাণ",
     "orders_suffix": "অর্ডার",
-    "pending_suffix": "বকেয়া"
+    "pending_suffix": "বকেয়া",
+    "time": "সময়",
+    "compare_prev": "পূর্ব পিরিয়ড তুলনা",
+    "prev_period": "পূর্ববর্তী পিরিয়ড",
+    "date": "তারিখ",
+    "sub_categories": "সাব-ক্যাটাগরি রিপোর্ট",
+    "sub_category_breakdown": "সাব-ক্যাটাগরি ভিত্তিক বিক্রয়",
+    "sub_category_name": "সাব-ক্যাটাগরি নাম",
+    "no_sub_category_data": "কোনো সাব-ক্যাটাগরি ডেটা নেই।"
   },
   "Settings": {
     "title": "সেটিংস",
@@ -1462,6 +1470,7 @@
     "select_all": "সব নির্বাচন",
     "batch_deactivate_success": "নির্বাচিত পণ্য নিষ্ক্রিয় করা হয়েছে",
     "batch_delete_success": "নির্বাচিত পণ্য মুছে ফেলা হয়েছে",
+    "batch_delete_confirm": "আপনি কি নিশ্চিত যে এই {count} টি পণ্য ডিলিট করতে চান? এগুলো আর বিলিং বা স্টকে দেখাবে না।",
     "batch_operation_failed": "ব্যাচ অপারেশন ব্যর্থ হয়েছে",
     "no_products_selected": "কোনো পণ্য নির্বাচন করা হয়নি",
     "categories": "ক্যাটাগরি",
