@@ -193,6 +193,7 @@ async function handlePost(request: NextRequest) {
     const amountPaidValue = toMoneyDecimal(validatedData.amountPaid);
     const prepaidToUse = toMoneyDecimal(validatedData.prepaidAmountUsed || 0);
     const changeAsPrepayment = toMoneyDecimal(validatedData.changeAsPrepayment || 0);
+    const debtRepaymentAmount = toMoneyDecimal(validatedData.debtRepaymentAmount || 0);
     const externalPaidAmount = subtractMoney(amountPaidValue, prepaidToUse);
 
     if (amountPaidValue.gt(totalAmount)) {
@@ -272,20 +273,48 @@ async function handlePost(request: NextRequest) {
         stockDeductions.sort((a, b) => a.productId.localeCompare(b.productId));
 
         if (stockDeductions.length > 0) {
-          const itemProductIds = stockDeductions.map((item) => item.productId);
-          const itemQuantities = stockDeductions.map((item) => item.quantity);
-
-          let updateResult = 0;
           for (let i = 0; i < stockDeductions.length; i++) {
-            const res = await tx.product.updateMany({
-              where: { id: stockDeductions[i].productId, currentStock: { gte: stockDeductions[i].quantity } },
-              data: { currentStock: { decrement: stockDeductions[i].quantity }, updatedAt: new Date() }
-            });
-            updateResult += res.count;
-          }
+            const productId = stockDeductions[i].productId;
+            const requiredQty = Number(stockDeductions[i].quantity);
 
-          if (updateResult !== stockDeductions.length) {
-            throw new Error(`Insufficient stock for one or more products. Another transaction may have depleted stock.`);
+            const product = await tx.product.findUnique({
+              where: { id: productId },
+              select: { currentStock: true, name: true }
+            });
+
+            if (!product) {
+              throw new Error(`Product not found: ${productId}`);
+            }
+
+            const currentStock = Number(product.currentStock || 0);
+
+            if (currentStock < requiredQty) {
+              const shortage = requiredQty - currentStock;
+
+              // Record the auto-adjustment in stock history so it is fully audit-logged
+              await tx.stockHistory.create({
+                data: {
+                  productId: productId,
+                  changeType: "adjustment",
+                  quantity: shortage,
+                  reason: `Auto-adjusted for sale: ${newSale.invoiceNumber}`,
+                  referenceId: newSale.id,
+                  saleId: newSale.id,
+                }
+              });
+
+              // Set stock to 0 since shortage was added and then sold
+              await tx.product.update({
+                where: { id: productId },
+                data: { currentStock: 0, updatedAt: new Date() }
+              });
+            } else {
+              // Normal decrement
+              await tx.product.update({
+                where: { id: productId },
+                data: { currentStock: { decrement: requiredQty }, updatedAt: new Date() }
+              });
+            }
           }
         }
 
@@ -337,7 +366,7 @@ async function handlePost(request: NextRequest) {
             });
           }
 
-          if (dueAmount.gt(0)) {
+          if (dueAmount.gt(0) || externalPaidAmount.gt(0)) {
             const creditAmount = subtractMoney(totalAmount, prepaidToUse);
             totalDueIncrement = creditAmount;
             totalDueDecrement = externalPaidAmount;
@@ -346,16 +375,18 @@ async function handlePost(request: NextRequest) {
             const subAmt = subtractMoney(creditBalanceAfter, externalPaidAmount);
             balanceAfterPayment = subAmt.gt(0) ? subAmt : new Decimal(0);
 
-            await tx.ledgerEntry.create({
-              data: {
-                customerId,
-                entryType: "credit",
-                amount: creditAmount,
-                balanceAfter: creditBalanceAfter,
-                description: `Credit purchase: ${newSale.invoiceNumber}`,
-                referenceId: newSale.id,
-              },
-            });
+            if (creditAmount.gt(0)) {
+              await tx.ledgerEntry.create({
+                data: {
+                  customerId,
+                  entryType: "credit",
+                  amount: creditAmount,
+                  balanceAfter: creditBalanceAfter,
+                  description: `Credit purchase: ${newSale.invoiceNumber}`,
+                  referenceId: newSale.id,
+                },
+              });
+            }
             if (externalPaidAmount.gt(0)) {
               await tx.ledgerEntry.create({
                 data: {
@@ -363,24 +394,25 @@ async function handlePost(request: NextRequest) {
                   entryType: "debit",
                   amount: externalPaidAmount,
                   balanceAfter: balanceAfterPayment,
-                  description: `Partial payment for: ${newSale.invoiceNumber}`,
+                  description: `Payment for sale: ${newSale.invoiceNumber}`,
                   referenceId: newSale.id,
                 },
               });
             }
-          } else if (externalPaidAmount.gt(0) && currentTotalDue.gt(0)) {
-            // Full payment or overpayment with existing due
-            totalDueDecrement = externalPaidAmount;
-            const subAmt = subtractMoney(currentTotalDue, externalPaidAmount);
-            balanceAfterPayment = subAmt.gt(0) ? subAmt : new Decimal(0);
+          }
 
+          if (debtRepaymentAmount.gt(0)) {
+            totalDueDecrement = totalDueDecrement.plus(debtRepaymentAmount);
+            const subAmt = subtractMoney(balanceAfterPayment, debtRepaymentAmount);
+            balanceAfterPayment = subAmt.gt(0) ? subAmt : new Decimal(0);
+            
             await tx.ledgerEntry.create({
               data: {
                 customerId,
                 entryType: "debit",
-                amount: externalPaidAmount,
+                amount: debtRepaymentAmount,
                 balanceAfter: balanceAfterPayment,
-                description: `Payment for sale: ${newSale.invoiceNumber}`,
+                description: `Due clearance during sale: ${newSale.invoiceNumber}`,
                 referenceId: newSale.id,
               },
             });

@@ -22,6 +22,7 @@ export interface Product {
   name: string;
   nameBn?: string;
   category: string;
+  subCategory?: string | null;
   buyingPrice: number;
   sellingPrice: number;
   unit: string;
@@ -45,6 +46,7 @@ export interface Category {
 export interface Customer {
   id: string;
   name: string;
+  nameEn?: string;
   phone?: string;
   address?: string;
   totalDue: number;
@@ -106,6 +108,7 @@ export interface SaleItem {
 export interface Supplier {
   id: string;
   name: string;
+  nameEn?: string;
   phone?: string;
   address?: string;
   email?: string;

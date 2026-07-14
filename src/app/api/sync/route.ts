@@ -312,19 +312,13 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
       products.map((p: any) => [p.id, p]),
     );
 
-    // STRICT validation: Reject sales with insufficient stock
+    // Validate all products exist
     for (const item of stockDeductions) {
       const product = productMap.get(item.productId);
 
       if (!product) {
         throw new Error(
           `Product ${item.productId} not found during sync validation`,
-        );
-      }
-
-      if (product.currentStock < item.quantity) {
-        throw new Error(
-          `Insufficient stock for product "${product.name}" during sync. Available: ${product.currentStock}, Required: ${item.quantity}`,
         );
       }
     }
@@ -354,6 +348,7 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
     const amountPaid = toMoneyDecimal(saleData.amountPaid || 0);
     const prepaidToUse = toMoneyDecimal(saleData.prepaidAmountUsed || 0);
     const changeAsPrepayment = toMoneyDecimal(saleData.changeAsPrepayment || 0);
+    const debtRepaymentAmount = toMoneyDecimal(saleData.debtRepaymentAmount || 0);
     const externalPaidAmount = subtractMoney(amountPaid, prepaidToUse);
 
     if (amountPaid.gt(totalAmount)) {
@@ -404,16 +399,42 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
       if (stockDeductions.length > 0) {
         // Sort stockDeductions by productId to guarantee consistent lock ordering and prevent deadlocks
         stockDeductions.sort((a, b) => a.productId.localeCompare(b.productId));
-        const productIds = stockDeductions.map((i) => i.productId);
-        const quantities = stockDeductions.map((i) => i.quantity);
 
+        for (let i = 0; i < stockDeductions.length; i++) {
+          const productId = stockDeductions[i].productId;
+          const requiredQty = Number(stockDeductions[i].quantity);
 
-      for (let i = 0; i < productIds.length; i++) {
-        await tx.product.updateMany({
-          where: { id: productIds[i], currentStock: { gte: quantities[i] } },
-          data: { currentStock: { decrement: quantities[i] }, updatedAt: new Date() }
-        });
-      }
+          const product = productMap.get(productId);
+          const currentStock = Number(product?.currentStock || 0);
+
+          if (currentStock < requiredQty) {
+            const shortage = requiredQty - currentStock;
+
+            // Record the auto-adjustment in stock history so it is fully audit-logged
+            await tx.stockHistory.create({
+              data: {
+                productId: productId,
+                changeType: "adjustment",
+                quantity: shortage,
+                reason: `Auto-adjusted for sync sale: ${saleData.invoiceNumber}`,
+                referenceId: sale.id,
+                saleId: sale.id,
+              }
+            });
+
+            // Set stock to 0 since shortage was added and then sold
+            await tx.product.update({
+              where: { id: productId },
+              data: { currentStock: 0, updatedAt: new Date() }
+            });
+          } else {
+            // Normal decrement
+            await tx.product.update({
+              where: { id: productId },
+              data: { currentStock: { decrement: requiredQty }, updatedAt: new Date() }
+            });
+          }
+        }
 
         // Create stock history for audit trail
         const historyData = stockDeductions.map((item) => ({
@@ -468,7 +489,7 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
           let prepaidBalanceDecrement = prepaidToUse;
           let balanceAfterPayment = currentTotalDue;
 
-          if (dueAmount.gt(0)) {
+          if (dueAmount.gt(0) || externalPaidAmount.gt(0)) {
             const creditAmount = subtractMoney(totalAmount, prepaidToUse);
             totalDueIncrement = creditAmount;
             totalDueDecrement = externalPaidAmount;
@@ -477,16 +498,18 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
             const subAmt = subtractMoney(creditBalanceAfter, externalPaidAmount);
             balanceAfterPayment = subAmt.gt(0) ? subAmt : new Decimal(0);
 
-            await tx.ledgerEntry.create({
-              data: {
-                customerId: saleData.customerId,
-                entryType: "credit",
-                amount: creditAmount,
-                balanceAfter: creditBalanceAfter,
-                description: `Offline sync credit purchase: ${saleData.invoiceNumber}`,
-                referenceId: sale.id,
-              },
-            });
+            if (creditAmount.gt(0)) {
+              await tx.ledgerEntry.create({
+                data: {
+                  customerId: saleData.customerId,
+                  entryType: "credit",
+                  amount: creditAmount,
+                  balanceAfter: creditBalanceAfter,
+                  description: `Offline sync credit purchase: ${saleData.invoiceNumber}`,
+                  referenceId: sale.id,
+                },
+              });
+            }
             if (externalPaidAmount.gt(0)) {
               await tx.ledgerEntry.create({
                 data: {
@@ -499,19 +522,20 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
                 },
               });
             }
-          } else if (externalPaidAmount.gt(0) && currentTotalDue.gt(0)) {
-            // Full payment or overpayment with existing due
-            totalDueDecrement = externalPaidAmount;
-            const subAmt = subtractMoney(currentTotalDue, externalPaidAmount);
-            balanceAfterPayment = subAmt.gt(0) ? subAmt : new Decimal(0);
+          }
 
+          if (debtRepaymentAmount.gt(0)) {
+            totalDueDecrement = totalDueDecrement.plus(debtRepaymentAmount);
+            const subAmt = subtractMoney(balanceAfterPayment, debtRepaymentAmount);
+            balanceAfterPayment = subAmt.gt(0) ? subAmt : new Decimal(0);
+            
             await tx.ledgerEntry.create({
               data: {
                 customerId: saleData.customerId,
                 entryType: "debit",
-                amount: externalPaidAmount,
+                amount: debtRepaymentAmount,
                 balanceAfter: balanceAfterPayment,
-                description: `Offline sync payment for: ${saleData.invoiceNumber}`,
+                description: `Offline sync due clearance: ${saleData.invoiceNumber}`,
                 referenceId: sale.id,
               },
             });

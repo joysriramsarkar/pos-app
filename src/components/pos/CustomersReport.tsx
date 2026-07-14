@@ -8,10 +8,10 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, Users, Download, Search, ChevronRight } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
 import { useTranslations } from 'next-intl';
 import { useNumberFormat } from '@/hooks/use-number-format';
-import { useSettingsStore } from '@/stores/settings-store';
 import { subDays, format } from 'date-fns';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
@@ -21,8 +21,11 @@ interface CustomersReportProps {
 
 export function CustomersReport({ onBack }: CustomersReportProps) {
   const t = useTranslations('Reports');
-  const { formatPrice, formatDate, formatNumber, formatStringNumbers } = useNumberFormat();
-  const currencySymbol = useSettingsStore((s) => s.settings.currency_symbol);
+  const { formatPrice, formatDate, formatNumber, formatStringNumbers, formatCompact } = useNumberFormat();
+
+  const customerChartConfig: ChartConfig = {
+    spent: { label: 'খরচ', color: 'var(--chart-1)' },
+  };
   
   const [customers, setCustomers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -36,14 +39,17 @@ export function CustomersReport({ onBack }: CustomersReportProps) {
   const [detailLoading, setDetailLoading] = useState(false);
   
   // Date states
-  const [preset, setPreset] = useState('30');
-  const [dateFrom, setDateFrom] = useState(format(subDays(new Date(), 29), 'yyyy-MM-dd'));
+  const [preset, setPreset] = useState('7');
+  const [dateFrom, setDateFrom] = useState(format(subDays(new Date(), 6), 'yyyy-MM-dd'));
   const [dateTo, setDateTo] = useState(format(new Date(), 'yyyy-MM-dd'));
 
   useEffect(() => {
     setLoading(true);
     let url = `/api/reports/customers?from=${dateFrom}&to=${dateTo}T23:59:59&tzOffset=${new Date().getTimezoneOffset()}`;
-    if (preset !== 'custom') {
+    if (preset === '1') {
+      const today = format(new Date(), 'yyyy-MM-dd');
+      url = `/api/reports/customers?from=${today}&to=${today}T23:59:59&hourly=true&tzOffset=${new Date().getTimezoneOffset()}`;
+    } else if (preset !== 'custom') {
       url = `/api/reports/customers?days=${preset}&tzOffset=${new Date().getTimezoneOffset()}`;
     }
     
@@ -152,7 +158,11 @@ export function CustomersReport({ onBack }: CustomersReportProps) {
 
   const handlePresetChange = (p: string) => {
     setPreset(p);
-    if (p !== 'custom') {
+    if (p === '1') {
+      const today = format(new Date(), 'yyyy-MM-dd');
+      setDateFrom(today);
+      setDateTo(today);
+    } else if (p !== 'custom') {
       const days = parseInt(p);
       setDateFrom(format(subDays(new Date(), days - 1), 'yyyy-MM-dd'));
       setDateTo(format(new Date(), 'yyyy-MM-dd'));
@@ -165,8 +175,7 @@ export function CustomersReport({ onBack }: CustomersReportProps) {
     setSelectedCustomerPhone(c.phone || 'N/A');
   };
 
-  const yFmt = (v: number) => `${currencySymbol}${v >= 1000 ? formatStringNumbers((v / 1000).toFixed(1)) + 'k' : formatStringNumbers(v)}`;
-  const tooltipStyle = { borderRadius: '8px', fontSize: '12px' };
+
 
   return (
     <div className="flex-1 flex flex-col gap-4 p-4 md:p-6 bg-slate-50/50 overflow-y-auto min-h-0 pb-24 animate-page-enter">
@@ -193,6 +202,14 @@ export function CustomersReport({ onBack }: CustomersReportProps) {
       <Card className="rounded-2xl shadow-sm">
         <CardContent className="p-3 flex flex-wrap gap-2 items-center justify-between">
           <div className="flex flex-wrap gap-1">
+            <Button
+              size="sm"
+              variant={preset === '1' ? 'default' : 'outline'}
+              className="h-8 text-xs"
+              onClick={() => handlePresetChange('1')}
+            >
+              {t('today')}
+            </Button>
             {[7, 30, 90].map((d) => (
               <Button
                 key={d}
@@ -228,7 +245,7 @@ export function CustomersReport({ onBack }: CustomersReportProps) {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Card className="rounded-2xl shadow-sm bg-blue-50/50 dark:bg-blue-950/10 border-blue-100 dark:border-blue-900/30">
           <CardContent className="p-3.5 flex flex-col justify-between h-full">
-            <p className="text-[10px] uppercase font-bold text-blue-600 tracking-wider">Top Customer Spend</p>
+            <p className="text-[10px] uppercase font-bold text-blue-600 tracking-wider">{t('top_customer_spend')}</p>
             <p className="text-sm font-semibold text-blue-700 truncate mt-1">{stats.maxSpent.name}</p>
             <p className="text-sm font-bold text-blue-600">{formatPrice(stats.maxSpent.value)}</p>
           </CardContent>
@@ -236,22 +253,22 @@ export function CustomersReport({ onBack }: CustomersReportProps) {
 
         <Card className="rounded-2xl shadow-sm bg-emerald-50/50 dark:bg-emerald-950/10 border-emerald-100 dark:border-emerald-900/30">
           <CardContent className="p-3.5 flex flex-col justify-between h-full">
-            <p className="text-[10px] uppercase font-bold text-emerald-600 tracking-wider">Avg Customer spend</p>
+            <p className="text-[10px] uppercase font-bold text-emerald-600 tracking-wider">{t('avg_customer_spend')}</p>
             <p className="text-lg md:text-xl font-extrabold text-emerald-700 mt-1">{formatPrice(stats.averageSpent)}</p>
           </CardContent>
         </Card>
 
         <Card className="rounded-2xl shadow-sm">
           <CardContent className="p-3.5 flex flex-col justify-between h-full">
-            <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Total Sales Invoiced</p>
-            <p className="text-lg md:text-xl font-extrabold mt-1">{formatNumber(stats.totalInvoices)} orders</p>
+            <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">{t('total_sales_invoiced')}</p>
+            <p className="text-lg md:text-xl font-extrabold mt-1">{formatNumber(stats.totalInvoices)} {t('orders')}</p>
           </CardContent>
         </Card>
 
         <Card className="rounded-2xl shadow-sm">
           <CardContent className="p-3.5 flex flex-col justify-between h-full">
-            <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Total Customer Accounts</p>
-            <p className="text-lg md:text-xl font-extrabold mt-1">{formatNumber(stats.count)} buyers</p>
+            <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">{t('total_customer_accounts')}</p>
+            <p className="text-lg md:text-xl font-extrabold mt-1">{formatNumber(stats.count)} {t('tab_customers')}</p>
           </CardContent>
         </Card>
       </div>
@@ -260,20 +277,18 @@ export function CustomersReport({ onBack }: CustomersReportProps) {
       {chartData.length > 0 && (
         <Card className="rounded-2xl shadow-sm">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold">Top 10 Customers Spend Comparison</CardTitle>
+            <CardTitle className="text-sm font-semibold">{t('top_customers_comp')}</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="w-full h-52">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData} margin={{ top: 10, right: 5, left: -25, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
-                  <XAxis dataKey="name" tick={{ fontSize: 9 }} tickLine={false} axisLine={false} />
-                  <YAxis tickFormatter={yFmt} tick={{ fontSize: 9 }} tickLine={false} axisLine={false} />
-                  <Tooltip formatter={(v: number) => formatPrice(v)} contentStyle={tooltipStyle} />
-                  <Bar dataKey="spent" name="Spent Amount" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={25} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+            <ChartContainer config={customerChartConfig} className="h-[220px] w-full">
+              <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="4 4" horizontal={false} stroke="hsl(var(--border) / 0.5)" />
+                <XAxis type="number" tickFormatter={formatCompact} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} width={80} />
+                <ChartTooltip content={<ChartTooltipContent formatter={(v) => <span className="font-bold tabular-nums">{formatPrice(Number(v))}</span>} />} />
+                <Bar dataKey="spent" name="spent" fill="var(--chart-1)" radius={[0, 4, 4, 0]} maxBarSize={18} />
+              </BarChart>
+            </ChartContainer>
           </CardContent>
         </Card>
       )}
@@ -281,11 +296,11 @@ export function CustomersReport({ onBack }: CustomersReportProps) {
       {/* Table Records list */}
       <Card className="rounded-2xl shadow-sm">
         <CardHeader className="pb-2 flex flex-row items-center justify-between flex-wrap gap-2">
-          <CardTitle className="text-sm font-semibold">Customers Activity Listing</CardTitle>
+          <CardTitle className="text-sm font-semibold">{t('customers_activity_listing')}</CardTitle>
           <div className="relative h-8 w-44">
             <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
             <Input
-              placeholder="Search customers..."
+              placeholder={t('search_customers_placeholder')}
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               className="pl-8 h-8 text-xs w-full"
@@ -296,12 +311,12 @@ export function CustomersReport({ onBack }: CustomersReportProps) {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="text-xs w-10">Rank</TableHead>
+                <TableHead className="text-xs w-10">{t('rank_col')}</TableHead>
                 <TableHead className="text-xs">{t('customer')}</TableHead>
-                <TableHead className="text-right text-xs">Orders Count</TableHead>
+                <TableHead className="text-right text-xs">{t('orders')}</TableHead>
                 <TableHead className="text-right text-xs">{t('spent')}</TableHead>
                 <TableHead className="text-right text-xs">{t('aov')}</TableHead>
-                <TableHead className="text-right text-xs">Outstanding Dues</TableHead>
+                <TableHead className="text-right text-xs">{t('total_due')}</TableHead>
                 <TableHead className="w-8"></TableHead>
               </TableRow>
             </TableHeader>
@@ -370,7 +385,7 @@ export function CustomersReport({ onBack }: CustomersReportProps) {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="text-[10px] py-1">Product</TableHead>
+                        <TableHead className="text-[10px] py-1">{t('product')}</TableHead>
                         <TableHead className="text-right text-[10px] py-1">Qty</TableHead>
                         <TableHead className="text-right text-[10px] py-1">Val</TableHead>
                       </TableRow>

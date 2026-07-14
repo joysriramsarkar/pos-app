@@ -4,11 +4,11 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Minus, Plus, Trash2, GripVertical } from 'lucide-react';
 import type { CartItem as CartItemType } from '@/types/pos';
-import { useCartStore, useQuantityUsageStore } from '@/stores/pos-store';
+import { useCartStore, useQuantityUsageStore, useProductsStore } from '@/stores/pos-store';
 import { cn, convertBengaliToEnglishNumerals } from '@/lib/utils';
 import Decimal from 'decimal.js';
 import { useNumberFormat } from '@/hooks/use-number-format';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 import { useSettingsStore } from '@/stores/settings-store';
 
 const EMPTY_USAGE: Record<number, number> = {};
@@ -30,6 +30,7 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
   const { formatPrice, formatStringNumbers } = useNumberFormat();
   const currencySymbol = useSettingsStore((s) => s.settings.currency_symbol);
   const t = useTranslations('Cart');
+  const locale = useLocale();
 
   // Scroll into view and highlight when newly added
   useEffect(() => {
@@ -38,16 +39,16 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
     }
   }, [isHighlighted]);
 
+  const isWeighted = ['kg', 'liter', 'gram', 'ml'].includes(item.unit);
+
   const getStep = (unit: string) => {
-    if (['kg', 'liter'].includes(unit)) return 0.1;
-    if (['gram', 'ml'].includes(unit)) return 50;
     return 1;
   };
 
   const handleQuantityChange = useCallback(
     (newQuantity: number) => {
-      // Ensure we don't go below 0 and not above availableStock
-      const validatedQuantity = Math.max(0, Math.min(newQuantity, item.availableStock));
+      // Ensure we don't go below 0
+      const validatedQuantity = Math.max(0, newQuantity);
       if (validatedQuantity === 0) {
         // If quantity becomes 0, remove the item
         removeItem(item.id);
@@ -55,15 +56,14 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
         updateQuantity(item.id, validatedQuantity);
       }
     },
-    [item.id, item.availableStock, updateQuantity, removeItem]
+    [item.id, updateQuantity, removeItem]
   );
 
   const handleIncrement = useCallback(() => {
     const step = getStep(item.unit);
     const newQty = new Decimal(item.quantity).plus(new Decimal(step)).toNumber();
-    const validatedQuantity = Math.min(newQty, item.availableStock);
-    updateQuantity(item.id, validatedQuantity);
-  }, [item.id, item.quantity, item.unit, item.availableStock, updateQuantity]);
+    updateQuantity(item.id, newQty);
+  }, [item.id, item.quantity, item.unit, updateQuantity]);
 
   const handleDecrement = useCallback(() => {
     const step = getStep(item.unit);
@@ -89,12 +89,19 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
   }, [item.quantity]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setInputValue(convertBengaliToEnglishNumerals(e.target.value));
+    // Allow Bengali and English digits, decimal point
+    setInputValue(e.target.value);
   };
 
   const commitInputValue = () => {
-    const value = parseFloat(inputValue);
+    const converted = convertBengaliToEnglishNumerals(inputValue);
+    let value = parseFloat(converted);
+    
     if (!isNaN(value) && value > 0) {
+      if (!isWeighted) {
+        value = Math.floor(value);
+      }
+      
       const currentFormatted = parseFloat(item.quantity.toFixed(3));
       if (value === currentFormatted) {
         setInputValue(formatQtyForInput(item.quantity));
@@ -119,16 +126,21 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
     }
   };
 
-  const isOverStock = item.quantity > item.availableStock;
-  const isAtStockLimit = item.quantity >= item.availableStock;
+  const storeProduct = useProductsStore((state) =>
+    state.products.find((p) => p.id === item.productId)
+  );
+  const availableStock = storeProduct ? Number(storeProduct.currentStock) : item.availableStock;
 
-  const isWeighted = ['kg', 'liter', 'gram', 'ml'].includes(item.unit);
+  const isOverStock = item.quantity > availableStock;
+  const isAtStockLimit = item.quantity >= availableStock;
+
   const productUsage = useQuantityUsageStore((state) => state.usage[item.productId] ?? EMPTY_USAGE);
   const popularQuantities = useMemo(() => {
     return Object.entries(productUsage)
       .sort(([, a], [, b]) => b - a)
       .slice(0, 4)
-      .map(([qty]) => parseFloat(qty));
+      .map(([qty]) => parseFloat(qty))
+      .filter((qty) => !isNaN(qty) && qty > 0);
   }, [productUsage]);
 
   const QUANTITY_PRESETS = useMemo(() => {
@@ -144,9 +156,8 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
   }, [popularQuantities, isWeighted]);
 
   const handlePiecePreset = useCallback((qty: number) => {
-    const validated = Math.min(qty, item.availableStock);
-    updateQuantity(item.id, validated);
-  }, [item.id, item.availableStock, updateQuantity]);
+    updateQuantity(item.id, qty);
+  }, [item.id, updateQuantity]);
 
   const pricePresets = useMemo(() => {
     if (!isWeighted) return [];
@@ -164,9 +175,13 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
 
   const handlePricePreset = useCallback((price: number) => {
     const qty = parseFloat((price / item.unitPrice).toFixed(5));
-    const validated = Math.min(qty, item.availableStock);
-    updateQuantity(item.id, validated);
-  }, [item.id, item.unitPrice, item.availableStock, updateQuantity]);
+    updateQuantity(item.id, qty);
+  }, [item.id, item.unitPrice, updateQuantity]);
+
+  const isBn = locale === 'bn';
+  const displayName = storeProduct
+    ? (isBn ? (storeProduct.nameBn || storeProduct.name) : (storeProduct.name || storeProduct.nameBn))
+    : item.productName;
 
   return (
     <div
@@ -178,7 +193,7 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
         isOverStock && 'border-destructive bg-destructive/5'
       )}
       role="listitem"
-      aria-label={`${item.productName}, quantity ${item.quantity}, ${formatPrice(item.totalPrice)}`}
+      aria-label={`${displayName}, quantity ${item.quantity}, ${formatPrice(item.totalPrice)}`}
     >
       {/* Drag Handle (for future reordering) */}
       <div className="text-muted-foreground transition-opacity">
@@ -189,7 +204,7 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <h4 className="font-medium text-xs truncate">{item.productName}</h4>
+            <h4 className="font-medium text-xs truncate">{displayName}</h4>
             <div className="flex items-center gap-1 mt-0">
               <span className="text-[10px] text-muted-foreground">
                 {formatPrice(item.unitPrice)}/{item.unit}
@@ -232,7 +247,7 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
               ref={inputRef}
               id={`quantity-${item.id}`}
               name={`quantity-${item.id}`}
-              type="number"
+              type="text"
               inputMode="decimal"
               value={inputValue}
               onChange={handleInputChange}
@@ -241,7 +256,6 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
               className="w-14 h-7 text-center px-1 touch-manipulation text-xs"
               aria-label="Quantity"
               onWheel={(e) => e.currentTarget.blur()}
-              max={item.availableStock}
               min={0}
             />
 
@@ -261,7 +275,7 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
             {/* Stock Warning */}
             {isOverStock && (
               <Badge variant="destructive" className="text-xs">
-                {t('only_stock', { stock: item.availableStock })}
+                {t('only_stock', { stock: availableStock })}
               </Badge>
             )}
 
@@ -279,57 +293,55 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
         </div>
 
         {/* Quantity/Price Presets Row */}
-        {!isOverStock && (
-          <div className="flex flex-wrap items-center gap-1.5 mt-1.5 pt-1.5 border-t border-dashed border-border/40">
-            <span className="text-[9px] font-medium text-muted-foreground mr-0.5">
-              {isWeighted ? "প্রিসেট টাকা:" : "প্রিসেট পরিমাণ:"}
-            </span>
-            {isWeighted ? (
-              <>
-                {pricePresets.map((price) => (
-                  <button
-                    key={price}
-                    onClick={() => handlePricePreset(price)}
-                    className="h-6 px-1.5 rounded text-[10px] font-medium bg-primary/10 hover:bg-primary/20 text-primary transition-colors touch-manipulation"
-                  >
-                    {currencySymbol}{formatStringNumbers(price)}
-                  </button>
-                ))}
-                <Input
-                  type="number"
-                  placeholder="কাস্টম টাকা"
-                  className="h-6 w-20 text-[10px] px-1.5 py-0 bg-primary/5 border-primary/20 text-primary focus-visible:ring-1 focus-visible:ring-primary/30"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      const val = parseFloat(convertBengaliToEnglishNumerals(e.currentTarget.value));
-                      if (!isNaN(val) && val > 0) {
-                        handlePricePreset(val);
-                        e.currentTarget.blur();
-                      }
-                    }
-                  }}
-                  onBlur={(e) => {
+        <div className="flex flex-wrap items-center gap-1.5 mt-1.5 pt-1.5 border-t border-dashed border-border/40">
+          <span className="text-[9px] font-medium text-muted-foreground mr-0.5">
+            {isWeighted ? t('preset_price', { defaultValue: 'Preset Price:' }) : t('preset_quantity', { defaultValue: 'Preset Qty:' })}
+          </span>
+          {isWeighted ? (
+            <>
+              {pricePresets.map((price) => (
+                <button
+                  key={price}
+                  onClick={() => handlePricePreset(price)}
+                  className="h-6 px-1.5 rounded text-[10px] font-medium bg-primary/10 hover:bg-primary/20 text-primary transition-colors touch-manipulation"
+                >
+                  {currencySymbol}{formatStringNumbers(price)}
+                </button>
+              ))}
+              <Input
+                type="number"
+                placeholder={t('custom_price', { defaultValue: 'Custom Price' })}
+                className="h-6 w-20 text-[10px] px-1.5 py-0 bg-primary/5 border-primary/20 text-primary focus-visible:ring-1 focus-visible:ring-primary/30"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
                     const val = parseFloat(convertBengaliToEnglishNumerals(e.currentTarget.value));
                     if (!isNaN(val) && val > 0) {
                       handlePricePreset(val);
-                      e.currentTarget.value = '';
+                      e.currentTarget.blur();
                     }
-                  }}
-                />
-              </>
-            ) : (
-              QUANTITY_PRESETS.map((qty) => (
-                <button
-                  key={qty}
-                  onClick={() => handlePiecePreset(qty)}
-                  className="h-6 px-1.5 rounded text-[10px] font-medium bg-primary/10 hover:bg-primary/20 text-primary transition-colors touch-manipulation"
-                >
-                  {formatStringNumbers(qty)}
-                </button>
-              ))
-            )}
-          </div>
-        )}
+                  }
+                }}
+                onBlur={(e) => {
+                  const val = parseFloat(convertBengaliToEnglishNumerals(e.currentTarget.value));
+                  if (!isNaN(val) && val > 0) {
+                    handlePricePreset(val);
+                    e.currentTarget.value = '';
+                  }
+                }}
+              />
+            </>
+          ) : (
+            QUANTITY_PRESETS.map((qty) => (
+              <button
+                key={qty}
+                onClick={() => handlePiecePreset(qty)}
+                className="h-6 px-1.5 rounded text-[10px] font-medium bg-primary/10 hover:bg-primary/20 text-primary transition-colors touch-manipulation"
+              >
+                {formatStringNumbers(qty)}
+              </button>
+            ))
+          )}
+        </div>
       </div>
     </div>
   );

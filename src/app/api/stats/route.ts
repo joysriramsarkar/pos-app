@@ -1,4 +1,5 @@
-export const dynamic = 'force-dynamic';
+// ড্যাশবোর্ড স্ট্যাটস প্রতি ৩০ সেকেন্ডে একবার রিফ্রেশ হবে — real-time লাগে না
+export const revalidate = 30;
 // ============================================================================
 // Stats API Route - Lakhan Bhandar POS
 // ============================================================================
@@ -85,18 +86,13 @@ export async function GET(request: NextRequest) {
     });
     const totalDue = customersWithDue.reduce((sum, c) => sum + Number(c.totalDue || 0), 0);
 
-    // Low stock count - products where currentStock <= minStockLevel
-    const allActiveProducts = await db.product.findMany({
-      where: { isActive: true },
-      select: {
-        id: true,
-        name: true,
-        nameBn: true,
-        currentStock: true,
-        minStockLevel: true,
-      },
-    });
-    const lowStockProducts = allActiveProducts.filter(p => Number(p.currentStock) <= Number(p.minStockLevel));
+    // Low stock count - সরাসরি ডেটাবেসে filter করা, পুরো টেবিল মেমরিতে না এনে
+    const lowStockProducts = await db.$queryRaw<{ id: string; name: string; nameBn: string | null; currentStock: number; minStockLevel: number }[]>`
+      SELECT id, name, name_bn as "nameBn", CAST(current_stock AS FLOAT) as "currentStock", CAST(min_stock_level AS FLOAT) as "minStockLevel"
+      FROM products
+      WHERE is_active = true AND current_stock <= min_stock_level
+      LIMIT 20
+    `;
 
     // Recent transactions (last 10)
     const recentSales = await db.sale.findMany({
@@ -105,6 +101,9 @@ export async function GET(request: NextRequest) {
       include: {
         customer: {
           select: { id: true, name: true },
+        },
+        user: {
+          select: { id: true, name: true, username: true },
         },
         items: {
           select: {
@@ -126,6 +125,7 @@ export async function GET(request: NextRequest) {
       status: tx.status === 'Completed' ? 'সম্পন্ন' : tx.status === 'Cancelled' ? 'বাতিল' : 'রিফান্ড',
       createdAt: tx.createdAt.toISOString(),
       customer: tx.customer,
+      user: tx.user,
       items: tx.items.map(item => ({
         productName: item.productName,
         quantity: item.quantity,
@@ -189,8 +189,12 @@ export async function GET(request: NextRequest) {
       return sum + (buyingPrice * Number(item.quantity));
     }, 0);
 
-    // Today's profit: sales - expenses - cost of goods
-    const todayProfit = todaySalesTotal - todayExpensesTotal - costOfGoodsSold;
+    // Today's profit: sales - operating expenses (excluding supplier payments) - cost of goods sold
+    const todayExpensesNonSupplier = todayExpenses
+      .filter(e => e.category !== 'Supplier Payment')
+      .reduce((sum, e) => sum + Number(e.amount || 0), 0);
+
+    const todayProfit = todaySalesTotal - todayExpensesNonSupplier - costOfGoodsSold;
     const profitMargin = todaySalesTotal > 0 ? ((todayProfit / todaySalesTotal) * 100) : 0;
 
     // Last 7 days sales data — use 2 bulk queries instead of 14 sequential ones

@@ -123,7 +123,10 @@ export async function GET() {
 
     // ---- PROFIT ----
     const grossProfit = totalSalesAmount - costOfGoodsSold;
-    const netProfit = grossProfit - totalExpenses;
+    const totalExpensesNonSupplier = todayExpenses
+      .filter((e) => e.category !== 'Supplier Payment')
+      .reduce((sum, e) => sum + Number(e.amount), 0);
+    const netProfit = grossProfit - totalExpensesNonSupplier;
 
     // ---- DUE COLLECTION ----
     // Dues created today: difference between totalAmount and amountPaid on Due/Partial sales

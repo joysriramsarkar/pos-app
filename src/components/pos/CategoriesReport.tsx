@@ -6,13 +6,38 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ArrowLeft, Tag, Download } from 'lucide-react';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent, type ChartConfig } from '@/components/ui/chart';
 import { useTranslations } from 'next-intl';
 import { useNumberFormat } from '@/hooks/use-number-format';
-import { useSettingsStore } from '@/stores/settings-store';
 import { subDays, format } from 'date-fns';
 
-const CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#ec4899', '#14b8a6', '#f97316'];
+// CSS token colors — auto-switch light/dark
+const CHART_COLORS = [
+  'var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)',
+  'var(--chart-4)', 'var(--chart-5)', 'var(--chart-1)',
+  'var(--chart-2)', 'var(--chart-3)'
+];
+
+const pieChartConfig: ChartConfig = {
+  revenue: { label: 'রাজস্ব', color: 'var(--chart-1)' },
+};
+
+const barChartConfig: ChartConfig = {
+  profit: { label: 'মুনাফা', color: 'var(--chart-2)' },
+};
+
+function ChartSkeleton({ height = 192 }: { height?: number }) {
+  return (
+    <div className="w-full animate-pulse" style={{ height }}>
+      <div className="h-full rounded-lg bg-muted/50 flex items-end justify-around px-3 pb-3 gap-1.5">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div key={i} className="flex-1 rounded-t-sm bg-muted" style={{ height: `${40 + Math.sin(i) * 25}%` }} />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 interface CategoriesReportProps {
   onBack: () => void;
@@ -20,10 +45,10 @@ interface CategoriesReportProps {
 
 export function CategoriesReport({ onBack }: CategoriesReportProps) {
   const t = useTranslations('Reports');
-  const { formatPrice, formatNumber, formatStringNumbers } = useNumberFormat();
-  const currencySymbol = useSettingsStore((s) => s.settings.currency_symbol);
+  const { formatPrice, formatNumber, formatStringNumbers, formatCompact } = useNumberFormat();
   
   const [categories, setCategories] = useState<any[]>([]);
+  const [subCategories, setSubCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   
   // Date states
@@ -47,6 +72,15 @@ export function CategoriesReport({ onBack }: CategoriesReportProps) {
       })
       .catch((err) => console.error('Failed to fetch category stats:', err))
       .finally(() => setLoading(false));
+
+    // Also fetch sub-categories
+    const subUrl = preset !== 'custom'
+      ? `/api/reports/categories?days=${preset}&subCategory=true&tzOffset=${new Date().getTimezoneOffset()}`
+      : `/api/reports/categories?from=${dateFrom}&to=${dateTo}T23:59:59&subCategory=true&tzOffset=${new Date().getTimezoneOffset()}`;
+    fetch(subUrl)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((res) => { if (res && res.categories) setSubCategories(res.categories ?? []); })
+      .catch((err) => console.error('Failed to fetch sub-category stats:', err));
   }, [preset, dateFrom, dateTo]);
 
   // Summary Metrics
@@ -131,8 +165,7 @@ export function CategoriesReport({ onBack }: CategoriesReportProps) {
     }
   };
 
-  const yFmt = (v: number) => `${currencySymbol}${v >= 1000 ? formatStringNumbers((v / 1000).toFixed(1)) + 'k' : formatStringNumbers(v)}`;
-  const tooltipStyle = { borderRadius: '8px', fontSize: '12px' };
+
 
   return (
     <div className="flex-1 flex flex-col gap-4 p-4 md:p-6 bg-slate-50/50 overflow-y-auto min-h-0 pb-24 animate-page-enter">
@@ -194,7 +227,7 @@ export function CategoriesReport({ onBack }: CategoriesReportProps) {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Card className="rounded-2xl shadow-sm bg-blue-50/50 dark:bg-blue-950/10 border-blue-100 dark:border-blue-900/30">
           <CardContent className="p-3.5 flex flex-col justify-between h-full">
-            <p className="text-[10px] uppercase font-bold text-blue-600 tracking-wider">Top Category (Sales)</p>
+            <p className="text-[10px] uppercase font-bold text-blue-600 tracking-wider">{t('top_category_sales')}</p>
             <p className="text-sm font-semibold text-blue-700 truncate mt-1">{stats.topCategory.name}</p>
             <p className="text-sm font-bold text-blue-600">{formatPrice(stats.topCategory.value)}</p>
           </CardContent>
@@ -202,22 +235,22 @@ export function CategoriesReport({ onBack }: CategoriesReportProps) {
 
         <Card className="rounded-2xl shadow-sm bg-emerald-50/50 dark:bg-emerald-950/10 border-emerald-100 dark:border-emerald-900/30">
           <CardContent className="p-3.5 flex flex-col justify-between h-full">
-            <p className="text-[10px] uppercase font-bold text-emerald-600 tracking-wider">Average Profit Margin</p>
+            <p className="text-[10px] uppercase font-bold text-emerald-600 tracking-wider">{t('avg_profit_margin')}</p>
             <p className="text-lg md:text-xl font-extrabold text-emerald-700 mt-1">{formatNumber(Number(stats.averageMargin.toFixed(1)))}%</p>
           </CardContent>
         </Card>
 
         <Card className="rounded-2xl shadow-sm">
           <CardContent className="p-3.5 flex flex-col justify-between h-full">
-            <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Total Category Revenue</p>
+            <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">{t('total_category_revenue')}</p>
             <p className="text-lg md:text-xl font-extrabold mt-1">{formatPrice(stats.totalRevenue)}</p>
           </CardContent>
         </Card>
 
         <Card className="rounded-2xl shadow-sm">
           <CardContent className="p-3.5 flex flex-col justify-between h-full">
-            <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Active Categories</p>
-            <p className="text-lg md:text-xl font-extrabold mt-1">{formatNumber(stats.count)} types</p>
+            <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">{t('active_categories_label')}</p>
+            <p className="text-lg md:text-xl font-extrabold mt-1">{formatNumber(stats.count)} {t('category')}</p>
           </CardContent>
         </Card>
       </div>
@@ -227,7 +260,7 @@ export function CategoriesReport({ onBack }: CategoriesReportProps) {
         {/* Pie Chart: Revenue shares */}
         <Card className="rounded-2xl shadow-sm col-span-1">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold">Revenue Distribution share</CardTitle>
+            <CardTitle className="text-sm font-semibold">{t('rev_dist_share')}</CardTitle>
           </CardHeader>
           <CardContent>
             {loading ? (
@@ -235,19 +268,21 @@ export function CategoriesReport({ onBack }: CategoriesReportProps) {
             ) : pieData.length === 0 ? (
               <p className="text-center text-muted-foreground text-sm py-12">{t('no_data')}</p>
             ) : (
-              <div className="w-full h-48">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={65}>
-                      {pieData.map((_, i) => (
-                        <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={(v: number) => formatPrice(v)} contentStyle={tooltipStyle} />
-                    <Legend wrapperStyle={{ fontSize: '9px' }} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
+              <ChartContainer config={pieChartConfig} className="h-[192px] w-full">
+                <PieChart>
+                  <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70}>
+                    {pieData.map((_, i) => (
+                      <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <ChartTooltip
+                    content={<ChartTooltipContent formatter={(v) => (
+                      <span className="font-bold tabular-nums">{formatPrice(Number(v))}</span>
+                    )} />}
+                  />
+                  <ChartLegend content={<ChartLegendContent />} />
+                </PieChart>
+              </ChartContainer>
             )}
           </CardContent>
         </Card>
@@ -255,7 +290,7 @@ export function CategoriesReport({ onBack }: CategoriesReportProps) {
         {/* Bar Chart: Profit comparison */}
         <Card className="rounded-2xl shadow-sm col-span-1 lg:col-span-2">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold">Net Profit Contribution</CardTitle>
+            <CardTitle className="text-sm font-semibold">{t('net_profit_contrib')}</CardTitle>
           </CardHeader>
           <CardContent>
             {loading ? (
@@ -263,17 +298,19 @@ export function CategoriesReport({ onBack }: CategoriesReportProps) {
             ) : barData.length === 0 ? (
               <p className="text-center text-muted-foreground text-sm py-12">{t('no_data')}</p>
             ) : (
-              <div className="w-full h-48">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={barData} margin={{ top: 10, right: 5, left: -25, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.3} />
-                    <XAxis dataKey="name" tick={{ fontSize: 9 }} tickLine={false} axisLine={false} />
-                    <YAxis tickFormatter={yFmt} tick={{ fontSize: 9 }} tickLine={false} axisLine={false} />
-                    <Tooltip formatter={(v: number) => formatPrice(v)} contentStyle={tooltipStyle} />
-                    <Bar dataKey="profit" name="Net Profit" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={25} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+              <ChartContainer config={barChartConfig} className="h-[192px] w-full">
+                <BarChart data={barData} layout="vertical" margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="4 4" horizontal={false} stroke="hsl(var(--border) / 0.5)" />
+                  <XAxis type="number" tickFormatter={formatCompact} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} />
+                  <YAxis type="category" dataKey="name" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} width={70} />
+                  <ChartTooltip
+                    content={<ChartTooltipContent formatter={(v) => (
+                      <span className="font-bold tabular-nums">{formatPrice(Number(v))}</span>
+                    )} />}
+                  />
+                  <Bar dataKey="profit" name="profit" fill="var(--chart-2)" radius={[0, 4, 4, 0]} maxBarSize={18} />
+                </BarChart>
+              </ChartContainer>
             )}
           </CardContent>
         </Card>
@@ -317,6 +354,52 @@ export function CategoriesReport({ onBack }: CategoriesReportProps) {
                     <TableCell className="text-right text-xs font-semibold text-emerald-600 dark:text-emerald-400">{formatPrice(c.profit)}</TableCell>
                     <TableCell className="text-right text-xs text-muted-foreground">{formatNumber(Number(c.margin))}%</TableCell>
                     <TableCell className="text-right text-xs text-muted-foreground font-medium">{formatNumber(Number(c.percentage))}%</TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {/* Sub-Category Report */}
+      <Card className="rounded-2xl shadow-sm">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-semibold">{t('sub_category_breakdown')}</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="text-xs">{t('category')}</TableHead>
+                <TableHead className="text-xs">{t('sub_category_name')}</TableHead>
+                <TableHead className="text-right text-xs">Items Sold</TableHead>
+                <TableHead className="text-right text-xs">{t('revenue')}</TableHead>
+                <TableHead className="text-right text-xs">{t('profit')}</TableHead>
+                <TableHead className="text-right text-xs">{t('margin_col')}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-6 text-muted-foreground text-xs">{t('loading')}</TableCell>
+                </TableRow>
+              ) : subCategories.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-6 text-muted-foreground text-xs">{t('no_sub_category_data')}</TableCell>
+                </TableRow>
+              ) : (
+                subCategories.map((c, index) => (
+                  <TableRow key={`${c.parentCategory}-${c.name}`} className="hover:bg-muted/30">
+                    <TableCell className="text-xs text-muted-foreground">{c.parentCategory}</TableCell>
+                    <TableCell className="text-xs font-semibold flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: CHART_COLORS[index % CHART_COLORS.length] }} />
+                      {c.name}
+                    </TableCell>
+                    <TableCell className="text-right text-xs">{formatNumber(c.qty)}</TableCell>
+                    <TableCell className="text-right text-xs font-semibold">{formatPrice(c.revenue)}</TableCell>
+                    <TableCell className="text-right text-xs font-semibold text-emerald-600 dark:text-emerald-400">{formatPrice(c.profit)}</TableCell>
+                    <TableCell className="text-right text-xs text-muted-foreground">{formatNumber(Number(c.margin))}%</TableCell>
                   </TableRow>
                 ))
               )}

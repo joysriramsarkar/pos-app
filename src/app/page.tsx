@@ -44,7 +44,8 @@ const SupplierReport = dynamic(() => import('@/components/pos/SupplierReport').t
 
 
 import { AddStockDialog, type StockEntryData } from '@/components/pos/AddStockDialog';
-import { ProductDialog, type ProductFormData } from '@/components/pos/ProductDialog';
+import type { ProductFormData } from '@/components/pos/ProductDialog';
+const ProductDialog = dynamic(() => import('@/components/pos/ProductDialog').then(m => m.ProductDialog), { ssr: false });
 import { CameraScannerDialog } from '@/components/pos/CameraScannerDialog';
 import { CheckoutDialog, type PaymentData } from '@/components/pos/CheckoutDialog';
 import { PrintDialog } from '@/components/pos/PrintDialog';
@@ -95,7 +96,7 @@ import { STORE_CONFIG } from '@/types/pos';
 import type { Product, Sale, SyncQueueItem } from '@/types/pos';
 import { cn } from '@/lib/utils';
 import { refreshProductsFromServer } from '@/lib/products-sync';
-import { convertBengaliToEnglishNumerals } from '@/lib/utils';
+import { convertBengaliToEnglishNumerals, convertEnglishToBengaliNumerals } from '@/lib/utils';
 import { toMoneyNumber } from '@/lib/money';
 import Decimal from 'decimal.js';
 import { v4 as uuidv4 } from 'uuid';
@@ -117,7 +118,6 @@ const navItems: { id: Exclude<PageType, 'menu' | 'stock-statistics' | 'expenses-
   { id: 'reports', label: 'Reports', icon: <FileText className="w-5 h-5" /> },
   { id: 'transactions', label: 'Transactions', icon: <History className="w-5 h-5" /> },
   { id: 'expenses', label: 'Expenses', icon: <Banknote className="w-5 h-5" /> },
-  { id: 'users', label: 'Users', icon: <UserCog className="w-5 h-5" /> },
   { id: 'settings', label: 'Settings', icon: <Settings className="w-5 h-5" /> },
   { id: 'audit', label: 'Audit Logs', icon: <ClipboardList className="w-5 h-5" /> },
   { id: 'purchase-orders', label: 'Purchase Orders', icon: <Truck className="w-5 h-5" /> },
@@ -145,7 +145,6 @@ function POSDashboard() {
   const [isExpensesMounted, setIsExpensesMounted] = useState(false);
   const [isSettingsMounted, setIsSettingsMounted] = useState(false);
   const [isTransactionsPageMounted, setIsTransactionsPageMounted] = useState(false);
-  const [isUsersPageMounted, setIsUsersPageMounted] = useState(false);
   const [isAuditPageMounted, setIsAuditPageMounted] = useState(false);
   const [mobileCartOpen, setMobileCartOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
@@ -187,7 +186,6 @@ function POSDashboard() {
     if (currentPage === 'expenses' && !isExpensesMounted) setIsExpensesMounted(true);
     if (currentPage === 'settings' && !isSettingsMounted) setIsSettingsMounted(true);
     if (currentPage === 'transactions' && !isTransactionsPageMounted) setIsTransactionsPageMounted(true);
-    if (currentPage === 'users' && !isUsersPageMounted) setIsUsersPageMounted(true);
     if (currentPage === 'audit' && !isAuditPageMounted) setIsAuditPageMounted(true);
   }, [
     currentPage,
@@ -200,7 +198,6 @@ function POSDashboard() {
     isExpensesMounted,
     isSettingsMounted,
     isTransactionsPageMounted,
-    isUsersPageMounted,
     isAuditPageMounted,
   ]);
 
@@ -466,6 +463,23 @@ function POSDashboard() {
     loadProducts();
   }, [activeUser?.requiresPasswordChange]);
 
+  // Load quantity suggestions on mount from last 30 days of sales
+  useEffect(() => {
+    if (activeUser?.requiresPasswordChange) return;
+    const loadQuantitySuggestions = async () => {
+      try {
+        const res = await fetch('/api/products/quantity-suggestions');
+        if (res.ok) {
+          const { data } = await res.json();
+          useQuantityUsageStore.getState().mergeUsage(data);
+        }
+      } catch (error) {
+        console.error('Failed to load quantity suggestions:', error);
+      }
+    };
+    loadQuantitySuggestions();
+  }, [activeUser?.requiresPasswordChange]);
+
   // Refresh products when tab becomes visible or after offline sync completes
   useEffect(() => {
     if (activeUser?.requiresPasswordChange) return;
@@ -715,7 +729,8 @@ function POSDashboard() {
       tax: paymentData.tax,
       usePrepaid: paymentData.usePrepaid,
       prepaidAmountUsed: paymentData.prepaidAmountUsed,
-      changeAsPrepayment: (paymentData.addChangeAsPrepayment && paymentData.change > 0) ? paymentData.change : 0,
+      changeAsPrepayment: paymentData.changeAsPrepayment || 0,
+      debtRepaymentAmount: paymentData.debtRepaymentAmount || 0,
       offlineSaleId: sale.id, // ট্র্যাকিংয়ের জন্য
     };
 
@@ -732,13 +747,13 @@ function POSDashboard() {
     };
 
     // Prepare prepayment queue item if applicable
-    const prepaymentQueueItem = (paymentData.addChangeAsPrepayment && paymentData.customerId && paymentData.change > 0) 
+    const prepaymentQueueItem = (paymentData.changeAsPrepayment && paymentData.changeAsPrepayment > 0 && paymentData.customerId) 
       ? {
           id: uuidv4(),
           entityType: 'Prepayment',
           entityId: uuidv4(),
           action: 'create',
-          payload: JSON.stringify({ customerId: paymentData.customerId, amount: paymentData.change }),
+          payload: JSON.stringify({ customerId: paymentData.customerId, amount: paymentData.changeAsPrepayment }),
           synced: false,
           retryCount: 0,
           createdAt: new Date(),
@@ -1676,16 +1691,7 @@ function POSDashboard() {
               <TransactionHistory />
             </motion.div>
           )}
-          {(currentPage === 'users' || isUsersPageMounted) && (
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: currentPage === 'users' ? 1 : 0, y: currentPage === 'users' ? 0 : 8 }}
-              transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className={cn("flex-1 min-h-0 flex flex-col", currentPage !== 'users' && "hidden")}
-            >
-              <UsersManagement />
-            </motion.div>
-          )}
+          {/* Users management has been moved inside Settings */}
           {(currentPage === 'audit' || isAuditPageMounted) && (
             <motion.div
               initial={{ opacity: 0, y: 8 }}
@@ -1730,7 +1736,9 @@ function POSDashboard() {
                   {/* Cart item count badge on the billing button */}
                   {item.id === 'billing' && cartItemCount > 0 && (
                     <Badge className="absolute -top-1.5 -right-2 h-4 min-w-4 p-0 flex items-center justify-center text-[8px] text-white bg-red-500 border border-white dark:border-card">
-                      {cartItemCount > 9 ? '9+' : cartItemCount}
+                      {locale === 'bn' 
+                        ? (cartItemCount > 9 ? '৯+' : convertEnglishToBengaliNumerals(cartItemCount)) 
+                        : (cartItemCount > 9 ? '9+' : cartItemCount)}
                     </Badge>
                   )}
                 </div>
@@ -1858,12 +1866,14 @@ function POSDashboard() {
       />
 
       {/* Product Dialog */}
-      <ProductDialog
-        open={isProductDialogOpen}
-        onOpenChange={setIsProductDialogOpen}
-        product={selectedProduct}
-        onSubmit={handleProductSave}
-      />
+      {isProductDialogOpen && (
+        <ProductDialog
+          open={isProductDialogOpen}
+          onOpenChange={setIsProductDialogOpen}
+          product={selectedProduct}
+          onSubmit={handleProductSave}
+        />
+      )}
 
       {/* Print Dialog */}
       <PrintDialog

@@ -1,4 +1,5 @@
-export const dynamic = 'force-dynamic';
+export const revalidate = 30;
+
 // ============================================================================
 // Products API Route - Lakhan Bhandar POS
 // ============================================================================
@@ -49,10 +50,12 @@ export async function GET(request: NextRequest) {
     }
     
     if (search) {
+      const engSearch = search.replace(/[০-৯]/g, (d) => String.fromCharCode(d.charCodeAt(0) - 2534 + 48));
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
         { nameBn: { contains: search, mode: 'insensitive' } },
         { barcode: { contains: search, mode: 'insensitive' } },
+        { barcode: { contains: engSearch, mode: 'insensitive' } },
       ];
     }
 
@@ -122,6 +125,7 @@ export async function POST(request: NextRequest) {
         name: String(validatedData.name).trim(),
         nameBn: validatedData.nameBn ? String(validatedData.nameBn).trim() : null,
         category: String(validatedData.category).trim(),
+        subCategory: validatedData.subCategory ? String(validatedData.subCategory).trim() : null,
         buyingPrice: validatedData.buyingPrice,
         sellingPrice: validatedData.sellingPrice,
         unit: validatedData.unit,
@@ -206,6 +210,7 @@ export async function PUT(request: NextRequest) {
         name: validatedData.name !== undefined ? String(validatedData.name).trim() : undefined,
         nameBn: validatedData.nameBn !== undefined ? (validatedData.nameBn ? String(validatedData.nameBn).trim() : null) : undefined,
         category: validatedData.category !== undefined ? String(validatedData.category).trim() : undefined,
+        subCategory: validatedData.subCategory !== undefined ? (validatedData.subCategory ? String(validatedData.subCategory).trim() : null) : undefined,
         buyingPrice: validatedData.buyingPrice,
         sellingPrice: validatedData.sellingPrice,
         unit: validatedData.unit,

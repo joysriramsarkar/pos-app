@@ -51,6 +51,8 @@ import {
   Edit,
   PlusCircle,
   ArrowUpFromLine,
+  Loader2,
+  ShoppingBag,
 } from 'lucide-react';
 import type { Customer, Supplier, LedgerEntry } from '@/types/pos';
 import { cn, convertBengaliToEnglishNumerals } from '@/lib/utils';
@@ -79,6 +81,42 @@ const getInitialsBg = (name: string) => {
   return colors[Math.abs(hash) % colors.length];
 };
 
+const normalizeAndValidatePhone = (phone: string): string | null => {
+  if (!phone) return null;
+  
+  // 1. Strip spaces and whitespace
+  let clean = phone.replace(/\s+/g, '');
+  
+  // 2. Convert Bengali numerals to English numerals
+  clean = convertBengaliToEnglishNumerals(clean);
+  
+  // 3. Remove leading '+' if present
+  if (clean.startsWith('+')) {
+    clean = clean.slice(1);
+  }
+  
+  // 4. Handle prefixes to extract the last 10 digits
+  // If it starts with '091' followed by 10 digits (13 digits total)
+  if (clean.startsWith('091') && clean.length === 13) {
+    clean = clean.slice(3);
+  }
+  // If it starts with '91' followed by 10 digits (12 digits total)
+  else if (clean.startsWith('91') && clean.length === 12) {
+    clean = clean.slice(2);
+  }
+  // If it starts with '0' followed by 10 digits (11 digits total)
+  else if (clean.startsWith('0') && clean.length === 11) {
+    clean = clean.slice(1);
+  }
+  
+  // 5. Test if it is exactly 10 digits
+  if (/^[0-9]{10}$/.test(clean)) {
+    return clean;
+  }
+  
+  return null;
+};
+
 export function PartiesManagement() {
   const t = useTranslations('Parties');
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -102,13 +140,26 @@ export function PartiesManagement() {
   const [editingPartyType, setEditingPartyType] = useState<PartyType>('customer');
   const [newParty, setNewParty] = useState({
     name: '',
+    nameEn: '',
     phone: '',
     address: '',
     notes: '',
   });
 
+  const [showDueEntryDialog, setShowDueEntryDialog] = useState(false);
+  const [dueEntryAmount, setDueEntryAmount] = useState('');
+  const [dueEntryDescription, setDueEntryDescription] = useState('');
+  const [isNameEnTouched, setIsNameEnTouched] = useState(false);
+
   const [customerSort, setCustomerSort] = useState<string>('name-asc');
   const [supplierSort, setSupplierSort] = useState<string>('name-asc');
+
+  const [showDetailsDialog, setShowDetailsDialog] = useState(false);
+  const [detailsCustomerId, setDetailsCustomerId] = useState<string | null>(null);
+  const [detailsCustomerName, setDetailsCustomerName] = useState('');
+  const [detailsCustomerPhone, setDetailsCustomerPhone] = useState('');
+  const [customerDetail, setCustomerDetail] = useState<any>(null);
+  const [detailsLoading, setDetailsLoading] = useState(false);
 
   const customers = useCustomersStore((state) => state.customers);
   const addCustomer = useCustomersStore((state) => state.addCustomer);
@@ -121,12 +172,78 @@ export function PartiesManagement() {
   const [showSupplierPaymentDialog, setShowSupplierPaymentDialog] = useState(false);
   const [supplierPaymentAmount, setSupplierPaymentAmount] = useState('');
   const [supplierPaymentMethod, setSupplierPaymentMethod] = useState('Cash');
+  const [showSupplierDueEntryDialog, setShowSupplierDueEntryDialog] = useState(false);
+  const [supplierDueEntryAmount, setSupplierDueEntryAmount] = useState('');
+  const [supplierDueEntryDescription, setSupplierDueEntryDescription] = useState('');
   const [supplierCashAmount, setSupplierCashAmount] = useState('');
   const [supplierUpiAmount, setSupplierUpiAmount] = useState('');
   const [supplierLedgerEntries, setSupplierLedgerEntries] = useState<any[]>([]);
   const { toast } = useToast();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const parsedPaymentAmount = parseFloat(paymentAmount) || 0;
+  const isMixedOk = useMemo(() => {
+    if (paymentMethod !== 'Mixed') return true;
+    const totalAmt = parseFloat(convertBengaliToEnglishNumerals(paymentAmount)) || 0;
+    const cashVal = parseFloat(cashAmount) || 0;
+    const upiVal = parseFloat(upiAmount) || 0;
+    return Math.abs(cashVal + upiVal - totalAmt) < 0.01;
+  }, [paymentMethod, paymentAmount, cashAmount, upiAmount]);
 
-  const { formatPrice, formatDate } = useNumberFormat();
+  const { formatPrice, formatDate, formatNumber } = useNumberFormat();
+
+  useEffect(() => {
+    const fetchDetail = async () => {
+      if (!detailsCustomerId) return;
+      setDetailsLoading(true);
+      setCustomerDetail(null);
+      try {
+        const res = await fetch(`/api/reports/customers?customerId=${detailsCustomerId}&days=365&tzOffset=${new Date().getTimezoneOffset()}`);
+        const data = await res.json();
+        // API returns data directly: { totalSpent, orderCount, aov, topProducts, categoryBreakdown, monthlyTrend, hourly }
+        setCustomerDetail(data);
+      } catch (err) {
+        console.error('Error fetching customer detail:', err);
+      } finally {
+        setDetailsLoading(false);
+      }
+    };
+    fetchDetail();
+  }, [detailsCustomerId]);
+
+  // Auto-translate name to English for Customers/Suppliers
+  useEffect(() => {
+    if (!newParty.name.trim()) {
+      if (!isNameEnTouched) {
+        setNewParty(prev => ({ ...prev, nameEn: '' }));
+      }
+      return;
+    }
+
+    const hasBengali = /[\u0980-\u09FF]/.test(newParty.name);
+    if (!hasBengali) {
+      if (!isNameEnTouched) {
+        setNewParty(prev => ({ ...prev, nameEn: newParty.name }));
+      }
+      return;
+    }
+
+    const timeoutId = setTimeout(async () => {
+      if (!isNameEnTouched) {
+        try {
+          const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=bn&tl=en&dt=t&q=${encodeURIComponent(newParty.name.trim())}`);
+          const data = await res.json();
+          if (data && data[0] && data[0][0] && data[0][0][0]) {
+            const translated = data[0][0][0];
+            setNewParty(prev => isNameEnTouched ? prev : { ...prev, nameEn: translated });
+          }
+        } catch (err) {
+          console.error("Auto-translate to English failed:", err);
+        }
+      }
+    }, 800);
+
+    return () => clearTimeout(timeoutId);
+  }, [newParty.name, isNameEnTouched]);
 
   useEffect(() => {
     if (
@@ -137,10 +254,11 @@ export function PartiesManagement() {
       !showAddDialog &&
       !showEditDialog &&
       !showSupplierLedger &&
-      !showSupplierPaymentDialog
+      !showSupplierPaymentDialog &&
+      !showDueEntryDialog
     ) {
       const timer = setTimeout(() => {
-        searchInputRef.current?.focus();
+        searchInputRef.current?.focus({ preventScroll: true });
       }, 50);
       return () => clearTimeout(timer);
     }
@@ -153,6 +271,7 @@ export function PartiesManagement() {
     showEditDialog,
     showSupplierLedger,
     showSupplierPaymentDialog,
+    showDueEntryDialog,
     activeTab
   ]);
 
@@ -281,6 +400,7 @@ export function PartiesManagement() {
       result = result.filter(c =>
         c.isActive && (
           c.name.toLowerCase().includes(query) ||
+          c.nameEn?.toLowerCase().includes(query) ||
           c.phone?.includes(query)
         )
       );
@@ -310,6 +430,7 @@ export function PartiesManagement() {
       result = result.filter(s =>
         s.isActive && (
           s.name.toLowerCase().includes(query) ||
+          s.nameEn?.toLowerCase().includes(query) ||
           s.phone?.includes(query)
         )
       );
@@ -416,6 +537,7 @@ export function PartiesManagement() {
       finalNotes += ` [নগদ: ${cAmt}, ইউপিআই: ${uAmt}]`;
     }
 
+    setIsSubmitting(true);
     try {
       const response = await fetch('/api/expenses', {
         method: 'POST',
@@ -447,6 +569,105 @@ export function PartiesManagement() {
     } catch (error) {
       console.error("Failed to record supplier payment:", error);
       toast({ title: 'Payment Failed', description: error instanceof Error ? error.message : 'An unexpected error occurred.', variant: 'destructive' });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleRecordSupplierDueEntry = (supplier: Supplier) => {
+    setSelectedSupplier(supplier);
+    setSupplierDueEntryAmount('');
+    setSupplierDueEntryDescription('');
+    setShowSupplierDueEntryDialog(true);
+  };
+
+  const handleSupplierDueEntrySubmit = async () => {
+    if (!selectedSupplier || !supplierDueEntryAmount) return;
+
+    const amount = parseFloat(supplierDueEntryAmount);
+    if (amount <= 0) {
+      toast({ title: t('invalid_amount') || 'ভুল পরিমাণ', description: t('positive_amount') || 'একটি ধনাত্মক পরিমাণ লিখুন।', variant: 'destructive' });
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const response = await fetch('/api/supplier-due-entry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          supplierId: selectedSupplier.id,
+          amount,
+          description: supplierDueEntryDescription
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to record supplier due entry.');
+      }
+
+      // Refresh suppliers list to update dues
+      const suppliersRes = await fetch('/api/suppliers');
+      if (suppliersRes.ok) {
+        const { data } = await suppliersRes.json();
+        setSuppliers(data);
+      }
+
+      setShowSupplierDueEntryDialog(false);
+      toast({ title: 'বাকি এন্ট্রি সফল', description: `Recorded ৳${amount} manual due for supplier ${selectedSupplier.name}.` });
+
+    } catch (error) {
+      console.error("Failed to record supplier due entry:", error);
+      toast({ title: 'বাকি এন্ট্রি ব্যর্থ', description: error instanceof Error ? error.message : 'An unexpected error occurred.', variant: 'destructive' });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleRecordDueEntry = (customer: Customer) => {
+    setSelectedCustomer(customer);
+    setDueEntryAmount('');
+    setDueEntryDescription('');
+    setShowDueEntryDialog(true);
+  };
+
+  const handleDueEntrySubmit = async () => {
+    if (!selectedCustomer || !dueEntryAmount) return;
+
+    const amount = parseFloat(dueEntryAmount);
+    if (amount <= 0) {
+      toast({ title: t('invalid_amount') || 'ভুল পরিমাণ', description: t('positive_amount') || 'একটি ধনাত্মক পরিমাণ লিখুন।', variant: 'destructive' });
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const response = await fetch('/api/due-entry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerId: selectedCustomer.id,
+          amount,
+          description: dueEntryDescription
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to record due entry.');
+      }
+
+      const { data: updatedCustomer } = await response.json();
+      updateCustomer(selectedCustomer.id, updatedCustomer);
+      setShowDueEntryDialog(false);
+      toast({ title: t('due_entry_success') || 'বাকি এন্ট্রি সফল', description: `৳${amount} outstanding due added for ${selectedCustomer.name}.` });
+
+    } catch (error) {
+      console.error("Failed to record due entry:", error);
+      toast({ title: t('due_entry_failed') || 'বাকি এন্ট্রি ব্যর্থ', description: error instanceof Error ? error.message : 'An unexpected error occurred.', variant: 'destructive' });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -478,6 +699,7 @@ export function PartiesManagement() {
       toast({ title: 'Invalid Amount', description: 'Amount exceeds available prepaid balance.', variant: 'destructive' });
       return;
     }
+    setIsSubmitting(true);
     try {
       const response = await fetch('/api/prepayment/withdraw', {
         method: 'POST',
@@ -494,6 +716,8 @@ export function PartiesManagement() {
       setShowWithdrawDialog(false);
     } catch (error) {
       toast({ title: 'Withdraw Failed', description: error instanceof Error ? error.message : 'Unknown error', variant: 'destructive' });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -502,22 +726,29 @@ export function PartiesManagement() {
     setEditingPartyType(activeTab);
     setNewParty({
       name: party.name,
+      nameEn: (party as any).nameEn || '',
       phone: party.phone || '',
       address: party.address || '',
       notes: party.notes || '',
     });
+    setIsNameEnTouched(true);
     setShowEditDialog(true);
   };
 
   const handleUpdateParty = async () => {
     if (!editingParty || !newParty.name) return;
 
-    // ensure phone is 10 digits when provided
-    if (newParty.phone && !/^[0-9]{10}$/.test(newParty.phone)) {
-      toast({ title: 'Invalid phone', description: 'Phone number must be exactly 10 digits.', variant: 'destructive' });
-      return;
+    let phoneNormalized = newParty.phone ? newParty.phone.trim() : '';
+    if (phoneNormalized) {
+      const validated = normalizeAndValidatePhone(phoneNormalized);
+      if (!validated) {
+        toast({ title: 'Invalid phone', description: 'Phone number must be exactly 10 digits (e.g. +91 75848 64899).', variant: 'destructive' });
+        return;
+      }
+      phoneNormalized = validated;
     }
 
+    setIsSubmitting(true);
     try {
       if (editingPartyType === 'customer') {
         const response = await fetch('/api/customers', {
@@ -526,6 +757,7 @@ export function PartiesManagement() {
           body: JSON.stringify({
             id: editingParty.id,
             ...newParty,
+            phone: phoneNormalized || null,
           }),
         });
 
@@ -544,6 +776,7 @@ export function PartiesManagement() {
           body: JSON.stringify({
             id: editingParty.id,
             ...newParty,
+            phone: phoneNormalized || null,
           }),
         });
 
@@ -567,11 +800,14 @@ export function PartiesManagement() {
       setShowEditDialog(false);
       setEditingParty(null);
       setEditingPartyType('customer');
-      setNewParty({ name: '', phone: '', address: '', notes: '' });
+      setNewParty({ name: '', nameEn: '', phone: '', address: '', notes: '' });
+      setIsNameEnTouched(false);
       toast({ title: `${editingPartyType === 'customer' ? 'Customer' : 'Supplier'} Updated`, description: `${newParty.name} has been updated successfully.` });
     } catch (error) {
       console.error('Failed to update party:', error);
       toast({ title: 'Update Failed', description: error instanceof Error ? error.message : 'An unexpected error occurred.', variant: 'destructive' });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -586,6 +822,7 @@ export function PartiesManagement() {
       finalNotes = `Mixed [নগদ: ${cAmt}, ইউপিআই: ${uAmt}]`;
     }
 
+    setIsSubmitting(true);
     try {
       const response = await fetch('/api/due-collection', {
         method: 'POST',
@@ -611,6 +848,8 @@ export function PartiesManagement() {
     } catch (error) {
       console.error("Failed to record payment:", error);
       toast({ title: 'Payment Failed', description: error instanceof Error ? error.message : 'An unexpected error occurred.', variant: 'destructive' });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -623,6 +862,7 @@ export function PartiesManagement() {
       return;
     }
 
+    setIsSubmitting(true);
     try {
       const response = await fetch('/api/prepayment', {
         method: 'POST',
@@ -647,24 +887,34 @@ export function PartiesManagement() {
       console.error("Failed to add prepayment:", error);
       const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
       toast({ title: 'Error', description: errorMessage, variant: 'destructive' });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleAddParty = async () => {
     if (!newParty.name) return;
 
-    // ensure phone is 10 digits when provided
-    if (newParty.phone && !/^[0-9]{10}$/.test(newParty.phone)) {
-      toast({ title: 'Invalid phone', description: 'Phone number must be exactly 10 digits.', variant: 'destructive' });
-      return;
+    let phoneNormalized = newParty.phone ? newParty.phone.trim() : '';
+    if (phoneNormalized) {
+      const validated = normalizeAndValidatePhone(phoneNormalized);
+      if (!validated) {
+        toast({ title: 'Invalid phone', description: 'Phone number must be exactly 10 digits (e.g. +91 75848 64899).', variant: 'destructive' });
+        return;
+      }
+      phoneNormalized = validated;
     }
 
+    setIsSubmitting(true);
     if (activeTab === 'customer') {
       try {
         const response = await fetch('/api/customers', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newParty),
+          body: JSON.stringify({
+            ...newParty,
+            phone: phoneNormalized || null,
+          }),
         });
 
         if (!response.ok) {
@@ -679,6 +929,7 @@ export function PartiesManagement() {
       } catch (error) {
         console.error("Failed to add customer:", error);
         toast({ title: 'Failed to Add Customer', description: error instanceof Error ? error.message : 'An unexpected error occurred.', variant: 'destructive' });
+        setIsSubmitting(false);
         return;
       }
 
@@ -687,7 +938,10 @@ export function PartiesManagement() {
         const response = await fetch('/api/suppliers', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newParty),
+          body: JSON.stringify({
+            ...newParty,
+            phone: phoneNormalized || null,
+          }),
         });
 
         if (!response.ok) {
@@ -707,16 +961,20 @@ export function PartiesManagement() {
       } catch (error) {
         console.error("Failed to add supplier:", error);
         toast({ title: 'Failed to Add Supplier', description: error instanceof Error ? error.message : 'An unexpected error occurred.', variant: 'destructive' });
+        setIsSubmitting(false);
         return;
       }
     }
 
-    setNewParty({ name: '', phone: '', address: '', notes: '' });
+    setNewParty({ name: '', nameEn: '', phone: '', address: '', notes: '' });
+    setIsNameEnTouched(false);
     setShowAddDialog(false);
+    setIsSubmitting(false);
   };
 
   const hasPartyChanges = editingParty ? (
     newParty.name !== editingParty.name ||
+    newParty.nameEn !== ((editingParty as any).nameEn || '') ||
     newParty.phone !== (editingParty.phone || '') ||
     newParty.address !== (editingParty.address || '') ||
     newParty.notes !== (editingParty.notes || '')
@@ -736,7 +994,7 @@ export function PartiesManagement() {
               {t('subtitle')}
             </p>
           </div>
-          <Button onClick={() => setShowAddDialog(true)} className="bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600">
+          <Button onClick={() => { setNewParty({ name: '', nameEn: '', phone: '', address: '', notes: '' }); setIsNameEnTouched(false); setShowAddDialog(true); }} className="bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600">
             <UserPlus className="w-4 h-4 mr-2" />
             {activeTab === 'customer' ? t('add_customer_btn') : t('add_supplier_btn')}
           </Button>
@@ -862,6 +1120,9 @@ export function PartiesManagement() {
                         </div>
                         <div className="min-w-0 flex-1">
                           <h3 className="font-bold text-sm md:text-base text-slate-800 dark:text-slate-200 truncate" title={customer.name}>{customer.name}</h3>
+                          {customer.nameEn && customer.nameEn !== customer.name && (
+                            <p className="text-[10px] md:text-xs text-muted-foreground/80 font-medium truncate" title={customer.nameEn}>{customer.nameEn}</p>
+                          )}
                           {customer.phone ? (
                             <p className="text-[11px] md:text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
                               <Phone className="w-3 h-3 shrink-0" />
@@ -926,11 +1187,34 @@ export function PartiesManagement() {
                         <Button
                           variant="outline"
                           size="sm"
+                          className="h-7 md:h-8 text-[11px] md:text-xs gap-1 px-2 md:px-3 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/20 dark:text-indigo-400 border-indigo-100 dark:border-indigo-900/30"
+                          onClick={() => {
+                            setDetailsCustomerId(customer.id);
+                            setDetailsCustomerName(customer.name);
+                            setDetailsCustomerPhone(customer.phone || '');
+                            setShowDetailsDialog(true);
+                          }}
+                        >
+                          <ShoppingBag className="w-3 h-3 md:w-3.5 md:h-3.5" />
+                          <span>{t('purchase_details') || 'কেনাকাটার বিবরণ'}</span>
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
                           className="h-7 md:h-8 text-[11px] md:text-xs gap-1 px-2 md:px-3 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/20 dark:text-blue-400 border-blue-100 dark:border-blue-900/30"
                           onClick={() => handleRecordPrepayment(customer)}
                         >
                           <PlusCircle className="w-3 h-3 md:w-3.5 md:h-3.5" />
                           <span>{t('prepayment')}</span>
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 md:h-8 text-[11px] md:text-xs gap-1 px-2 md:px-3 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 dark:text-red-400 border-red-100 dark:border-red-900/30"
+                          onClick={() => handleRecordDueEntry(customer)}
+                        >
+                          <PlusCircle className="w-3 h-3 md:w-3.5 md:h-3.5" />
+                          <span>{t('due_entry')}</span>
                         </Button>
                         {isPrepaid && (
                           <Button
@@ -984,6 +1268,9 @@ export function PartiesManagement() {
                         </div>
                         <div className="min-w-0 flex-1">
                           <h3 className="font-bold text-sm md:text-base text-slate-800 dark:text-slate-200 truncate" title={supplier.name}>{supplier.name}</h3>
+                          {supplier.nameEn && supplier.nameEn !== supplier.name && (
+                            <p className="text-[10px] md:text-xs text-muted-foreground/80 font-medium truncate" title={supplier.nameEn}>{supplier.nameEn}</p>
+                          )}
                           {supplier.phone ? (
                             <p className="text-[11px] md:text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
                               <Phone className="w-3 h-3 shrink-0" />
@@ -1043,6 +1330,15 @@ export function PartiesManagement() {
                           <FileText className="w-3 h-3 md:w-3.5 md:h-3.5" />
                           <span>লেজার</span>
                         </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 md:h-8 text-[11px] md:text-xs gap-1 px-2 md:px-3 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20 dark:text-red-400 border-red-100 dark:border-red-900/30"
+                          onClick={() => handleRecordSupplierDueEntry(supplier)}
+                        >
+                          <PlusCircle className="w-3 h-3 md:w-3.5 md:h-3.5" />
+                          <span>বাকি এন্ট্রি</span>
+                        </Button>
                         {isDue && (
                           <Button
                             variant="outline"
@@ -1066,7 +1362,7 @@ export function PartiesManagement() {
 
       {/* Ledger Dialog */}
       <Dialog open={showLedger} onOpenChange={setShowLedger}>
-        <DialogContent className="sm:max-w-lg w-[95vw] max-h-[90dvh] overflow-y-auto">
+        <DialogContent className="md:max-w-2xl w-[95vw] max-h-[90dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileText className="w-5 h-5" />
@@ -1183,6 +1479,11 @@ export function PartiesManagement() {
                   className="pl-9"
                 />
               </div>
+              {selectedCustomer && parsedPaymentAmount > selectedCustomer.totalDue && (
+                <p className="text-xs text-destructive font-medium mt-1">
+                  {t('repay_amount_exceeds', { max: formatPrice(selectedCustomer.totalDue) })}
+                </p>
+              )}
             </div>
 
             <div className="space-y-1.5">
@@ -1268,15 +1569,22 @@ export function PartiesManagement() {
           </div>
 
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setShowPaymentDialog(false)}>
+            <Button variant="outline" onClick={() => setShowPaymentDialog(false)} disabled={isSubmitting}>
               Cancel
             </Button>
             <Button
               onClick={handlePaymentSubmit}
-              disabled={!paymentAmount || parseFloat(paymentAmount) <= 0}
+              disabled={!paymentAmount || parsedPaymentAmount <= 0 || (selectedCustomer ? parsedPaymentAmount > selectedCustomer.totalDue : false) || !isMixedOk || isSubmitting}
               className="bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
             >
-              Record Payment
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Recording...
+                </>
+              ) : (
+                'Record Payment'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1334,15 +1642,22 @@ export function PartiesManagement() {
             </div>
           </div>
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setShowPrepaymentDialog(false)}>
+            <Button variant="outline" onClick={() => setShowPrepaymentDialog(false)} disabled={isSubmitting}>
               Cancel
             </Button>
             <Button
               onClick={handlePrepaymentSubmit}
-              disabled={!prepaymentAmount || parseFloat(prepaymentAmount) <= 0}
+              disabled={!prepaymentAmount || parseFloat(prepaymentAmount) <= 0 || isSubmitting}
               className="bg-green-600 text-white hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600"
             >
-              Add Prepayment
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Adding...
+                </>
+              ) : (
+                'Add Prepayment'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1394,20 +1709,34 @@ export function PartiesManagement() {
             </div>
           </div>
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setShowWithdrawDialog(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setShowWithdrawDialog(false)} disabled={isSubmitting}>Cancel</Button>
             <Button
               onClick={handleWithdrawSubmit}
-              disabled={!withdrawAmount || parseFloat(withdrawAmount) <= 0 || parseFloat(withdrawAmount) > (selectedCustomer?.prepaidBalance || 0)}
+              disabled={!withdrawAmount || parseFloat(withdrawAmount) <= 0 || parseFloat(withdrawAmount) > (selectedCustomer?.prepaidBalance || 0) || isSubmitting}
               className="bg-orange-600 text-white hover:bg-orange-700"
             >
-              Withdraw
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Withdrawing...
+                </>
+              ) : (
+                'Withdraw'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Edit Party Dialog */}
-      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+      <Dialog open={showEditDialog} onOpenChange={(open) => {
+        setShowEditDialog(open);
+        if (!open) {
+          setEditingParty(null);
+          setNewParty({ name: '', nameEn: '', phone: '', address: '', notes: '' });
+          setIsNameEnTouched(false);
+        }
+      }}>
         <DialogContent className="sm:max-w-md w-[95vw] max-h-[90dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -1431,6 +1760,19 @@ export function PartiesManagement() {
             </div>
 
             <div className="space-y-2">
+              <Label htmlFor="edit-party-nameEn">{t('name_en_label') || 'English Name'}</Label>
+              <Input
+                id="edit-party-nameEn"
+                value={newParty.nameEn}
+                onChange={(e) => {
+                  setNewParty(prev => ({ ...prev, nameEn: e.target.value }));
+                  setIsNameEnTouched(true);
+                }}
+                placeholder="Auto-translated to English"
+              />
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="edit-party-phone">Phone</Label>
               <div className="relative">
                 <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -1440,6 +1782,7 @@ export function PartiesManagement() {
                   onChange={(e) => setNewParty(prev => ({ ...prev, phone: e.target.value }))}
                   placeholder="Enter phone number"
                   className="pl-9"
+                  autoComplete="new-password"
                 />
               </div>
             </div>
@@ -1471,18 +1814,31 @@ export function PartiesManagement() {
           </div>
 
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => { setShowEditDialog(false); setEditingParty(null); setNewParty({ name: '', phone: '', address: '', notes: '' }); }}>
+            <Button variant="outline" onClick={() => { setShowEditDialog(false); setEditingParty(null); setNewParty({ name: '', nameEn: '', phone: '', address: '', notes: '' }); setIsNameEnTouched(false); }} disabled={isSubmitting}>
               Cancel
             </Button>
-            <Button onClick={handleUpdateParty} disabled={!newParty.name || !hasPartyChanges} className="bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600">
-              Update {editingPartyType === 'customer' ? 'Customer' : 'Supplier'}
+            <Button onClick={handleUpdateParty} disabled={!newParty.name || !hasPartyChanges || isSubmitting} className="bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600">
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Updating...
+                </>
+              ) : (
+                `Update ${editingPartyType === 'customer' ? 'Customer' : 'Supplier'}`
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Add Party Dialog */}
-      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+      <Dialog open={showAddDialog} onOpenChange={(open) => {
+        setShowAddDialog(open);
+        if (!open) {
+          setNewParty({ name: '', nameEn: '', phone: '', address: '', notes: '' });
+          setIsNameEnTouched(false);
+        }
+      }}>
         <DialogContent className="sm:max-w-md w-[95vw] max-h-[90dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -1506,6 +1862,19 @@ export function PartiesManagement() {
             </div>
 
             <div className="space-y-2">
+              <Label htmlFor="party-form-nameEn">{t('name_en_label') || 'English Name'}</Label>
+              <Input
+                id="party-form-nameEn"
+                value={newParty.nameEn}
+                onChange={(e) => {
+                  setNewParty(prev => ({ ...prev, nameEn: e.target.value }));
+                  setIsNameEnTouched(true);
+                }}
+                placeholder="Auto-translated to English"
+              />
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="party-form-phone">Phone</Label>
               <div className="relative">
                 <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -1515,6 +1884,7 @@ export function PartiesManagement() {
                   onChange={(e) => setNewParty(prev => ({ ...prev, phone: e.target.value }))}
                   placeholder="Enter phone number"
                   className="pl-9"
+                  autoComplete="new-password"
                 />
               </div>
             </div>
@@ -1542,19 +1912,290 @@ export function PartiesManagement() {
           </div>
 
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setShowAddDialog(false)}>
+            <Button variant="outline" onClick={() => { setShowAddDialog(false); setNewParty({ name: '', nameEn: '', phone: '', address: '', notes: '' }); setIsNameEnTouched(false); }} disabled={isSubmitting}>
               Cancel
             </Button>
-            <Button onClick={handleAddParty} disabled={!newParty.name} className="bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600">
-              Add {activeTab === 'customer' ? 'Customer' : 'Supplier'}
+            <Button onClick={handleAddParty} disabled={!newParty.name || isSubmitting} className="bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600">
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Adding...
+                </>
+              ) : (
+                `Add ${activeTab === 'customer' ? 'Customer' : 'Supplier'}`
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
+      {/* Manual Due Entry Dialog */}
+      <Dialog open={showDueEntryDialog} onOpenChange={setShowDueEntryDialog}>
+        <DialogContent className="sm:max-w-sm w-[95vw] max-h-[90dvh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{t('due_entry_title') || 'ম্যানুয়াল বাকি এন্ট্রি'}</DialogTitle>
+            <DialogDescription>
+              {t('due_entry_desc', { name: selectedCustomer?.name || '' }) || `${selectedCustomer?.name || ''} এর জন্য ম্যানুয়াল বাকি এন্ট্রি রেকর্ড করুন`}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="due-entry-amount">{t('due_entry_amount') || 'বাকির পরিমাণ'}</Label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">৳</span>
+                <Input
+                  id="due-entry-amount"
+                  type="text"
+                  value={dueEntryAmount}
+                  onChange={(e) => {
+                    const val = convertBengaliToEnglishNumerals(e.target.value);
+                    const cleaned = val.replace(/[^0-9.]/g, '');
+                    const dotCount = (cleaned.match(/\./g) || []).length;
+                    if (dotCount > 1) return;
+                    setDueEntryAmount(cleaned);
+                  }}
+                  placeholder="0"
+                  className="pl-9"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="due-entry-description">{t('notes_label') || 'নোট'}</Label>
+              <Textarea
+                id="due-entry-description"
+                value={dueEntryDescription}
+                onChange={(e) => setDueEntryDescription(e.target.value)}
+                placeholder={t('additional_notes') || 'অতিরিক্ত নোট...'}
+                rows={2}
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setShowDueEntryDialog(false)} disabled={isSubmitting}>
+              {t('cancel') || 'বাতিল'}
+            </Button>
+            <Button
+              onClick={handleDueEntrySubmit}
+              disabled={!dueEntryAmount || parseFloat(dueEntryAmount) <= 0 || isSubmitting}
+              className="bg-red-600 text-white hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-650"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  এন্ট্রি হচ্ছে...
+                </>
+              ) : (
+                t('due_entry') || 'বাকি এন্ট্রি'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Manual Supplier Due Entry Dialog */}
+      <Dialog open={showSupplierDueEntryDialog} onOpenChange={setShowSupplierDueEntryDialog}>
+        <DialogContent className="sm:max-w-sm w-[95vw] max-h-[90dvh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>সাপ্লায়ার ম্যানুয়াল বাকি এন্ট্রি</DialogTitle>
+            <DialogDescription>
+              {selectedSupplier?.name || ''} এর জন্য ম্যানুয়াল বাকি এন্ট্রি রেকর্ড করুন
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="supplier-due-entry-amount">বাকির পরিমাণ</Label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">৳</span>
+                <Input
+                  id="supplier-due-entry-amount"
+                  type="text"
+                  value={supplierDueEntryAmount}
+                  onChange={(e) => {
+                    const val = convertBengaliToEnglishNumerals(e.target.value);
+                    const cleaned = val.replace(/[^0-9.]/g, '');
+                    const dotCount = (cleaned.match(/\./g) || []).length;
+                    if (dotCount > 1) return;
+                    setSupplierDueEntryAmount(cleaned);
+                  }}
+                  placeholder="0"
+                  className="pl-9"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="supplier-due-entry-description">{t('notes_label') || 'নোট'}</Label>
+              <Textarea
+                id="supplier-due-entry-description"
+                value={supplierDueEntryDescription}
+                onChange={(e) => setSupplierDueEntryDescription(e.target.value)}
+                placeholder={t('additional_notes') || 'অতিরিক্ত নোট...'}
+                rows={2}
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setShowSupplierDueEntryDialog(false)} disabled={isSubmitting}>
+              {t('cancel') || 'বাতিল'}
+            </Button>
+            <Button
+              onClick={handleSupplierDueEntrySubmit}
+              disabled={!supplierDueEntryAmount || parseFloat(supplierDueEntryAmount) <= 0 || isSubmitting}
+              className="bg-red-600 text-white hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-650"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  এন্ট্রি হচ্ছে...
+                </>
+              ) : (
+                'বাকি এন্ট্রি'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Customer Purchase Details Dialog */}
+      <Dialog open={showDetailsDialog} onOpenChange={(o) => { if(!o) { setShowDetailsDialog(false); setDetailsCustomerId(null); setCustomerDetail(null); } }}>
+        <DialogContent className="max-w-lg w-[95vw] max-h-[90dvh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShoppingBag className="w-5 h-5 text-indigo-600" />
+              <span>{detailsCustomerName}</span>
+            </DialogTitle>
+            <DialogDescription className="flex items-center gap-1">
+              {detailsCustomerPhone && <span>{detailsCustomerPhone}</span>}
+              <span className="text-[10px] text-muted-foreground ml-auto">গত ১ বছরের তথ্য</span>
+            </DialogDescription>
+          </DialogHeader>
+          
+          {detailsLoading ? (
+            <div className="py-10 text-center text-xs text-muted-foreground flex flex-col items-center gap-2">
+              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+              <span>লোড হচ্ছে...</span>
+            </div>
+          ) : !customerDetail || (customerDetail.orderCount === 0 && !customerDetail.topProducts?.length) ? (
+            <div className="py-10 text-center text-xs text-muted-foreground">
+              <ShoppingBag className="w-8 h-8 mx-auto mb-2 opacity-30" />
+              <p>কোনো কেনাকাটার তথ্য পাওয়া যায়নি।</p>
+              <p className="text-[10px] mt-1">এই গ্রাহক এখনো কোনো কেনাকাটা করেননি।</p>
+            </div>
+          ) : (
+            <div className="space-y-4 pt-1">
+              {/* Summary Stats */}
+              <div className="grid grid-cols-3 gap-2">
+                <div className="bg-indigo-50 dark:bg-indigo-950/20 rounded-xl p-3 text-center border border-indigo-100 dark:border-indigo-900/30">
+                  <p className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold uppercase tracking-wider mb-0.5">মোট কেনাকাটা</p>
+                  <p className="text-sm font-extrabold text-indigo-700 dark:text-indigo-300">{formatPrice(customerDetail.totalSpent)}</p>
+                </div>
+                <div className="bg-muted/50 rounded-xl p-3 text-center border border-border/40">
+                  <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-0.5">অর্ডার সংখ্যা</p>
+                  <p className="text-sm font-extrabold">{formatNumber(customerDetail.orderCount)}</p>
+                </div>
+                <div className="bg-muted/50 rounded-xl p-3 text-center border border-border/40">
+                  <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-0.5">গড় মূল্য</p>
+                  <p className="text-sm font-extrabold">{formatPrice(customerDetail.aov)}</p>
+                </div>
+              </div>
+
+              {/* Top Products */}
+              {customerDetail.topProducts?.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold mb-2 flex items-center gap-1.5">
+                    <span className="w-1.5 h-4 bg-indigo-500 rounded-full inline-block"></span>
+                    শীর্ষ ক্রয়কৃত পণ্য
+                  </p>
+                  <div className="rounded-lg overflow-hidden border border-border/50">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/40">
+                          <TableHead className="text-[10px] py-1.5 font-bold">পণ্যের নাম</TableHead>
+                          <TableHead className="text-right text-[10px] py-1.5 font-bold">পরিমাণ</TableHead>
+                          <TableHead className="text-right text-[10px] py-1.5 font-bold">মোট মূল্য</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {customerDetail.topProducts.map((p: any, idx: number) => (
+                          <TableRow key={p.id} className={idx % 2 === 0 ? 'bg-background' : 'bg-muted/20'}>
+                            <TableCell className="text-xs py-2">{p.name}</TableCell>
+                            <TableCell className="text-right text-xs py-2 text-muted-foreground">{formatNumber(p.qty)}</TableCell>
+                            <TableCell className="text-right text-xs py-2 font-semibold">{formatPrice(p.revenue)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              )}
+
+              {/* Category Breakdown */}
+              {customerDetail.categoryBreakdown?.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold mb-2 flex items-center gap-1.5">
+                    <span className="w-1.5 h-4 bg-emerald-500 rounded-full inline-block"></span>
+                    ক্যাটেগরি অনুযায়ী খরচ
+                  </p>
+                  <div className="space-y-1.5">
+                    {[...customerDetail.categoryBreakdown]
+                      .sort((a: any, b: any) => b.value - a.value)
+                      .slice(0, 5)
+                      .map((cat: any) => {
+                        const pct = customerDetail.totalSpent > 0 ? (cat.value / customerDetail.totalSpent) * 100 : 0;
+                        return (
+                          <div key={cat.name} className="flex items-center gap-2">
+                            <p className="text-[10px] text-muted-foreground w-24 shrink-0 truncate">{cat.name}</p>
+                            <div className="flex-1 bg-muted/50 rounded-full h-1.5 overflow-hidden">
+                              <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${pct}%` }} />
+                            </div>
+                            <p className="text-[10px] font-semibold w-16 text-right shrink-0">{formatPrice(cat.value)}</p>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+              )}
+
+              {/* Monthly Trend */}
+              {customerDetail.monthlyTrend?.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold mb-2 flex items-center gap-1.5">
+                    <span className="w-1.5 h-4 bg-blue-500 rounded-full inline-block"></span>
+                    মাসওয়ারি কেনাকাটা
+                  </p>
+                  <div className="rounded-lg overflow-hidden border border-border/50">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/40">
+                          <TableHead className="text-[10px] py-1.5 font-bold">মাস</TableHead>
+                          <TableHead className="text-right text-[10px] py-1.5 font-bold">মোট খরচ</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {[...customerDetail.monthlyTrend].reverse().map((m: any, idx: number) => (
+                          <TableRow key={m.month} className={idx % 2 === 0 ? 'bg-background' : 'bg-muted/20'}>
+                            <TableCell className="text-xs py-1.5 text-muted-foreground">{m.month}</TableCell>
+                            <TableCell className="text-right text-xs py-1.5 font-semibold">{formatPrice(m.spent)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* Supplier Ledger Dialog */}
       <Dialog open={showSupplierLedger} onOpenChange={setShowSupplierLedger}>
-        <DialogContent className="sm:max-w-lg w-[95vw] max-h-[90dvh] overflow-y-auto">
+        <DialogContent className="md:max-w-2xl w-[95vw] max-h-[90dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileText className="w-5 h-5" />
@@ -1758,15 +2399,22 @@ export function PartiesManagement() {
           </div>
 
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setShowSupplierPaymentDialog(false)}>
+            <Button variant="outline" onClick={() => setShowSupplierPaymentDialog(false)} disabled={isSubmitting}>
               বাতিল
             </Button>
             <Button
               onClick={handleSupplierPaymentSubmit}
-              disabled={!supplierPaymentAmount || parseFloat(supplierPaymentAmount) <= 0}
+              disabled={!supplierPaymentAmount || parseFloat(supplierPaymentAmount) <= 0 || isSubmitting}
               className="bg-green-600 text-white hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600"
             >
-              পেমেন্ট রেকর্ড করুন
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  রেকর্ড হচ্ছে...
+                </>
+              ) : (
+                'পেমেন্ট রেকর্ড করুন'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

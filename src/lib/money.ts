@@ -9,6 +9,14 @@ export function toMoneyNumber(value: Decimal.Value | null | undefined): number {
   return toMoneyDecimal(value).toNumber();
 }
 
+export function toUnitPriceDecimal(value: Decimal.Value | null | undefined): Decimal {
+  return new Decimal(value || 0).toDecimalPlaces(6, Decimal.ROUND_HALF_UP);
+}
+
+export function toUnitPriceNumber(value: Decimal.Value | null | undefined): number {
+  return toUnitPriceDecimal(value).toNumber();
+}
+
 export function addMoney(...values: (Decimal.Value | null | undefined)[]): Decimal {
   const result = values.reduce<Decimal>((sum, value) => sum.plus(toMoneyDecimal(value)), new Decimal(0));
   return toMoneyDecimal(result);

@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { db as prisma } from "@/lib/db";
-import { format, eachDayOfInterval, parseISO, subDays } from "date-fns";
+import { format, eachDayOfInterval, eachMonthOfInterval, parseISO, subDays } from "date-fns";
 import { toZonedTime } from "date-fns-tz";
 import { requirePermission } from "@/lib/api-middleware";
 
@@ -116,16 +116,21 @@ export async function GET(request: NextRequest) {
 
       chartData = chartMap;
     } else {
-      const dayList = eachDayOfInterval({ start: startDate, end: endDate });
+      const isYearly = parseInt(sp.get("days") || "30") === 365;
+      const intervalList = isYearly 
+        ? eachMonthOfInterval({ start: startDate, end: endDate })
+        : eachDayOfInterval({ start: startDate, end: endDate });
+        
       const dailyMap = new Map<string, { date: string; amount: number; count: number }>();
-      dayList.forEach((d) => {
-        const key = format(toZonedTime(d, TZ), "yyyy-MM-dd");
+      intervalList.forEach((d) => {
+        const key = format(toZonedTime(d, TZ), isYearly ? "yyyy-MM" : "yyyy-MM-dd");
         dailyMap.set(key, { date: key, amount: 0, count: 0 });
       });
 
       purchases.forEach((p) => {
         if (p.paymentStatus === 'Paid') {
-          const key = format(toZonedTime(p.createdAt, TZ), "yyyy-MM-dd");
+          const isYearly = parseInt(sp.get("days") || "30") === 365;
+          const key = format(toZonedTime(p.createdAt, TZ), isYearly ? "yyyy-MM" : "yyyy-MM-dd");
           const day = dailyMap.get(key);
           if (day) {
             day.amount += Number(p.totalAmount);
