@@ -122,7 +122,8 @@ export default proxy;
 
 export const config = {
   matcher: [
-    "/((?!api/auth|login|_next/static|_next/image|favicon.ico|logo.svg|manifest.json).*)",
+    // Public: auth pages, static assets, health check (uptime monitors)
+    "/((?!api/auth|api/health|login|_next/static|_next/image|favicon.ico|logo.svg|manifest.json).*)",
     "/api/auth/callback/credentials",
     "/api/auth/signin",
     "/api/auth/change-password",

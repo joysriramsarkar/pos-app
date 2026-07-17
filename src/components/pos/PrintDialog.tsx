@@ -176,6 +176,21 @@ function getPageStyle(format: PrintFormat): string {
   }
 }
 
+function mapPaperSizeToFormat(size?: string): PrintFormat {
+  switch (size) {
+    case '58mm':
+      return 'thermal-58';
+    case '80mm':
+      return 'thermal-80';
+    case 'A4':
+      return 'a4';
+    case 'A5':
+      return 'a5';
+    default:
+      return 'thermal-80';
+  }
+}
+
 export function PrintDialog({
   open,
   onOpenChange,
@@ -183,16 +198,16 @@ export function PrintDialog({
   onPrint,
 }: PrintDialogProps) {
   const { settings } = useSettingsStore();
-  const [selectedFormat, setSelectedFormat] =
-    React.useState<PrintFormat>("thermal-80");
+  const [selectedFormat, setSelectedFormat] = React.useState<PrintFormat>(() =>
+    mapPaperSizeToFormat(settings.print_paper_size),
+  );
   const [showLogo, setShowLogo] = React.useState(true);
   const [showGst, setShowGst] = React.useState(false);
   const [footerMessage, setFooterMessage] = React.useState(
-    "This is a computer generated invoice.",
+    () => settings.print_footer || 'This is a computer generated invoice.',
   );
   const [isSharing, setIsSharing] = React.useState(false);
-  const [preparedFile, setPreparedFile] = React.useState<File | null>(null);
-  const [isPreparing, setIsPreparing] = React.useState(false);
+  const [isPrinting, setIsPrinting] = React.useState(false);
   const { toast } = useToast();
   const t = useTranslations("PrintDialog");
 
@@ -207,10 +222,13 @@ export function PrintDialog({
 
   React.useEffect(() => {
     if (!open) return;
-  }, [open]);
+    setSelectedFormat(mapPaperSizeToFormat(settings.print_paper_size));
+    if (settings.print_footer) setFooterMessage(settings.print_footer);
+  }, [open, settings.print_paper_size, settings.print_footer]);
 
   const handlePrint = () => {
-    if (!sale) return;
+    if (!sale || isPrinting) return;
+    setIsPrinting(true);
     const container = document.createElement("div");
     container.className = "print-invoice-container";
     container.setAttribute("data-format", selectedFormat);
@@ -228,17 +246,20 @@ export function PrintDialog({
       printContent: container,
       pageStyle: getPageStyle(selectedFormat),
       format: selectedFormat,
+      documentName: `Invoice-${sale.invoiceNumber}`,
       onAfterPrint: () => {
+        setIsPrinting(false);
         onOpenChange(false);
         onPrint?.(selectedFormat);
       },
     });
+    // Safety: clear printing flag if native path never calls onAfterPrint
+    setTimeout(() => setIsPrinting(false), 8000);
   };
 
-  // Share invoice as PDF via Web Share API or WhatsApp fallback
+  /** One-tap PDF share (native sheet / download). Never shares HTML. */
   const handleShare = async () => {
-    if (!sale) return;
-    // If running on a native platform, defer to the library which handles native sharing
+    if (!sale || isSharing) return;
     setIsSharing(true);
     try {
       const html = buildInvoiceHtml(
@@ -251,67 +272,33 @@ export function PrintDialog({
         getPageStyle(selectedFormat),
       );
 
-      // If Capacitor native, use the existing helper (keeps native sharing behavior)
-      try {
-        const cap = await import('@capacitor/core').then(m => (m as any).Capacitor).catch(() => null);
-        if (cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform()) {
-          await shareInvoiceAsPdf(
-            html,
-            selectedFormat,
-            sale.invoiceNumber,
-            storeConfig.name,
-            ''
-          );
-          return;
-        }
-      } catch {}
+      const result = await shareInvoiceAsPdf(
+        html,
+        selectedFormat,
+        sale.invoiceNumber,
+        storeConfig.name,
+      );
 
-      // Web: prepare the PDF in background and wait for a second user tap to actually share
-      setIsPreparing(true);
-      const { generateInvoicePdf } = await import('@/lib/invoicePdf');
-      const blob = await generateInvoicePdf(html, selectedFormat);
-      const file = new File([blob], `Invoice-${sale.invoiceNumber}.pdf`, { type: 'application/pdf' });
-      setPreparedFile(file);
-      toast({ title: 'Invoice Ready', description: 'Tap the Share button again to complete sharing (required on some browsers).' });
-    } catch (err) {
-      console.error('Prepare share failed:', err);
-    } finally {
-      setIsPreparing(false);
-      setIsSharing(false);
-    }
-  };
-
-  const performPreparedShare = async () => {
-    if (!preparedFile || !sale) return;
-    setIsSharing(true);
-    try {
-      const shareData: any = { title: `Invoice ${sale.invoiceNumber}`, text: `Invoice from ${storeConfig.name}`, files: [preparedFile] };
-      try {
-        const canShare = typeof (navigator as any).canShare === 'function' ? (navigator as any).canShare(shareData) : true;
-        if (canShare) {
-          await (navigator as any).share(shareData);
-          setPreparedFile(null);
-          toast({ title: 'Shared', description: 'Invoice shared successfully.' });
-          onOpenChange(false);
-          return;
-        }
-      } catch (err) {
-        console.warn('navigator.share failed at performPreparedShare:', err);
+      if (result === 'downloaded') {
+        toast({
+          title: t('downloaded') || 'Downloaded',
+          description: t('downloaded_desc') || 'Invoice PDF downloaded.',
+        });
+      } else {
+        toast({
+          title: t('shared') || 'Shared',
+          description: t('shared_desc') || 'Invoice shared successfully.',
+        });
       }
-
-      // fallback to download
-      try {
-        const url = URL.createObjectURL(preparedFile);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = preparedFile.name;
-        a.click();
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
-        setPreparedFile(null);
-        toast({ title: 'Downloaded', description: 'Invoice downloaded as a fallback.' });
-      } catch (err) {
-        toast({ title: 'Share failed', description: 'Unable to share or download the invoice.', variant: 'destructive' });
-      }
+    } catch (err: unknown) {
+      const name = err instanceof Error ? err.name : '';
+      if (name === 'AbortError') return;
+      console.error('Share failed:', err);
+      toast({
+        title: t('share_failed') || 'Share failed',
+        description: t('share_failed_desc') || 'Unable to share or download the invoice.',
+        variant: 'destructive',
+      });
     } finally {
       setIsSharing(false);
     }
@@ -437,19 +424,20 @@ export function PrintDialog({
           </Button>
           <Button
             variant="outline"
-            onClick={preparedFile ? performPreparedShare : handleShare}
-            disabled={isSharing}
+            onClick={handleShare}
+            disabled={isSharing || isPrinting}
             className="gap-2 border-green-500 text-green-600 hover:bg-green-50"
           >
             <Share2 className="w-4 h-4" />
-            {isPreparing ? t('preparing') : preparedFile ? (isSharing ? t('sharing') : t('tap_to_share')) : (isSharing ? t('sharing') : t('share_whatsapp'))}
+            {isSharing ? t('sharing') : t('share_whatsapp')}
           </Button>
           <Button
             onClick={handlePrint}
+            disabled={isPrinting || isSharing}
             className="bg-blue-600 text-white hover:bg-blue-700 gap-2"
           >
             <Printer className="w-4 h-4" />
-            {t('print_invoice')}
+            {isPrinting ? (t('printing') || t('print_invoice')) : t('print_invoice')}
           </Button>
         </DialogFooter>
       </DialogContent>

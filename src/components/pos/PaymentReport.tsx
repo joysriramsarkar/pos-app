@@ -86,44 +86,56 @@ export function PaymentReport({ onBack }: PaymentReportProps) {
       const matchesMethod =
         filterMethod === 'All' ||
         s.paymentMethod === filterMethod ||
-        (filterMethod === 'Split' && (s.cashAmount > 0 && s.upiAmount > 0));
+        (filterMethod === 'Mixed' &&
+          (s.paymentMethod === 'Mixed' ||
+            (Number(s.cashAmount) > 0 && Number(s.upiAmount) > 0)));
         
       return matchesSearch && matchesMethod;
     });
   }, [sales, searchQuery, filterMethod]);
 
-  // Aggregated totals
+  // Aggregated totals — align with dashboard/stats (Mixed not "Split"; fallback cashAmount)
   const summary = useMemo(() => {
     let cash = 0;
     let upi = 0;
     let prepaid = 0;
     let due = 0;
     let total = 0;
-    
+
     sales.forEach((s) => {
-      if (s.status !== 'Completed') return;
-      
+      if (s.status !== 'Completed' && s.status !== 'PartialReturn') return;
+
       const amtPaid = Number(s.amountPaid || 0);
       const totalAmt = Number(s.totalAmount || 0);
-      
+      const method = s.paymentMethod || 'Cash';
+      const hasSplit = s.cashAmount != null || s.upiAmount != null;
+
       total += amtPaid;
-      
-      if (s.paymentMethod === 'Cash') {
+
+      if (hasSplit || method === 'Mixed') {
+        const c = Number(s.cashAmount || 0);
+        const u = Number(s.upiAmount || 0);
+        if (c > 0 || u > 0) {
+          cash += c;
+          upi += u;
+        } else if (method === 'Mixed') {
+          cash += amtPaid; // unknown split
+        }
+      } else if (method === 'Cash') {
         cash += amtPaid;
-      } else if (s.paymentMethod === 'UPI') {
+      } else if (method === 'UPI') {
         upi += amtPaid;
-      } else if (s.paymentMethod === 'Split') {
-        cash += Number(s.cashAmount || 0);
-        upi += Number(s.upiAmount || 0);
-      } else if (s.paymentMethod === 'Prepaid') {
+      } else if (method === 'Prepaid') {
         prepaid += amtPaid;
+      } else if (method === 'Due') {
+        cash += amtPaid; // partial collections typically cash
       }
-      
+
       if (totalAmt > amtPaid) {
-        due += (totalAmt - amtPaid);
+        due += totalAmt - amtPaid;
       }
     });
-    
+
     return { cash, upi, prepaid, due, total };
   }, [sales]);
 
@@ -138,14 +150,14 @@ export function PaymentReport({ onBack }: PaymentReportProps) {
 
   const trendData = useMemo(() => {
     const map: Record<string, { label: string; cash: number; upi: number; prepaid: number; ts: number }> = {};
-    
+
     sales.forEach((s) => {
-      if (s.status !== 'Completed') return;
+      if (s.status !== 'Completed' && s.status !== 'PartialReturn') return;
       const d = new Date(s.createdAt);
-      
+
       let k = '';
       let ts = d.getTime();
-      
+
       if (viewMode === 'daily') {
         k = format(d, 'dd MMM');
       } else if (viewMode === 'weekly') {
@@ -155,24 +167,34 @@ export function PaymentReport({ onBack }: PaymentReportProps) {
         k = format(d, 'MMM yyyy');
         ts = startOfMonth(d).getTime();
       }
-      
+
       if (!map[k]) {
         map[k] = { label: k, cash: 0, upi: 0, prepaid: 0, ts };
       }
-      
+
       const amtPaid = Number(s.amountPaid || 0);
-      if (s.paymentMethod === 'Cash') {
-        map[k].cash += amtPaid;
-      } else if (s.paymentMethod === 'UPI') {
-        map[k].upi += amtPaid;
-      } else if (s.paymentMethod === 'Split') {
-        map[k].cash += Number(s.cashAmount || 0);
-        map[k].upi += Number(s.upiAmount || 0);
-      } else if (s.paymentMethod === 'Prepaid') {
+      const method = s.paymentMethod || 'Cash';
+      const c = Number(s.cashAmount || 0);
+      const u = Number(s.upiAmount || 0);
+
+      if (method === 'Cash') {
+        map[k].cash += c > 0 || u > 0 ? c : amtPaid;
+      } else if (method === 'UPI') {
+        map[k].upi += c > 0 || u > 0 ? u : amtPaid;
+      } else if (method === 'Mixed') {
+        if (c > 0 || u > 0) {
+          map[k].cash += c;
+          map[k].upi += u;
+        } else {
+          map[k].cash += amtPaid;
+        }
+      } else if (method === 'Prepaid') {
         map[k].prepaid += amtPaid;
+      } else if (method === 'Due') {
+        map[k].cash += amtPaid;
       }
     });
-    
+
     return Object.values(map).sort((a, b) => a.ts - b.ts);
   }, [sales, viewMode]);
 
@@ -433,7 +455,8 @@ export function PaymentReport({ onBack }: PaymentReportProps) {
                 <SelectItem value="All">{t('all_methods')}</SelectItem>
                 <SelectItem value="Cash">Cash</SelectItem>
                 <SelectItem value="UPI">UPI</SelectItem>
-                <SelectItem value="Split">{t('split_payment')}</SelectItem>
+                <SelectItem value="Mixed">{t('mixed_payment') || t('split_payment') || 'Mixed'}</SelectItem>
+                <SelectItem value="Due">Due</SelectItem>
                 <SelectItem value="Prepaid">Prepaid</SelectItem>
               </SelectContent>
             </Select>
@@ -478,12 +501,12 @@ export function PaymentReport({ onBack }: PaymentReportProps) {
                           {s.customer?.phone && <p className="text-[10px] text-muted-foreground">{s.customer.phone}</p>}
                         </TableCell>
                         <TableCell className="text-xs">
-                          {s.paymentMethod === 'Split' ? (
+                          {s.paymentMethod === 'Mixed' || (Number(s.cashAmount) > 0 && Number(s.upiAmount) > 0) ? (
                             <Badge variant="outline" className="text-[10px]">
-                              Split (C: {s.cashAmount} / U: {s.upiAmount})
+                              Mixed (C: {Number(s.cashAmount || 0)} / U: {Number(s.upiAmount || 0)})
                             </Badge>
                           ) : (
-                            <Badge variant="secondary" className="text-[10px]">{s.paymentMethod}</Badge>
+                            <Badge variant="secondary" className="text-[10px]">{s.paymentMethod || 'Cash'}</Badge>
                           )}
                         </TableCell>
                         <TableCell className="text-right text-xs font-medium">{formatPrice(totalAmt)}</TableCell>

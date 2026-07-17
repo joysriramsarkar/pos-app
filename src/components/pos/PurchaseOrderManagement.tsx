@@ -79,7 +79,7 @@ export default function PurchaseOrderManagement() {
   const t = useTranslations('PurchaseOrders');
   const tb = useTranslations('Billing');
   const tc = useTranslations('Common');
-  const { formatPrice, formatDate } = useNumberFormat();
+  const { formatPrice, formatDate, currencySymbol } = useNumberFormat();
 
   const products = useProductsStore((state) => state.products);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -517,7 +517,7 @@ export default function PurchaseOrderManagement() {
       const parsedPaid = parseFloat(receiveAmountPaid);
       const maxAllowed = selectedOrder.totalAmount - selectedOrder.paidAmount;
       if (!isNaN(parsedPaid) && parsedPaid > maxAllowed) {
-        toast.error(`পরিশোধিত টাকা বকেয়া পরিমাণের (৳${maxAllowed}) চেয়ে বেশি হতে পারবে না।`);
+        toast.error(`পরিশোধিত টাকা বকেয়া পরিমাণের (${formatPrice(maxAllowed)}) চেয়ে বেশি হতে পারবে না।`);
         return;
       }
     }
@@ -1232,7 +1232,7 @@ export default function PurchaseOrderManagement() {
             <div className="space-y-1.5">
               <Label htmlFor="form-amount-paid" className="text-sm font-medium">পরিশোধিত টাকা (ঐচ্ছিক)</Label>
               <div className="relative">
-                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium">৳</span>
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium">{currencySymbol}</span>
                 <Input
                   id="form-amount-paid"
                   type="number"
@@ -1492,7 +1492,7 @@ export default function PurchaseOrderManagement() {
                       <div className="space-y-1.5 border-t pt-2.5">
                         <Label htmlFor="receive-amount-paid" className="text-xs">পরিশোধিত টাকা (ঐচ্ছিক)</Label>
                         <div className="relative">
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">৳</span>
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">{currencySymbol}</span>
                           <Input
                             id="receive-amount-paid"
                             type="text"

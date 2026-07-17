@@ -159,7 +159,9 @@ export async function POST(request: NextRequest) {
 
     let finalNotes = notes || '';
     if (totalGstAmount > 0) {
-      const gstNote = `মোট জিএসটি: ৳${totalGstAmount.toFixed(2)}`;
+      const currencyRow = await db.setting.findUnique({ where: { key: 'currency_symbol' } });
+      const currencySymbol = currencyRow?.value || '₹';
+      const gstNote = `মোট জিএসটি: ${currencySymbol}${totalGstAmount.toFixed(2)}`;
       finalNotes = finalNotes ? `${finalNotes}\n${gstNote}` : gstNote;
     }
 

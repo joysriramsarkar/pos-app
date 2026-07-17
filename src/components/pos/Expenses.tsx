@@ -102,7 +102,7 @@ export function Expenses({ onReport }: ExpensesProps) {
   const [dateFilterMode, setDateFilterMode] = useState<'today' | 'yesterday' | 'custom'>('today');
   const [customDate, setCustomDate] = useState('');
   const { toast } = useToast();
-  const currency = useSettingsStore((s) => s.settings.currency_symbol || '৳');
+  const currency = useSettingsStore((s) => s.settings.currency_symbol || '₹');
 
   const parseDateSafe = (dateStr: string | Date | null | undefined): Date => {
     if (!dateStr) return new Date();
@@ -243,7 +243,7 @@ export function Expenses({ onReport }: ExpensesProps) {
 
   const highestCategory = categoryBreakdown[0] || null;
 
-  const { formatPrice, formatNumber, formatDate } = useNumberFormat();
+  const { formatPrice, formatNumber, formatDate, formatStringNumbers } = useNumberFormat();
 
   const handleAddExpense = async () => {
     if (!amount || !category) return;
@@ -527,7 +527,7 @@ export function Expenses({ onReport }: ExpensesProps) {
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
                         <span className="text-xs font-bold tabular-nums">{formatPrice(cat.amount)}</span>
-                        <span className="text-[10px] text-muted-foreground">({cat.percentage.toFixed(0)}%)</span>
+                        <span className="text-[10px] text-muted-foreground">({formatStringNumbers(cat.percentage.toFixed(0))}%)</span>
                       </div>
                     </div>
                     <Progress value={cat.percentage} className="h-1.5" />
@@ -759,8 +759,8 @@ export function Expenses({ onReport }: ExpensesProps) {
                     ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400'
                     : 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400'
                     }`}>
-                    <span>নগদ {currency}{cashVal} + ইউপিআই {currency}{upiVal}</span>
-                    <span className="font-semibold">{isMixedOk ? '✓ মিলেছে' : `বাকি: ${currency}${Math.abs(totalAmt - mixedSum).toFixed(2)}`}</span>
+                    <span>নগদ {currency}{formatStringNumbers(cashVal)} + ইউপিআই {currency}{formatStringNumbers(upiVal)}</span>
+                    <span className="font-semibold">{isMixedOk ? '✓ মিলেছে' : `বাকি: ${formatPrice(Math.abs(totalAmt - mixedSum))}`}</span>
                   </div>
                 </div>
               );
@@ -1056,8 +1056,8 @@ export function Expenses({ onReport }: ExpensesProps) {
                     ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400'
                     : 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400'
                     }`}>
-                    <span>নগদ {currency}{cashVal} + ইউপিআই {currency}{upiVal}</span>
-                    <span className="font-semibold">{isMixedOk ? '✓ মিলেছে' : `বাকি: ${currency}${Math.abs(totalAmt - mixedSum).toFixed(2)}`}</span>
+                    <span>নগদ {currency}{formatStringNumbers(cashVal)} + ইউপিআই {currency}{formatStringNumbers(upiVal)}</span>
+                    <span className="font-semibold">{isMixedOk ? '✓ মিলেছে' : `বাকি: ${formatPrice(Math.abs(totalAmt - mixedSum))}`}</span>
                   </div>
                 </div>
               );

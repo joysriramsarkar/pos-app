@@ -139,7 +139,7 @@ export function PartiesManagement() {
     return Math.abs(cashVal + upiVal - totalAmt) < 0.01;
   }, [paymentMethod, paymentAmount, cashAmount, upiAmount]);
 
-  const { formatPrice, formatDate, formatNumber } = useNumberFormat();
+  const { formatPrice, formatDate, formatNumber, currencySymbol } = useNumberFormat();
 
   useEffect(() => {
     const fetchDetail = async () => {
@@ -476,7 +476,7 @@ export function PartiesManagement() {
       return;
     }
     if (amount > totalDue) {
-      toast({ title: 'ভুল পরিমাণ', description: `পরিশোধের পরিমাণ বকেয়া পরিমাণের (৳${totalDue}) চেয়ে বেশি হতে পারবে না।`, variant: 'destructive' });
+      toast({ title: 'ভুল পরিমাণ', description: `পরিশোধের পরিমাণ বকেয়া পরিমাণের (${formatPrice(totalDue)}) চেয়ে বেশি হতে পারবে না।`, variant: 'destructive' });
       return;
     }
 
@@ -565,7 +565,7 @@ export function PartiesManagement() {
       }
 
       setShowSupplierDueEntryDialog(false);
-      toast({ title: 'বাকি এন্ট্রি সফল', description: `Recorded ৳${amount} manual due for supplier ${selectedSupplier.name}.` });
+      toast({ title: 'বাকি এন্ট্রি সফল', description: `Recorded ${formatPrice(amount)} manual due for supplier ${selectedSupplier.name}.` });
 
     } catch (error) {
       console.error("Failed to record supplier due entry:", error);
@@ -611,7 +611,7 @@ export function PartiesManagement() {
       const { data: updatedCustomer } = await response.json();
       updateCustomer(selectedCustomer.id, updatedCustomer);
       setShowDueEntryDialog(false);
-      toast({ title: t('due_entry_success') || 'বাকি এন্ট্রি সফল', description: `৳${amount} outstanding due added for ${selectedCustomer.name}.` });
+      toast({ title: t('due_entry_success') || 'বাকি এন্ট্রি সফল', description: `${formatPrice(amount)} outstanding due added for ${selectedCustomer.name}.` });
 
     } catch (error) {
       console.error("Failed to record due entry:", error);
@@ -662,7 +662,7 @@ export function PartiesManagement() {
       }
       const { data: updated } = await response.json();
       updateCustomer(selectedCustomer.id, updated);
-      toast({ title: 'Withdrawn', description: `₹${amount} withdrawn from ${selectedCustomer.name}'s prepaid balance.` });
+      toast({ title: 'Withdrawn', description: `${formatPrice(amount)} withdrawn from ${selectedCustomer.name}'s prepaid balance.` });
       setShowWithdrawDialog(false);
     } catch (error) {
       toast({ title: 'Withdraw Failed', description: error instanceof Error ? error.message : 'Unknown error', variant: 'destructive' });
@@ -793,7 +793,7 @@ export function PartiesManagement() {
       const { data } = await response.json();
       updateCustomer(selectedCustomer.id, data.customer);
       setShowPaymentDialog(false);
-      toast({ title: 'Payment Recorded', description: `₹${paidAmount} payment recorded for ${selectedCustomer.name}.` });
+      toast({ title: 'Payment Recorded', description: `${formatPrice(paidAmount)} payment recorded for ${selectedCustomer.name}.` });
 
     } catch (error) {
       console.error("Failed to record payment:", error);
@@ -1413,7 +1413,7 @@ export function PartiesManagement() {
             <div className="space-y-2">
               <Label htmlFor="payment-dialog-amount">Payment Amount</Label>
               <div className="relative">
-                <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">{currencySymbol}</span>
                 <Input
                   id="payment-dialog-amount"
                   type="text"
@@ -1490,7 +1490,7 @@ export function PartiesManagement() {
                   </div>
                   <div className={`text-xs px-2 py-1.5 rounded-lg flex items-center justify-between ${isMixedOk ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400' : 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400'}`}>
                     <span>নগদ {cashVal} + ইউপিআই {upiVal}</span>
-                    <span className="font-semibold">{isMixedOk ? '✓ মিলেছে' : `বাকি: ${Math.abs(totalAmt - mixedSum).toFixed(2)}`}</span>
+                    <span className="font-semibold">{isMixedOk ? '✓ মিলেছে' : `বাকি: ${formatPrice(Math.abs(totalAmt - mixedSum))}`}</span>
                   </div>
                 </div>
               );
@@ -1505,7 +1505,7 @@ export function PartiesManagement() {
                   size="sm"
                   onClick={() => setPaymentAmount(amount.toString())}
                 >
-                  ₹{amount}
+                  {formatPrice(amount)}
                 </Button>
               ))}
               <Button
@@ -1561,7 +1561,7 @@ export function PartiesManagement() {
             <div className="space-y-2">
               <Label htmlFor="prepayment-dialog-amount">Amount to Add</Label>
               <div className="relative">
-                <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">{currencySymbol}</span>
                 <Input
                   id="prepayment-dialog-amount"
                   type="text"
@@ -1586,7 +1586,7 @@ export function PartiesManagement() {
                   size="sm"
                   onClick={() => setPrepaymentAmount(amount.toString())}
                 >
-                  ₹{amount}
+                  {formatPrice(amount)}
                 </Button>
               ))}
             </div>
@@ -1634,7 +1634,7 @@ export function PartiesManagement() {
             <div className="space-y-2">
               <Label htmlFor="withdraw-amount">Amount to Withdraw</Label>
               <div className="relative">
-                <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">{currencySymbol}</span>
                 <Input
                   id="withdraw-amount"
                   type="text"
@@ -1653,7 +1653,7 @@ export function PartiesManagement() {
             </div>
             <div className="flex flex-wrap gap-2">
               {[100, 200, 500, 1000].map((amount) => (
-                <Button key={amount} variant="outline" size="sm" onClick={() => setWithdrawAmount(amount.toString())}>₹{amount}</Button>
+                <Button key={amount} variant="outline" size="sm" onClick={() => setWithdrawAmount(amount.toString())}>{formatPrice(amount)}</Button>
               ))}
               <Button variant="outline" size="sm" onClick={() => setWithdrawAmount((selectedCustomer?.prepaidBalance || 0).toString())}>Full Balance</Button>
             </div>
@@ -1893,7 +1893,7 @@ export function PartiesManagement() {
             <div className="space-y-2">
               <Label htmlFor="due-entry-amount">{t('due_entry_amount') || 'বাকির পরিমাণ'}</Label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">৳</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">{currencySymbol}</span>
                 <Input
                   id="due-entry-amount"
                   type="text"
@@ -1959,7 +1959,7 @@ export function PartiesManagement() {
             <div className="space-y-2">
               <Label htmlFor="supplier-due-entry-amount">বাকির পরিমাণ</Label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">৳</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">{currencySymbol}</span>
                 <Input
                   id="supplier-due-entry-amount"
                   type="text"
@@ -2248,7 +2248,7 @@ export function PartiesManagement() {
             <div className="space-y-2">
               <Label htmlFor="supplier-payment-dialog-amount">পরিশোধের পরিমাণ</Label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">৳</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">{currencySymbol}</span>
                 <Input
                   id="supplier-payment-dialog-amount"
                   type="text"
@@ -2320,7 +2320,7 @@ export function PartiesManagement() {
                   </div>
                   <div className={`text-xs px-2 py-1.5 rounded-lg flex items-center justify-between ${isMixedOk ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400' : 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400'}`}>
                     <span>নগদ {cashVal} + ইউপিআই {upiVal}</span>
-                    <span className="font-semibold">{isMixedOk ? '✓ মিলেছে' : `বাকি: ${Math.abs(totalAmt - mixedSum).toFixed(2)}`}</span>
+                    <span className="font-semibold">{isMixedOk ? '✓ মিলেছে' : `বাকি: ${formatPrice(Math.abs(totalAmt - mixedSum))}`}</span>
                   </div>
                 </div>
               );
@@ -2335,7 +2335,7 @@ export function PartiesManagement() {
                   size="sm"
                   onClick={() => setSupplierPaymentAmount(amount.toString())}
                 >
-                  ৳{amount}
+                  {formatPrice(amount)}
                 </Button>
               ))}
               <Button

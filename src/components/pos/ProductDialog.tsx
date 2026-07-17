@@ -581,7 +581,7 @@ export function ProductDialog({
           {profitMargin && (
             <div className="flex items-center gap-2 text-sm">
               <Badge variant={parseFloat(profitMargin) >= 10 ? 'default' : 'secondary'}>
-                {profitMargin}{t('margin')}
+                {formatNumber(profitMargin)}{t('margin')}
               </Badge>
               <span className="text-muted-foreground">
                 {t('profit', { amount: formatNumber((parseFloat(sellingPrice) - parseFloat(buyingPrice)).toFixed(2)), unit })}

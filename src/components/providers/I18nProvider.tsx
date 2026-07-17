@@ -9,6 +9,11 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   const [messages, setMessages] = useState<any>(null);
 
   useEffect(() => {
+    // Keep <html lang> in sync so formatPriceGlobal / isBengali() work outside hooks
+    if (typeof document !== 'undefined') {
+      document.documentElement.lang = settings.app_language === 'bn' ? 'bn' : 'en';
+    }
+
     const loaders: Record<string, () => Promise<{ default: Record<string, unknown> }>> = {
       bn: () => import('../../../messages/bn.json'),
       en: () => import('../../../messages/en.json'),

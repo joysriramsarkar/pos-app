@@ -5,6 +5,17 @@ import type { Sale, SaleItem, PrintFormat } from "@/types/pos";
 import { STORE_CONFIG } from "@/types/pos";
 import Decimal from 'decimal.js';
 import { toMoneyNumber } from '@/lib/money';
+import {
+  getReceiptLanguage,
+  getReceiptLabels,
+  getReceiptStoreTitle,
+  formatReceiptMoney,
+  formatReceiptNumber,
+  formatReceiptDate,
+  formatReceiptTime,
+  formatReceiptPaymentMethod,
+  formatReceiptPaymentStatus,
+} from '@/lib/receipt-i18n';
 
 // ============================================================================
 // TYPES
@@ -28,28 +39,15 @@ interface PrintInvoiceProps {
 }
 
 // ============================================================================
-// HELPER FUNCTIONS
+// HELPER FUNCTIONS (respect Settings → receipt_language)
 // ============================================================================
 
 const formatCurrency = (amount: number | string | null | undefined): string => {
-  return `₹${Number(amount ?? 0).toFixed(2)}`;
+  return formatReceiptMoney(amount);
 };
 
-const formatDate = (date: Date): string => {
-  return new Date(date).toLocaleDateString("en-IN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
-};
-
-const formatTime = (date: Date): string => {
-  return new Date(date).toLocaleTimeString("en-IN", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true,
-  });
-};
+const formatDate = (date: Date): string => formatReceiptDate(date);
+const formatTime = (date: Date): string => formatReceiptTime(date);
 
 // ============================================================================
 // THERMAL INVOICE (58mm and 80mm)
@@ -79,6 +77,12 @@ function ThermalInvoice({
 }: ThermalInvoiceProps) {
   // Use passed config or fallback to hardcoded defaults
   const config = storeConfig || STORE_CONFIG;
+  const lang = getReceiptLanguage();
+  const L = getReceiptLabels(lang);
+  const storeTitle = getReceiptStoreTitle(
+    { name: config.name, nameBn: config.nameBn },
+    lang,
+  );
   const is58mm = width === "58mm";
   const fontSize = is58mm ? "text-[10px]" : "text-xs";
   const sectionPadding = is58mm ? "p-2" : "p-3";
@@ -114,8 +118,10 @@ function ThermalInvoice({
             )}
           </div>
         )}
-        <h1 className="font-bold text-sm tracking-wide uppercase">{config.name}</h1>
-        <p className={`${fontSize} font-medium`}>{config.nameBn}</p>
+        <h1 className="font-bold text-sm tracking-wide">{storeTitle.primary}</h1>
+        {storeTitle.secondary && (
+          <p className={`${fontSize} font-medium`}>{storeTitle.secondary}</p>
+        )}
         {config.address && <p className={`${fontSize} text-[#666]`}>{config.address}</p>}
         {config.phone && <p className={`${fontSize} text-[#666]`}>☎ {config.phone}</p>}
       </div>
@@ -126,26 +132,26 @@ function ThermalInvoice({
       {/* Invoice Info */}
       <div className={`${fontSize} space-y-0.5 ${sectionPadding} py-2`}>
         <div className="flex justify-between min-w-0">
-          <span className="text-[#888]">Invoice#</span>
+          <span className="text-[#888]">{L.invoiceNo}</span>
           <span className="font-bold shrink-0 ml-2">{sale.invoiceNumber}</span>
         </div>
         <div className="flex justify-between min-w-0">
-          <span className="text-[#888]">Date</span>
+          <span className="text-[#888]">{L.date}</span>
           <span className="shrink-0 ml-2">{formatDate(sale.createdAt)}</span>
         </div>
         <div className="flex justify-between min-w-0">
-          <span className="text-[#888]">Time</span>
+          <span className="text-[#888]">{L.time}</span>
           <span className="shrink-0 ml-2">{formatTime(sale.createdAt)}</span>
         </div>
         {sale.customer && (
           <div className="mt-1 pt-1" style={{ borderTop: '1px dashed #999' }}>
             <div className="flex justify-between min-w-0">
-              <span className="text-[#888]">Customer</span>
+              <span className="text-[#888]">{L.customer}</span>
               <span className="truncate ml-2 font-medium">{sale.customer.name}</span>
             </div>
             {sale.customer.phone && (
               <div className="flex justify-between min-w-0">
-                <span className="text-[#888]">Phone</span>
+                <span className="text-[#888]">{L.phone}</span>
                 <span className="shrink-0 ml-2">{sale.customer.phone}</span>
               </div>
             )}
@@ -160,19 +166,19 @@ function ThermalInvoice({
         <table className="w-full border-separate border-spacing-0">
           <thead>
             <tr style={{ borderBottom: '1px solid #000' }}>
-              <th className="text-left w-[52%] font-bold pb-1">Item</th>
-              <th className="text-right w-[16%] font-bold pb-1">Qty</th>
-              <th className="text-right w-[16%] font-bold pb-1">Rate</th>
-              <th className="text-right w-[16%] font-bold pb-1">Amt</th>
+              <th className="text-left w-[52%] font-bold pb-1">{L.item}</th>
+              <th className="text-right w-[16%] font-bold pb-1">{L.qty}</th>
+              <th className="text-right w-[16%] font-bold pb-1">{L.rate}</th>
+              <th className="text-right w-[16%] font-bold pb-1">{L.amount}</th>
             </tr>
           </thead>
           <tbody>
             {sale.items.map((item) => (
               <tr key={item.id} style={{ borderBottom: '1px dotted #ccc' }}>
                 <td className="w-[52%] pr-1 align-top py-0.5 whitespace-normal">{item.productName}</td>
-                <td className="w-[16%] text-right align-top py-0.5">{item.quantity}{(item as any).unit || (item as any).product?.unit ? ` ${(item as any).unit || (item as any).product?.unit}` : ''}</td>
-                <td className="w-[16%] text-right align-top py-0.5">{Number(item.unitPrice ?? 0).toFixed(0)}</td>
-                <td className="w-[16%] text-right align-top py-0.5 font-medium">{Number(item.totalPrice ?? 0).toFixed(0)}</td>
+                <td className="w-[16%] text-right align-top py-0.5">{formatReceiptNumber(item.quantity)}{(item as any).unit || (item as any).product?.unit ? ` ${(item as any).unit || (item as any).product?.unit}` : ''}</td>
+                <td className="w-[16%] text-right align-top py-0.5">{formatReceiptNumber(Number(item.unitPrice ?? 0), { maximumFractionDigits: 0 })}</td>
+                <td className="w-[16%] text-right align-top py-0.5 font-medium">{formatReceiptNumber(Number(item.totalPrice ?? 0), { maximumFractionDigits: 0 })}</td>
               </tr>
             ))}
           </tbody>
@@ -181,18 +187,18 @@ function ThermalInvoice({
         {/* Totals */}
         <div className="mt-1 space-y-0.5" style={{ borderTop: '1px solid #000', paddingTop: 4 }}>
           <div className="flex justify-between min-w-0">
-            <span className="text-[#888]">Subtotal</span>
+            <span className="text-[#888]">{L.subtotal}</span>
             <span className="font-medium">{formatCurrency(sale.subtotal)}</span>
           </div>
           {(sale.discount ?? 0) > 0 && (
             <div className="flex justify-between min-w-0">
-              <span className="text-[#888]">Discount</span>
+              <span className="text-[#888]">{L.discount}</span>
               <span className="font-medium">-{formatCurrency(sale.discount)}</span>
             </div>
           )}
           {(sale.tax ?? 0) > 0 && (
             <div className="flex justify-between min-w-0">
-              <span className="text-[#888]">Tax</span>
+              <span className="text-[#888]">{L.tax}</span>
               <span className="font-medium">+{formatCurrency(sale.tax)}</span>
             </div>
           )}
@@ -203,7 +209,7 @@ function ThermalInvoice({
 
       {/* Grand Total */}
       <div className={`${sectionPadding} py-1.5 flex justify-between font-bold text-sm`}>
-        <span>TOTAL</span>
+        <span>{L.total.toUpperCase()}</span>
         <span>{formatCurrency(sale.totalAmount)}</span>
       </div>
 
@@ -212,16 +218,16 @@ function ThermalInvoice({
       {/* Payment Info */}
       <div className={`${fontSize} space-y-0.5 ${sectionPadding} py-1`}>
         <div className="flex justify-between min-w-0">
-          <span className="text-[#888]">Payment</span>
-          <span className="font-semibold">{sale.paymentMethod}</span>
+          <span className="text-[#888]">{L.payment}</span>
+          <span className="font-semibold">{formatReceiptPaymentMethod(String(sale.paymentMethod ?? ''))}</span>
         </div>
         <div className="flex justify-between min-w-0">
-          <span className="text-[#888]">Status</span>
-          <span className="font-semibold">{sale.paymentStatus}</span>
+          <span className="text-[#888]">{L.status}</span>
+          <span className="font-semibold">{formatReceiptPaymentStatus(String(sale.paymentStatus ?? ''))}</span>
         </div>
         {toMoneyNumber(sale.amountPaid ?? 0) < toMoneyNumber(sale.totalAmount ?? 0) && (
           <div className="flex justify-between min-w-0">
-            <span className="text-[#888]">Due</span>
+            <span className="text-[#888]">{L.due}</span>
             <span className="font-bold">{formatCurrency(toMoneyNumber(new Decimal(sale.totalAmount ?? 0).minus(sale.amountPaid ?? 0)))}</span>
           </div>
         )}
@@ -230,8 +236,7 @@ function ThermalInvoice({
       {/* Footer */}
       <div style={{ borderTop: '1px dashed #555', margin: '4px 8px 0' }} />
       <div className={`${fontSize} text-center py-3 space-y-0.5`}>
-        <p className="font-bold text-sm">ধন্যবাদ!</p>
-        <p className="text-[#666]">Thank you for shopping!</p>
+        <p className="font-bold text-sm">{L.thankYou}</p>
         {footerMessage && <p className="text-[#aaa] text-[8px] mt-1">{footerMessage}</p>}
       </div>
     </div>
@@ -268,6 +273,12 @@ function StandardInvoice({
 }: StandardInvoiceProps) {
   // Use passed config or fallback to hardcoded defaults
   const config = storeConfig || STORE_CONFIG;
+  const lang = getReceiptLanguage();
+  const L = getReceiptLabels(lang);
+  const storeTitle = getReceiptStoreTitle(
+    { name: config.name, nameBn: config.nameBn },
+    lang,
+  );
   const isA4 = size === "A4";
   const paperWidth = isA4 ? "w-[210mm]" : "w-[148mm]";
   const paperHeight = isA4 ? "min-h-[297mm]" : "min-h-[210mm]";
@@ -291,15 +302,17 @@ function StandardInvoice({
             )
           )}
           <div>
-            <div style={{ fontWeight: 800, fontSize: isA4 ? 20 : 16, letterSpacing: 1 }}>{config.name}</div>
-            <div style={{ fontSize: isA4 ? 13 : 11, opacity: 0.8 }}>{config.nameBn}</div>
+            <div style={{ fontWeight: 800, fontSize: isA4 ? 20 : 16, letterSpacing: 1 }}>{storeTitle.primary}</div>
+            {storeTitle.secondary && (
+              <div style={{ fontSize: isA4 ? 13 : 11, opacity: 0.8 }}>{storeTitle.secondary}</div>
+            )}
             {config.address && <div style={{ fontSize: 11, opacity: 0.7, marginTop: 2 }}>{config.address}</div>}
             {config.phone && <div style={{ fontSize: 11, opacity: 0.7 }}>☎ {config.phone}</div>}
             {showGst && config.gstNumber && <div style={{ fontSize: 11, opacity: 0.7 }}>GST: {config.gstNumber}</div>}
           </div>
         </div>
         <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: isA4 ? 22 : 17, fontWeight: 900, letterSpacing: 2, opacity: 0.9 }}>INVOICE</div>
+          <div style={{ fontSize: isA4 ? 22 : 17, fontWeight: 900, letterSpacing: 2, opacity: 0.9 }}>{L.taxInvoice}</div>
           <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>#{sale.invoiceNumber}</div>
           <div style={{ fontSize: 11, opacity: 0.7 }}>{formatDate(sale.createdAt)} {formatTime(sale.createdAt)}</div>
         </div>
@@ -308,7 +321,7 @@ function StandardInvoice({
       {/* Bill To */}
       {sale.customer && (
         <div style={{ marginBottom: 20, padding: '10px 14px', background: '#f8f8f8', borderLeft: '4px solid #111', borderRadius: 2 }}>
-          <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#666', marginBottom: 4 }}>Bill To</div>
+          <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', color: '#666', marginBottom: 4 }}>{L.billTo}</div>
           <div style={{ fontWeight: 700, fontSize: 14 }}>{sale.customer.name}</div>
           {sale.customer.phone && <div style={{ fontSize: 12, color: '#555' }}>☎ {sale.customer.phone}</div>}
           {sale.customer.address && <div style={{ fontSize: 12, color: '#555' }}>{sale.customer.address}</div>}
@@ -320,18 +333,18 @@ function StandardInvoice({
         <thead>
           <tr style={{ background: '#111', color: '#fff' }}>
             <th style={{ padding: '8px 10px', textAlign: 'left', width: '5%' }}>#</th>
-            <th style={{ padding: '8px 10px', textAlign: 'left' }}>Item</th>
-            <th style={{ padding: '8px 10px', textAlign: 'center', width: '10%' }}>Qty</th>
-            <th style={{ padding: '8px 10px', textAlign: 'right', width: '15%' }}>Rate</th>
-            <th style={{ padding: '8px 10px', textAlign: 'right', width: '15%' }}>Amount</th>
+            <th style={{ padding: '8px 10px', textAlign: 'left' }}>{L.item}</th>
+            <th style={{ padding: '8px 10px', textAlign: 'center', width: '10%' }}>{L.qty}</th>
+            <th style={{ padding: '8px 10px', textAlign: 'right', width: '15%' }}>{L.rate}</th>
+            <th style={{ padding: '8px 10px', textAlign: 'right', width: '15%' }}>{L.amount}</th>
           </tr>
         </thead>
         <tbody>
           {sale.items.map((item, index) => (
             <tr key={item.id} style={{ borderBottom: '1px solid #e5e5e5', background: index % 2 === 0 ? '#fff' : '#fafafa' }}>
-              <td style={{ padding: '7px 10px', color: '#888' }}>{index + 1}</td>
+              <td style={{ padding: '7px 10px', color: '#888' }}>{formatReceiptNumber(index + 1)}</td>
               <td style={{ padding: '7px 10px', fontWeight: 500 }}>{item.productName}</td>
-              <td style={{ padding: '7px 10px', textAlign: 'center' }}>{item.quantity}{(item as any).unit || (item as any).product?.unit ? ` ${(item as any).unit || (item as any).product?.unit}` : ''}</td>
+              <td style={{ padding: '7px 10px', textAlign: 'center' }}>{formatReceiptNumber(item.quantity)}{(item as any).unit || (item as any).product?.unit ? ` ${(item as any).unit || (item as any).product?.unit}` : ''}</td>
               <td style={{ padding: '7px 10px', textAlign: 'right' }}>{formatCurrency(item.unitPrice)}</td>
               <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 600 }}>{formatCurrency(item.totalPrice)}</td>
             </tr>
@@ -343,28 +356,28 @@ function StandardInvoice({
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 20 }}>
         <div style={{ width: isA4 ? 240 : 200, fontSize: isA4 ? 13 : 11 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid #e5e5e5' }}>
-            <span style={{ color: '#666' }}>Subtotal</span>
+            <span style={{ color: '#666' }}>{L.subtotal}</span>
             <span>{formatCurrency(sale.subtotal)}</span>
           </div>
           {(sale.discount ?? 0) > 0 && (
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid #e5e5e5', color: '#16a34a' }}>
-              <span>Discount</span>
+              <span>{L.discount}</span>
               <span>-{formatCurrency(sale.discount)}</span>
             </div>
           )}
           {(sale.tax ?? 0) > 0 && (
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid #e5e5e5' }}>
-              <span style={{ color: '#666' }}>Tax</span>
+              <span style={{ color: '#666' }}>{L.tax}</span>
               <span>+{formatCurrency(sale.tax)}</span>
             </div>
           )}
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 10px', background: '#111', color: '#fff', fontWeight: 800, fontSize: isA4 ? 15 : 13, marginTop: 4, borderRadius: 2 }}>
-            <span>Grand Total</span>
+            <span>{L.grandTotal}</span>
             <span>{formatCurrency(sale.totalAmount)}</span>
           </div>
           {toMoneyNumber(sale.amountPaid ?? 0) < toMoneyNumber(sale.totalAmount ?? 0) && (
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 10px', background: '#fee2e2', color: '#b91c1c', fontWeight: 700, fontSize: 12, marginTop: 2, borderRadius: 2 }}>
-              <span>Due</span>
+              <span>{L.due}</span>
               <span>{formatCurrency(toMoneyNumber(new Decimal(sale.totalAmount ?? 0).minus(sale.amountPaid ?? 0)))}</span>
             </div>
           )}
@@ -374,13 +387,13 @@ function StandardInvoice({
       {/* Payment + Notes row */}
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 24, fontSize: isA4 ? 12 : 11, padding: '10px 14px', background: '#f8f8f8', borderRadius: 4 }}>
         <div>
-          <div style={{ fontWeight: 700, marginBottom: 3 }}>Payment Details</div>
-          <div>Method: <strong>{sale.paymentMethod}</strong></div>
-          <div>Status: <strong style={{ color: sale.paymentStatus === 'Paid' ? '#16a34a' : sale.paymentStatus === 'Partial' ? '#d97706' : '#dc2626' }}>{sale.paymentStatus}</strong></div>
+          <div style={{ fontWeight: 700, marginBottom: 3 }}>{L.paymentDetails}</div>
+          <div>{L.method}: <strong>{formatReceiptPaymentMethod(String(sale.paymentMethod ?? ''))}</strong></div>
+          <div>{L.status}: <strong style={{ color: sale.paymentStatus === 'Paid' ? '#16a34a' : sale.paymentStatus === 'Partial' ? '#d97706' : '#dc2626' }}>{formatReceiptPaymentStatus(String(sale.paymentStatus ?? ''))}</strong></div>
         </div>
         {sale.notes && (
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontWeight: 700, marginBottom: 3 }}>Notes</div>
+            <div style={{ fontWeight: 700, marginBottom: 3 }}>{L.notes}</div>
             <div style={{ color: '#555' }}>{sale.notes}</div>
           </div>
         )}
@@ -389,16 +402,16 @@ function StandardInvoice({
       {/* Footer */}
       <div style={{ borderTop: '2px solid #e5e5e5', paddingTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', fontSize: 11, color: '#666' }}>
         <div>
-          <div style={{ fontWeight: 700, marginBottom: 4 }}>Terms & Conditions</div>
-          <div>• Goods once sold will not be taken back.</div>
-          <div>• Subject to local jurisdiction.</div>
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>{L.terms}</div>
+          <div>• {L.term1}</div>
+          <div>• {L.term2}</div>
         </div>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ borderTop: '1px solid #999', width: 120, paddingTop: 4, marginTop: 32 }}>Authorized Signatory</div>
+          <div style={{ borderTop: '1px solid #999', width: 120, paddingTop: 4, marginTop: 32 }}>{L.signatory}</div>
         </div>
       </div>
       <div style={{ textAlign: 'center', marginTop: 16, paddingTop: 12, borderTop: '1px solid #e5e5e5', fontSize: 12 }}>
-        <strong>ধন্যবাদ! Thank you for shopping with us!</strong>
+        <strong>{L.thankYou}</strong>
         {footerMessage && <div style={{ fontSize: 10, color: '#999', marginTop: 4 }}>{footerMessage}</div>}
       </div>
     </div>

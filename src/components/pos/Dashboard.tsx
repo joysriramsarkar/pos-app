@@ -85,6 +85,8 @@ interface StatsData {
   todayOrders: number;
   todayCash: number;
   todayUpi: number;
+  todayDueCreated?: number;
+  todayCollected?: number;
   todayExpenses: number;
   totalDue: number;
   lowStockCount: number;
@@ -94,6 +96,7 @@ interface StatsData {
     nameBn: string;
     currentStock: number;
     minStockLevel: number;
+    soldLast7?: number;
   }[];
   recentTransactions: Transaction[];
   paymentBreakdown: {
@@ -101,6 +104,15 @@ interface StatsData {
     'ইউপিআই': number;
     'মিশ্র': number;
     'বাকি': number;
+  };
+  reconciliation?: {
+    salesTotal: number;
+    cashInDrawer: number;
+    upiCollected: number;
+    collected: number;
+    dueCreated: number;
+    expenses: number;
+    expectedCashAfterExpenses: number;
   };
   totalProducts: number;
   totalCustomers: number;
@@ -711,6 +723,38 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         </CardContent>
       </Card>
 
+      {/* Day-end reconciliation strip */}
+      {stats?.reconciliation && (
+        <Card className="shadow-md border-emerald-200/60 dark:border-emerald-900/40 animate-stagger-in" style={{ animationDelay: '0.35s' }}>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">{t('day_end_reconciliation') || 'Day-end reconciliation'}</CardTitle>
+            <CardDescription>
+              {t('day_end_reconciliation_desc') || 'Cash drawer vs UPI vs dues opened today'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+              <div className="rounded-lg bg-green-50 dark:bg-green-950/30 p-3">
+                <p className="text-muted-foreground text-xs">{t('cash')}</p>
+                <p className="font-semibold tabular-nums">{formatTaka(stats.reconciliation.cashInDrawer)}</p>
+              </div>
+              <div className="rounded-lg bg-blue-50 dark:bg-blue-950/30 p-3">
+                <p className="text-muted-foreground text-xs">{t('upi')}</p>
+                <p className="font-semibold tabular-nums">{formatTaka(stats.reconciliation.upiCollected)}</p>
+              </div>
+              <div className="rounded-lg bg-orange-50 dark:bg-orange-950/30 p-3">
+                <p className="text-muted-foreground text-xs">{t('due')}</p>
+                <p className="font-semibold tabular-nums">{formatTaka(stats.reconciliation.dueCreated)}</p>
+              </div>
+              <div className="rounded-lg bg-muted/50 p-3">
+                <p className="text-muted-foreground text-xs">{t('expected_drawer') || 'Expected cash after expenses'}</p>
+                <p className="font-semibold tabular-nums">{formatTaka(stats.reconciliation.expectedCashAfterExpenses)}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Payment Breakdown & Today's Expenses */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-stagger-in" style={{ animationDelay: '0.4s' }}>
         {/* Payment Breakdown */}
@@ -821,6 +865,9 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                           {product.currentStock === 0
                             ? t('out_of_stock')
                             : `${product.currentStock} ${t('left')}`}
+                          {typeof product.soldLast7 === 'number' && product.soldLast7 > 0
+                            ? ` · 7d: ${product.soldLast7}`
+                            : ''}
                         </p>
                       </div>
                     </div>

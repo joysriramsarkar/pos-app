@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
     // Single customer detail
     if (customerId) {
       const orders = await prisma.sale.findMany({
-        where: { customerId, createdAt: { gte: startDate, lte: endDate }, status: "Completed" },
+        where: { customerId, createdAt: { gte: startDate, lte: endDate }, status: { in: ["Completed", "PartialReturn"] } },
         include: {
           items: {
             include: { product: { select: { id: true, category: true } } },
@@ -116,7 +116,7 @@ export async function GET(request: NextRequest) {
       by: ["customerId"],
       where: {
         createdAt: { gte: startDate, lte: endDate },
-        status: "Completed",
+        status: { in: ["Completed", "PartialReturn"] },
         customerId: { not: null },
       },
       _sum: { totalAmount: true },

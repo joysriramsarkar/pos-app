@@ -39,7 +39,7 @@ export default function LanguageTab({ localSettings, handleChange, handleSave, i
 
         <div className="space-y-2">
           <Label>{t("receipt_language")}</Label>
-          <Select value={localSettings.receipt_language} onValueChange={(val) => handleChange("receipt_language", val as "en" | "bn")}>
+          <Select value={localSettings.receipt_language} onValueChange={(val) => handleChange("receipt_language", val as "en" | "bn" | "both")}>
             <SelectTrigger className="w-full md:w-[300px]">
               <SelectValue />
             </SelectTrigger>

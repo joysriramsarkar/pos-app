@@ -7,6 +7,9 @@ export const revalidate = 30;
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requirePermission } from '@/lib/api-middleware';
+import { aggregateSalePayments } from '@/lib/sale-payment-breakdown';
+
+const jsonHeaders = { 'Content-Type': 'application/json; charset=utf-8' };
 
 export async function GET(request: NextRequest) {
   const authError = await requirePermission(request, 'sales.view');
@@ -29,14 +32,14 @@ export async function GET(request: NextRequest) {
     const yesterdayStart = new Date(startOfDay);
     yesterdayStart.setDate(yesterdayStart.getDate() - 1);
 
-    // Today's sales
+    // Today's sales (Completed + PartialReturn — exclude Cancelled/full Refunded originals)
     const todaySales = await db.sale.findMany({
       where: {
         createdAt: {
           gte: startOfDay,
           lt: endOfDay,
         },
-        status: 'Completed',
+        status: { in: ['Completed', 'PartialReturn'] },
       },
       include: {
         customer: {
@@ -45,10 +48,13 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    const todaySalesTotal = todaySales.reduce((sum, sale) => sum + Number(sale.totalAmount || 0), 0);
-    const todayOrdersCount = todaySales.length;
-    const todayCashTotal = todaySales.reduce((sum, sale) => sum + Number(sale.cashAmount || 0), 0);
-    const todayUpiTotal = todaySales.reduce((sum, sale) => sum + Number(sale.upiAmount || 0), 0);
+    const todayAgg = aggregateSalePayments(todaySales);
+    const todaySalesTotal = todayAgg.salesTotal;
+    const todayOrdersCount = todayAgg.orders;
+    const todayCashTotal = todayAgg.cash;
+    const todayUpiTotal = todayAgg.upi;
+    const todayDueCreated = todayAgg.dueCreated;
+    const todayCollected = todayAgg.collected;
 
     // Yesterday's sales
     const yesterdaySales = await db.sale.findMany({
@@ -86,11 +92,35 @@ export async function GET(request: NextRequest) {
     });
     const totalDue = customersWithDue.reduce((sum, c) => sum + Number(c.totalDue || 0), 0);
 
-    // Low stock count - সরাসরি ডেটাবেসে filter করা, পুরো টেবিল মেমরিতে না এনে
-    const lowStockProducts = await db.$queryRaw<{ id: string; name: string; nameBn: string | null; currentStock: number; minStockLevel: number }[]>`
-      SELECT id, name, name_bn as "nameBn", CAST(current_stock AS FLOAT) as "currentStock", CAST(min_stock_level AS FLOAT) as "minStockLevel"
-      FROM products
-      WHERE is_active = true AND current_stock <= min_stock_level
+    // Low stock — prefer items with recent sales velocity (restock first what sells)
+    const day7StartForStock = new Date(startOfDay);
+    day7StartForStock.setDate(day7StartForStock.getDate() - 6);
+
+    const lowStockProducts = await db.$queryRaw<{
+      id: string;
+      name: string;
+      nameBn: string | null;
+      currentStock: number;
+      minStockLevel: number;
+      soldLast7: number;
+    }[]>`
+      SELECT p.id, p.name, p.name_bn as "nameBn",
+             CAST(p.current_stock AS FLOAT) as "currentStock",
+             CAST(p.min_stock_level AS FLOAT) as "minStockLevel",
+             COALESCE(CAST(v.sold AS FLOAT), 0) as "soldLast7"
+      FROM products p
+      LEFT JOIN (
+        SELECT si.product_id, SUM(si.quantity) as sold
+        FROM sale_items si
+        INNER JOIN sales s ON s.id = si.sale_id
+        WHERE s.created_at >= ${day7StartForStock}
+          AND s.created_at < ${endOfDay}
+          AND s.status IN ('Completed', 'PartialReturn')
+          AND si.quantity > 0
+        GROUP BY si.product_id
+      ) v ON v.product_id = p.id
+      WHERE p.is_active = true AND p.current_stock <= p.min_stock_level
+      ORDER BY COALESCE(v.sold, 0) DESC, p.current_stock ASC
       LIMIT 20
     `;
 
@@ -115,14 +145,21 @@ export async function GET(request: NextRequest) {
       },
     });
 
+    // Keep English codes in API (UTF-8 safe); UI translates — avoids mojibake double-encoding
     const recentTransactions = recentSales.map(tx => ({
       id: tx.id,
       invoiceNumber: tx.invoiceNumber,
       totalAmount: Number(tx.totalAmount || 0),
       amountPaid: Number(tx.amountPaid || 0),
-      paymentMethod: tx.paymentMethod === 'Cash' ? 'নগদ' : tx.paymentMethod === 'UPI' ? 'ইউপিআই' : tx.paymentMethod === 'Mixed' ? 'মিশ্র' : 'বাকি',
-      paymentStatus: tx.paymentStatus === 'Paid' ? 'সম্পন্ন' : tx.paymentStatus === 'Partial' ? 'আংশিক' : 'বাকি',
-      status: tx.status === 'Completed' ? 'সম্পন্ন' : tx.status === 'Cancelled' ? 'বাতিল' : 'রিফান্ড',
+      paymentMethod: tx.paymentMethod || 'Cash',
+      paymentMethodLabel:
+        tx.paymentMethod === 'Cash' ? 'নগদ'
+        : tx.paymentMethod === 'UPI' ? 'ইউপিআই'
+        : tx.paymentMethod === 'Mixed' ? 'মিশ্র'
+        : tx.paymentMethod === 'Prepaid' ? 'প্রিপেইড'
+        : 'বাকি',
+      paymentStatus: tx.paymentStatus || 'Paid',
+      status: tx.status || 'Completed',
       createdAt: tx.createdAt.toISOString(),
       customer: tx.customer,
       user: tx.user,
@@ -145,12 +182,25 @@ export async function GET(request: NextRequest) {
     });
     const todayExpensesTotal = todayExpenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
 
-    // Payment method breakdown for today
+    // Drawer-oriented breakdown (actual money in / credit opened) — keys kept for Dashboard i18n
     const paymentBreakdown = {
-      'নগদ': todaySales.filter(s => s.paymentMethod === 'Cash').reduce((sum, s) => sum + Number(s.totalAmount || 0), 0),
-      'ইউপিআই': todaySales.filter(s => s.paymentMethod === 'UPI').reduce((sum, s) => sum + Number(s.totalAmount || 0), 0),
-      'মিশ্র': todaySales.filter(s => s.paymentMethod === 'Mixed').reduce((sum, s) => sum + Number(s.totalAmount || 0), 0),
-      'বাকি': todaySales.filter(s => s.paymentMethod === 'Due').reduce((sum, s) => sum + Number(s.totalAmount || 0), 0),
+      'নগদ': todayCashTotal,
+      'ইউপিআই': todayUpiTotal,
+      'মিশ্র': todaySales
+        .filter((s) => s.paymentMethod === 'Mixed')
+        .reduce((sum, s) => sum + Number(s.totalAmount || 0), 0),
+      'বাকি': todayDueCreated,
+    };
+
+    // Day-end reconciliation strip
+    const reconciliation = {
+      salesTotal: todaySalesTotal,
+      cashInDrawer: todayCashTotal,
+      upiCollected: todayUpiTotal,
+      collected: todayCollected,
+      dueCreated: todayDueCreated,
+      expenses: todayExpensesTotal,
+      expectedCashAfterExpenses: todayCashTotal - todayExpensesTotal,
     };
 
     // Total products count
@@ -252,40 +302,47 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        todaySales: todaySalesTotal,
-        todayOrders: todayOrdersCount,
-        todayCash: todayCashTotal,
-        todayUpi: todayUpiTotal,
-        todayExpenses: todayExpensesTotal,
-        totalDue,
-        lowStockCount: lowStockProducts.length,
-        lowStockProducts: lowStockProducts.map(p => ({
-          id: p.id,
-          name: p.name,
-          nameBn: p.nameBn || p.name,
-          currentStock: Number(p.currentStock),
-          minStockLevel: Number(p.minStockLevel),
-        })),
-        recentTransactions,
-        paymentBreakdown,
-        totalProducts,
-        totalCustomers,
-        todayProfit,
-        last7DaysSales,
-        profitMargin,
-        yesterdaySales: yesterdaySalesTotal,
-        yesterdayOrders: yesterdayOrdersCount,
-        yesterdayExpenses: yesterdayExpensesTotal,
+    return NextResponse.json(
+      {
+        success: true,
+        data: {
+          todaySales: todaySalesTotal,
+          todayOrders: todayOrdersCount,
+          todayCash: todayCashTotal,
+          todayUpi: todayUpiTotal,
+          todayDueCreated,
+          todayCollected,
+          todayExpenses: todayExpensesTotal,
+          totalDue,
+          lowStockCount: lowStockProducts.length,
+          lowStockProducts: lowStockProducts.map(p => ({
+            id: p.id,
+            name: p.name,
+            nameBn: p.nameBn || p.name,
+            currentStock: Number(p.currentStock),
+            minStockLevel: Number(p.minStockLevel),
+            soldLast7: Number(p.soldLast7 || 0),
+          })),
+          recentTransactions,
+          paymentBreakdown,
+          reconciliation,
+          totalProducts,
+          totalCustomers,
+          todayProfit,
+          last7DaysSales,
+          profitMargin,
+          yesterdaySales: yesterdaySalesTotal,
+          yesterdayOrders: yesterdayOrdersCount,
+          yesterdayExpenses: yesterdayExpensesTotal,
+        },
       },
-    });
+      { headers: jsonHeaders },
+    );
   } catch (error) {
     console.error('Error fetching dashboard stats:', error);
     return NextResponse.json(
       { success: false, error: 'Failed to fetch dashboard stats' },
-      { status: 500 }
+      { status: 500, headers: jsonHeaders },
     );
   }
 }

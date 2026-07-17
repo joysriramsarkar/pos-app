@@ -14,7 +14,7 @@ import { useProductsStore, useUIStore, useCartStore } from '@/stores/pos-store';
 import { cn, convertBengaliToEnglishNumerals } from '@/lib/utils';
 import { useTranslations } from 'next-intl';
 
-const cleanSearchQuery = (q: string) => q.replace(/rs\.?|₹|'/gi, '').trim();
+const cleanSearchQuery = (q: string) => q.replace(/rs\.?|₹|৳|'/gi, '').trim();
 import { useToast } from '@/hooks/use-toast';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useNumberFormat } from '@/hooks/use-number-format';

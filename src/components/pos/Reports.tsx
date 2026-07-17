@@ -1,6 +1,38 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid,
+  Tooltip as RechartsTooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell,
+} from 'recharts';
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  TrendingUp, TrendingDown, DollarSign, Package, Users,
+  AlertTriangle, Download, BarChart2, Lightbulb, ChevronRight, Receipt, ExternalLink,
+} from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import { format, subDays } from 'date-fns';
+import { useTranslations } from 'next-intl';
+import { useNumberFormat } from '@/hooks/use-number-format';
+import {
+  PAYMENT_METHOD_COLORS,
+  paymentMethodLabelBn,
+  paymentMethodLabelEn,
+} from '@/lib/report-filters';
 
 interface SaleChartPoint { date: string; revenue: number; profit: number; count: number; }
 interface SummaryData {
@@ -26,60 +58,49 @@ interface CustomerDetail {
   monthlyTrend: { month: string; spent: number; }[];
   topProducts: { id: string; name: string; qty: number; revenue: number; }[];
 }
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid,
-  Tooltip as RechartsTooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell
-} from 'recharts';
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  TrendingUp, TrendingDown, DollarSign, Package, Users,
-  AlertTriangle, Download, BarChart2, Lightbulb, ChevronRight, Receipt, ExternalLink
-} from 'lucide-react';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from '@/components/ui/dialog';
-import { format, subDays } from 'date-fns';
-import { useTranslations } from 'next-intl';
-import { useNumberFormat } from '@/hooks/use-number-format';
 
 type ChartType = 'bar' | 'line';
 type DatePreset = '1' | '7' | '30' | '365' | 'custom';
 
-const PAYMENT_COLORS = [
-  'var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)',
-  'var(--chart-5)', 'var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)'
-];
 
 const salesChartConfig = {
   revenue: { label: "Revenue", color: "var(--chart-1)" },
-  profit: { label: "Profit", color: "var(--chart-2)" }
+  profit: { label: "Profit", color: "var(--chart-2)" },
 };
 
-const paymentChartConfig = {
-  "Cash": { label: "Cash", color: "var(--chart-1)" },
-  "Card": { label: "Card", color: "var(--chart-2)" },
-  "UPI": { label: "UPI", color: "var(--chart-3)" },
-  "Others": { label: "Others", color: "var(--chart-4)" }
-};
+/** Build pie config + colors from actual payment keys (Cash/UPI/Mixed/Due/Prepaid) */
+function buildPaymentChartConfig(keys: string[], isBn: boolean) {
+  const config: Record<string, { label: string; color: string }> = {};
+  for (const key of keys) {
+    config[key] = {
+      label: isBn ? paymentMethodLabelBn(key) : paymentMethodLabelEn(key),
+      color: PAYMENT_METHOD_COLORS[key] || "var(--chart-5)",
+    };
+  }
+  if (!config.Others) {
+    config.Others = {
+      label: isBn ? "অন্যান্য" : "Others",
+      color: PAYMENT_METHOD_COLORS.Others,
+    };
+  }
+  return config;
+}
+
+function paymentSliceColor(name: string, index: number): string {
+  return PAYMENT_METHOD_COLORS[name] || `var(--chart-${(index % 5) + 1})`;
+}
+
+function categorySliceColor(index: number): string {
+  return `var(--chart-${(index % 5) + 1})`;
+}
 
 function mergeSmallSlices(data: { name: string; value: number }[], threshold = 0.04) {
   const total = data.reduce((s, d) => s + d.value, 0);
-  const main = data.filter(d => d.value / total >= threshold);
-  const others = data.filter(d => d.value / total < threshold);
+  if (total <= 0) return data;
+  const main = data.filter((d) => d.value / total >= threshold);
+  const others = data.filter((d) => d.value / total < threshold);
   if (!others.length) return main;
-  return [...main, { name: 'Others', value: others.reduce((s, d) => s + d.value, 0) }];
+  return [...main, { name: "Others", value: others.reduce((s, d) => s + d.value, 0) }];
 }
 
 const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate }) => {
@@ -307,8 +328,16 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
 
   const paymentBreakdown = useMemo(() => {
     if (!summaryData?.paymentBreakdown) return [];
-    return Object.entries(summaryData.paymentBreakdown).map(([name, value]) => ({ name, value: value as number }));
+    return Object.entries(summaryData.paymentBreakdown)
+      .filter(([, value]) => Number(value) > 0)
+      .map(([name, value]) => ({ name, value: Number(value) }))
+      .sort((a, b) => b.value - a.value);
   }, [summaryData]);
+
+  const paymentChartConfig = useMemo(
+    () => buildPaymentChartConfig(paymentBreakdown.map((p) => p.name), isBn),
+    [paymentBreakdown, isBn],
+  );
 
   // CSV export — Sales
   const handleExportCSV = useCallback(() => {
@@ -628,14 +657,46 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
                     {paymentBreakdown.length > 0 ? (
                       <ChartContainer config={paymentChartConfig} className="w-full h-full aspect-auto">
                         <PieChart>
-                          {(() => { const d = mergeSmallSlices(paymentBreakdown); return (
-                          <Pie data={d} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80}>
-                            {d.map((_, i) => (
-                              <Cell key={i} fill={PAYMENT_COLORS[i % PAYMENT_COLORS.length]} />
-                            ))}
-                          </Pie>
-                          ); })()}
-                          <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
+                          {(() => {
+                            const d = mergeSmallSlices(paymentBreakdown).map((slice) => ({
+                              ...slice,
+                              // Legend/tooltip show localized label; keep id for color
+                              displayName: isBn
+                                ? paymentMethodLabelBn(slice.name)
+                                : paymentMethodLabelEn(slice.name),
+                            }));
+                            return (
+                              <Pie
+                                data={d}
+                                dataKey="value"
+                                nameKey="displayName"
+                                cx="50%"
+                                cy="50%"
+                                outerRadius={80}
+                                strokeWidth={2}
+                              >
+                                {d.map((slice, i) => (
+                                  <Cell
+                                    key={slice.name}
+                                    fill={paymentSliceColor(slice.name, i)}
+                                  />
+                                ))}
+                              </Pie>
+                            );
+                          })()}
+                          <ChartTooltip
+                            cursor={false}
+                            content={
+                              <ChartTooltipContent
+                                formatter={(value, name) => (
+                                  <div className="flex items-center justify-between gap-3 min-w-[120px]">
+                                    <span className="text-muted-foreground text-xs">{String(name)}</span>
+                                    <span className="font-bold tabular-nums">{formatPrice(Number(value))}</span>
+                                  </div>
+                                )}
+                              />
+                            }
+                          />
                           <Legend wrapperStyle={{ fontSize: '12px' }} />
                         </PieChart>
                       </ChartContainer>
@@ -667,11 +728,14 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
                         return (
                           <TableRow key={p.name}>
                             <TableCell className="flex items-center gap-2">
-                              <span className="w-3 h-3 rounded-full inline-block" style={{ background: PAYMENT_COLORS[i % PAYMENT_COLORS.length] }} />
-                              {p.name}
+                              <span
+                                className="w-3 h-3 rounded-full inline-block shrink-0"
+                                style={{ background: paymentSliceColor(p.name, i) }}
+                              />
+                              {isBn ? paymentMethodLabelBn(p.name) : paymentMethodLabelEn(p.name)}
                             </TableCell>
-                            <TableCell className="text-right font-medium">{formatPrice(p.value as number)}</TableCell>
-                            <TableCell className="text-right text-muted-foreground">{total > 0 ? formatNumber(Number(((p.value as number / total) * 100).toFixed(1))) : 0}%</TableCell>
+                            <TableCell className="text-right font-medium tabular-nums">{formatPrice(p.value as number)}</TableCell>
+                            <TableCell className="text-right text-muted-foreground tabular-nums">{total > 0 ? formatNumber(Number(((p.value as number / total) * 100).toFixed(1))) : 0}%</TableCell>
                           </TableRow>
                         );
                       }) : (
@@ -917,12 +981,12 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
                         <PieChart>
                           {(() => { const d = mergeSmallSlices(categoryData.map(c => ({ name: c.name, value: c.revenue }))); return (
                           <Pie data={d} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80}>
-                            {d.map((_, i) => (
-                              <Cell key={i} fill={PAYMENT_COLORS[i % PAYMENT_COLORS.length]} />
+                            {d.map((slice, i) => (
+                              <Cell key={slice.name} fill={categorySliceColor(i)} />
                             ))}
                           </Pie>
                           ); })()}
-                          <RechartsTooltip formatter={(v: number) => `₹${v.toFixed(2)}`} />
+                          <RechartsTooltip formatter={(v: number) => formatPrice(Number(v))} />
                           <Legend wrapperStyle={{ fontSize: '12px' }} />
                         </PieChart>
                       </ResponsiveContainer>
@@ -958,7 +1022,7 @@ const Reports: React.FC<{ onNavigate?: (page: string) => void }> = ({ onNavigate
                         ) : categoryData.length > 0 ? categoryData.map((c, i) => (
                           <TableRow key={c.name}>
                             <TableCell className="flex items-center gap-2">
-                              <span className="w-3 h-3 rounded-full inline-block shrink-0" style={{ background: PAYMENT_COLORS[i % PAYMENT_COLORS.length] }} />
+                              <span className="w-3 h-3 rounded-full inline-block shrink-0" style={{ background: categorySliceColor(i) }} />
                               {c.name}
                             </TableCell>
                             <TableCell className="text-right font-medium">{formatPrice(Number(c.revenue))}</TableCell>
@@ -1189,10 +1253,10 @@ function ProductDetailContent({ product, dateParams, detail, setDetail, isLoadin
       {/* Summary Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: t('total_sold'), value: `${summary.totalQty} ${p.unit}`, color: 'text-blue-600' },
-          { label: t('revenue'), value: `₹${summary.totalRevenue.toFixed(0)}`, color: 'text-primary' },
-          { label: t('profit'), value: `₹${summary.totalProfit.toFixed(0)}`, color: summary.totalProfit >= 0 ? 'text-emerald-600' : 'text-red-500' },
-          { label: t('margin_label'), value: `${summary.profitMargin}%`, color: 'text-amber-600' },
+          { label: t('total_sold'), value: `${formatStringNumbers(summary.totalQty)} ${p.unit}`, color: 'text-blue-600' },
+          { label: t('revenue'), value: formatPrice(summary.totalRevenue), color: 'text-primary' },
+          { label: t('profit'), value: formatPrice(summary.totalProfit), color: summary.totalProfit >= 0 ? 'text-emerald-600' : 'text-red-500' },
+          { label: t('margin_label'), value: `${formatStringNumbers(summary.profitMargin)}%`, color: 'text-amber-600' },
         ].map(s => (
           <div key={s.label} className="bg-muted/50 rounded-xl p-3 text-center">
             <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
@@ -1204,10 +1268,10 @@ function ProductDetailContent({ product, dateParams, detail, setDetail, isLoadin
       {/* Peak info + stock */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: t('peak_hour'), value: summary.peakHour },
+          { label: t('peak_hour'), value: formatStringNumbers(summary.peakHour) },
           { label: t('peak_day'), value: summary.peakDay },
-          { label: t('avg_qty'), value: summary.avgOrderQty.toFixed(1) },
-          { label: t('current_stock'), value: `${p.currentStock} ${p.unit}`, color: p.currentStock <= p.minStockLevel ? 'text-red-500' : 'text-emerald-600' },
+          { label: t('avg_qty'), value: formatStringNumbers(summary.avgOrderQty.toFixed(1)) },
+          { label: t('current_stock'), value: `${formatStringNumbers(p.currentStock)} ${p.unit}`, color: p.currentStock <= p.minStockLevel ? 'text-red-500' : 'text-emerald-600' },
         ].map(s => (
           <div key={s.label} className="border rounded-xl p-3 text-center">
             <p className={`text-base font-semibold ${(s as any).color ?? ''}`}>{s.value}</p>
@@ -1296,7 +1360,7 @@ function ProductDetailContent({ product, dateParams, detail, setDetail, isLoadin
                     {c.phone && <p className="text-xs text-muted-foreground">{c.phone}</p>}
                   </TableCell>
                   <TableCell className="text-right">{c.qty} <span className="text-xs text-muted-foreground">{p.unit}</span></TableCell>
-                  <TableCell className="text-right font-medium">₹{c.revenue.toFixed(2)}</TableCell>
+                  <TableCell className="text-right font-medium">{formatPrice(c.revenue)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -1336,9 +1400,9 @@ function CustomerDetailContent({ customer, dateParams, detail, setDetail, isLoad
     <div className="space-y-4">
       <div className="grid grid-cols-3 gap-3">
         {[
-          { label: t('total_spent'), value: `₹${detail.totalSpent.toFixed(2)}`, color: 'text-primary' },
-          { label: t('orders'), value: detail.orderCount, color: '' },
-          { label: t('avg_order'), value: `₹${detail.aov.toFixed(2)}`, color: '' },
+          { label: t('total_spent'), value: formatPrice(detail.totalSpent), color: 'text-primary' },
+          { label: t('orders'), value: formatStringNumbers(detail.orderCount), color: '' },
+          { label: t('avg_order'), value: formatPrice(detail.aov), color: '' },
         ].map(s => (
           <div key={s.label} className="bg-muted rounded-lg p-3 text-center">
             <p className={`text-lg font-bold ${s.color}`}>{s.value}</p>
@@ -1378,8 +1442,8 @@ function CustomerDetailContent({ customer, dateParams, detail, setDetail, isLoad
               {detail.topProducts.map((p) => (
                 <TableRow key={p.id}>
                   <TableCell className="text-sm">{p.name}</TableCell>
-                  <TableCell className="text-right text-sm">{p.qty}</TableCell>
-                  <TableCell className="text-right text-sm font-medium">₹{p.revenue.toFixed(2)}</TableCell>
+                  <TableCell className="text-right text-sm">{formatStringNumbers(p.qty)}</TableCell>
+                  <TableCell className="text-right text-sm font-medium">{formatPrice(p.revenue)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -1557,7 +1621,7 @@ function ExpensesTabContent({ expenses, dateParams, onNavigate, isLoading }: {
                   <TableCell className="text-sm">{cat}</TableCell>
                   <TableCell className="text-right text-sm">{filtered.filter(e => e.category === cat).length}</TableCell>
                   <TableCell className="text-right font-semibold text-sm">{fp(amt)}</TableCell>
-                  <TableCell className="text-right text-xs text-muted-foreground">{total > 0 ? ((amt/total)*100).toFixed(1) : 0}%</TableCell>
+                  <TableCell className="text-right text-xs text-muted-foreground">{total > 0 ? formatStringNumbers(((amt/total)*100).toFixed(1)) : formatStringNumbers(0)}%</TableCell>
                 </TableRow>
               ))}
             </TableBody>

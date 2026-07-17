@@ -208,7 +208,8 @@
     "export_failed": "Export Failed",
     "payment": "Payment",
     "partial": "Partial",
-    "max": "Max"
+    "max": "Max",
+    "refresh": "Refresh"
   },
   "DailyCalculator": {
     "title": "Profit-Loss Calculator",
@@ -336,6 +337,9 @@
     "upi": "Upi",
     "due": "Due",
     "today_payments_breakdown": "Today Payments Breakdown",
+    "day_end_reconciliation": "Day-end reconciliation",
+    "day_end_reconciliation_desc": "Cash drawer vs UPI vs dues opened today (after expenses)",
+    "expected_drawer": "Cash after expenses",
     "user": "User",
     "good_morning": "Good Morning",
     "good_afternoon": "Good Afternoon",
@@ -407,9 +411,14 @@
     "no_customers_with_due": "No Customers With Due",
     "all_clear": "All Clear",
     "cash": "Cash",
-    "upi": "Upi",
+    "upi": "UPI",
     "mixed": "Mixed",
     "amount_exceeds": "Amount Exceeds",
+    "top_dues": "Top dues — tap to collect",
+    "sort_due": "Due",
+    "sort_name": "Name",
+    "sort_oldest": "Oldest",
+    "today": "Today",
     "enter_amount": "Enter Amount"
   },
   "Expenses": {
@@ -504,7 +513,8 @@
     "hourly": "Hourly",
     "expense": "Expense",
     "count": "Count",
-    "loading": "Loading expenses..."
+    "loading": "Loading expenses...",
+    "yearly": "Yearly"
   },
   "Keyboard": {
     "title": "Keyboard Shortcuts",
@@ -808,14 +818,21 @@
     "footer_message": "Footer Message",
     "footer_placeholder": "Footer Placeholder",
     "share_invoice": "Share Invoice",
-    "share_mobile": "Share Mobile",
-    "share_desktop": "Share Desktop",
+    "share_mobile": "On mobile: share the PDF via WhatsApp, email, etc.",
+    "share_desktop": "On desktop: PDF is shared if supported, otherwise downloaded.",
     "print_invoice": "Print Invoice",
-    "preparing": "Preparing",
-    "sharing": "Sharing",
-    "tap_to_share": "Tap To Share",
-    "share_whatsapp": "Share Whatsapp",
-    "computer_generated": "Computer Generated"
+    "printing": "Printing…",
+    "preparing": "Preparing…",
+    "sharing": "Sharing…",
+    "tap_to_share": "Tap to Share",
+    "share_whatsapp": "Share PDF",
+    "computer_generated": "Computer Generated",
+    "shared": "Shared",
+    "shared_desc": "Invoice shared successfully.",
+    "downloaded": "Downloaded",
+    "downloaded_desc": "Invoice PDF downloaded.",
+    "share_failed": "Share failed",
+    "share_failed_desc": "Unable to share or download the invoice."
   },
   "PrintInvoice": {
     "title": "Invoice",
@@ -1134,6 +1151,7 @@
     "qty": "Qty",
     "from": "From",
     "to": "To",
+    "mixed_payment": "Mixed Payment",
     "ai_suggested_questions": "Ai Suggested Questions",
     "ai_ask_custom": "Ai Ask Custom",
     "ai_analyzing": "Ai Analyzing",
@@ -1524,17 +1542,17 @@
     "cancel_order": "Cancel Order",
     "refund_order": "Refund Order",
     "invoice_ready": "Invoice Ready",
-    "invoice_ready_desc": "Invoice Ready Desc",
+    "invoice_ready_desc": "PDF is ready to share.",
     "shared": "Shared",
-    "shared_desc": "Shared Desc",
+    "shared_desc": "Invoice shared successfully.",
     "downloaded": "Downloaded",
-    "downloaded_desc": "Downloaded Desc",
-    "share_failed": "Share Failed",
-    "share_failed_desc": "Share Failed Desc",
-    "preparing": "Preparing",
-    "sharing": "Sharing",
-    "tap_to_share": "Tap To Share",
-    "share_whatsapp": "Share Whatsapp"
+    "downloaded_desc": "Invoice PDF downloaded.",
+    "share_failed": "Share failed",
+    "share_failed_desc": "Unable to share or download the invoice.",
+    "preparing": "Preparing…",
+    "sharing": "Sharing…",
+    "tap_to_share": "Tap to Share",
+    "share_whatsapp": "Share PDF"
   },
   "TransactionHistory": {
     "title": "Transaction History",
@@ -1573,10 +1591,12 @@
     "refunded": "Refunded",
     "all_methods": "All Methods",
     "cash": "Cash",
-    "upi": "Upi",
+    "upi": "UPI",
     "due": "Due",
     "prepaid": "Prepaid",
-    "mixed": "Mixed"
+    "mixed": "Mixed",
+    "partial": "Partial",
+    "error": "Something went wrong. Please try again."
   },
   "Users": {
     "title": "Users Management",

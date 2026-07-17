@@ -39,7 +39,7 @@ export function DailyProfitCalculator() {
   const tc = useTranslations('Common');
   const { formatPrice, formatDate } = useNumberFormat();
   const { toast } = useToast();
-  const currency = useSettingsStore((s) => s.settings.currency_symbol || '৳');
+  const currency = useSettingsStore((s) => s.settings.currency_symbol || '₹');
 
   const [records, setRecords] = useState<DailyRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);

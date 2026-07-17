@@ -26,6 +26,16 @@ import { useToast } from '@/hooks/use-toast';
 import { useTranslations } from 'next-intl';
 import { useNumberFormat } from "@/hooks/use-number-format";
 import { PrintDialog } from "../PrintDialog";
+import {
+  getReceiptLanguage,
+  getReceiptLabels,
+  getReceiptStoreTitle,
+  formatReceiptMoney,
+  formatReceiptNumber,
+  formatReceiptDateTime,
+  formatReceiptPaymentMethod,
+  formatReceiptPaymentStatus,
+} from "@/lib/receipt-i18n";
 
 interface TransactionDetailsDialogProps {
   transaction: Transaction | null;
@@ -41,8 +51,6 @@ export function TransactionDetailsDialog({
   onUpdateStatus,
 }: TransactionDetailsDialogProps) {
   const [isSharing, setIsSharing] = useState(false);
-  const [preparedFile, setPreparedFile] = useState<File | null>(null);
-  const [isPreparing, setIsPreparing] = useState(false);
   const [isPrintOpen, setIsPrintOpen] = useState(false);
   const { toast } = useToast();
   const { settings } = useSettingsStore();
@@ -62,6 +70,15 @@ export function TransactionDetailsDialog({
     phone: settings.store_phone || "",
     gstNumber: settings.store_gst || "",
   };
+
+  const receiptLang = getReceiptLanguage();
+  const receiptLabels = getReceiptLabels(receiptLang);
+  const receiptStoreTitle = getReceiptStoreTitle(
+    { name: storeConfig.name, nameBn: storeConfig.nameBn },
+    receiptLang,
+  );
+
+  const formatMoneyPlain = (amount: number) => formatReceiptMoney(amount, receiptLang);
 
   const getStatusText = (status: string) => {
     if (!status) return '';
@@ -115,17 +132,18 @@ export function TransactionDetailsDialog({
   };
 
   const handleShare = async () => {
+    if (isSharing) return;
     setIsSharing(true);
     try {
       const printFormat = "a4" as const;
-
-      // Build plain HTML invoice for PDF (no React renderToString needed)
+      const L = receiptLabels;
       const itemRows = transaction.items
         .map((i, idx) => {
           const quantity = Number(i.quantity ?? 0);
           const unitPrice = Number(i.unitPrice ?? 0);
           const totalPrice = Number(i.totalPrice ?? 0);
-          return `<tr><td>${idx + 1}</td><td>${i.productName}</td><td style="text-align:center">${quantity}${(i as any).unit || (i as any).product?.unit ? ` ${(i as any).unit || (i as any).product?.unit}` : ''}</td><td style="text-align:right">₹${unitPrice.toFixed(2)}</td><td style="text-align:right">₹${totalPrice.toFixed(2)}</td></tr>`;
+          const unit = (i as any).unit || (i as any).product?.unit;
+          return `<tr><td>${formatReceiptNumber(idx + 1, undefined, receiptLang)}</td><td>${i.productName}</td><td style="text-align:center">${formatReceiptNumber(quantity, undefined, receiptLang)}${unit ? ` ${unit}` : ''}</td><td style="text-align:right">${formatMoneyPlain(unitPrice)}</td><td style="text-align:right">${formatMoneyPlain(totalPrice)}</td></tr>`;
         })
         .join("");
       const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
@@ -139,77 +157,38 @@ export function TransactionDetailsDialog({
         .footer{margin-top:24px;text-align:center;color:#666;font-size:12px}
       </style></head><body>
         <div class="header">
-          <div><h1>${storeConfig.name}</h1><h2>${storeConfig.nameBn}</h2><p style="font-size:12px;margin:4px 0">${storeConfig.address}</p><p style="font-size:12px;margin:0">Ph: ${storeConfig.phone}</p></div>
-          <div style="text-align:right"><div style="border:2px solid #000;padding:8px 16px;display:inline-block"><b>TAX INVOICE</b></div><p style="font-size:13px;margin:8px 0 2px">Invoice: <b>${transaction.invoiceNumber}</b></p><p style="font-size:12px;margin:0">${format(transaction.createdAt, "dd/MM/yyyy HH:mm")}</p></div>
+          <div><h1>${receiptStoreTitle.primary}</h1>${receiptStoreTitle.secondary ? `<h2>${receiptStoreTitle.secondary}</h2>` : ''}<p style="font-size:12px;margin:4px 0">${storeConfig.address}</p><p style="font-size:12px;margin:0">${L.phone}: ${storeConfig.phone}</p></div>
+          <div style="text-align:right"><div style="border:2px solid #000;padding:8px 16px;display:inline-block"><b>${L.taxInvoice}</b></div><p style="font-size:13px;margin:8px 0 2px">${L.invoice}: <b>${transaction.invoiceNumber}</b></p><p style="font-size:12px;margin:0">${formatReceiptDateTime(transaction.createdAt, receiptLang)}</p></div>
         </div>
-        ${transaction.customer ? `<div style="background:#f9fafb;padding:10px;border-radius:6px;margin-bottom:12px"><b>Bill To:</b> ${transaction.customer.name}${transaction.customer.phone ? ` | ${transaction.customer.phone}` : ""}</div>` : ""}
-        <table><thead><tr><th>#</th><th>Item</th><th style="text-align:center">Qty</th><th style="text-align:right">Unit Price</th><th style="text-align:right">Amount</th></tr></thead><tbody>${itemRows}</tbody></table>
+        ${transaction.customer ? `<div style="background:#f9fafb;padding:10px;border-radius:6px;margin-bottom:12px"><b>${L.billTo}:</b> ${transaction.customer.name}${transaction.customer.phone ? ` | ${transaction.customer.phone}` : ""}</div>` : ""}
+        <table><thead><tr><th>#</th><th>${L.item}</th><th style="text-align:center">${L.qty}</th><th style="text-align:right">${L.rate}</th><th style="text-align:right">${L.amount}</th></tr></thead><tbody>${itemRows}</tbody></table>
         <div style="display:flex;justify-content:flex-end"><table style="width:260px">
-          <tr><td>Subtotal:</td><td style="text-align:right">₹${(Number(transaction.totalAmount ?? 0) + Number(transaction.discount ?? 0) - Number(transaction.tax ?? 0)).toFixed(2)}</td></tr>
-          ${(Number(transaction.discount ?? 0)) > 0 ? `<tr><td style="color:green">Discount:</td><td style="text-align:right;color:green">-₹${Number(transaction.discount ?? 0).toFixed(2)}</td></tr>` : ""}
-          ${(Number(transaction.tax ?? 0)) > 0 ? `<tr><td>Tax:</td><td style="text-align:right">₹${Number(transaction.tax ?? 0).toFixed(2)}</td></tr>` : ""}
-          <tr class="total-row"><td>Grand Total:</td><td style="text-align:right">₹${Number(transaction.totalAmount ?? 0).toFixed(2)}</td></tr>
-          <tr><td>Amount Paid:</td><td style="text-align:right">₹${Number(transaction.amountPaid ?? 0).toFixed(2)}</td></tr>
-          ${Number(transaction.totalAmount ?? 0) - Number(transaction.amountPaid ?? 0) > 0 ? `<tr><td style="color:red">Due:</td><td style="text-align:right;color:red">₹${(Number(transaction.totalAmount ?? 0) - Number(transaction.amountPaid ?? 0)).toFixed(2)}</td></tr>` : ""}
+          <tr><td>${L.subtotal}:</td><td style="text-align:right">${formatMoneyPlain(Number(transaction.totalAmount ?? 0) + Number(transaction.discount ?? 0) - Number(transaction.tax ?? 0))}</td></tr>
+          ${(Number(transaction.discount ?? 0)) > 0 ? `<tr><td style="color:green">${L.discount}:</td><td style="text-align:right;color:green">-${formatMoneyPlain(Number(transaction.discount ?? 0))}</td></tr>` : ""}
+          ${(Number(transaction.tax ?? 0)) > 0 ? `<tr><td>${L.tax}:</td><td style="text-align:right">${formatMoneyPlain(Number(transaction.tax ?? 0))}</td></tr>` : ""}
+          <tr class="total-row"><td>${L.grandTotal}:</td><td style="text-align:right">${formatMoneyPlain(Number(transaction.totalAmount ?? 0))}</td></tr>
+          <tr><td>${L.paid}:</td><td style="text-align:right">${formatMoneyPlain(Number(transaction.amountPaid ?? 0))}</td></tr>
+          ${Number(transaction.totalAmount ?? 0) - Number(transaction.amountPaid ?? 0) > 0 ? `<tr><td style="color:red">${L.due}:</td><td style="text-align:right;color:red">${formatMoneyPlain(Number(transaction.totalAmount ?? 0) - Number(transaction.amountPaid ?? 0))}</td></tr>` : ""}
         </table></div>
-        <p style="margin-top:12px;font-size:13px">Payment: <b>${transaction.paymentMethod}</b> (${transaction.paymentStatus})</p>
-        <div class="footer"><p>ধন্যবাদ! Thank you for shopping with us!</p></div>
+        <p style="margin-top:12px;font-size:13px">${L.payment}: <b>${formatReceiptPaymentMethod(String(transaction.paymentMethod ?? ''), receiptLang)}</b> (${formatReceiptPaymentStatus(String(transaction.paymentStatus ?? ''), receiptLang)})</p>
+        <div class="footer"><p>${L.thankYou}</p></div>
       </body></html>`;
 
-      // If Capacitor native, use existing helper immediately
-      try {
-        const cap = await import('@capacitor/core').then(m => (m as any).Capacitor).catch(() => null);
-        if (cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform()) {
-          await shareInvoiceAsPdf(html, printFormat, transaction.invoiceNumber, storeConfig.name, '');
-          return;
-        }
-      } catch {}
+      const result = await shareInvoiceAsPdf(
+        html,
+        printFormat,
+        transaction.invoiceNumber,
+        storeConfig.name,
+      );
 
-      setIsPreparing(true);
-      const { generateInvoicePdf } = await import('@/lib/invoicePdf');
-      const blob = await generateInvoicePdf(html, printFormat);
-      const file = new File([blob], `Invoice-${transaction.invoiceNumber}.pdf`, { type: 'application/pdf' });
-      setPreparedFile(file);
-      toast({ title: t('invoice_ready'), description: t('invoice_ready_desc') });
-    } catch (err: unknown) {
-      if ((err instanceof Error ? err.name : "") !== "AbortError") {
-        console.error("Share failed:", err);
-      }
-    } finally {
-      setIsPreparing(false);
-      setIsSharing(false);
-    }
-  };
-
-  const performPreparedShare = async () => {
-    if (!preparedFile) return;
-    setIsSharing(true);
-    try {
-      const shareData: any = { title: `Invoice ${transaction.invoiceNumber}`, text: `Invoice from ${storeConfig.name}`, files: [preparedFile] };
-      try {
-        const canShare = typeof (navigator as any).canShare === 'function' ? (navigator as any).canShare(shareData) : true;
-        if (canShare) {
-          await (navigator as any).share(shareData);
-          setPreparedFile(null);
-          toast({ title: t('shared'), description: t('shared_desc') });
-          onOpenChange(false);
-          return;
-        }
-      } catch (err) {
-        console.warn('navigator.share failed at performPreparedShare:', err);
-      }
-
-      // fallback to download
-      try {
-        const url = URL.createObjectURL(preparedFile);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = preparedFile.name;
-        a.click();
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
-        setPreparedFile(null);
+      if (result === 'downloaded') {
         toast({ title: t('downloaded'), description: t('downloaded_desc') });
-      } catch (err) {
+      } else {
+        toast({ title: t('shared'), description: t('shared_desc') });
+      }
+    } catch (err: unknown) {
+      if ((err instanceof Error ? err.name : '') !== 'AbortError') {
+        console.error('Share failed:', err);
         toast({ title: t('share_failed'), description: t('share_failed_desc'), variant: 'destructive' });
       }
     } finally {
@@ -428,12 +407,12 @@ export function TransactionDetailsDialog({
                 </Button>
                 <Button
                   variant="outline"
-                  onClick={preparedFile ? performPreparedShare : handleShare}
+                  onClick={handleShare}
                   disabled={isSharing}
                   className="h-10 gap-2 border-green-500 text-green-600 hover:bg-green-50"
                 >
                   <Share2 className="w-4 h-4" />
-                  {isPreparing ? t('preparing') : preparedFile ? (isSharing ? t('sharing') : t('tap_to_share')) : (isSharing ? t('sharing') : t('share_whatsapp'))}
+                  {isSharing ? t('sharing') : t('share_whatsapp')}
                 </Button>
                 {isAdmin && transaction.status === "Completed" && (
                   <>

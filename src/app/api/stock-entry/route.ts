@@ -90,12 +90,14 @@ export async function POST(request: NextRequest) {
         data: updateData,
       });
 
+      const currencyRow = await tx.setting.findUnique({ where: { key: 'currency_symbol' } });
+      const currencySymbol = currencyRow?.value || '₹';
       const stockHistory = await tx.stockHistory.create({
         data: {
           productId,
           changeType: 'purchase',
           quantity,
-          reason: notes || `Stock purchase: ${quantity} units @ ₹${purchasePrice}`,
+          reason: notes || `Stock purchase: ${quantity} units @ ${currencySymbol}${purchasePrice}`,
           referenceId: undefined,
         },
       });

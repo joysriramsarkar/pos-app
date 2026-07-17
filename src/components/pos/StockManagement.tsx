@@ -93,7 +93,7 @@ export function StockManagement({
   const locale = useLocale();
   const userRole = useUserRole();
   const canDelete = userRole === 'ADMIN' || userRole === 'MANAGER';
-  const { formatPrice } = useNumberFormat();
+  const { formatPrice, formatNumber } = useNumberFormat();
   const formatNum = (num: number) => locale === 'bn' ? convertEnglishToBengaliNumerals(num) : num;
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -569,7 +569,7 @@ export function StockManagement({
                   {formatPrice(potentialProfit)}
                 </p>
                 <p className="text-[9px] text-teal-600/70 dark:text-teal-500/70">
-                  {totalRetailValue > 0 ? ((potentialProfit / totalRetailValue) * 100).toFixed(1) : '0'}% {t('profit_margin')}
+                  {totalRetailValue > 0 ? formatNumber(Number(((potentialProfit / totalRetailValue) * 100).toFixed(1))) : formatNumber(0)}% {t('profit_margin')}
                 </p>
               </CardContent>
             </Card>
@@ -910,7 +910,7 @@ export function StockManagement({
                           <TableCell className="text-right font-medium">{formatPrice(product.sellingPrice)}</TableCell>
                           <TableCell className="text-right text-xs text-muted-foreground">
                             <span className={cn(profitMargin >= 0 ? 'text-green-600' : 'text-red-600')}>
-                              {profitMargin.toFixed(1)}%
+                              {formatNumber(Number(profitMargin.toFixed(1)))}%
                             </span>
                           </TableCell>
                           <TableCell className="text-center">

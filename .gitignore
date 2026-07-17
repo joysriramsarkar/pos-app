@@ -20,6 +20,13 @@ node_modules
 # production
 /build
 
+# Android build outputs (keep source under android/)
+android/.gradle/
+android/**/build/
+android/local.properties
+*.apk
+*.aab
+
 # misc
 .DS_Store
 *.pem
