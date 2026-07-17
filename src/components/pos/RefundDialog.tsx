@@ -28,6 +28,7 @@ interface RefundDialogProps {
     amountPaid: number;
     paymentMethod: string;
     items: Array<{
+      id?: string;
       productId: string;
       productName: string;
       quantity: number;
@@ -143,14 +144,22 @@ export default function RefundDialog({ open, onOpenChange, sale, onSuccess }: Re
 
     setSubmitting(true);
     try {
+      // Canonical endpoint: SaleReturn model via /api/sales/returns
       const refundItems = sale.items
         .filter((item) => selectedItems[item.productId] && (refundQuantities[item.productId] || 0) > 0)
         .map((item) => ({
-          productId: item.productId,
+          saleItemId: item.id,
           quantity: refundQuantities[item.productId] || 0,
         }));
 
-      const res = await fetch('/api/refunds', {
+      if (refundItems.some((i) => !i.saleItemId)) {
+        toast.error(t('refund_failed'), {
+          description: 'Sale item id missing — reload transaction and try again',
+        });
+        return;
+      }
+
+      const res = await fetch('/api/sales/returns', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

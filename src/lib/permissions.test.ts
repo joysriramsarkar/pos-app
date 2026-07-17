@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { getUserRole, roleHasPermission } from './permissions-helpers';
 import { Session } from 'next-auth';
 

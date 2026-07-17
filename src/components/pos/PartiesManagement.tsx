@@ -61,61 +61,11 @@ import { toMoneyNumber } from '@/lib/money';
 import Decimal from 'decimal.js';
 import { useTranslations } from 'next-intl';
 import { useNumberFormat } from '@/hooks/use-number-format';
-
-
-
-type PartyType = 'customer' | 'supplier';
-
-const getInitialsBg = (name: string) => {
-  const colors = [
-    'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-    'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400',
-    'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
-    'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400',
-    'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400',
-  ];
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return colors[Math.abs(hash) % colors.length];
-};
-
-const normalizeAndValidatePhone = (phone: string): string | null => {
-  if (!phone) return null;
-  
-  // 1. Strip spaces and whitespace
-  let clean = phone.replace(/\s+/g, '');
-  
-  // 2. Convert Bengali numerals to English numerals
-  clean = convertBengaliToEnglishNumerals(clean);
-  
-  // 3. Remove leading '+' if present
-  if (clean.startsWith('+')) {
-    clean = clean.slice(1);
-  }
-  
-  // 4. Handle prefixes to extract the last 10 digits
-  // If it starts with '091' followed by 10 digits (13 digits total)
-  if (clean.startsWith('091') && clean.length === 13) {
-    clean = clean.slice(3);
-  }
-  // If it starts with '91' followed by 10 digits (12 digits total)
-  else if (clean.startsWith('91') && clean.length === 12) {
-    clean = clean.slice(2);
-  }
-  // If it starts with '0' followed by 10 digits (11 digits total)
-  else if (clean.startsWith('0') && clean.length === 11) {
-    clean = clean.slice(1);
-  }
-  
-  // 5. Test if it is exactly 10 digits
-  if (/^[0-9]{10}$/.test(clean)) {
-    return clean;
-  }
-  
-  return null;
-};
+import {
+  type PartyType,
+  getInitialsBg,
+  normalizeAndValidatePhone,
+} from '@/components/pos/parties/parties-utils';
 
 export function PartiesManagement() {
   const t = useTranslations('Parties');

@@ -192,7 +192,7 @@ export function DuesReport({ onBack, onNavigate }: DuesReportProps) {
                 <XAxis type="number" tickFormatter={formatCompact} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} />
                 <YAxis type="category" dataKey="name" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} width={80} />
                 <ChartTooltip content={<ChartTooltipContent formatter={(v) => <span className="font-bold tabular-nums">{formatPrice(Number(v))}</span>} />} />
-                <Bar dataKey="due" name="due" fill="var(--chart-4)" radius={[0, 4, 4, 0]} maxBarSize={18} />
+                <Bar dataKey="due" name="due" fill="var(--color-due)" radius={[0, 4, 4, 0]} maxBarSize={18} />
               </BarChart>
             </ChartContainer>
           </CardContent>

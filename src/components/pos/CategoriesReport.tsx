@@ -308,7 +308,7 @@ export function CategoriesReport({ onBack }: CategoriesReportProps) {
                       <span className="font-bold tabular-nums">{formatPrice(Number(v))}</span>
                     )} />}
                   />
-                  <Bar dataKey="profit" name="profit" fill="var(--chart-2)" radius={[0, 4, 4, 0]} maxBarSize={18} />
+                  <Bar dataKey="profit" name="profit" fill="var(--color-profit)" radius={[0, 4, 4, 0]} maxBarSize={18} />
                 </BarChart>
               </ChartContainer>
             )}

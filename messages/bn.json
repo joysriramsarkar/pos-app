@@ -48,7 +48,10 @@
     "camera_permission_required": "ক্যামেরার পারমিশন ছাড়া স্ক্যান সম্ভব নয়!",
     "invalid_barcode": "অবৈধ বারকোড: {barcode}",
     "scanner_error": "স্ক্যানার ত্রুটি: {error}",
-    "done_scanned": "সম্পন্ন ({count}টি স্ক্যান করা হয়েছে)"
+    "done_scanned": "সম্পন্ন ({count}টি স্ক্যান করা হয়েছে)",
+    "torch_on": "ফ্ল্যাশলাইট চালু",
+    "torch_off": "ফ্ল্যাশলাইট বন্ধ",
+    "scanner_keyboard_fallback": "USB/Bluetooth বারকোড স্ক্যানার ব্যবহার করতে পারেন, অথবা সার্চে কোড টাইপ করুন।"
   },
   "Cart": {
     "title": "কার্ট",

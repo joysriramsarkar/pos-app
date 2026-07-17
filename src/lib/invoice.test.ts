@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, mock } from 'vitest';
 import { generateInvoiceNumber, generateServerInvoiceNumber } from './invoice';
 
 describe('Invoice Number Generators', () => {

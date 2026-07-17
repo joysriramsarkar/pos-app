@@ -47,15 +47,22 @@ export async function GET(request: NextRequest) {
     const saleItemsWithSale = await prisma.saleItem.findMany({
       where: {
         createdAt: { gte: startDate, lte: endDate },
-        sale: { status: "Completed" },
+        sale: { status: { in: ["Completed", "PartialReturn"] } },
+        quantity: { gt: 0 },
       },
       select: {
         saleId: true,
         quantity: true,
         totalPrice: true,
+        costPriceAtSale: true,
         product: { select: { category: true, subCategory: true, buyingPrice: true } },
       },
     });
+
+    const unitCost = (item: (typeof saleItemsWithSale)[0]) => {
+      const snap = Number(item.costPriceAtSale);
+      return snap > 0 ? snap : Number(item.product?.buyingPrice || 0);
+    };
 
     if (useSubCategory) {
       // Group by sub-category
@@ -69,7 +76,7 @@ export async function GET(request: NextRequest) {
         const existing = subCatMap.get(key) || { name: subCat, parentCategory: parentCat, revenue: 0, qty: 0, profit: 0, orders: new Set<string>() };
         existing.revenue += Number(item.totalPrice);
         existing.qty += Number(item.quantity);
-        existing.profit += Number(item.totalPrice) - Number(item.product?.buyingPrice || 0) * Number(item.quantity);
+        existing.profit += Number(item.totalPrice) - unitCost(item) * Number(item.quantity);
         existing.orders.add(item.saleId);
         subCatMap.set(key, existing);
       });
@@ -99,7 +106,7 @@ export async function GET(request: NextRequest) {
       const existing = catMap.get(cat) || { revenue: 0, qty: 0, profit: 0, orders: new Set<string>() };
       existing.revenue += Number(Number(item.totalPrice));
       existing.qty += Number(item.quantity);
-      existing.profit += Number(Number(item.totalPrice)) - Number(item.product?.buyingPrice || 0) * Number(item.quantity);
+      existing.profit += Number(Number(item.totalPrice)) - unitCost(item) * Number(item.quantity);
       existing.orders.add(item.saleId);
       catMap.set(cat, existing);
     });

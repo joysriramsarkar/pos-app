@@ -1,7 +1,8 @@
 export const dynamic = 'force-dynamic';
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { requireAuth } from '@/lib/api-middleware';
 
 export interface NotificationItem {
   id: string;
@@ -19,7 +20,10 @@ function toBnNum(num: number): string {
   return num.toString().replace(/\d/g, (d) => bnDigits[parseInt(d)]);
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const authResult = await requireAuth(request);
+  if (!authResult.authorized) return authResult.response!;
+
   try {
     const notifications: NotificationItem[] = [];
 

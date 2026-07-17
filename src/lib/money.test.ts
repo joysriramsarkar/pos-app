@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect } from 'vitest';
 import { toMoneyNumber, addMoney, subtractMoney, multiplyMoney } from './money';
 
 describe('toMoneyNumber', () => {

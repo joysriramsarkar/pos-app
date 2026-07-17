@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import ZAI from 'z-ai-web-dev-sdk';
+import { requireRole } from '@/lib/api-middleware';
 
 export async function POST(request: NextRequest) {
+  const roleError = await requireRole(request, ['ADMIN', 'MANAGER']);
+  if (roleError) return roleError;
+
   try {
     const { reportData, question } = await request.json();
 
@@ -36,7 +40,7 @@ ${JSON.stringify(reportData, null, 2)}
     console.error('AI Advisor error:', error);
     return NextResponse.json(
       { success: false, error: message },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

@@ -1,7 +1,9 @@
 export const dynamic = 'force-dynamic';
 
 import { db } from '@/lib/db';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { requirePermission } from '@/lib/api-middleware';
+import { toMoneyNumber } from '@/lib/money';
 
 // Helper: convert number to Bengali digits
 function toBnNum(n: number | string): string {
@@ -28,7 +30,10 @@ function formatBengaliDate(date: Date): string {
 }
 
 // GET /api/daily-summary - Comprehensive daily closing report
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const authError = await requirePermission(request, 'reports.view');
+  if (authError) return authError;
+
   try {
     const today = new Date();
     const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -40,14 +45,51 @@ export async function GET() {
     const bengaliDate = formatBengaliDate(today);
 
     // ---- SALES SUMMARY ----
-    const todaySales = await db.sale.findMany({
+    // Include Completed + PartialReturn; exclude Cancelled and fully refunded originals.
+    // Legacy negative refund invoices (status Refunded, totalAmount < 0) are applied as offsets.
+    const todaySalesRaw = await db.sale.findMany({
       where: {
         createdAt: { gte: startOfDay, lt: endOfDay },
-        status: { notIn: ['Cancelled', 'Refunded'] },
+        status: { notIn: ['Cancelled'] },
       },
     });
 
-    const totalSalesAmount = todaySales.reduce((sum, s) => sum + Number(s.totalAmount), 0);
+    const todaySaleIds = todaySalesRaw
+      .filter((s) => s.status === 'Completed' || s.status === 'PartialReturn')
+      .map((s) => s.id);
+
+    const returnsToday = await db.saleReturn.findMany({
+      where: {
+        OR: [
+          { createdAt: { gte: startOfDay, lt: endOfDay } },
+          { saleId: { in: todaySaleIds } },
+        ],
+      },
+      select: { saleId: true, refundAmount: true, createdAt: true },
+    });
+
+    // Net refund amount per original sale (SaleReturn records)
+    const refundBySaleId = returnsToday.reduce<Record<string, number>>((acc, r) => {
+      acc[r.saleId] = (acc[r.saleId] || 0) + toMoneyNumber(r.refundAmount);
+      return acc;
+    }, {});
+
+    // Active sales for breakdown (Completed / PartialReturn net of returns)
+    const todaySales = todaySalesRaw.filter(
+      (s) => s.status === 'Completed' || s.status === 'PartialReturn',
+    );
+
+    // Legacy negative refund sales created today
+    const legacyRefundOffset = todaySalesRaw
+      .filter((s) => s.status === 'Refunded' && Number(s.totalAmount) < 0)
+      .reduce((sum, s) => sum + Number(s.totalAmount), 0);
+
+    const grossSalesAmount = todaySales.reduce((sum, s) => {
+      const net = Number(s.totalAmount) - (refundBySaleId[s.id] || 0);
+      return sum + Math.max(0, net);
+    }, 0);
+    // legacyRefundOffset is negative; adding it reduces total
+    const totalSalesAmount = grossSalesAmount + legacyRefundOffset;
     const totalSalesCount = todaySales.length;
     const avgOrderValue = totalSalesCount > 0 ? totalSalesAmount / totalSalesCount : 0;
 
@@ -99,15 +141,40 @@ export async function GET() {
       expenseByCategory[cat] = (expenseByCategory[cat] || 0) + Number(Number(expense.amount));
     }
 
-    // ---- COST OF GOODS SOLD ----
+    // ---- COST OF GOODS SOLD (sale-time cost snapshot) ----
     const todaySaleItems = await db.saleItem.findMany({
       where: {
         sale: {
           createdAt: { gte: startOfDay, lt: endOfDay },
-          status: { notIn: ['Cancelled', 'Refunded'] },
+          status: { in: ['Completed', 'PartialReturn'] },
         },
+        quantity: { gt: 0 },
+      },
+      select: {
+        productId: true,
+        quantity: true,
+        totalPrice: true,
+        productName: true,
+        costPriceAtSale: true,
       },
     });
+
+    // Subtract returned quantities for today
+    const returnItemsToday = await db.saleReturnItem.findMany({
+      where: {
+        saleReturn: {
+          OR: [
+            { createdAt: { gte: startOfDay, lt: endOfDay } },
+            { saleId: { in: todaySaleIds } },
+          ],
+        },
+      },
+      select: { productId: true, quantity: true },
+    });
+    const returnedQtyByProduct = returnItemsToday.reduce<Record<string, number>>((acc, r) => {
+      acc[r.productId] = (acc[r.productId] || 0) + Number(r.quantity);
+      return acc;
+    }, {});
 
     const productIds = [...new Set(todaySaleItems.map((item) => item.productId))];
     const products = await db.product.findMany({
@@ -116,9 +183,25 @@ export async function GET() {
     });
     const productBuyingPriceMap = new Map(products.map((p) => [p.id, Number(p.buyingPrice)]));
 
-    const costOfGoodsSold = todaySaleItems.reduce((sum, item) => {
-      const buyingPrice = productBuyingPriceMap.get(item.productId) ?? 0;
-      return sum + buyingPrice * Number(item.quantity);
+    // Weighted average unit cost per product from snapshots (for return net-out)
+    const costAggByProduct = todaySaleItems.reduce<
+      Record<string, { qty: number; cost: number }>
+    >((acc, item) => {
+      const qty = Number(item.quantity);
+      const snap = Number(item.costPriceAtSale);
+      const unit = snap > 0 ? snap : (productBuyingPriceMap.get(item.productId) ?? 0);
+      const prev = acc[item.productId] || { qty: 0, cost: 0 };
+      prev.qty += qty;
+      prev.cost += unit * qty;
+      acc[item.productId] = prev;
+      return acc;
+    }, {});
+
+    const costOfGoodsSold = Object.entries(costAggByProduct).reduce((sum, [productId, agg]) => {
+      const returned = returnedQtyByProduct[productId] || 0;
+      const netQty = Math.max(0, agg.qty - returned);
+      const avgUnit = agg.qty > 0 ? agg.cost / agg.qty : 0;
+      return sum + avgUnit * netQty;
     }, 0);
 
     // ---- PROFIT ----
@@ -138,15 +221,41 @@ export async function GET() {
       0
     );
 
-    // Dues collected today: Sum of all 'debit' ledger entries created today (both manual and checkout payments)
+    // Dues collected: debit entries that reduce customer due (exclude refund-related reverse-due noise if desired;
+    // include manual collection, sale payments, due clearance). Prepayments use entryType prepayment-*.
     const todayDebitLedger = await db.ledgerEntry.findMany({
       where: {
         entryType: 'debit',
         createdAt: { gte: startOfDay, lt: endOfDay },
+        NOT: {
+          OR: [
+            { description: { contains: 'prepaid', mode: 'insensitive' } },
+            { description: { contains: 'Prepayment', mode: 'insensitive' } },
+            { description: { contains: 'return refund', mode: 'insensitive' } },
+          ],
+        },
       },
-      select: { amount: true },
+      select: { amount: true, description: true },
     });
-    const duesCollected = todayDebitLedger.reduce((sum, entry) => sum + Number(entry.amount), 0);
+    // Prefer explicit due-payment descriptions; fall back to all remaining debits
+    const duePaymentEntries = todayDebitLedger.filter((e) => {
+      const d = (e.description || '').toLowerCase();
+      return (
+        d.includes('due collection') ||
+        d.includes('due clearance') ||
+        d.includes('payment for sale') ||
+        d.includes('manual due') ||
+        d.includes('offline sync payment') ||
+        d.includes('offline sync due clearance') ||
+        d.includes('বকেয়া') ||
+        d.includes('reverse due') // refund reducing due is not "collected cash" but reduces outstanding
+      );
+    });
+    // Cash collected against dues: exclude "reverse due" (those are refund adjustments, not cash in)
+    const cashDueCollections = (duePaymentEntries.length > 0 ? duePaymentEntries : todayDebitLedger).filter(
+      (e) => !(e.description || '').toLowerCase().includes('reverse due'),
+    );
+    const duesCollected = cashDueCollections.reduce((sum, entry) => sum + Number(entry.amount), 0);
 
     // ---- TOP 5 SELLING PRODUCTS ----
     const productSalesMap: Record<string, { name: string; nameBn: string; quantity: number; revenue: number }> = {};
@@ -169,6 +278,23 @@ export async function GET() {
       }
       productSalesMap[item.productId].quantity += Number(item.quantity);
       productSalesMap[item.productId].revenue += Number(Number(item.totalPrice));
+    }
+    // Net out returns for top products
+    for (const [productId, retQty] of Object.entries(returnedQtyByProduct)) {
+      if (productSalesMap[productId]) {
+        const unitRev =
+          productSalesMap[productId].quantity > 0
+            ? productSalesMap[productId].revenue / productSalesMap[productId].quantity
+            : 0;
+        productSalesMap[productId].quantity = Math.max(
+          0,
+          productSalesMap[productId].quantity - retQty,
+        );
+        productSalesMap[productId].revenue = Math.max(
+          0,
+          productSalesMap[productId].revenue - unitRev * retQty,
+        );
+      }
     }
 
     const topProducts = Object.values(productSalesMap)
@@ -201,7 +327,7 @@ export async function GET() {
     const yesterdaySales = await db.sale.findMany({
       where: {
         createdAt: { gte: yesterdayStart, lt: yesterdayEnd },
-        status: { notIn: ['Cancelled', 'Refunded'] },
+        status: { in: ['Completed', 'PartialReturn'] },
       },
     });
     const yesterdayCashTotal = yesterdaySales.reduce((sum, s) => sum + Number(s.cashAmount || 0), 0);

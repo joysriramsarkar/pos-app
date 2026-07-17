@@ -15,7 +15,7 @@
 
 ## ✨ Features
 
-- 📶 **Offline-First**: IndexedDB local cache with intelligent sync queue. Sales, stock updates, and customer changes work without internet and sync automatically when back online.
+- 📶 **Offline-First**: IndexedDB local cache + sync worker (`src/lib/offline/`). See [ARCHITECTURE.md](src/lib/offline/ARCHITECTURE.md).
 - 🌍 **Bilingual (EN/BN)**: Full English and Bengali UI via `next-intl`. Integrated Google Input Tools engine for live English-to-Bengali transliteration while typing product names.
 - 📱 **Barcode Scanning**: Global keyboard-wedge scanner support on desktop. Native camera scanning on Android via Capacitor ML Kit.
 - 🛒 **Cart & Checkout**: Multi-tab cart with per-tab independent checkout processing, prepaid balance, partial/due payments, change-as-prepayment, split Cash+UPI payments.
@@ -54,6 +54,8 @@
 
 ### Installation
 
+**Package manager:** npm only (`package-lock.json`). Do not commit `bun.lock`.
+
 **1. Clone & install dependencies**
 ```bash
 npm install
@@ -61,21 +63,22 @@ npm install
 
 **2. Environment variables**
 
-Create a `.env` file in the root:
-```env
-DATABASE_URL="postgresql://user:password@host:5432/dbname?schema=public"
-DIRECT_URL="postgresql://user:password@host:5432/dbname?schema=public"
-NEXTAUTH_SECRET="your_secure_random_string"
-NEXTAUTH_URL="http://localhost:3000"
-# Optional: use a stable admin password for seed script
-SEED_ADMIN_PASSWORD="your_admin_password"
+```bash
+cp .env.example .env
 ```
 
+Edit `.env` with your database and secrets. Required keys are documented in `.env.example`:
+
+| Variable | Required | Notes |
+| :--- | :--- | :--- |
+| `DATABASE_URL` | yes | Postgres connection string |
+| `DIRECT_URL` | for migrations | Direct (non-pooled) URL |
+| `NEXTAUTH_SECRET` | yes | ≥ 32 chars (`openssl rand -base64 32`) |
+| `NEXTAUTH_URL` | yes | e.g. `http://localhost:3000` |
+| `ALLOWED_ORIGINS` | prod | Comma-separated CORS/CSRF origins |
+| `SEED_ADMIN_PASSWORD` | optional | Stable password for `npm run db:seed` |
+
 > `NEXTAUTH_SECRET` should be a strong random string, at least 32 characters long.
-> For example:
-> ```bash
-> openssl rand -base64 32
-> ```
 
 **3. Database setup**
 ```bash

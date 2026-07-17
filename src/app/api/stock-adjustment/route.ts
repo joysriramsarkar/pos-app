@@ -30,11 +30,20 @@ export async function POST(request: NextRequest) {
     const { productId, quantity, adjustmentType, reason } = result.data;
 
     const updatedProduct = await db.$transaction(async (tx) => {
-      const product = await tx.product.findUnique({ where: { id: productId } });
+      const locked = await tx.$queryRaw<
+        Array<{ id: string; name: string; unit: string; current_stock: unknown }>
+      >`
+        SELECT id, name, unit, "current_stock"
+        FROM products
+        WHERE id = ${productId}
+        FOR UPDATE
+      `;
+      const product = locked[0];
       if (!product) throw new Error(`Product ${productId} not found`);
 
-      if (Number(product.currentStock) < quantity) {
-        throw new Error(`অপর্যাপ্ত স্টক। বর্তমান স্টক: ${product.currentStock} ${product.unit}`);
+      const currentStock = Number(product.current_stock);
+      if (currentStock < quantity) {
+        throw new Error(`অপর্যাপ্ত স্টক। বর্তমান স্টক: ${currentStock} ${product.unit}`);
       }
 
       const updated = await tx.product.update({
@@ -46,7 +55,7 @@ export async function POST(request: NextRequest) {
         data: {
           productId,
           changeType: 'adjustment',
-          quantity: -quantity, // নেগেটিভ = স্টক কমছে
+          quantity: -quantity,
           reason: `[${ADJUSTMENT_LABELS[adjustmentType]}] ${reason}`,
         },
       });
@@ -56,7 +65,7 @@ export async function POST(request: NextRequest) {
 
     const user = await getAuthenticatedUser(request);
     await logAudit({
-      userId: (user as any)?.id,
+      userId: (user as { id?: string } | null)?.id,
       action: 'STOCK_ADJUSTMENT',
       entityType: 'Product',
       entityId: updatedProduct.id,
@@ -72,7 +81,7 @@ export async function POST(request: NextRequest) {
   } catch (error: unknown) {
     return NextResponse.json(
       { success: false, error: error instanceof Error ? error.message : 'Failed to adjust stock' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

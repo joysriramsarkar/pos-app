@@ -281,7 +281,7 @@ export function StockReport({ onBack }: StockReportProps) {
                 <XAxis type="number" tickFormatter={formatCompactUnit} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} />
                 <YAxis type="category" dataKey="name" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} width={85} />
                 <ChartTooltip content={<ChartTooltipContent formatter={(v) => <span className="font-bold tabular-nums">{formatNumber(Number(v))}</span>} />} />
-                <Bar dataKey="stock" name="stock" fill="var(--chart-5)" radius={[0, 4, 4, 0]} maxBarSize={14} />
+                <Bar dataKey="stock" name="stock" fill="var(--color-stock)" radius={[0, 4, 4, 0]} maxBarSize={14} />
                 <Bar dataKey="minLevel" name="minLevel" fill="hsl(var(--muted-foreground) / 0.4)" radius={[0, 4, 4, 0]} maxBarSize={14} />
               </BarChart>
             </ChartContainer>

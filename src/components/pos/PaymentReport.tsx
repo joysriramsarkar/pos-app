@@ -403,9 +403,9 @@ export function PaymentReport({ onBack }: PaymentReportProps) {
                   <YAxis tickFormatter={formatCompact} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} width={55} />
                   <ChartTooltip content={<ChartTooltipContent formatter={(v) => <span className="font-bold tabular-nums">{formatPrice(Number(v))}</span>} />} />
                   <ChartLegend content={<ChartLegendContent />} />
-                  <Bar dataKey="cash" name="cash" fill="var(--chart-2)" stackId="a" radius={[0, 0, 0, 0]} maxBarSize={20} />
-                  <Bar dataKey="upi" name="upi" fill="var(--chart-1)" stackId="a" radius={[0, 0, 0, 0]} maxBarSize={20} />
-                  <Bar dataKey="prepaid" name="prepaid" fill="var(--chart-3)" stackId="a" radius={[4, 4, 0, 0]} maxBarSize={20} />
+                  <Bar dataKey="cash" name="cash" fill="var(--color-cash)" stackId="a" radius={[0, 0, 0, 0]} maxBarSize={20} />
+                  <Bar dataKey="upi" name="upi" fill="var(--color-upi)" stackId="a" radius={[0, 0, 0, 0]} maxBarSize={20} />
+                  <Bar dataKey="prepaid" name="prepaid" fill="var(--color-prepaid)" stackId="a" radius={[4, 4, 0, 0]} maxBarSize={20} />
                 </BarChart>
               </ChartContainer>
             )}

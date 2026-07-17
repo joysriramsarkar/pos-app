@@ -31,11 +31,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         where: {
           productId: id,
           createdAt: { gte: startDate, lte: endDate },
-          sale: { status: 'Completed' },
+          sale: { status: { in: ['Completed', 'PartialReturn'] } },
+          quantity: { gt: 0 },
         },
         select: {
           quantity: true,
           totalPrice: true,
+          costPriceAtSale: true,
           createdAt: true,
           sale: {
             select: {
@@ -59,14 +61,18 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     let totalQty = 0;
     let totalRevenue = 0;
+    let totalCost = 0;
     const days = Number(sp.get('days') || 30);
     const isYearly = days === 365;
+    const fallbackCost = Number(product.buyingPrice);
 
     for (const item of saleItems) {
       const date = item.createdAt;
       const qty = Number(item.quantity);
       const revenue = Number(Number(item.totalPrice));
-      const profit = revenue - Number(product.buyingPrice) * qty;
+      const unitCost = Number(item.costPriceAtSale) > 0 ? Number(item.costPriceAtSale) : fallbackCost;
+      const profit = revenue - unitCost * qty;
+      totalCost += unitCost * qty;
 
       // Daily trend
       const dateKey = format(date, isYearly ? 'yyyy-MM' : 'yyyy-MM-dd');
@@ -125,7 +131,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       .sort((a, b) => b.revenue - a.revenue)
       .slice(0, 10);
 
-    const totalProfit = totalRevenue - Number(product.buyingPrice) * totalQty;
+    const totalProfit = totalRevenue - totalCost;
     const profitMargin = totalRevenue > 0 ? ((totalProfit / totalRevenue) * 100).toFixed(1) : '0';
     const totalOrders = saleItems.length;
     const avgOrderQty = totalOrders > 0 ? (totalQty / totalOrders) : 0;

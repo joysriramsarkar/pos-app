@@ -367,7 +367,7 @@ export function SupplierReport({ onBack }: SupplierReportProps) {
                   }} />
                   <YAxis tickFormatter={formatCompact} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} width={55} />
                   <ChartTooltip content={<ChartTooltipContent formatter={(v) => <span className="font-bold tabular-nums">{formatPrice(Number(v))}</span>} />} />
-                  <Bar dataKey="amount" name="amount" fill="var(--chart-1)" radius={[4, 4, 0, 0]} maxBarSize={25} />
+                  <Bar dataKey="amount" name="amount" fill="var(--color-amount)" radius={[4, 4, 0, 0]} maxBarSize={25} />
                 </BarChart>
               ) : chartStyle === 'line' ? (
                 <LineChart data={processedChartData} margin={{ top: 10, right: 5, left: 0, bottom: 5 }}>

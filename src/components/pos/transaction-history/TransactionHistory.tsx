@@ -306,6 +306,7 @@ export function TransactionHistory() {
           amountPaid: refundSale.amountPaid ?? 0,
           paymentMethod: refundSale.paymentMethod,
           items: refundSale.items.map(item => ({
+            id: item.id,
             productId: item.productId,
             productName: item.productName,
             quantity: item.quantity ?? 0,

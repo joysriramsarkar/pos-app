@@ -1,9 +1,6 @@
 // ============================================================================
-// useCameraBarcodeScanner - Camera Barcode Scanning Hook
-// Lakhan Bhandar POS System
-//
-// This hook enables camera-based barcode/QR code scanning with a robust,
-// race-condition-free cleanup mechanism.
+// useCameraBarcodeScanner - High-quality in-page camera barcode scanning
+// Browser/PWA path for Lakhan Bhandar POS (Capacitor uses ML Kit separately)
 // ============================================================================
 
 import { useEffect, useRef, useCallback, useState } from "react";
@@ -11,31 +8,37 @@ import { Html5Qrcode } from "html5-qrcode";
 import { convertBengaliToEnglishNumerals } from "@/lib/utils";
 
 interface CameraBarcodeScannerConfig {
-  /** Callback when barcode/QR is successfully scanned */
   onBarcodeDetected: (barcode: string) => void;
-  /** Callback to trigger component close/unmount *after* cleanup */
   onClose: () => void;
-  /** Callback for error handling */
   onError?: (error: string) => void;
-  /** Enable or disable scanner */
   enabled?: boolean;
-  /** Facings: environment (back), user (front) */
   facingMode?: "environment" | "user";
 }
 
 const SCANNER_ID = "html5-qr-code-full-region";
 
-// Helper function to get user-friendly error messages
-function getErrorMessage(error: any): string {
+/** High-res rear camera constraints — applied both via facingMode and videoConstraints */
+const HIGH_QUALITY_VIDEO: MediaTrackConstraints = {
+  facingMode: { ideal: "environment" },
+  width: { ideal: 1920, min: 640 },
+  height: { ideal: 1080, min: 480 },
+  frameRate: { ideal: 30, min: 15 },
+};
+
+function getErrorMessage(error: unknown): string {
   if (typeof error === "string") return error;
-  if (error.name === "NotAllowedError" || error.code === "PERMISSION_DENIED") {
+  const err = error as { name?: string; code?: string; message?: string };
+  if (err.name === "NotAllowedError" || err.code === "PERMISSION_DENIED") {
     return "Camera permission denied. Please allow camera access in your browser settings.";
   }
-  if (error.name === "NotFoundError" || error.code === "DEVICE_NOT_FOUND") {
+  if (err.name === "NotFoundError" || err.code === "DEVICE_NOT_FOUND") {
     return "No camera device found. Please check if a camera is connected and enabled.";
   }
-  if (error.name === "NotReadableError" || error.code === "DEVICE_IN_USE") {
+  if (err.name === "NotReadableError" || err.code === "DEVICE_IN_USE") {
     return "Camera is already in use by another application. Please close other camera apps.";
+  }
+  if (err.name === "OverconstrainedError") {
+    return "Camera does not support the requested quality. Trying lower settings...";
   }
   return (
     (error instanceof Error ? error.message : "Unknown error") ||
@@ -44,29 +47,80 @@ function getErrorMessage(error: any): string {
 }
 
 function playSuccessBeep() {
-  if (typeof window === "undefined" || !(window as any).AudioContext) return;
-
+  if (typeof window === "undefined") return;
   try {
     const AudioCtx =
-      (window as any).AudioContext || (window as any).webkitAudioContext;
+      (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext })
+        .AudioContext ||
+      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtx) return;
     const ctx = new AudioCtx();
     const oscillator = ctx.createOscillator();
     const gainNode = ctx.createGain();
-
     oscillator.type = "sine";
     oscillator.frequency.value = 880;
     gainNode.gain.value = 0.1;
-
     oscillator.connect(gainNode);
     gainNode.connect(ctx.destination);
-
     oscillator.start();
     setTimeout(() => {
       oscillator.stop();
       ctx.close();
     }, 80);
   } catch {
-    // Ignore audio errors (some browsers restrict autoplay without user interaction)
+    // ignore autoplay restrictions
+  }
+}
+
+function isBackCameraLabel(label: string): boolean {
+  const l = label.toLowerCase();
+  return (
+    l.includes("back") ||
+    l.includes("rear") ||
+    l.includes("environment") ||
+    l.includes("পশ্চাৎ") ||
+    // Common OEM labels
+    l.includes("camera2 0") ||
+    l.includes("0, facing back")
+  );
+}
+
+/**
+ * Prefer continuous autofocus + max resolution on the live track after start.
+ * Silently no-ops when capabilities are missing.
+ */
+async function enhanceLiveTrack(scanner: Html5Qrcode): Promise<void> {
+  try {
+    const caps = scanner.getRunningTrackCapabilities?.() as
+      | (MediaTrackCapabilities & {
+          focusMode?: string[];
+          zoom?: { min: number; max: number };
+          torch?: boolean;
+        })
+      | undefined;
+    if (!caps) return;
+
+    const advanced: Record<string, unknown>[] = [];
+    const constraints: Record<string, unknown> = {};
+
+    if (Array.isArray(caps.focusMode) && caps.focusMode.includes("continuous")) {
+      constraints.focusMode = "continuous";
+    }
+
+    // Slight optical zoom when available helps dense 1D barcodes
+    if (caps.zoom && typeof caps.zoom.max === "number" && caps.zoom.max > 1) {
+      const zoom = Math.min(caps.zoom.max, Math.max(caps.zoom.min ?? 1, 1.5));
+      advanced.push({ zoom });
+    }
+
+    if (Object.keys(constraints).length || advanced.length) {
+      if (advanced.length) {
+        constraints.advanced = advanced;
+      }
+      await scanner.applyVideoConstraints(constraints as MediaTrackConstraints);
+    }
+  } catch (e) {
+    console.warn("[Scanner] Live track enhance skipped:", e);
   }
 }
 
@@ -80,21 +134,21 @@ export function useCameraBarcodeScanner(config: CameraBarcodeScannerConfig) {
   } = config;
 
   const scannerRef = useRef<Html5Qrcode | null>(null);
-  const isInitializingRef = useRef<boolean>(false);
-  const isMountedRef = useRef<boolean>(false);
+  const isInitializingRef = useRef(false);
+  const isMountedRef = useRef(false);
 
   const [isSupported, setIsSupported] = useState(true);
   const [isInitialized, setIsInitialized] = useState(false);
   const [isShuttingDown, setIsShuttingDown] = useState(false);
+  const [torchSupported, setTorchSupported] = useState(false);
+  const [torchOn, setTorchOn] = useState(false);
 
-  const lastScannedRef = useRef<string>("");
-  const lastScannedTimeRef = useRef<number>(0);
+  const lastScannedRef = useRef("");
+  const lastScannedTimeRef = useRef(0);
 
-  // --- Strict, Blocking Shutdown ---
   const startShutdown = useCallback(async () => {
-    // If already shutting down, or no scanner exists, just ensure close is called.
     if (isShuttingDown || !scannerRef.current) {
-      return; // Don't call onClose multiple times
+      return;
     }
 
     setIsShuttingDown(true);
@@ -105,139 +159,146 @@ export function useCameraBarcodeScanner(config: CameraBarcodeScannerConfig) {
       if (!scanner) return;
 
       try {
+        // Turn torch off before stop
+        if (torchOn) {
+          try {
+            await scanner.applyVideoConstraints({
+              advanced: [{ torch: false }],
+            } as unknown as MediaTrackConstraints);
+          } catch {
+            /* ignore */
+          }
+        }
         const state = scanner.getState();
-        console.log(`[Scanner] Current state before stop: ${state}`);
         if (state === 2) {
-          // Html5QrcodeScannerState.SCANNING = 2
-          console.log("[Scanner] Attempting to stop scanner...");
           await scanner.stop();
         }
       } catch (stopError) {
-        console.warn(
-          "[Scanner] Stop failed (might be in transition):",
-          stopError,
-        );
-        // Continue with clear even if stop fails
+        console.warn("[Scanner] Stop failed:", stopError);
       }
 
       try {
-        console.log("[Scanner] Clearing scanner...");
         scanner.clear();
       } catch (clearError) {
         console.warn("[Scanner] Clear failed:", clearError);
       }
-
-      console.log("[Scanner] Scanner cleanup completed.");
     } catch (error) {
-      console.error("[Scanner] Unexpected error during cleanup:", error);
+      console.error("[Scanner] Unexpected cleanup error:", error);
     } finally {
       if (isMountedRef.current) {
         scannerRef.current = null;
         setIsInitialized(false);
         setIsShuttingDown(false);
+        setTorchOn(false);
+        setTorchSupported(false);
       }
-      console.log("[Scanner] Shutdown complete. Calling onClose().");
-      onClose(); // Triggers the parent component to unmount.
+      onClose();
     }
-  }, [onClose]);
+  }, [onClose, isShuttingDown, torchOn]);
 
-  // --- Scanner Initialization ---
+  const setTorch = useCallback(async (on: boolean) => {
+    const scanner = scannerRef.current;
+    if (!scanner || !torchSupported) return false;
+    try {
+      await scanner.applyVideoConstraints({
+        advanced: [{ torch: on }],
+      } as unknown as MediaTrackConstraints);
+      setTorchOn(on);
+      return true;
+    } catch (e) {
+      console.warn("[Scanner] Torch toggle failed:", e);
+      return false;
+    }
+  }, [torchSupported]);
+
+  const toggleTorch = useCallback(async () => {
+    return setTorch(!torchOn);
+  }, [setTorch, torchOn]);
+
   const initializeScanner = useCallback(async () => {
-    // Strict Mode Protection: Prevent initialization if already shutting down or initializing
     if (isInitializingRef.current || scannerRef.current || isShuttingDown) {
-      if (isShuttingDown) {
-        console.log(
-          "[Scanner] Initialization skipped: scanner is shutting down.",
-        );
-      } else {
-        console.log(
-          "[Scanner] Initialization skipped: already initializing or initialized.",
-        );
-      }
       return;
     }
     isInitializingRef.current = true;
     setIsInitialized(false);
-    console.log("[Scanner] Starting initialization...");
+    setTorchSupported(false);
+    setTorchOn(false);
+
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      const msg = "Camera API is not supported in this browser.";
+      onError?.(msg);
+      setIsSupported(false);
+      isInitializingRef.current = false;
+      return;
+    }
 
     try {
-      // Pre-flight check: Container must exist in the DOM.
       const container = document.getElementById(SCANNER_ID);
       if (!container) {
         throw new Error(`Scanner container #${SCANNER_ID} not found in DOM.`);
       }
-      container.innerHTML = ""; // Clear previous content
+      container.innerHTML = "";
 
-      // Initialize the scanner library.
-      const scanner = new Html5Qrcode(SCANNER_ID);
+      // Style container for full-bleed in-page video (avoids tiny/blurry default)
+      container.style.width = "100%";
+      container.style.height = "100%";
+      container.style.overflow = "hidden";
+      container.style.position = "relative";
+      container.style.background = "#000";
 
-      // Always prioritize the back camera (environment). If the browser cannot satisfy exact constraints,
-      // retry using a less strict constraint rather than falling back to the front camera.
-      const desiredFacingMode = "environment";
+      // Prefer native BarcodeDetector when available (Chrome Android) for sharper decode
+      const scanner = new Html5Qrcode(SCANNER_ID, {
+        verbose: false,
+        experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any);
 
-      const getEnvironmentCameraId = async (): Promise<string | null> => {
+      // Warm permission once so labels are available and UI stays in-page
+      try {
+        const warm = await navigator.mediaDevices.getUserMedia({
+          video: HIGH_QUALITY_VIDEO,
+          audio: false,
+        });
+        warm.getTracks().forEach((t) => t.stop());
+      } catch (warmErr) {
+        // Fall through — html5-qrcode will request again with softer constraints
+        console.warn("[Scanner] Warm-up getUserMedia failed:", warmErr);
+      }
+
+      const getPreferredCameraId = async (): Promise<string | null> => {
         try {
-          // First, explicitly call Html5Qrcode.getCameras() to get the array of available devices
           const devices = await Html5Qrcode.getCameras();
-          console.log("[Scanner] Available cameras:", devices);
-
-          // Iterate through the devices and explicitly look for a camera where device.label.toLowerCase()
-          // includes "back", "rear", or "environment"
-          for (const device of devices) {
-            const label = (device.label || "").toLowerCase();
-            if (
-              label.includes("back") ||
-              label.includes("rear") ||
-              label.includes("environment")
-            ) {
-              console.log(
-                "[Scanner] Found back camera:",
-                device.label,
-                device.id,
-              );
-              return device.id;
-            }
-          }
-
-          // If no back camera found by label, try to find any video input device
-          // Html5Qrcode.getCameras() returns all available cameras, so we'll use the last one as fallback
-          if (devices.length > 0) {
-            // Assume the last camera in the array is the back camera
-            const backCamera = devices[devices.length - 1];
-            console.log(
-              "[Scanner] Using fallback camera (assuming back):",
-              backCamera.label,
-              backCamera.id,
-            );
-            return backCamera.id;
-          }
-
-          return null;
-        } catch (error) {
-          console.warn("[Scanner] Failed to enumerate cameras:", error);
+          if (!devices?.length) return null;
+          const back = devices.find((d) => isBackCameraLabel(d.label || ""));
+          if (back) return back.id;
+          // Many phones list rear last when facing labels are empty
+          return devices[devices.length - 1]?.id ?? null;
+        } catch {
           return null;
         }
       };
 
       const commonScanOptions = {
-        fps: 20, // Increased FPS for real-time mobile scanning
-        qrbox: (w: number, h: number) => {
-          // Rectangular box optimal for standard EAN/UPC barcodes
-          return { width: w * 0.8, height: h * 0.5 };
+        fps: 15, // slightly lower fps → more decode time per frame on mobile CPUs
+        qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+          // Wide box for 1D EAN/UPC; leave margin for handheld shake
+          const width = Math.floor(Math.min(viewfinderWidth * 0.88, 480));
+          const height = Math.floor(Math.min(viewfinderHeight * 0.32, 180));
+          return { width: Math.max(width, 240), height: Math.max(height, 100) };
         },
-        aspectRatio: 1.0,
+        // Match phone landscape camera feed; 1.0 square often forces downscale
+        aspectRatio: 1.777778,
+        disableFlip: false,
         videoConstraints: {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
+          ...HIGH_QUALITY_VIDEO,
+          facingMode: facingMode === "user" ? { ideal: "user" } : { ideal: "environment" },
+        } as MediaTrackConstraints,
       };
 
       const handleScanSuccess = (decodedText: string) => {
         const normalizedText = convertBengaliToEnglishNumerals(decodedText);
         const now = Date.now();
-        if (now - lastScannedTimeRef.current < 1500) {
-          return; // Debounce duplicate scans
-        }
+        if (now - lastScannedTimeRef.current < 1200) return;
         lastScannedRef.current = normalizedText;
         lastScannedTimeRef.current = now;
         playSuccessBeep();
@@ -245,101 +306,131 @@ export function useCameraBarcodeScanner(config: CameraBarcodeScannerConfig) {
         onBarcodeDetected(normalizedText);
       };
 
-      const handleScanFailure = (error: any) => {
+      const handleScanFailure = (error: unknown) => {
         const errorMsg =
           typeof error === "string"
             ? error
             : error instanceof Error
               ? error.message
-              : "Unknown error";
-        // Avoid logging noisy scan failures that happen on every frame.
+              : "";
         if (
           errorMsg &&
-          !errorMsg.includes(
-            "No MultiFormat Readers were able to detect the code",
-          ) &&
-          !errorMsg.includes("No barcode or QR code detected")
+          !errorMsg.includes("No MultiFormat Readers were able to detect the code") &&
+          !errorMsg.includes("No barcode or QR code detected") &&
+          !errorMsg.includes("QR code parse error")
         ) {
+          // rare real errors only
           console.warn("[Scanner] Scan error:", errorMsg);
         }
       };
 
-      const environmentDeviceId = await getEnvironmentCameraId();
       let started = false;
 
-      // 1) Try deviceId-based selection (most reliable on mobile devices).
-      if (environmentDeviceId) {
+      // 1) Best path: full MediaTrackConstraints (resolution applied by browser)
+      const constraintAttempts: MediaTrackConstraints[] = [
+        {
+          facingMode: { ideal: facingMode },
+          width: { ideal: 1920, min: 1280 },
+          height: { ideal: 1080, min: 720 },
+          frameRate: { ideal: 30, min: 15 },
+        },
+        {
+          facingMode: { ideal: facingMode },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        { facingMode: { ideal: facingMode } },
+        { facingMode: facingMode },
+      ];
+
+      for (const cameraConfig of constraintAttempts) {
+        if (started) break;
         try {
-          // সরাসরি string ID পাস করতে হবে, কোনো জটিল Object নয়
           await scanner.start(
-            environmentDeviceId,
+            cameraConfig,
             commonScanOptions,
             handleScanSuccess,
             handleScanFailure,
           );
           started = true;
-          console.log("[Scanner] Started using detected back camera deviceId.");
-        } catch (deviceIdError) {
-          console.warn(
-            "[Scanner] Failed to start using environment deviceId...",
-            deviceIdError,
-          );
-          // এখানে throw করা যাবে না, করলে নিচের fallback কাজ করবে না।
+          console.log("[Scanner] Started with MediaTrackConstraints:", cameraConfig);
+        } catch (e) {
+          console.warn("[Scanner] Constraint attempt failed:", cameraConfig, e);
         }
       }
 
-      // 2) Fallback: try facingMode constraints if still not started.
+      // 2) Fallback: explicit deviceId (labels available after warm-up)
       if (!started) {
-        try {
-          // Strict facingMode Object
-          await scanner.start(
-            { facingMode: { exact: "environment" } },
-            commonScanOptions,
-            handleScanSuccess,
-            handleScanFailure,
-          );
-          started = true;
-          console.log("[Scanner] Started with strict facingMode=environment.");
-        } catch (strictError) {
-          console.warn(
-            "[Scanner] Strict facingMode failed, retrying relaxed facingMode...",
-            strictError,
-          );
+        const deviceId = await getPreferredCameraId();
+        if (deviceId) {
           try {
-            // Relaxed facingMode Object
             await scanner.start(
-              { facingMode: "environment" },
+              deviceId,
               commonScanOptions,
               handleScanSuccess,
               handleScanFailure,
             );
             started = true;
-            console.log(
-              "[Scanner] Started with relaxed facingMode=environment.",
-            );
-          } catch (relaxedError) {
-            console.error(
-              "[Scanner] Failed to start scanner with environment-facing camera.",
-              relaxedError,
-            );
-            throw relaxedError; // এখানে আর কোনো অপশন নেই, তাই Error Throw করতে হবে
+            console.log("[Scanner] Started with deviceId:", deviceId);
+          } catch (e) {
+            console.warn("[Scanner] deviceId start failed:", e);
           }
         }
       }
 
-      // Check if component is still mounted before setting state.
+      // 3) Last resort: any camera
+      if (!started) {
+        await scanner.start(
+          { facingMode: "environment" },
+          {
+            ...commonScanOptions,
+            videoConstraints: { facingMode: "environment" },
+            aspectRatio: 1.333,
+          },
+          handleScanSuccess,
+          handleScanFailure,
+        );
+        started = true;
+        console.log("[Scanner] Started with last-resort environment facingMode");
+      }
+
+      // Polish live video CSS (html5-qrcode injects <video>)
+      const video = container.querySelector("video");
+      if (video) {
+        video.setAttribute("playsinline", "true");
+        video.setAttribute("webkit-playsinline", "true");
+        video.style.width = "100%";
+        video.style.height = "100%";
+        video.style.objectFit = "cover";
+        video.style.transform = "translateZ(0)"; // promote layer — sharper on some GPUs
+      }
+      const videoParent = container.querySelector("video")?.parentElement;
+      if (videoParent) {
+        (videoParent as HTMLElement).style.width = "100%";
+        (videoParent as HTMLElement).style.height = "100%";
+      }
+
+      await enhanceLiveTrack(scanner);
+
+      // Detect torch support for UI
+      try {
+        const caps = scanner.getRunningTrackCapabilities?.() as
+          | { torch?: boolean }
+          | undefined;
+        if (caps?.torch) {
+          setTorchSupported(true);
+        }
+      } catch {
+        /* no torch */
+      }
+
       if (isMountedRef.current) {
         scannerRef.current = scanner;
         setIsInitialized(true);
         console.log("[Scanner] ✅ Scanner initialized successfully.");
       } else {
-        console.log(
-          "[Scanner] Component unmounted during initialization, cleaning up.",
-        );
         const state = scanner.getState();
-        if (state === 2) {
-          await scanner.stop();
-        }
+        if (state === 2) await scanner.stop();
         scanner.clear();
       }
     } catch (error: unknown) {
@@ -347,16 +438,13 @@ export function useCameraBarcodeScanner(config: CameraBarcodeScannerConfig) {
       console.error("[Scanner] ❌ Initialization failed:", errorMessage, error);
       if (isMountedRef.current) {
         onError?.(errorMessage);
-        setIsSupported(false); // Assume non-recoverable error
+        setIsSupported(false);
       }
     } finally {
       isInitializingRef.current = false;
     }
   }, [facingMode, onBarcodeDetected, onError, isShuttingDown]);
 
-  // --- Lifecycle Effects ---
-
-  // Handle mount and unmount status.
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
@@ -364,42 +452,29 @@ export function useCameraBarcodeScanner(config: CameraBarcodeScannerConfig) {
     };
   }, []);
 
-  // Initialize scanner when the 'enabled' prop becomes true.
   useEffect(() => {
     if (enabled && isSupported) {
-      // Use a short delay to ensure the DOM element is available after the dialog opens.
+      // Wait for fullscreen overlay paint so #scanner container has non-zero size
       const timer = setTimeout(() => {
-        if (isMountedRef.current) {
-          initializeScanner();
-        }
-      }, 150);
+        if (isMountedRef.current) initializeScanner();
+      }, 200);
       return () => clearTimeout(timer);
     }
   }, [enabled, isSupported, initializeScanner]);
 
-  // Final safety-net cleanup on unmount.
-  // This should ideally not be needed if startShutdown is always called.
   useEffect(() => {
     return () => {
       if (scannerRef.current) {
-        console.warn(
-          "[Scanner] Unsafe unmount cleanup triggered. The scanner was not shut down correctly.",
-        );
         const scanner = scannerRef.current;
         scannerRef.current = null;
-
-        const cleanup = async () => {
+        void (async () => {
           try {
-            const state = scanner.getState();
-            if (state === 2) {
-              await scanner.stop();
-            }
+            if (scanner.getState() === 2) await scanner.stop();
             scanner.clear();
-          } catch (err) {
-            console.error("[Scanner] Unsafe cleanup failed:", err);
+          } catch {
+            /* ignore */
           }
-        };
-        cleanup();
+        })();
       }
     };
   }, []);
@@ -410,6 +485,10 @@ export function useCameraBarcodeScanner(config: CameraBarcodeScannerConfig) {
     isShuttingDown,
     startShutdown,
     scannerId: SCANNER_ID,
+    torchSupported,
+    torchOn,
+    toggleTorch,
+    setTorch,
   };
 }
 

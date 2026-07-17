@@ -48,7 +48,10 @@
     "camera_permission_required": "Camera permission is required to scan barcodes!",
     "invalid_barcode": "Invalid barcode: {barcode}",
     "scanner_error": "Scanner error: {error}",
-    "done_scanned": "Done ({count} scanned)"
+    "done_scanned": "Done ({count} scanned)",
+    "torch_on": "Turn flashlight on",
+    "torch_off": "Turn flashlight off",
+    "scanner_keyboard_fallback": "You can also use a USB/Bluetooth barcode scanner or type the code in search."
   },
   "Cart": {
     "title": "Cart",

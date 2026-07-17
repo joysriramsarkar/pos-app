@@ -300,7 +300,7 @@ export function SalesReport({ onBack }: SalesReportProps) {
           <Bar dataKey="revenue" name="revenue" fill="url(#sr-revGrad)" radius={[4, 4, 0, 0]} maxBarSize={28} minPointSize={2} />
           <Bar dataKey="profit" name="profit" fill="url(#sr-profGrad)" radius={[4, 4, 0, 0]} maxBarSize={28} minPointSize={2} />
           {showComparison && viewMode !== 'daily' && (
-            <Bar dataKey="prevRevenue" name="prevRevenue" fill="var(--chart-4)" fillOpacity={0.4} radius={[4, 4, 0, 0]} maxBarSize={28} />
+            <Bar dataKey="prevRevenue" name="prevRevenue" fill="var(--color-prevRevenue)" fillOpacity={0.4} radius={[4, 4, 0, 0]} maxBarSize={28} />
           )}
         </BarChart>
       );
@@ -313,7 +313,7 @@ export function SalesReport({ onBack }: SalesReportProps) {
           <Line type="monotone" dataKey="revenue" name="revenue" stroke="var(--chart-1)" strokeWidth={2.5} dot={{ r: 2, fill: 'var(--chart-1)' }} />
           <Line type="monotone" dataKey="profit" name="profit" stroke="var(--chart-2)" strokeWidth={2.5} dot={{ r: 2, fill: 'var(--chart-2)' }} />
           {showComparison && viewMode !== 'daily' && (
-            <Line type="monotone" dataKey="prevRevenue" name="prevRevenue" stroke="var(--chart-4)" strokeWidth={1.5} strokeDasharray="5 3" dot={false} />
+            <Line type="monotone" dataKey="prevRevenue" name="prevRevenue" stroke="var(--color-prevRevenue)" strokeWidth={1.5} strokeDasharray="5 3" dot={false} />
           )}
         </LineChart>
       );
@@ -336,7 +336,7 @@ export function SalesReport({ onBack }: SalesReportProps) {
         <Area type="monotone" dataKey="revenue" name="revenue" stroke="var(--chart-1)" fill="url(#sr-areaRev)" strokeWidth={2.5} />
         <Area type="monotone" dataKey="profit" name="profit" stroke="var(--chart-2)" fill="url(#sr-areaProf)" strokeWidth={2.5} />
         {showComparison && viewMode !== 'daily' && (
-          <Area type="monotone" dataKey="prevRevenue" name="prevRevenue" stroke="var(--chart-4)" fill="none" strokeWidth={1.5} strokeDasharray="5 3" />
+          <Area type="monotone" dataKey="prevRevenue" name="prevRevenue" stroke="var(--color-prevRevenue)" fill="none" strokeWidth={1.5} strokeDasharray="5 3" />
         )}
       </AreaChart>
     );

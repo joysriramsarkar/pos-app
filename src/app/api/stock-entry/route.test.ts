@@ -1,8 +1,8 @@
-import { describe, expect, it, mock, beforeEach } from 'bun:test';
+import { describe, expect, it, beforeEach, vi } from 'vitest';
 
-mock.module('@/lib/env', () => ({ env: {} }));
+vi.mock('@/lib/env', () => ({ env: {} }));
 
-mock.module('next/server', () => ({
+vi.mock('next/server', () => ({
   NextResponse: {
     json: (body: any, init?: any) => {
       return new Response(JSON.stringify(body), { status: init?.status || 200 });
@@ -10,35 +10,35 @@ mock.module('next/server', () => ({
   }
 }));
 
-mock.module('@/lib/db', () => ({
+vi.mock('@/lib/db', () => ({
   db: {
-    user: { findUnique: mock(() => Promise.resolve(null)) },
-    rolePermission: { findFirst: mock(() => Promise.resolve(null)) },
-    $transaction: mock(() => Promise.resolve(null)),
+    user: { findUnique: vi.fn(() => Promise.resolve(null)) },
+    rolePermission: { findFirst: vi.fn(() => Promise.resolve(null)) },
+    $transaction: vi.fn(() => Promise.resolve(null)),
   },
 }));
 
-mock.module('@/lib/permissions', () => ({
-  hasPermission: mock(() => Promise.resolve(true)),
-  getUserRole: mock(() => null),
-  roleHasPermission: mock(() => true),
+vi.mock('@/lib/permissions', () => ({
+  hasPermission: vi.fn(() => Promise.resolve(true)),
+  getUserRole: vi.fn(() => null),
+  roleHasPermission: vi.fn(() => true),
   rolePermissions: {},
 }));
 
-mock.module('@/lib/permissions-helpers', () => ({
-  getUserRole: mock(() => null),
-  roleHasPermission: mock(() => true),
+vi.mock('@/lib/permissions-helpers', () => ({
+  getUserRole: vi.fn(() => null),
+  roleHasPermission: vi.fn(() => true),
   rolePermissions: {},
 }));
 
-mock.module('@/lib/api-middleware', () => ({
-  requireAuth: mock(() => Promise.resolve({ authorized: true, response: null, session: { user: { id: '1', role: 'ADMIN' } } })),
-  requirePermission: mock(() => Promise.resolve(null)),
-  requireRole: mock(() => Promise.resolve(null)),
-  getAuthenticatedUser: mock(() => Promise.resolve({ id: '1', role: 'ADMIN' })),
+vi.mock('@/lib/api-middleware', () => ({
+  requireAuth: vi.fn(() => Promise.resolve({ authorized: true, response: null, session: { user: { id: '1', role: 'ADMIN' } } })),
+  requirePermission: vi.fn(() => Promise.resolve(null)),
+  requireRole: vi.fn(() => Promise.resolve(null)),
+  getAuthenticatedUser: vi.fn(() => Promise.resolve({ id: '1', role: 'ADMIN' })),
 }));
 
-mock.module('@/schemas', () => ({
+vi.mock('@/schemas', () => ({
   StockEntryInputSchema: {
     safeParse: () => ({ success: false, error: { flatten: () => ({ fieldErrors: {} }) } })
   }

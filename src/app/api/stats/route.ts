@@ -163,7 +163,7 @@ export async function GET(request: NextRequest) {
       where: { isActive: true },
     });
 
-    // Calculate today's cost of goods sold from sale items
+    // COGS from sale-time cost snapshot (fallback to current WAC for legacy rows)
     const todaySaleItems = await db.saleItem.findMany({
       where: {
         sale: {
@@ -171,12 +171,17 @@ export async function GET(request: NextRequest) {
             gte: startOfDay,
             lt: endOfDay,
           },
-          status: 'Completed',
+          status: { in: ['Completed', 'PartialReturn'] },
         },
+        quantity: { gt: 0 },
+      },
+      select: {
+        productId: true,
+        quantity: true,
+        costPriceAtSale: true,
       },
     });
 
-    // Get buying prices for products sold today
     const productIds = [...new Set(todaySaleItems.map(item => item.productId))];
     const products = await db.product.findMany({
       where: { id: { in: productIds } },
@@ -185,8 +190,9 @@ export async function GET(request: NextRequest) {
     const productBuyingPriceMap = new Map(products.map(p => [p.id, Number(p.buyingPrice || 0)]));
 
     const costOfGoodsSold = todaySaleItems.reduce((sum, item) => {
-      const buyingPrice = productBuyingPriceMap.get(item.productId) ?? 0;
-      return sum + (buyingPrice * Number(item.quantity));
+      const snap = Number(item.costPriceAtSale);
+      const unitCost = snap > 0 ? snap : (productBuyingPriceMap.get(item.productId) ?? 0);
+      return sum + (unitCost * Number(item.quantity));
     }, 0);
 
     // Today's profit: sales - operating expenses (excluding supplier payments) - cost of goods sold

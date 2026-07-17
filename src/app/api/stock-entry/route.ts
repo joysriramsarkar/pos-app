@@ -11,8 +11,6 @@ import { multiplyMoney, toMoneyNumber, toUnitPriceNumber } from '@/lib/money';
 import { logAudit } from '@/lib/audit';
 import Decimal from 'decimal.js';
 
-const getIp = (req: NextRequest) => req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || undefined;
-
 // POST /api/stock-entry - Create stock entry (purchase)
 export async function POST(request: NextRequest) {
   const authError = await requirePermission(request, 'stock.edit');
@@ -22,14 +20,13 @@ export async function POST(request: NextRequest) {
     let body;
     try {
       body = await request.json();
-    } catch (parseError) {
+    } catch {
       return NextResponse.json(
         { success: false, error: 'Invalid request body: JSON parsing failed' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    // Validate with Zod
     const result = StockEntryInputSchema.safeParse(body);
     if (!result.success) {
       const errors = Object.values(result.error.flatten().fieldErrors)
@@ -37,41 +34,51 @@ export async function POST(request: NextRequest) {
         .join(', ');
       return NextResponse.json(
         { success: false, error: errors || 'Validation failed' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     const { productId, quantity, purchasePrice, date, supplierId, amountPaid, notes } = result.data;
 
-    // Update stock in transaction
     const transactionResult = await db.$transaction(async (tx) => {
-      // Verify product exists
-      const product = await tx.product.findUnique({
-        where: { id: productId },
-      });
+      // Lock product row for concurrent stock/WAC safety
+      const locked = await tx.$queryRaw<
+        Array<{
+          id: string;
+          name: string;
+          current_stock: unknown;
+          buying_price: unknown;
+        }>
+      >`
+        SELECT id, name, "current_stock", "buying_price"
+        FROM products
+        WHERE id = ${productId}
+        FOR UPDATE
+      `;
 
-      if (!product) {
+      const productRow = locked[0];
+      if (!productRow) {
         throw new Error(`Product ${productId} not found`);
       }
 
-      // Increment stock
-      // build update data dynamically so we only touch buyingPrice when provided
-      const updateData: any = {
+      const currentStock = Number(productRow.current_stock) || 0;
+      const updateData: {
+        currentStock: { increment: number };
+        updatedAt: Date;
+        buyingPrice?: number;
+      } = {
         currentStock: { increment: quantity },
         updatedAt: new Date(),
       };
 
       if (purchasePrice !== undefined && purchasePrice !== null) {
-        // Calculate the Weighted Average Cost (WAC)
-        const currentStock = Number(product.currentStock) || 0; // Handle null/undefined
         const newStock = currentStock + quantity;
-
-        // Handle division by zero edge case (though newStock should be > 0 since quantity > 0)
         if (newStock > 0) {
-          const currentPrice = product.buyingPrice !== null && product.buyingPrice !== undefined
-            ? Number(product.buyingPrice)
-            : purchasePrice;
-          const wac = ((currentStock * currentPrice) + (quantity * purchasePrice)) / newStock;
+          const currentPrice =
+            productRow.buying_price !== null && productRow.buying_price !== undefined
+              ? Number(productRow.buying_price)
+              : purchasePrice;
+          const wac = (currentStock * currentPrice + quantity * purchasePrice) / newStock;
           updateData.buyingPrice = toUnitPriceNumber(wac);
         } else {
           updateData.buyingPrice = toUnitPriceNumber(purchasePrice);
@@ -83,40 +90,45 @@ export async function POST(request: NextRequest) {
         data: updateData,
       });
 
-      // Create StockHistory record for audit trail
       const stockHistory = await tx.stockHistory.create({
         data: {
           productId,
           changeType: 'purchase',
-          quantity, // Positive number for addition
+          quantity,
           reason: notes || `Stock purchase: ${quantity} units @ ₹${purchasePrice}`,
-          referenceId: undefined, // Will be set after purchase creation
+          referenceId: undefined,
         },
       });
 
-      // Optionally create Purchase record if supplierId provided
       if (supplierId) {
-        // Verify supplier exists before creating purchase
         const supplier = await tx.supplier.findUnique({
           where: { id: supplierId },
         });
 
         if (supplier) {
           const totalAmount = multiplyMoney(quantity, purchasePrice);
-          const actualAmountPaid = amountPaid !== undefined ? new Decimal(amountPaid) : totalAmount;
-          const paymentStatus = 'Paid';
+          const actualAmountPaid =
+            amountPaid !== undefined ? new Decimal(amountPaid) : totalAmount;
+
+          let paymentStatus = 'Paid';
+          if (actualAmountPaid.lte(0)) {
+            paymentStatus = 'Pending';
+          } else if (actualAmountPaid.lt(totalAmount)) {
+            paymentStatus = 'Partial';
+          }
 
           const purchase = await tx.purchase.create({
             data: {
               supplierId,
               invoiceNumber: `PUR-${Date.now()}`,
               totalAmount,
+              paidAmount: toMoneyNumber(actualAmountPaid),
               paymentStatus,
               notes,
               items: {
                 create: {
                   productId,
-                  productName: product.name,
+                  productName: productRow.name,
                   quantity,
                   buyingPrice: purchasePrice,
                   totalPrice: totalAmount,
@@ -126,24 +138,20 @@ export async function POST(request: NextRequest) {
             include: { items: true },
           });
 
-          // Update StockHistory to link to Purchase using the record ID we have
           await tx.stockHistory.update({
-            where: {
-              id: stockHistory.id,
-            },
+            where: { id: stockHistory.id },
             data: {
               referenceId: purchase.id,
               purchaseId: purchase.id,
             },
           });
 
-          // Create Expense record for payment if amountPaid > 0
           if (actualAmountPaid.gt(0)) {
             await tx.expense.create({
               data: {
                 amount: actualAmountPaid,
                 category: 'Supplier Payment',
-                notes: notes || `Paid for stock: ${quantity} units of ${product.name}`,
+                notes: notes || `Paid for stock: ${quantity} units of ${productRow.name}`,
                 date: date ? new Date(date) : new Date(),
                 supplierId,
                 supplierName: supplier.name,
@@ -151,14 +159,13 @@ export async function POST(request: NextRequest) {
             });
           }
         }
-        // If supplier doesn't exist, just skip purchase creation and only update stock
       }
 
       return updatedProduct;
     });
 
     const user = await getAuthenticatedUser(request);
-    const userId = (user as any)?.id;
+    const userId = (user as { id?: string } | null)?.id;
     await logAudit({
       userId,
       action: 'STOCK_ENTRY',
@@ -176,12 +183,11 @@ export async function POST(request: NextRequest) {
   } catch (error: unknown) {
     console.error('Error creating stock entry:', error);
     return NextResponse.json(
-      { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Failed to create stock entry' 
+      {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to create stock entry',
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
-

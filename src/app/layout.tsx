@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { SessionProvider } from "@/components/providers/SessionProvider";
@@ -9,24 +8,10 @@ import { I18nProvider } from "@/components/providers/I18nProvider";
 import { ForcePasswordChangeDialog } from "@/components/pos/ForcePasswordChangeDialog";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
-import { Noto_Sans_Bengali } from "next/font/google";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-const notoBengali = Noto_Sans_Bengali({
-  variable: "--font-noto-bengali",
-  subsets: ["bengali"],
-  weight: ["400", "500", "600", "700"],
-  display: "swap",
-});
+/**
+ * Fonts are system stacks (see globals.css) — no Google Fonts fetch at build time.
+ * This keeps `next build` working offline / behind firewalls.
+ */
 
 export const metadata: Metadata = {
   title: "Lakhan Bhandar POS - লক্ষ্মণ ভাণ্ডার",
@@ -44,11 +29,11 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 5,
   userScalable: true,
-  viewportFit: "cover",  // ← নতুন: নচ সহ ফুল স্ক্রিন
-  interactiveWidget: "resizes-content", // Prevent virtual keyboard from overlaying fixed elements
+  viewportFit: "cover",
+  interactiveWidget: "resizes-content",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#ffffff" },  // ← নতুন
-    { media: "(prefers-color-scheme: dark)", color: "#1a1a1a" },   // ← নতুন
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#1a1a1a" },
   ],
 };
 
@@ -59,10 +44,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="bn" suppressHydrationWarning>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} ${notoBengali.variable} antialiased bg-background text-foreground`}
-        suppressHydrationWarning
-      >
+      <body className="font-sans antialiased bg-background text-foreground" suppressHydrationWarning>
         <ErrorBoundary>
           <SessionProvider>
             <OfflineProvider>

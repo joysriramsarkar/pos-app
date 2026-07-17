@@ -368,6 +368,14 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
     }
 
     // CREATE PHASE: Now that validation passed, create records
+    // Snapshot cost at sync time from current product buying price
+    const costByProduct = new Map(
+      products.map((p: { id: string; buyingPrice: unknown }) => [
+        p.id,
+        toMoneyNumber(p.buyingPrice as number),
+      ]),
+    );
+
     const sale = await tx.sale.create({
       data: {
         id: saleData.id,
@@ -390,6 +398,7 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
             productName: item.productName,
             quantity: item.quantity,
             unitPrice: item.unitPrice,
+            costPriceAtSale: costByProduct.get(item.productId) ?? 0,
             totalPrice: item.totalPrice,
           })),
         },
@@ -633,6 +642,7 @@ async function syncCustomer(tx: Prisma.TransactionClient, customerData: z.infer<
       }
     }
 
+    // Never trust client-provided balances — ledger is server-authoritative
     return tx.customer.create({
       data: {
         id: customerData.id,
@@ -640,8 +650,8 @@ async function syncCustomer(tx: Prisma.TransactionClient, customerData: z.infer<
         phone: customerData.phone || null,
         address: customerData.address || null,
         notes: customerData.notes || null,
-        totalDue: customerData.totalDue || 0,
-        totalPaid: customerData.totalPaid || 0,
+        totalDue: 0,
+        totalPaid: 0,
         isActive: true,
       },
     });
@@ -720,14 +730,25 @@ async function syncProduct(tx: Prisma.TransactionClient, productData: z.infer<ty
     if ("productId" in productData && "quantityChange" in productData) {
       const { productId, quantityChange } = productData;
 
-      // For stock deductions (negative quantityChange), floor at 0 to prevent negative stock
+      // Lock product row
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM products WHERE id = ${productId} FOR UPDATE
+      `;
+      if (!locked[0]) {
+        throw new Error(`Product ${productId} not found during stock sync`);
+      }
+
       let updated;
       if (quantityChange < 0) {
-        await tx.product.updateMany({
+        const result = await tx.product.updateMany({
           where: { id: productId, currentStock: { gte: Math.abs(quantityChange) } },
-          data: { currentStock: { decrement: Math.abs(quantityChange) }, updatedAt: new Date() }
+          data: { currentStock: { decrement: Math.abs(quantityChange) }, updatedAt: new Date() },
         });
         updated = await tx.product.findUniqueOrThrow({ where: { id: productId } });
+        // Only write history when stock actually changed — avoids ledger drift
+        if (result.count === 0) {
+          return updated;
+        }
       } else {
         updated = await tx.product.update({
           where: { id: productId },
