@@ -12,10 +12,12 @@ import { z } from 'zod';
 import { ProductInputSchema, SaleInputSchema, CustomerInputSchema } from '@/schemas';
 import { addMoney, subtractMoney, toMoneyNumber, toMoneyDecimal } from '@/lib/money';
 import Decimal from 'decimal.js';
+import { findSaleItemTotalMismatch } from '@/lib/sale-calculations';
 import {
-  aggregateSaleItemQuantities,
-  findSaleItemTotalMismatch,
-} from '@/lib/sale-calculations';
+  applySaleStockPlans,
+  costPriceForProduct,
+  lockAndPlanSaleStock,
+} from '@/lib/sale-stock';
 import { logAudit } from '@/lib/audit';
 
 const getIp = (req: NextRequest) => req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || undefined;
@@ -301,27 +303,11 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
       throw new Error(itemTotalMismatch);
     }
 
-    // 1. Validate all products exist and check current stock levels
-    const stockDeductions = aggregateSaleItemQuantities(saleData.items);
-    const productIds = stockDeductions.map((item) => item.productId);
-    const products = await tx.product.findMany({
-      where: { id: { in: productIds } },
-    });
-
-    const productMap = new Map<string, any>(
-      products.map((p: any) => [p.id, p]),
+    // 1. Lock products + plan stock (FOR UPDATE, auto-adjust, blended COGS)
+    const { plansByProductId, autoAdjusted } = await lockAndPlanSaleStock(
+      tx,
+      saleData.items,
     );
-
-    // Validate all products exist
-    for (const item of stockDeductions) {
-      const product = productMap.get(item.productId);
-
-      if (!product) {
-        throw new Error(
-          `Product ${item.productId} not found during sync validation`,
-        );
-      }
-    }
 
     // 2. Validate customer exists if specified
     if (saleData.customerId) {
@@ -343,7 +329,8 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
 
     if ((saleData.totalAmount || 0) < 0) {
       throw new Error("Total amount cannot be negative");
-    }    const totalAmount = toMoneyDecimal(saleData.totalAmount || 0);
+    }
+    const totalAmount = toMoneyDecimal(saleData.totalAmount || 0);
     const amountReceived = toMoneyDecimal(saleData.amountReceived || 0);
     const amountPaid = toMoneyDecimal(saleData.amountPaid || 0);
     const prepaidToUse = toMoneyDecimal(saleData.prepaidAmountUsed || 0);
@@ -367,15 +354,7 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
       throw new Error("Received amount does not cover sale payment and prepaid change");
     }
 
-    // CREATE PHASE: Now that validation passed, create records
-    // Snapshot cost at sync time from current product buying price
-    const costByProduct = new Map(
-      products.map((p: { id: string; buyingPrice: unknown }) => [
-        p.id,
-        toMoneyNumber(p.buyingPrice as number),
-      ]),
-    );
-
+    // CREATE PHASE: sale rows use blended cost (owned @ WAC, shortage @ 0)
     const sale = await tx.sale.create({
       data: {
         id: saleData.id,
@@ -398,68 +377,25 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
             productName: item.productName,
             quantity: item.quantity,
             unitPrice: item.unitPrice,
-            costPriceAtSale: costByProduct.get(item.productId) ?? 0,
+            costPriceAtSale: costPriceForProduct(plansByProductId, item.productId, 0),
             totalPrice: item.totalPrice,
           })),
         },
       },
       include: { items: true },
-    });      // Update stock for all products
-      if (stockDeductions.length > 0) {
-        // Sort stockDeductions by productId to guarantee consistent lock ordering and prevent deadlocks
-        stockDeductions.sort((a, b) => a.productId.localeCompare(b.productId));
+    });
 
-        for (let i = 0; i < stockDeductions.length; i++) {
-          const productId = stockDeductions[i].productId;
-          const requiredQty = Number(stockDeductions[i].quantity);
+    await applySaleStockPlans(tx, {
+      saleId: sale.id,
+      invoiceNumber: sale.invoiceNumber,
+      plans: Array.from(plansByProductId.values()),
+      historyReasonPrefix: "Offline sync sale",
+    });
 
-          const product = productMap.get(productId);
-          const currentStock = Number(product?.currentStock || 0);
+    // Attach auto-adjust metadata for callers / audit
+    (sale as { autoAdjusted?: typeof autoAdjusted }).autoAdjusted = autoAdjusted;
 
-          if (currentStock < requiredQty) {
-            const shortage = requiredQty - currentStock;
-
-            // Record the auto-adjustment in stock history so it is fully audit-logged
-            await tx.stockHistory.create({
-              data: {
-                productId: productId,
-                changeType: "adjustment",
-                quantity: shortage,
-                reason: `Auto-adjusted for sync sale: ${saleData.invoiceNumber}`,
-                referenceId: sale.id,
-                saleId: sale.id,
-              }
-            });
-
-            // Set stock to 0 since shortage was added and then sold
-            await tx.product.update({
-              where: { id: productId },
-              data: { currentStock: 0, updatedAt: new Date() }
-            });
-          } else {
-            // Normal decrement
-            await tx.product.update({
-              where: { id: productId },
-              data: { currentStock: { decrement: requiredQty }, updatedAt: new Date() }
-            });
-          }
-        }
-
-        // Create stock history for audit trail
-        const historyData = stockDeductions.map((item) => ({
-          productId: item.productId,
-          changeType: 'sale',
-          quantity: -item.quantity,
-          reason: `Offline sync sale: ${saleData.invoiceNumber}`,
-          referenceId: sale.id,
-          saleId: sale.id,
-        }));
-
-
-      await tx.stockHistory.createMany({
-        data: historyData,
-      });
-    }    // Update customer due/prepaid if applicable
+    // Update customer due/prepaid if applicable
     if (saleData.customerId && (amountPaid.lt(totalAmount) || prepaidToUse.gt(0) || changeAsPrepayment.gt(0))) {
       const dueAmount = subtractMoney(totalAmount, amountPaid);
 

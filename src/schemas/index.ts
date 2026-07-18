@@ -114,3 +114,38 @@ export const ExpenseInputSchema = z.object({
 });
 
 export type ExpenseInput = z.infer<typeof ExpenseInputSchema>;
+
+/** Shared yyyy-MM-dd calendar-day key (timezone-stable daily buckets). */
+export const CalendarDateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be yyyy-MM-dd');
+
+export const DailyManualRecordInputSchema = z.object({
+  date: CalendarDateSchema,
+  sales: z.coerce.number().finite().nonnegative().default(0),
+  expenses: z.coerce.number().finite().nonnegative().default(0),
+  notes: z.string().max(2000).nullable().optional(),
+});
+
+export type DailyManualRecordInput = z.infer<typeof DailyManualRecordInputSchema>;
+
+export const SalesListQuerySchema = z.object({
+  id: z.string().max(64).optional(),
+  invoiceNumber: z.string().max(100).optional(),
+  customerId: z.string().max(64).optional(),
+  status: z.enum(['Completed', 'Cancelled', 'Refunded', 'Pending']).optional(),
+  dateFrom: z.string().max(40).optional(),
+  dateTo: z.string().max(40).optional(),
+  page: z.coerce.number().int().min(1).max(10_000).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+
+export type SalesListQuery = z.infer<typeof SalesListQuerySchema>;
+
+export const SaleStatusUpdateSchema = z.object({
+  id: z.string().min(1, 'Sale ID is required'),
+  status: z.enum(['Cancelled', 'Refunded']),
+  reason: z.string().max(500).optional(),
+});
+
+export type SaleStatusUpdate = z.infer<typeof SaleStatusUpdateSchema>;

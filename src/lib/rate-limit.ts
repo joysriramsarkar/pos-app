@@ -25,6 +25,15 @@ export const usernameLoginLimiter = redis
     })
   : null;
 
+// Sales create: 60 requests / minute per user or IP (abuse / runaway offline sync)
+export const salesCreateLimiter = redis
+  ? new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(60, "60 s"),
+      prefix: "ratelimit:sales:create",
+    })
+  : null;
+
 // Local in-memory fallback store
 const localMemoryMap = new Map<string, { count: number; resetAt: number }>();
 
@@ -43,4 +52,24 @@ export async function checkLocalRateLimit(key: string, limit: number, windowMs: 
   
   cached.count += 1;
   return { success: true };
+}
+
+/** Prefer Upstash when configured; otherwise in-memory sliding window. */
+export async function enforceRateLimit(
+  key: string,
+  options: {
+    limit: number;
+    windowMs: number;
+    redisLimiter?: { limit: (id: string) => Promise<{ success: boolean }> } | null;
+  }
+): Promise<{ success: boolean }> {
+  const { limit, windowMs, redisLimiter } = options;
+  if (redisLimiter) {
+    try {
+      return await redisLimiter.limit(key);
+    } catch {
+      // fall through to memory
+    }
+  }
+  return checkLocalRateLimit(key, limit, windowMs);
 }

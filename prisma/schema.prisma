@@ -41,6 +41,8 @@ model Product {
   @@map("products")
 }
 
+// Category catalog (lookup / backup). Product.category remains a denormalized
+// string for POS speed; create/update product routes upsert matching Category rows.
 model Category {
   id          String   @id @default(cuid())
   name        String   @unique
@@ -435,9 +437,11 @@ model AuditLog {
 // DAILY MANUAL CALCULATOR RECORDS
 // ============================================================================
 
+// Calendar-day key as yyyy-MM-dd string (timezone-stable daily buckets).
+// Validated at API boundary via CalendarDateSchema — not a wall-clock DateTime.
 model DailyManualRecord {
   id        String   @id @default(cuid())
-  date      String   @unique // date format "yyyy-MM-dd"
+  date      String   @unique // "yyyy-MM-dd"
   sales     Decimal  @default(0)
   expenses  Decimal  @default(0)
   profit    Decimal  @default(0)

@@ -1,10 +1,31 @@
 services:
+  # Optional local Postgres for development (not required if using Supabase)
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pos
+      POSTGRES_PASSWORD: pos
+      POSTGRES_DB: pos_app
+    ports:
+      - "5432:5432"
+    volumes:
+      - pos_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pos -d pos_app"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   app:
     build: .
     restart: unless-stopped
     env_file: .env
     environment:
       NODE_ENV: production
+      # Override when using the local db service:
+      # DATABASE_URL: postgresql://pos:pos@db:5432/pos_app?schema=public
+      # DIRECT_URL: postgresql://pos:pos@db:5432/pos_app?schema=public
     expose:
       - "3000"
     healthcheck:
@@ -31,3 +52,4 @@ services:
 volumes:
   caddy_data:
   caddy_config:
+  pos_pg_data:
