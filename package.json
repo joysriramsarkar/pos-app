@@ -114,7 +114,7 @@
     "tsx": "^4.21.0",
     "tw-animate-css": "^1.3.5",
     "typescript": "^5.9.3",
-    "vitest": "^3.2.7"
+    "vitest": "^4.1.10"
   },
   "overrides": {
     "@hono/node-server": "^1.19.13",
