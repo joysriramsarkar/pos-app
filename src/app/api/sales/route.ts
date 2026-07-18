@@ -229,6 +229,16 @@ async function handlePost(request: NextRequest) {
 
     const sale = await db.$transaction(
       async (tx) => {
+        // Snapshot cost (WAC) at sale time for stable historical profit reports
+        const itemProductIds = [...new Set(validatedItems.map((i) => i.productId))];
+        const costProducts = await tx.product.findMany({
+          where: { id: { in: itemProductIds } },
+          select: { id: true, buyingPrice: true },
+        });
+        const costByProduct = new Map(
+          costProducts.map((p) => [p.id, toMoneyNumber(p.buyingPrice)]),
+        );
+
         const saleCreateData: any = {
           invoiceNumber,
           subtotal,
@@ -249,6 +259,7 @@ async function handlePost(request: NextRequest) {
               productName: item.productName,
               quantity: item.quantity,
               unitPrice: item.unitPrice,
+              costPriceAtSale: costByProduct.get(item.productId) ?? 0,
               totalPrice: item.totalPrice,
             })),
           },
@@ -508,6 +519,13 @@ async function handlePut(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Sale ID is required" }, { status: 400 });
     }
 
+    if (!status || !["Cancelled", "Refunded"].includes(status)) {
+      return NextResponse.json(
+        { success: false, error: "Status must be Cancelled or Refunded" },
+        { status: 400 },
+      );
+    }
+
     const existingSale = await db.sale.findUnique({
       where: { id },
       include: { items: true, customer: true },
@@ -535,16 +553,42 @@ async function handlePut(request: NextRequest) {
         include: { items: true },
       });
 
+      // Do not restore stock already returned via SaleReturn / prior refunds
+      const priorReturnItems = await tx.saleReturnItem.findMany({
+        where: { saleItem: { saleId: id } },
+        select: { productId: true, quantity: true },
+      });
+      const alreadyReturnedByProduct = priorReturnItems.reduce((acc, r) => {
+        acc.set(r.productId, (acc.get(r.productId) || 0) + Number(r.quantity));
+        return acc;
+      }, new Map<string, number>());
+
+      if (priorReturnItems.length > 0) {
+        throw new Error(
+          "Cannot cancel/refund a sale that already has returns. Process remaining items via returns instead.",
+        );
+      }
+
       const productReturnQuantities = existingSale.items.reduce((acc, item) => {
+        const already = alreadyReturnedByProduct.get(item.productId) || 0;
+        // If multiple lines share a product, already is product-level — only subtract once below
         acc.set(item.productId, (acc.get(item.productId) || 0) + Number(item.quantity));
         return acc;
       }, new Map<string, number>());
 
-      const productIds = Array.from(productReturnQuantities.keys());
-      const quantities = Array.from(productReturnQuantities.values());
+      // Net restore = sold qty − already returned
+      for (const [pid, soldQty] of productReturnQuantities) {
+        const already = alreadyReturnedByProduct.get(pid) || 0;
+        productReturnQuantities.set(pid, Math.max(0, soldQty - already));
+      }
+
+      const productIds = Array.from(productReturnQuantities.keys()).sort();
+      const quantities = productIds.map((pid) => productReturnQuantities.get(pid) || 0);
 
       if (productIds.length > 0) {
         for (let i = 0; i < productIds.length; i++) {
+          if (quantities[i] <= 0) continue;
+          await tx.$executeRaw`SELECT id FROM products WHERE id = ${productIds[i]} FOR UPDATE`;
           await tx.product.update({
             where: { id: productIds[i] },
             data: { currentStock: { increment: quantities[i] }, updatedAt: new Date() }
@@ -552,14 +596,16 @@ async function handlePut(request: NextRequest) {
         }
 
         await tx.stockHistory.createMany({
-          data: productIds.map((id, index) => ({
-            productId: id,
-            changeType: "return",
-            quantity: quantities[index],
-            reason: `${status}: ${existingSale.invoiceNumber}`,
-            referenceId: existingSale.id,
-            saleId: existingSale.id,
-          })),
+          data: productIds
+            .map((pid, index) => ({
+              productId: pid,
+              changeType: "return",
+              quantity: quantities[index],
+              reason: `${status}: ${existingSale.invoiceNumber}`,
+              referenceId: existingSale.id,
+              saleId: existingSale.id,
+            }))
+            .filter((row) => row.quantity > 0),
         });
       }
 
@@ -592,17 +638,18 @@ async function handlePut(request: NextRequest) {
         const currentTotalDue = toMoneyDecimal(customer.totalDue);
         const currentPrepaidBalance = toMoneyDecimal(customer.prepaidBalance);
 
-        const newTotalDue = dueAmount.gt(0) ? (currentTotalDue.minus(dueAmount).gt(0) ? currentTotalDue.minus(dueAmount) : new Decimal(0)) : currentTotalDue;
+        // Floor due at 0 — absolute set avoids negative balance under concurrent collections
+        const newTotalDue = dueAmount.gt(0)
+          ? (currentTotalDue.minus(dueAmount).gt(0) ? currentTotalDue.minus(dueAmount) : new Decimal(0))
+          : currentTotalDue;
         const prepaidBalanceAdjustment = subtractMoney(prepaidUsedAmount, changePrepaymentAmount);
         const addPrepaid = currentPrepaidBalance.plus(prepaidBalanceAdjustment);
         const newPrepaidBalance = addPrepaid.gt(0) ? addPrepaid : new Decimal(0);
 
-        const customerUpdateData: any = { updatedAt: new Date() };
-        if (dueAmount.gt(0)) customerUpdateData.totalDue = { decrement: dueAmount };
-        if (prepaidBalanceAdjustment.gt(0)) {
-           customerUpdateData.prepaidBalance = { increment: prepaidBalanceAdjustment };
-        } else if (prepaidBalanceAdjustment.lt(0)) {
-           customerUpdateData.prepaidBalance = { decrement: prepaidBalanceAdjustment.abs() };
+        const customerUpdateData: Record<string, unknown> = { updatedAt: new Date() };
+        if (dueAmount.gt(0)) customerUpdateData.totalDue = newTotalDue;
+        if (!prepaidBalanceAdjustment.isZero()) {
+          customerUpdateData.prepaidBalance = newPrepaidBalance;
         }
 
         if (dueAmount.gt(0) || !prepaidBalanceAdjustment.isZero()) {
@@ -654,6 +701,13 @@ async function handlePut(request: NextRequest) {
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Failed to update sale";
     console.error("Error updating sale:", error);
-    return NextResponse.json({ success: false, error: errorMessage }, { status: 500 });
+    const isClientError =
+      errorMessage.includes("Cannot cancel") ||
+      errorMessage.includes("not found") ||
+      errorMessage.includes("Only completed");
+    return NextResponse.json(
+      { success: false, error: errorMessage },
+      { status: isClientError ? 400 : 500 },
+    );
   }
 }

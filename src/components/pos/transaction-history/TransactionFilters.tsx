@@ -44,20 +44,23 @@ export function TransactionFilters({
     <div className="flex flex-col gap-2 shrink-0">
       {/* Mobile Search and Toggle */}
       <div className="md:hidden flex gap-2">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <div className="relative flex-1 min-w-0">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <Input
+            type="search"
+            enterKeyHint="search"
             placeholder={t('search_placeholder')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 bg-background shadow-sm"
+            className="pl-9 h-11 text-base bg-background shadow-sm touch-manipulation"
           />
         </div>
         <Button
           variant="outline"
           size="icon"
           onClick={() => setFilterOpen(!filterOpen)}
-          className={`relative shrink-0 shadow-sm ${filterOpen ? 'bg-primary/10 border-primary/50' : ''}`}
+          className={`relative shrink-0 h-11 w-11 shadow-sm touch-manipulation ${filterOpen ? 'bg-primary/10 border-primary/50' : ''}`}
+          aria-label="Filters"
         >
           <SlidersHorizontal className="h-4 w-4" />
           {activeFilterCount > 0 && (

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { requireRole } from "@/lib/api-middleware";
+import { db } from "@/lib/db";
 
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -26,6 +27,9 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       );
     }
+
+    const currencyRow = await db.setting.findUnique({ where: { key: "currency_symbol" } });
+    const currencySymbol = currencyRow?.value || "₹";
 
     const margin = parseFloat(summary.profitMargin ?? "0");
     const growth = summary.revenueGrowth ?? 0;
@@ -69,7 +73,7 @@ export async function POST(request: NextRequest) {
 
     // Profit vs revenue sanity
     if (revenue > 0 && profit < 0) {
-      insights.push(`⚠️ You are selling at a net loss (Revenue: ₹${revenue.toFixed(0)}, Profit: ₹${profit.toFixed(0)}). Check if any products have buying prices higher than their selling prices in your inventory.`);
+      insights.push(`⚠️ You are selling at a net loss (Revenue: ${currencySymbol}${revenue.toFixed(0)}, Profit: ${currencySymbol}${profit.toFixed(0)}). Check if any products have buying prices higher than their selling prices in your inventory.`);
     }
 
     const advice = insights.join("\n\n");

@@ -1,39 +1,45 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { GlobalWindow } from 'happy-dom';
 
 import { NextIntlClientProvider } from 'next-intl';
 
-const mockToast = mock();
-mock.module('@/hooks/use-toast', () => ({
+const mockToast = vi.fn();
+vi.mock('@/hooks/use-toast', () => ({
   useToast: () => ({ toast: mockToast })
 }));
 
-mock.module('@/stores/pos-store', () => ({
+vi.mock('@/stores/pos-store', () => ({
   useProductsStore: (fn: any) => fn({ categories: ['Groceries'], products: [] })
 }));
 
-mock.module('@capacitor/core', () => ({
+vi.mock('@capacitor/core', () => ({
   Capacitor: { isNativePlatform: () => false },
   registerPlugin: () => ({}),
   WebPlugin: class {}
 }));
 
-mock.module('@capacitor-mlkit/barcode-scanning', () => ({
+vi.mock('@capacitor-mlkit/barcode-scanning', () => ({
   BarcodeScanner: { isSupported: () => Promise.resolve(true) },
   BarcodeFormat: { QR_CODE: 'QR_CODE' }
 }));
 
-mock.module('./CameraScannerDialog', () => ({
+vi.mock('./CameraScannerDialog', () => ({
   CameraScannerDialog: () => null
 }));
 
-mock.module('@/hooks/use-camera-barcode-scanner', () => ({
+vi.mock('@/hooks/use-camera-barcode-scanner', () => ({
   useCameraBarcodeScanner: () => ({
     scannerId: 'scanner-id',
     isInitialized: true,
-    startShutdown: mock()
+    isSupported: true,
+    isShuttingDown: false,
+    startShutdown: vi.fn(),
+    torchSupported: false,
+    torchOn: false,
+    toggleTorch: vi.fn(),
+    setTorch: vi.fn(),
   })
 }));
 
@@ -44,7 +50,7 @@ global.window = window as any;
 global.requestAnimationFrame = (cb) => setTimeout(cb, 0);
 
 // We need an exact mock for the Button to ensure onClick goes through seamlessly
-mock.module('@/components/ui/button', () => ({
+vi.mock('@/components/ui/button', () => ({
   Button: ({ children, onClick, disabled, className, type, variant, size, title }: any) => {
     // Expose the submission trigger
     if (children === 'update_product') {
@@ -55,7 +61,7 @@ mock.module('@/components/ui/button', () => ({
 }));
 
 // MOCK RADIX
-mock.module('@/components/ui/dialog', () => ({
+vi.mock('@/components/ui/dialog', () => ({
   Dialog: ({ children, open }: any) => open ? <div>{children}</div> : null,
   DialogContent: ({ children }: any) => <div>{children}</div>,
   DialogHeader: ({ children }: any) => <div>{children}</div>,
@@ -64,7 +70,7 @@ mock.module('@/components/ui/dialog', () => ({
   DialogFooter: ({ children }: any) => <div>{children}</div>,
 }));
 
-mock.module('@/components/ui/select', () => ({
+vi.mock('@/components/ui/select', () => ({
   Select: ({ children }: any) => <div>{children}</div>,
   SelectTrigger: ({ children }: any) => <button>{children}</button>,
   SelectValue: () => <span>Select</span>,
@@ -72,7 +78,7 @@ mock.module('@/components/ui/select', () => ({
   SelectItem: ({ children }: any) => <span>{children}</span>,
 }));
 
-mock.module('@/components/ui/switch', () => ({
+vi.mock('@/components/ui/switch', () => ({
   Switch: ({ checked, onCheckedChange }: any) => (
     <input type="checkbox" checked={checked} onChange={(e) => onCheckedChange(e.target.checked)} />
   )
@@ -92,7 +98,7 @@ describe('ProductDialog', () => {
     document.body.appendChild(container);
     const root = createRoot(container);
 
-    const onSubmit = mock(() => {
+    const onSubmit = vi.fn(() => {
       throw new Error('Network error simulated');
     });
 

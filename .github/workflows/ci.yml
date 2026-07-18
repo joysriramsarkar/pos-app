@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, dev]
+    branches: [main, dev, test]
   pull_request:
-    branches: [main, dev]
+    branches: [main, dev, test]
 
 jobs:
   ci:
@@ -12,29 +12,32 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      DATABASE_URL:    ${{ secrets.DATABASE_URL }}
-      NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
-      NEXTAUTH_URL:    "http://localhost:3000"
+      DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://dummy:dummy@localhost:5432/dummy' }}
+      DIRECT_URL: ${{ secrets.DIRECT_URL || 'postgresql://dummy:dummy@localhost:5432/dummy' }}
+      NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET || 'ci-test-secret-at-least-32-characters-long' }}
+      NEXTAUTH_URL: "http://localhost:3000"
       ALLOWED_ORIGINS: "http://localhost:3000"
+      NODE_ENV: test
 
     steps:
       - uses: actions/checkout@v4
 
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
         with:
-          bun-version: latest
+          node-version: "22"
+          cache: npm
 
       - name: Install dependencies
-        run: bun install
+        run: npm ci
 
       - name: Generate Prisma client
-        run: bunx prisma generate --config prisma.config.ts
+        run: npx prisma generate --config prisma.config.ts
 
       - name: Lint
-        run: bun run lint
+        run: npm run lint
 
       - name: Typecheck
-        run: bun run typecheck
+        run: npm run typecheck
 
       - name: Test
-        run: bun run test
+        run: npm test

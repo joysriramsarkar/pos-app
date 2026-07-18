@@ -1,7 +1,30 @@
-import { describe, expect, it, mock, beforeEach, spyOn } from 'bun:test';
-import { POST } from './route';
+import { describe, expect, it, beforeEach, vi } from 'vitest';
 
-mock.module('next/server', () => ({
+// Test-only mock values — not real credentials
+const TEST_USER_ID = '1';
+const TEST_CURRENT = Buffer.from('test-current').toString('base64');
+const TEST_NEW = Buffer.from('test-new').toString('base64');
+const TEST_WRONG = Buffer.from('test-wrong').toString('base64');
+const TEST_STORED_HASH = Buffer.from('test-stored').toString('base64');
+const TEST_HASH_OUTPUT = Buffer.from('test-output').toString('base64');
+
+const {
+  mockGetServerSession,
+  mockCompare,
+  mockHash,
+  mockFindUnique,
+  mockUpdate,
+} = vi.hoisted(() => ({
+  mockGetServerSession: vi.fn(() => Promise.resolve({ user: { id: '1', role: 'ADMIN' } })),
+  mockCompare: vi.fn(() => Promise.resolve(true)),
+  mockHash: vi.fn(() => Promise.resolve(Buffer.from('test-output').toString('base64'))),
+  mockFindUnique: vi.fn(() =>
+    Promise.resolve({ id: '1', password: Buffer.from('test-stored').toString('base64') }),
+  ),
+  mockUpdate: vi.fn(() => Promise.resolve({})),
+}));
+
+vi.mock('next/server', () => ({
   NextResponse: {
     json: (body: any, init?: any) => {
       return new Response(JSON.stringify(body), {
@@ -12,30 +35,17 @@ mock.module('next/server', () => ({
   },
 }));
 
-const mockGetServerSession = mock(() => Promise.resolve({ user: { id: '1', role: 'ADMIN' } }));
-mock.module('next-auth', () => ({
+vi.mock('next-auth', () => ({
   getServerSession: mockGetServerSession,
 }));
 
-// Test-only mock values — not real credentials
-const TEST_USER_ID = '1';
-const TEST_CURRENT = Buffer.from('test-current').toString('base64');
-const TEST_NEW = Buffer.from('test-new').toString('base64');
-const TEST_WRONG = Buffer.from('test-wrong').toString('base64');
-const TEST_STORED_HASH = Buffer.from('test-stored').toString('base64');
-const TEST_HASH_OUTPUT = Buffer.from('test-output').toString('base64');
-
-const mockCompare = mock(() => Promise.resolve(true));
-const mockHash = mock(() => Promise.resolve(TEST_HASH_OUTPUT));
-mock.module('bcryptjs', () => ({
+vi.mock('bcryptjs', () => ({
   default: { compare: mockCompare, hash: mockHash },
   compare: mockCompare,
   hash: mockHash,
 }));
 
-const mockFindUnique = mock(() => Promise.resolve({ id: TEST_USER_ID, password: TEST_STORED_HASH }));
-const mockUpdate = mock(() => Promise.resolve({}));
-mock.module('@/lib/db', () => ({
+vi.mock('@/lib/db', () => ({
   db: {
     user: {
       findUnique: mockFindUnique,
@@ -44,9 +54,11 @@ mock.module('@/lib/db', () => ({
   },
 }));
 
-mock.module('../[...nextauth]/route', () => ({
+vi.mock('../[...nextauth]/route', () => ({
   authOptions: {},
 }));
+
+import { POST } from './route';
 
 describe('POST /api/auth/change-password', () => {
   beforeEach(() => {
@@ -59,6 +71,7 @@ describe('POST /api/auth/change-password', () => {
     mockGetServerSession.mockResolvedValue({ user: { id: TEST_USER_ID, role: 'ADMIN' } });
     mockFindUnique.mockResolvedValue({ id: TEST_USER_ID, password: TEST_STORED_HASH });
     mockCompare.mockResolvedValue(true);
+    mockHash.mockResolvedValue(TEST_HASH_OUTPUT);
   });
 
   it('should return 200 on successful password change', async () => {
@@ -141,7 +154,7 @@ describe('POST /api/auth/change-password', () => {
   });
 
   it('should return 500 on database error during user fetch', async () => {
-    const consoleSpy = spyOn(console, 'error').mockImplementation(() => {});
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     mockFindUnique.mockRejectedValueOnce(new Error('DB Error'));
 
     const req = new Request('http://localhost:3000/api/auth/change-password', {
@@ -157,7 +170,7 @@ describe('POST /api/auth/change-password', () => {
   });
 
   it('should return 500 on database error during password update', async () => {
-    const consoleSpy = spyOn(console, 'error').mockImplementation(() => {});
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     mockUpdate.mockRejectedValueOnce(new Error('Update DB Error'));
 
     const req = new Request('http://localhost:3000/api/auth/change-password', {

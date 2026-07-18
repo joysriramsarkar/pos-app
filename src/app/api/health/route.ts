@@ -2,37 +2,43 @@ import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(request: Request) {
-  try {
-    console.log("🔍 [HEALTH CHECK] Starting database connection check...");
+/**
+ * Public health check — no auth (excluded from proxy matcher).
+ * Safe for uptime monitors; does not leak secrets.
+ */
+export async function GET() {
+  const headers = {
+    "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": "no-store",
+  };
 
-    // Try to query the database
-    const result = await db.$queryRaw`SELECT 1 as connection_test`;
+  try {
+    await db.$queryRaw`SELECT 1 as connection_test`;
 
     return Response.json(
       {
         status: "ok",
         database: "connected",
-        timestamp: new Date(),
+        timestamp: new Date().toISOString(),
         environment: process.env.NODE_ENV,
       },
-      { status: 200 },
+      { status: 200, headers },
     );
   } catch (error: unknown) {
     console.error(
-      "❌ [HEALTH CHECK] Database connection failed:",
-      (error instanceof Error ? error.message : "Unknown error"),
+      "[HEALTH CHECK] Database connection failed:",
+      error instanceof Error ? error.message : "Unknown error",
     );
-    console.error("❌ [HEALTH CHECK] Full error:", error);
 
     return Response.json(
       {
         status: "error",
         database: "failed",
-        error: (error instanceof Error ? error.message : "Unknown error"),
-        timestamp: new Date(),
+        // Do not expose raw DB errors to unauthenticated callers
+        error: "database_unavailable",
+        timestamp: new Date().toISOString(),
       },
-      { status: 500 },
+      { status: 503, headers },
     );
   }
 }

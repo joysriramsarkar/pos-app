@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { safeJsonFetch, getErrorMessage } from './api-utils';
 
 describe('getErrorMessage', () => {
@@ -18,7 +18,7 @@ describe('safeJsonFetch', () => {
 
   beforeEach(() => {
     // Reset fetch mock before each test
-    global.fetch = mock();
+    global.fetch = vi.fn();
   });
 
   afterEach(() => {

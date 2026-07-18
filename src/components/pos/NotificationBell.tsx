@@ -71,7 +71,26 @@ export default function NotificationBell({ variant = 'desktop' }: NotificationBe
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [readIds, setReadIds] = useState<Set<string>>(new Set());
+  const [readIds, setReadIds] = useState<Set<string>>(() => {
+    if (typeof window === 'undefined') return new Set();
+    try {
+      const raw = localStorage.getItem('pos-notif-read-ids');
+      if (!raw) return new Set();
+      return new Set(JSON.parse(raw) as string[]);
+    } catch {
+      return new Set();
+    }
+  });
+
+  const persistReadIds = useCallback((ids: Set<string>) => {
+    try {
+      // Keep last 200 ids only
+      const arr = Array.from(ids).slice(-200);
+      localStorage.setItem('pos-notif-read-ids', JSON.stringify(arr));
+    } catch {
+      /* ignore quota */
+    }
+  }, []);
 
   const fetchNotifications = useCallback(async () => {
     try {
@@ -79,15 +98,17 @@ export default function NotificationBell({ variant = 'desktop' }: NotificationBe
       const res = await fetch('/api/notifications');
       if (res.ok) {
         const data: NotificationsResponse = await res.json();
-        setNotifications(data.data || []);
-        setUnreadCount(data.unreadCount || 0);
+        const list = data.data || [];
+        setNotifications(list);
+        const unread = list.filter((n) => !readIds.has(n.id)).length;
+        setUnreadCount(unread);
       }
     } catch (error) {
       console.error('বিজ্ঞপ্তি আনতে ত্রুটি:', error);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [readIds]);
 
   useEffect(() => {
     fetchNotifications();
@@ -97,21 +118,24 @@ export default function NotificationBell({ variant = 'desktop' }: NotificationBe
 
   const markAsRead = useCallback((id: string) => {
     setReadIds((prev) => {
+      if (prev.has(id)) return prev;
       const newSet = new Set(prev);
       newSet.add(id);
+      persistReadIds(newSet);
       return newSet;
     });
     setUnreadCount((prev) => Math.max(0, prev - 1));
-  }, []);
+  }, [persistReadIds]);
 
   const markAllAsRead = useCallback(() => {
     setReadIds((prev) => {
       const newSet = new Set(prev);
       notifications.forEach((n) => newSet.add(n.id));
+      persistReadIds(newSet);
       return newSet;
     });
     setUnreadCount(0);
-  }, [notifications]);
+  }, [notifications, persistReadIds]);
 
   const isRead = useCallback(
     (id: string) => readIds.has(id),

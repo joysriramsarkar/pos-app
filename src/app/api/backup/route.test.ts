@@ -1,6 +1,6 @@
-import { describe, expect, it, mock, beforeEach } from 'bun:test';
+import { describe, expect, it, beforeEach, vi } from 'vitest';
 
-mock.module('next/server', () => ({
+vi.mock('next/server', () => ({
   NextResponse: {
     json: (body: any, init?: { status?: number }) => {
       return new Response(JSON.stringify(body), {
@@ -11,54 +11,54 @@ mock.module('next/server', () => ({
   },
 }));
 
-mock.module('next-auth', () => ({
-  getServerSession: mock(() => Promise.resolve({ user: { id: '1', role: 'ADMIN' } })),
+vi.mock('next-auth', () => ({
+  getServerSession: vi.fn(() => Promise.resolve({ user: { id: '1', role: 'ADMIN' } })),
 }));
 
-mock.module('../auth/[...nextauth]/route', () => ({
+vi.mock('../auth/[...nextauth]/route', () => ({
   authOptions: {},
 }));
 
 // Mock api-middleware to avoid permissions.ts -> db chain
-const mockRequireRole = mock(() => Promise.resolve(null));
-mock.module('@/lib/api-middleware', () => ({
-  requireAuth: mock(() => Promise.resolve({ authorized: true, response: null, session: { user: { id: '1', role: 'ADMIN' } } })),
-  requirePermission: mock(() => Promise.resolve(null)),
+const mockRequireRole = vi.fn(() => Promise.resolve(null));
+vi.mock('@/lib/api-middleware', () => ({
+  requireAuth: vi.fn(() => Promise.resolve({ authorized: true, response: null, session: { user: { id: '1', role: 'ADMIN' } } })),
+  requirePermission: vi.fn(() => Promise.resolve(null)),
   requireRole: mockRequireRole,
-  getAuthenticatedUser: mock(() => Promise.resolve({ id: '1', role: 'ADMIN' })),
+  getAuthenticatedUser: vi.fn(() => Promise.resolve({ id: '1', role: 'ADMIN' })),
 }));
 
-mock.module('bcryptjs', () => ({
+vi.mock('bcryptjs', () => ({
   default: {
-    hash: mock(() => Promise.resolve('hashed-password')),
-    compare: mock(() => Promise.resolve(true)),
+    hash: vi.fn(() => Promise.resolve('hashed-password')),
+    compare: vi.fn(() => Promise.resolve(true)),
   },
-  hash: mock(() => Promise.resolve('hashed-password')),
-  compare: mock(() => Promise.resolve(true)),
+  hash: vi.fn(() => Promise.resolve('hashed-password')),
+  compare: vi.fn(() => Promise.resolve(true)),
 }));
 
-mock.module('crypto', () => ({
+vi.mock('crypto', () => ({
   default: {
-    randomBytes: mock(() => ({ toString: () => 'random-string' })),
+    randomBytes: vi.fn(() => ({ toString: () => 'random-string' })),
   },
-  randomBytes: mock(() => ({ toString: () => 'random-string' })),
+  randomBytes: vi.fn(() => ({ toString: () => 'random-string' })),
 }));
 
-mock.module('@/lib/db', () => ({
+vi.mock('@/lib/db', () => ({
   db: {
-    $transaction: mock((cb) => cb({
-      saleItem: { deleteMany: mock(), createMany: mock() },
-      purchaseItem: { deleteMany: mock(), createMany: mock() },
-      stockHistory: { deleteMany: mock(), createMany: mock() },
-      ledgerEntry: { deleteMany: mock(), createMany: mock() },
-      sale: { deleteMany: mock(), createMany: mock() },
-      purchase: { deleteMany: mock(), createMany: mock() },
-      product: { deleteMany: mock(), createMany: mock() },
-      category: { deleteMany: mock(), createMany: mock() },
-      customer: { deleteMany: mock(), createMany: mock() },
-      supplier: { deleteMany: mock(), createMany: mock() },
-      setting: { deleteMany: mock(), createMany: mock() },
-      user: { deleteMany: mock(), createMany: mock() },
+    $transaction: vi.fn((cb) => cb({
+      saleItem: { deleteMany: vi.fn(), createMany: vi.fn() },
+      purchaseItem: { deleteMany: vi.fn(), createMany: vi.fn() },
+      stockHistory: { deleteMany: vi.fn(), createMany: vi.fn() },
+      ledgerEntry: { deleteMany: vi.fn(), createMany: vi.fn() },
+      sale: { deleteMany: vi.fn(), createMany: vi.fn() },
+      purchase: { deleteMany: vi.fn(), createMany: vi.fn() },
+      product: { deleteMany: vi.fn(), createMany: vi.fn() },
+      category: { deleteMany: vi.fn(), createMany: vi.fn() },
+      customer: { deleteMany: vi.fn(), createMany: vi.fn() },
+      supplier: { deleteMany: vi.fn(), createMany: vi.fn() },
+      setting: { deleteMany: vi.fn(), createMany: vi.fn() },
+      user: { deleteMany: vi.fn(), createMany: vi.fn() },
     })),
   },
 }));
@@ -74,7 +74,7 @@ describe('POST /api/backup', () => {
     });
 
     // Mock the json() method directly on this instance
-    req.json = mock().mockRejectedValue(new Error('Invalid JSON'));
+    req.json = vi.fn().mockRejectedValue(new Error('Invalid JSON'));
 
     const res = await POST(req as any);
     const json = await res.json();
@@ -90,7 +90,7 @@ describe('POST /api/backup', () => {
     });
 
     // Mock the json() method directly on this instance
-    req.json = mock().mockResolvedValue({ wrongKey: 'something' });
+    req.json = vi.fn().mockResolvedValue({ wrongKey: 'something' });
 
     const res = await POST(req as any);
     const json = await res.json();

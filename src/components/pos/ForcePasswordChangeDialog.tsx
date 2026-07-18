@@ -59,7 +59,7 @@ export function ForcePasswordChangeDialog() {
   return (
     <Dialog open modal>
       <DialogContent
-        className="sm:max-w-md"
+        className="sm:max-w-md w-[95vw] max-h-[90dvh] overflow-y-auto"
         onPointerDownOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}
       >

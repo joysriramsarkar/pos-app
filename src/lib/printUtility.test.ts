@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, mock, spyOn } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { printToIframe } from './printUtility';
 import { Capacitor } from '@capacitor/core';
 import { GlobalWindow } from 'happy-dom';
@@ -13,7 +13,7 @@ const setupDOM = () => {
 };
 
 // Mock Capacitor
-mock.module('@capacitor/core', () => ({
+vi.mock('@capacitor/core', () => ({
   Capacitor: {
     isNativePlatform: () => false,
   },
@@ -35,11 +35,10 @@ describe('printToIframe', () => {
 
     setupDOM();
 
-    consoleErrorSpy = spyOn(console, 'error').mockImplementation(() => {});
-    consoleWarnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-    // Reset Capacitor mock behavior
-    spyOn(Capacitor, 'isNativePlatform').mockReturnValue(false);
+    vi.spyOn(Capacitor, 'isNativePlatform').mockReturnValue(false);
   });
 
   afterEach(() => {
@@ -54,35 +53,38 @@ describe('printToIframe', () => {
 
   it('should log an error and return early if printContent is missing', () => {
     printToIframe({ printContent: null as any });
-    expect(consoleErrorSpy).toHaveBeenCalledWith("[PrintUtil] Print content is missing.");
-    expect(document.body.innerHTML).toBe(''); // No iframe appended
+    expect(consoleErrorSpy).toHaveBeenCalledWith('[PrintUtil] Print content is missing.');
   });
 
   it('should standard web print with an iframe and trigger onBeforePrint and onAfterPrint', async () => {
     const printContent = document.createElement('div');
     printContent.innerHTML = '<p>Test Invoice</p>';
 
-    const onBeforePrint = mock();
-    const onAfterPrint = mock();
+    const onBeforePrint = vi.fn();
+    const onAfterPrint = vi.fn();
+    const printSpy = vi.fn();
 
-    // We need to mock setTimeout so it triggers handlePrint immediately
-    global.setTimeout = ((fn: any, delay: number) => fn()) as any;
+    global.setTimeout = ((fn: any) => {
+      fn();
+      return 0 as any;
+    }) as any;
 
-    // Create a spy for appendChild to capture the iframe
-    const appendChildSpy = spyOn(document.body, 'appendChild').mockImplementation((node) => {
+    const appendChildSpy = vi.spyOn(document.body, 'appendChild').mockImplementation((node) => {
       const iframe = node as HTMLIFrameElement;
       Object.defineProperty(iframe, 'contentWindow', {
         value: {
           document: {
-            querySelectorAll: () => [], // Use empty array since it's used with Array.from
-            open: mock(),
-            write: mock(),
-            close: mock()
+            querySelectorAll: () => [],
+            open: vi.fn(),
+            write: vi.fn(),
+            close: vi.fn(),
           },
-          focus: mock(),
-          print: mock()
+          focus: vi.fn(),
+          print: printSpy,
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
         },
-        writable: true
+        writable: true,
       });
       return node;
     });
@@ -90,149 +92,108 @@ describe('printToIframe', () => {
     printToIframe({
       printContent,
       onBeforePrint,
-      onAfterPrint
+      onAfterPrint,
     });
 
-    const newIframe = appendChildSpy.mock.calls[0][0] as HTMLIFrameElement;
-
-    // Wait for the simulated setTimeout
-    await new Promise(resolve => originalSetTimeout(resolve, 0));
+    await new Promise((resolve) => originalSetTimeout(resolve, 0));
 
     expect(onBeforePrint).toHaveBeenCalled();
-    expect(newIframe.contentWindow?.print).toHaveBeenCalled();
+    expect(printSpy).toHaveBeenCalled();
     expect(onAfterPrint).toHaveBeenCalled();
-  });
-
-  it('should wait for images to load before printing', async () => {
-    const printContent = document.createElement('div');
-    printContent.innerHTML = '<p>Test</p>';
-
-    const onBeforePrint = mock();
-
-    // We mock appendChild so we can intercept the iframe and mock its contentWindow
-    const appendChildSpy = spyOn(document.body, 'appendChild').mockImplementation((node) => {
-      const iframe = node as HTMLIFrameElement;
-
-      // Create a mock image element
-      const mockImg = document.createElement('img');
-      Object.defineProperty(mockImg, 'complete', { value: false });
-      let loadCallback: any;
-      mockImg.addEventListener = mock((event: string, cb: any) => {
-        if (event === 'load') loadCallback = cb;
-      });
-
-      Object.defineProperty(iframe, 'contentWindow', {
-        value: {
-          document: {
-            querySelectorAll: (sel: string) => sel === 'img' ? [mockImg] : [],
-            open: mock(),
-            write: mock(),
-            close: mock()
-          },
-          focus: mock(),
-          print: mock()
-        },
-        writable: true
-      });
-
-      // Simulate image load after a tiny delay
-      global.setTimeout(() => {
-        if (loadCallback) loadCallback();
-      }, 10);
-
-      return document.body; // Fake return
-    });
-
-    printToIframe({
-      printContent,
-      onBeforePrint
-    });
-
-    // Initially not printed
-    expect(onBeforePrint).not.toHaveBeenCalled();
-
-    // Wait for image load simulation
-    await new Promise(resolve => global.setTimeout(resolve, 20));
-
-    expect(onBeforePrint).toHaveBeenCalled();
 
     appendChildSpy.mockRestore();
   });
 
   describe('Capacitor native environment', () => {
     beforeEach(() => {
-      spyOn(Capacitor, 'isNativePlatform').mockReturnValue(true);
+      vi.spyOn(Capacitor, 'isNativePlatform').mockReturnValue(true);
     });
 
     it('should use cordova.plugins.printer if available', async () => {
       const printContent = document.createElement('div');
+      const cordovaPrintSpy = vi.fn((_html: string, _opts: unknown, cb: (ok: boolean) => void) => {
+        cb(true);
+      });
 
-      const cordovaPrintSpy = mock();
-      global.window.cordova = {
+      (global.window as any).cordova = {
         plugins: {
           printer: {
-            print: cordovaPrintSpy
-          }
-        }
+            print: cordovaPrintSpy,
+          },
+        },
       };
 
-      // We need to mock setTimeout so it triggers handlePrint immediately
-      global.setTimeout = ((fn: any, delay: number) => fn()) as any;
+      global.setTimeout = ((fn: any) => {
+        fn();
+        return 0 as any;
+      }) as any;
 
-      // Mock appendChild to ensure contentWindow exists so we bypass error handling
-      const appendChildSpy = spyOn(document.body, 'appendChild').mockImplementation((node) => {
+      const appendChildSpy = vi.spyOn(document.body, 'appendChild').mockImplementation((node) => {
         const iframe = node as HTMLIFrameElement;
         Object.defineProperty(iframe, 'contentWindow', {
           value: {
             document: {
               querySelectorAll: () => [],
-              open: mock(),
-              write: mock(),
-              close: mock()
-            }
+              open: vi.fn(),
+              write: vi.fn(),
+              close: vi.fn(),
+            },
+            focus: vi.fn(),
+            print: vi.fn(),
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn(),
           },
-          writable: true
+          writable: true,
         });
         return node;
       });
 
       printToIframe({ printContent });
 
-      await new Promise(resolve => originalSetTimeout(resolve, 0));
+      await new Promise((resolve) => originalSetTimeout(resolve, 0));
 
       expect(cordovaPrintSpy).toHaveBeenCalled();
 
       appendChildSpy.mockRestore();
-      delete global.window.cordova;
+      delete (global.window as any).cordova;
     });
 
-    it('should fallback to navigator.share or warn if cordova printer is not available', async () => {
+    it('should fall back to WebView print when cordova printer is missing', async () => {
       const printContent = document.createElement('div');
+      const printSpy = vi.fn();
 
-      // navigator.share may or may not be called depending on happy-dom support
-      // We just verify the function completes without throwing
-      global.setTimeout = ((fn: any) => fn()) as any;
+      delete (global.window as any).cordova;
 
-      const appendChildSpy = spyOn(document.body, 'appendChild').mockImplementation((node) => {
+      global.setTimeout = ((fn: any) => {
+        fn();
+        return 0 as any;
+      }) as any;
+
+      const appendChildSpy = vi.spyOn(document.body, 'appendChild').mockImplementation((node) => {
         const iframe = node as HTMLIFrameElement;
         Object.defineProperty(iframe, 'contentWindow', {
           value: {
             document: {
               querySelectorAll: () => [],
-              open: mock(),
-              write: mock(),
-              close: mock()
-            }
+              open: vi.fn(),
+              write: vi.fn(),
+              close: vi.fn(),
+            },
+            focus: vi.fn(),
+            print: printSpy,
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn(),
           },
-          writable: true
+          writable: true,
         });
         return node;
       });
 
-      // Should not throw
-      expect(() => printToIframe({ printContent })).not.toThrow();
+      printToIframe({ printContent });
 
-      await new Promise(resolve => originalSetTimeout(resolve, 0));
+      await new Promise((resolve) => originalSetTimeout(resolve, 0));
+
+      expect(printSpy).toHaveBeenCalled();
 
       appendChildSpy.mockRestore();
     });

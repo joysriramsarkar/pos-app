@@ -1,42 +1,42 @@
-import { describe, expect, it, mock, beforeEach } from 'bun:test';
+import { describe, expect, it, beforeEach, vi } from 'vitest';
 
-const mockFindMany = mock(() => Promise.resolve([]));
-const mockCount = mock(() => Promise.resolve(0));
+const mockFindMany = vi.fn(() => Promise.resolve([]));
+const mockCount = vi.fn(() => Promise.resolve(0));
 
-mock.module('@/lib/env', () => ({ env: {} }));
-mock.module('@/lib/db', () => ({
+vi.mock('@/lib/env', () => ({ env: {} }));
+vi.mock('@/lib/db', () => ({
   db: {
-    user: { findUnique: mock(() => Promise.resolve(null)) },
-    rolePermission: { findFirst: mock(() => Promise.resolve(null)) },
+    user: { findUnique: vi.fn(() => Promise.resolve(null)) },
+    rolePermission: { findFirst: vi.fn(() => Promise.resolve(null)) },
     product: { findMany: mockFindMany, count: mockCount },
   },
 }));
 
-mock.module('@/lib/permissions', () => ({
-  hasPermission: mock(() => Promise.resolve(true)),
-  getUserRole: mock(() => null),
-  roleHasPermission: mock(() => true),
+vi.mock('@/lib/permissions', () => ({
+  hasPermission: vi.fn(() => Promise.resolve(true)),
+  getUserRole: vi.fn(() => null),
+  roleHasPermission: vi.fn(() => true),
   rolePermissions: {},
 }));
 
-mock.module('@/lib/permissions-helpers', () => ({
-  getUserRole: mock(() => null),
-  roleHasPermission: mock(() => true),
+vi.mock('@/lib/permissions-helpers', () => ({
+  getUserRole: vi.fn(() => null),
+  roleHasPermission: vi.fn(() => true),
   rolePermissions: {},
 }));
 
-mock.module('@/lib/api-middleware', () => ({
-  requireAuth: mock(() => Promise.resolve({ authorized: true, response: null, session: { user: { id: '1', role: 'ADMIN' } } })),
-  requirePermission: mock(() => Promise.resolve(null)),
-  requireRole: mock(() => Promise.resolve(null)),
-  getAuthenticatedUser: mock(() => Promise.resolve({ id: '1', role: 'ADMIN' })),
+vi.mock('@/lib/api-middleware', () => ({
+  requireAuth: vi.fn(() => Promise.resolve({ authorized: true, response: null, session: { user: { id: '1', role: 'ADMIN' } } })),
+  requirePermission: vi.fn(() => Promise.resolve(null)),
+  requireRole: vi.fn(() => Promise.resolve(null)),
+  getAuthenticatedUser: vi.fn(() => Promise.resolve({ id: '1', role: 'ADMIN' })),
 }));
 
-mock.module('next-auth', () => ({
-  getServerSession: mock(() => Promise.resolve({ user: { id: '1', role: 'ADMIN' } })),
+vi.mock('next-auth', () => ({
+  getServerSession: vi.fn(() => Promise.resolve({ user: { id: '1', role: 'ADMIN' } })),
 }));
 
-mock.module('@/app/api/auth/[...nextauth]/route', () => ({
+vi.mock('@/app/api/auth/[...nextauth]/route', () => ({
   authOptions: {},
 }));
 

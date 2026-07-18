@@ -131,23 +131,52 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  const handleRetrySync = async () => {
+    try {
+      setIsSyncing(true);
+      const worker = await getSyncWorker();
+      await worker.startSync();
+    } catch (e) {
+      console.error('Manual sync retry failed', e);
+      setIsSyncing(false);
+    }
+  };
+
   return (
     <OfflineContext.Provider value={{ isOnline: networkStatus === 'online', networkStatus, isSyncing, syncStats }}>
       {children}
-      {(networkStatus === 'offline' || isSyncing) && (
-        <div className="fixed top-0 left-1/2 -translate-x-1/2 bg-amber-500 text-white px-2 py-1 text-xs z-50">
-          offline, sync pending: {pendingSyncCount}
+      {networkStatus === 'offline' && (
+        <div className="fixed top-0 inset-x-0 z-50 flex justify-center pointer-events-none">
+          <div className="pointer-events-auto mt-0 bg-amber-600 text-white px-3 py-1.5 text-xs font-medium shadow-md rounded-b-md">
+            Offline — sales queue locally
+            {pendingSyncCount > 0 ? ` · ${pendingSyncCount} pending sync` : ''}
+          </div>
+        </div>
+      )}
+      {isSyncing && networkStatus === 'online' && (
+        <div className="fixed top-0 inset-x-0 z-50 flex justify-center pointer-events-none">
+          <div className="mt-0 bg-sky-600 text-white px-3 py-1.5 text-xs font-medium shadow-md rounded-b-md">
+            Syncing{pendingSyncCount > 0 ? ` ${pendingSyncCount} item(s)…` : '…'}
+          </div>
         </div>
       )}
       {failedSyncCount > 0 && !isSyncing && networkStatus === 'online' && (
-        <div className="fixed top-4 right-4 bg-orange-500 text-white px-4 py-2 rounded-lg shadow-lg z-50">
-          ⚠️ {failedSyncCount} item{failedSyncCount > 1 ? 's' : ''} failed to sync
+        <div className="fixed top-4 right-4 bg-orange-600 text-white px-4 py-2 rounded-lg shadow-lg z-50 max-w-sm">
+          <div className="font-medium text-sm">
+            ⚠️ {failedSyncCount} item{failedSyncCount > 1 ? 's' : ''} failed to sync
+          </div>
           {failedSyncPreview && (
-            <div className="text-xs mt-1 text-white/90 max-w-xs truncate" title={failedSyncPreview}>
+            <div className="text-xs mt-1 text-white/90 truncate" title={failedSyncPreview}>
               {failedSyncPreview}
             </div>
           )}
-          <div className="text-xs mt-1 text-white/90">Retry after fixing the conflict, stock, or login issue.</div>
+          <button
+            type="button"
+            onClick={() => void handleRetrySync()}
+            className="mt-2 text-xs underline underline-offset-2 hover:text-white"
+          >
+            Retry sync now
+          </button>
         </div>
       )}
     </OfflineContext.Provider>

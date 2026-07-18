@@ -1,13 +1,13 @@
-import { describe, expect, it, mock, beforeEach } from 'bun:test';
+import { describe, expect, it, beforeEach, vi } from 'vitest';
 
-const mockFindUnique = mock(() => Promise.resolve(null));
-const mockFindMany = mock(() => Promise.resolve([]));
-const mockCount = mock(() => Promise.resolve(0));
-const mockCreate = mock(() => Promise.resolve({}));
-const mockUpdate = mock(() => Promise.resolve({}));
+const mockFindUnique = vi.fn(() => Promise.resolve(null));
+const mockFindMany = vi.fn(() => Promise.resolve([]));
+const mockCount = vi.fn(() => Promise.resolve(0));
+const mockCreate = vi.fn(() => Promise.resolve({}));
+const mockUpdate = vi.fn(() => Promise.resolve({}));
 
-mock.module('@/lib/env', () => ({ env: {} }));
-mock.module('@/lib/db', () => ({
+vi.mock('@/lib/env', () => ({ env: {} }));
+vi.mock('@/lib/db', () => ({
   db: {
     supplier: {
       findUnique: mockFindUnique,
@@ -19,14 +19,14 @@ mock.module('@/lib/db', () => ({
   },
 }));
 
-const mockLogAudit = mock(() => Promise.resolve());
-mock.module('@/lib/audit', () => ({
+const mockLogAudit = vi.fn(() => Promise.resolve());
+vi.mock('@/lib/audit', () => ({
   logAudit: mockLogAudit,
 }));
 
-mock.module('@/lib/api-middleware', () => ({
-  requirePermission: mock(() => Promise.resolve(null)),
-  getAuthenticatedUser: mock(() => Promise.resolve({ id: '1', role: 'ADMIN' })),
+vi.mock('@/lib/api-middleware', () => ({
+  requirePermission: vi.fn(() => Promise.resolve(null)),
+  getAuthenticatedUser: vi.fn(() => Promise.resolve({ id: '1', role: 'ADMIN' })),
 }));
 
 const { GET, POST, PUT, DELETE } = await import('./route');

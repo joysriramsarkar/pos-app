@@ -6,28 +6,51 @@ import { authOptions } from "@/app/api/auth/[...nextauth]/route";
  * Middleware to check if request is authorized (has valid session)
  */
 export async function requireAuth(request: NextRequest) {
-  // CSRF Protection Check
+  // CSRF Protection Check for state-changing methods
   if (["POST", "PUT", "DELETE", "PATCH"].includes(request.method)) {
     const origin = request.headers.get("origin");
     const host = request.headers.get("host") || request.headers.get("x-forwarded-host");
+    const secFetchSite = request.headers.get("sec-fetch-site");
 
-    // In production or when origin is present, ensure they match to prevent CSRF
+    // Explicit cross-site browser requests are always rejected
+    if (secFetchSite === "cross-site") {
+      return {
+        authorized: false,
+        response: NextResponse.json({ error: "Forbidden: CSRF check failed" }, { status: 403 }),
+      };
+    }
+
     if (origin && host) {
       try {
         const originUrl = new URL(origin);
         if (originUrl.host !== host) {
-          return {
-            authorized: false,
-            response: NextResponse.json({ error: "Forbidden: CSRF check failed" }, { status: 403 }),
-          };
+          // Capacitor / custom schemes (capacitor://, ionic://, http://localhost on device) may differ
+          const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? "")
+            .split(",")
+            .map((o) => o.trim())
+            .filter(Boolean);
+          const originAllowed =
+            allowedOrigins.includes(origin) ||
+            origin.startsWith("capacitor://") ||
+            origin.startsWith("ionic://");
+          if (!originAllowed) {
+            return {
+              authorized: false,
+              response: NextResponse.json({ error: "Forbidden: CSRF check failed" }, { status: 403 }),
+            };
+          }
         }
-      } catch (e) {
-        // Invalid origin URL
+      } catch {
         return {
           authorized: false,
           response: NextResponse.json({ error: "Forbidden: Invalid origin" }, { status: 403 }),
         };
       }
+    } else if (process.env.NODE_ENV === "production" && !origin && secFetchSite === "cross-site") {
+      return {
+        authorized: false,
+        response: NextResponse.json({ error: "Forbidden: CSRF check failed" }, { status: 403 }),
+      };
     }
   }
 

@@ -113,7 +113,7 @@ export async function POST(req: NextRequest) {
             await tx.ledgerEntry.create({
                 data: {
                     customerId: customerId,
-                    entryType: 'debit', // 'debit' for the store, as the store now owes the customer
+                    entryType: 'prepayment-added',
                     amount: amount,
                     balanceAfter: customer.totalDue, // Prepaid balance is separate from due balance
                     description: 'Prepayment added',

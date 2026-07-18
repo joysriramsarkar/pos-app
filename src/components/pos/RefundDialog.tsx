@@ -15,7 +15,7 @@ import { toast } from 'sonner';
 import {
   RotateCcw, AlertTriangle, Package, Wallet, CheckCircle, Loader2,
 } from 'lucide-react';
-import { useSettingsStore } from '@/stores/settings-store';
+import { useNumberFormat } from '@/hooks/use-number-format';
 
 interface RefundDialogProps {
   open: boolean;
@@ -28,6 +28,7 @@ interface RefundDialogProps {
     amountPaid: number;
     paymentMethod: string;
     items: Array<{
+      id?: string;
       productId: string;
       productName: string;
       quantity: number;
@@ -42,7 +43,7 @@ interface RefundDialogProps {
 export default function RefundDialog({ open, onOpenChange, sale, onSuccess }: RefundDialogProps) {
   const t = useTranslations('Refund');
   const tc = useTranslations('Common');
-  const currency = useSettingsStore((s) => s.settings.currency_symbol || '৳');
+  const { formatPrice, formatNumber } = useNumberFormat();
 
   const [selectedItems, setSelectedItems] = useState<Record<string, boolean>>({});
   const [refundQuantities, setRefundQuantities] = useState<Record<string, number>>({});
@@ -143,14 +144,22 @@ export default function RefundDialog({ open, onOpenChange, sale, onSuccess }: Re
 
     setSubmitting(true);
     try {
+      // Canonical endpoint: SaleReturn model via /api/sales/returns
       const refundItems = sale.items
         .filter((item) => selectedItems[item.productId] && (refundQuantities[item.productId] || 0) > 0)
         .map((item) => ({
-          productId: item.productId,
+          saleItemId: item.id,
           quantity: refundQuantities[item.productId] || 0,
         }));
 
-      const res = await fetch('/api/refunds', {
+      if (refundItems.some((i) => !i.saleItemId)) {
+        toast.error(t('refund_failed'), {
+          description: 'Sale item id missing — reload transaction and try again',
+        });
+        return;
+      }
+
+      const res = await fetch('/api/sales/returns', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -192,7 +201,7 @@ export default function RefundDialog({ open, onOpenChange, sale, onSuccess }: Re
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="w-[95vw] max-w-2xl max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <RotateCcw className="h-5 w-5 text-orange-600" />
@@ -214,7 +223,7 @@ export default function RefundDialog({ open, onOpenChange, sale, onSuccess }: Re
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">মোট পরিমাণ</p>
-                <p className="font-bold text-sm">{currency}{sale.totalAmount.toLocaleString()}</p>
+                <p className="font-bold text-sm">{formatPrice(sale.totalAmount)}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">পেমেন্ট পদ্ধতি</p>
@@ -262,7 +271,7 @@ export default function RefundDialog({ open, onOpenChange, sale, onSuccess }: Re
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-sm truncate">{item.productName}</p>
                       <p className="text-xs text-muted-foreground">
-                        {currency}{item.unitPrice} × {item.quantity} {item.unit} = {currency}{item.totalPrice.toLocaleString()}
+                        {formatPrice(item.unitPrice)} × {formatNumber(item.quantity)} {item.unit} = {formatPrice(item.totalPrice)}
                       </p>
                     </div>
                     {selectedItems[item.productId] && (
@@ -367,7 +376,7 @@ export default function RefundDialog({ open, onOpenChange, sale, onSuccess }: Re
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">{t('refund_amount')}</p>
-                <p className="text-2xl font-bold text-destructive">{currency}{refundAmount.toLocaleString()}</p>
+                <p className="text-2xl font-bold text-destructive">{formatPrice(refundAmount)}</p>
               </div>
               <div className="text-right text-sm">
                 <div className="flex items-center gap-1 text-emerald-600">
@@ -392,7 +401,7 @@ export default function RefundDialog({ open, onOpenChange, sale, onSuccess }: Re
               <div>
                 <p className="font-medium text-sm">{t('refund_confirm_message')}</p>
                 <p className="text-sm text-muted-foreground mt-1">
-                  ইনভয়েস: {sale.invoiceNumber} | পরিমাণ: {currency}{refundAmount.toLocaleString()} | পদ্ধতি: {refundMethod === 'নগদ' ? t('cash_refund') : t('reduce_due')}
+                  ইনভয়েস: {sale.invoiceNumber} | পরিমাণ: {formatPrice(refundAmount)} | পদ্ধতি: {refundMethod === 'নগদ' ? t('cash_refund') : t('reduce_due')}
                 </p>
               </div>
             </div>

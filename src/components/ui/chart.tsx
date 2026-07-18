@@ -48,22 +48,48 @@ function ChartContainer({
 }) {
   const uniqueId = React.useId()
   const chartId = `chart-${id || uniqueId.replace(/:/g, "")}`
+  const containerRef = React.useRef<HTMLDivElement>(null)
+  const [ready, setReady] = React.useState(false)
+
+  // Avoid Recharts "width(0) height(0)" when mounted in a hidden tab/dialog
+  React.useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+
+    const check = () => {
+      const { width, height } = el.getBoundingClientRect()
+      setReady(width > 0 && height > 0)
+    }
+
+    check()
+    const ro = new ResizeObserver(check)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  const hasExplicitHeight =
+    typeof className === "string" &&
+    (/\bh-(\[|[0-9])/.test(className) || className.includes("aspect-auto"))
 
   return (
     <ChartContext.Provider value={{ config }}>
       <div
+        ref={containerRef}
         data-slot="chart"
         data-chart={chartId.replace(/[^\w-]/g, "")}
         className={cn(
-          "[&_.recharts-cartesian-axis-tick_text]:fill-muted-foreground [&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-border/50 [&_.recharts-curve.recharts-tooltip-cursor]:stroke-border [&_.recharts-polar-grid_[stroke='#ccc']]:stroke-border [&_.recharts-radial-bar-background-sector]:fill-muted [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-muted [&_.recharts-reference-line_[stroke='#ccc']]:stroke-border flex aspect-video justify-center text-xs [&_.recharts-dot[stroke='#fff']]:stroke-transparent [&_.recharts-layer]:outline-hidden [&_.recharts-sector]:outline-hidden [&_.recharts-sector[stroke='#fff']]:stroke-transparent [&_.recharts-surface]:outline-hidden",
+          "[&_.recharts-cartesian-axis-tick_text]:fill-muted-foreground [&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-border/50 [&_.recharts-curve.recharts-tooltip-cursor]:stroke-border [&_.recharts-polar-grid_[stroke='#ccc']]:stroke-border [&_.recharts-radial-bar-background-sector]:fill-muted [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-muted [&_.recharts-reference-line_[stroke='#ccc']]:stroke-border flex w-full min-h-[12rem] min-w-0 justify-center text-xs [&_.recharts-dot[stroke='#fff']]:stroke-transparent [&_.recharts-layer]:outline-hidden [&_.recharts-sector]:outline-hidden [&_.recharts-sector[stroke='#fff']]:stroke-transparent [&_.recharts-surface]:outline-hidden",
+          !hasExplicitHeight && "aspect-video",
           className
         )}
         {...props}
       >
         <ChartStyle id={chartId} config={config} />
-        <RechartsPrimitive.ResponsiveContainer>
-          {children}
-        </RechartsPrimitive.ResponsiveContainer>
+        {ready ? (
+          <RechartsPrimitive.ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} debounce={50}>
+            {children}
+          </RechartsPrimitive.ResponsiveContainer>
+        ) : null}
       </div>
     </ChartContext.Provider>
   )
@@ -347,6 +373,62 @@ function getPayloadConfigFromPayload(
     : config[key as keyof typeof config]
 }
 
+/**
+ * Safe wrapper around Recharts ResponsiveContainer.
+ * Only mounts the chart after the parent has non-zero size (avoids width/height 0 warnings
+ * in hidden tabs, closed dialogs, and collapsed layout).
+ */
+function SafeResponsiveContainer({
+  children,
+  className,
+  height = 256,
+  width = "100%",
+  ...props
+}: React.ComponentProps<typeof RechartsPrimitive.ResponsiveContainer> & {
+  className?: string
+  /** Fallback/min box height when using percentage sizing */
+  height?: number | `${number}%` | string
+}) {
+  const ref = React.useRef<HTMLDivElement>(null)
+  const [ready, setReady] = React.useState(false)
+
+  React.useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const check = () => {
+      const r = el.getBoundingClientRect()
+      setReady(r.width > 0 && r.height > 0)
+    }
+    check()
+    const ro = new ResizeObserver(check)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  const numericHeight = typeof height === "number" ? height : undefined
+  const boxStyle: React.CSSProperties =
+    numericHeight != null
+      ? { width: "100%", height: numericHeight, minWidth: 0, minHeight: numericHeight }
+      : { width: "100%", height: typeof height === "string" ? height : "16rem", minWidth: 0, minHeight: "12rem" }
+
+  return (
+    <div ref={ref} className={cn("w-full min-w-0", className)} style={boxStyle}>
+      {ready ? (
+        <RechartsPrimitive.ResponsiveContainer
+          width={width}
+          height="100%"
+          minWidth={0}
+          minHeight={0}
+          debounce={50}
+          {...props}
+        >
+          {children}
+        </RechartsPrimitive.ResponsiveContainer>
+      ) : null}
+    </div>
+  )
+}
+
 export {
   ChartContainer,
   ChartTooltip,
@@ -354,4 +436,5 @@ export {
   ChartLegend,
   ChartLegendContent,
   ChartStyle,
+  SafeResponsiveContainer,
 }

@@ -1,0 +1,149 @@
+'use client';
+
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Separator } from '@/components/ui/separator';
+import { CreditCard, Check } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { paymentMethods } from './paymentMethods';
+
+interface CartTotalsProps {
+  paymentMethod: string;
+  setPaymentMethod: (method: any) => void;
+  customerName: string | null | undefined;
+  subtotal: number;
+  discount: number;
+  tax: number;
+  total: number;
+  showDiscountInput: boolean;
+  setShowDiscountInput: (v: boolean) => void;
+  handleDiscountChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  isCartEmpty: boolean;
+  onCheckout: () => void;
+  formatPrice: (n: number) => string;
+  t: (key: string) => string;
+}
+
+export function CartTotals({
+  paymentMethod,
+  setPaymentMethod,
+  customerName,
+  subtotal,
+  discount,
+  tax,
+  total,
+  showDiscountInput,
+  setShowDiscountInput,
+  handleDiscountChange,
+  isCartEmpty,
+  onCheckout,
+  formatPrice,
+  t,
+}: CartTotalsProps) {
+  return (
+    <div className="flex-none mt-auto bg-background border-t p-2 md:p-0 shadow-[0_-8px_20px_-10px_rgba(0,0,0,0.12)] md:shadow-none z-10 shrink-0">
+      <div className="p-2 md:p-3">
+        <Label className="text-[10px] font-semibold text-muted-foreground mb-1.5 block uppercase tracking-wider">{t('payment_method')}</Label>
+        <div className="grid grid-cols-4 gap-1.5">
+          {paymentMethods
+            .filter(({ method }) => method !== 'Due' || customerName)
+            .map(({ method, icon, labelKey, color }) => (
+              <button
+                key={method}
+                type="button"
+                onClick={() => setPaymentMethod(method)}
+                className={cn(
+                  'relative flex flex-col items-center justify-center min-w-0 max-w-full whitespace-nowrap rounded-xl border-2 transition-all duration-200 touch-manipulation h-11 sm:h-9 px-1 py-0.5',
+                  paymentMethod === method
+                    ? 'border-emerald-600 bg-emerald-500/10 dark:border-emerald-500 shadow-md shadow-emerald-500/10 scale-[1.02]'
+                    : 'border-border/50 bg-background hover:bg-muted/80 hover:border-emerald-500/30'
+                )}
+              >
+                {paymentMethod === method && (
+                  <div className="absolute top-1 right-1 bg-emerald-600 rounded-full p-0.5 shadow-sm">
+                    <Check className="w-2.5 h-2.5 text-white" />
+                  </div>
+                )}
+                <div className={cn(
+                  'mb-0.5 transition-transform duration-200 inline-flex items-center justify-center text-muted-foreground',
+                  paymentMethod === method ? 'text-emerald-600 dark:text-emerald-400 scale-110' : 'group-hover:scale-110'
+                )}>
+                  {icon}
+                </div>
+                <span className={cn(
+                  'text-[10px] font-bold tracking-tight sm:text-xs',
+                  paymentMethod === method ? 'text-emerald-600 dark:text-emerald-400' : 'text-foreground'
+                )}>
+                  {t(labelKey as any)}
+                </span>
+              </button>
+            ))}
+        </div>
+
+        <div className="flex justify-between text-xs mt-2.5 border-t pt-1.5">
+          <span className="text-muted-foreground font-medium">{t('subtotal')}</span>
+          <span className="font-semibold">{formatPrice(subtotal)}</span>
+        </div>
+
+        <div className="flex justify-between items-center text-xs mt-1">
+          <span className="text-muted-foreground font-medium">{t('discount')}</span>
+          <div className="flex items-center gap-1">
+            {showDiscountInput ? (
+              <Input
+                type="number"
+                value={discount || ''}
+                onChange={handleDiscountChange}
+                className="w-16 h-6 text-right text-xs px-1.5 rounded-md border-emerald-500/30 focus-visible:ring-emerald-500/50"
+                placeholder="0"
+                min={0}
+                max={subtotal}
+                autoFocus
+                onBlur={() => discount === 0 && setShowDiscountInput(false)}
+              />
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 rounded-md"
+                onClick={() => setShowDiscountInput(true)}
+              >
+                {discount > 0 ? formatPrice(discount) : t('add_discount')}
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {tax > 0 && (
+          <div className="flex justify-between text-xs mt-1">
+            <span className="text-muted-foreground font-medium">{t('tax')}</span>
+            <span className="font-semibold">{formatPrice(tax)}</span>
+          </div>
+        )}
+
+        <Separator className="my-2 bg-border/60" />
+
+        <div className="flex flex-col gap-2">
+          <div className="flex items-end justify-between">
+            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{t('total')}</span>
+            <span className="text-xl md:text-2xl font-black text-emerald-600 dark:text-emerald-400 tracking-tight">{formatPrice(total)}</span>
+          </div>
+          <Button
+            size="lg"
+            className={cn(
+              "w-full h-12 text-base font-bold rounded-xl shadow-lg transition-all duration-300 touch-manipulation flex items-center justify-center gap-2 btn-shimmer-overlay active:scale-[0.99]",
+              isCartEmpty || total <= 0
+                ? "bg-muted text-muted-foreground shadow-none pointer-events-none"
+                : "bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600 hover:shadow-emerald-600/25 hover:-translate-y-0.5 active:translate-y-0"
+            )}
+            disabled={isCartEmpty || total <= 0}
+            onClick={onCheckout}
+          >
+            <CreditCard className="w-5 h-5" />
+            {t('complete_checkout')}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}

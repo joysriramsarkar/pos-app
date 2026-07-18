@@ -2,6 +2,8 @@ import {
   Dialog,
   DialogContent,
   DialogClose,
+  DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -18,8 +20,8 @@ import { format } from "date-fns";
 import { Share2, X, Printer } from "lucide-react";
 import { getPaymentStatusColor } from "./utils";
 import { Transaction, TransactionItem } from "./types";
-import { useState } from "react";
-import { shareInvoiceAsPdf } from "@/lib/invoicePdf";
+import { useState, useEffect } from "react";
+import { shareInvoiceFromSale, preloadPdfLibs } from "@/lib/invoicePdf";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useIsAdmin } from "@/hooks/use-permissions";
 import { useToast } from '@/hooks/use-toast';
@@ -41,8 +43,6 @@ export function TransactionDetailsDialog({
   onUpdateStatus,
 }: TransactionDetailsDialogProps) {
   const [isSharing, setIsSharing] = useState(false);
-  const [preparedFile, setPreparedFile] = useState<File | null>(null);
-  const [isPreparing, setIsPreparing] = useState(false);
   const [isPrintOpen, setIsPrintOpen] = useState(false);
   const { toast } = useToast();
   const { settings } = useSettingsStore();
@@ -52,6 +52,10 @@ export function TransactionDetailsDialog({
   const t = useTranslations('TransactionDetails');
   const tc = useTranslations('Common');
   const th = useTranslations('TransactionHistory');
+
+  useEffect(() => {
+    if (isOpen) preloadPdfLibs();
+  }, [isOpen]);
 
   if (!transaction) return null;
 
@@ -114,109 +118,6 @@ export function TransactionDetailsDialog({
     }
   };
 
-  const handleShare = async () => {
-    setIsSharing(true);
-    try {
-      const printFormat = "a4" as const;
-
-      // Build plain HTML invoice for PDF (no React renderToString needed)
-      const itemRows = transaction.items
-        .map((i, idx) => {
-          const quantity = Number(i.quantity ?? 0);
-          const unitPrice = Number(i.unitPrice ?? 0);
-          const totalPrice = Number(i.totalPrice ?? 0);
-          return `<tr><td>${idx + 1}</td><td>${i.productName}</td><td style="text-align:center">${quantity}${(i as any).unit || (i as any).product?.unit ? ` ${(i as any).unit || (i as any).product?.unit}` : ''}</td><td style="text-align:right">₹${unitPrice.toFixed(2)}</td><td style="text-align:right">₹${totalPrice.toFixed(2)}</td></tr>`;
-        })
-        .join("");
-      const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
-        body{font-family:Arial,sans-serif;padding:20px;color:#000;background:#fff}
-        h1{font-size:22px;margin:0}h2{font-size:14px;color:#555;margin:4px 0 0}
-        .header{display:flex;justify-content:space-between;margin-bottom:16px}
-        table{width:100%;border-collapse:collapse;margin:12px 0}
-        th{background:#f3f4f6;padding:8px;text-align:left;font-size:13px;border-bottom:2px solid #000}
-        td{padding:7px 8px;font-size:13px;border-bottom:1px solid #e5e7eb}
-        .total-row{font-weight:bold;font-size:15px;border-top:2px solid #000}
-        .footer{margin-top:24px;text-align:center;color:#666;font-size:12px}
-      </style></head><body>
-        <div class="header">
-          <div><h1>${storeConfig.name}</h1><h2>${storeConfig.nameBn}</h2><p style="font-size:12px;margin:4px 0">${storeConfig.address}</p><p style="font-size:12px;margin:0">Ph: ${storeConfig.phone}</p></div>
-          <div style="text-align:right"><div style="border:2px solid #000;padding:8px 16px;display:inline-block"><b>TAX INVOICE</b></div><p style="font-size:13px;margin:8px 0 2px">Invoice: <b>${transaction.invoiceNumber}</b></p><p style="font-size:12px;margin:0">${format(transaction.createdAt, "dd/MM/yyyy HH:mm")}</p></div>
-        </div>
-        ${transaction.customer ? `<div style="background:#f9fafb;padding:10px;border-radius:6px;margin-bottom:12px"><b>Bill To:</b> ${transaction.customer.name}${transaction.customer.phone ? ` | ${transaction.customer.phone}` : ""}</div>` : ""}
-        <table><thead><tr><th>#</th><th>Item</th><th style="text-align:center">Qty</th><th style="text-align:right">Unit Price</th><th style="text-align:right">Amount</th></tr></thead><tbody>${itemRows}</tbody></table>
-        <div style="display:flex;justify-content:flex-end"><table style="width:260px">
-          <tr><td>Subtotal:</td><td style="text-align:right">₹${(Number(transaction.totalAmount ?? 0) + Number(transaction.discount ?? 0) - Number(transaction.tax ?? 0)).toFixed(2)}</td></tr>
-          ${(Number(transaction.discount ?? 0)) > 0 ? `<tr><td style="color:green">Discount:</td><td style="text-align:right;color:green">-₹${Number(transaction.discount ?? 0).toFixed(2)}</td></tr>` : ""}
-          ${(Number(transaction.tax ?? 0)) > 0 ? `<tr><td>Tax:</td><td style="text-align:right">₹${Number(transaction.tax ?? 0).toFixed(2)}</td></tr>` : ""}
-          <tr class="total-row"><td>Grand Total:</td><td style="text-align:right">₹${Number(transaction.totalAmount ?? 0).toFixed(2)}</td></tr>
-          <tr><td>Amount Paid:</td><td style="text-align:right">₹${Number(transaction.amountPaid ?? 0).toFixed(2)}</td></tr>
-          ${Number(transaction.totalAmount ?? 0) - Number(transaction.amountPaid ?? 0) > 0 ? `<tr><td style="color:red">Due:</td><td style="text-align:right;color:red">₹${(Number(transaction.totalAmount ?? 0) - Number(transaction.amountPaid ?? 0)).toFixed(2)}</td></tr>` : ""}
-        </table></div>
-        <p style="margin-top:12px;font-size:13px">Payment: <b>${transaction.paymentMethod}</b> (${transaction.paymentStatus})</p>
-        <div class="footer"><p>ধন্যবাদ! Thank you for shopping with us!</p></div>
-      </body></html>`;
-
-      // If Capacitor native, use existing helper immediately
-      try {
-        const cap = await import('@capacitor/core').then(m => (m as any).Capacitor).catch(() => null);
-        if (cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform()) {
-          await shareInvoiceAsPdf(html, printFormat, transaction.invoiceNumber, storeConfig.name, '');
-          return;
-        }
-      } catch {}
-
-      setIsPreparing(true);
-      const { generateInvoicePdf } = await import('@/lib/invoicePdf');
-      const blob = await generateInvoicePdf(html, printFormat);
-      const file = new File([blob], `Invoice-${transaction.invoiceNumber}.pdf`, { type: 'application/pdf' });
-      setPreparedFile(file);
-      toast({ title: t('invoice_ready'), description: t('invoice_ready_desc') });
-    } catch (err: unknown) {
-      if ((err instanceof Error ? err.name : "") !== "AbortError") {
-        console.error("Share failed:", err);
-      }
-    } finally {
-      setIsPreparing(false);
-      setIsSharing(false);
-    }
-  };
-
-  const performPreparedShare = async () => {
-    if (!preparedFile) return;
-    setIsSharing(true);
-    try {
-      const shareData: any = { title: `Invoice ${transaction.invoiceNumber}`, text: `Invoice from ${storeConfig.name}`, files: [preparedFile] };
-      try {
-        const canShare = typeof (navigator as any).canShare === 'function' ? (navigator as any).canShare(shareData) : true;
-        if (canShare) {
-          await (navigator as any).share(shareData);
-          setPreparedFile(null);
-          toast({ title: t('shared'), description: t('shared_desc') });
-          onOpenChange(false);
-          return;
-        }
-      } catch (err) {
-        console.warn('navigator.share failed at performPreparedShare:', err);
-      }
-
-      // fallback to download
-      try {
-        const url = URL.createObjectURL(preparedFile);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = preparedFile.name;
-        a.click();
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
-        setPreparedFile(null);
-        toast({ title: t('downloaded'), description: t('downloaded_desc') });
-      } catch (err) {
-        toast({ title: t('share_failed'), description: t('share_failed_desc'), variant: 'destructive' });
-      }
-    } finally {
-      setIsSharing(false);
-    }
-  };
-
   const saleMapped = transaction ? {
     id: transaction.id,
     invoiceNumber: transaction.invoiceNumber,
@@ -259,6 +160,32 @@ export function TransactionDetailsDialog({
     }))
   } : null;
 
+  const handleShare = async () => {
+    if (isSharing || !saleMapped) return;
+    setIsSharing(true);
+    try {
+      const result = await shareInvoiceFromSale(saleMapped as any, 'a4', {
+        name: storeConfig.name,
+        nameBn: storeConfig.nameBn,
+        address: storeConfig.address,
+        phone: storeConfig.phone,
+        gstNumber: storeConfig.gstNumber,
+      });
+      if (result === 'downloaded') {
+        toast({ title: t('downloaded'), description: t('downloaded_desc') });
+      } else {
+        toast({ title: t('shared'), description: t('shared_desc') });
+      }
+    } catch (err: unknown) {
+      if ((err instanceof Error ? err.name : '') !== 'AbortError') {
+        console.error('Share failed:', err);
+        toast({ title: t('share_failed'), description: t('share_failed_desc'), variant: 'destructive' });
+      }
+    } finally {
+      setIsSharing(false);
+    }
+  };
+
   return (
     <>
       <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -266,12 +193,12 @@ export function TransactionDetailsDialog({
           {/* Sticky header */}
           <div className="sticky top-0 z-10 bg-background border-b px-4 py-3 md:px-6 md:py-4 flex items-start justify-between gap-3 shrink-0">
             <div className="min-w-0">
-              <h2 className="text-lg md:text-xl font-semibold leading-tight">
+              <DialogTitle className="text-lg md:text-xl font-semibold leading-tight">
                 {t('title', { invoice: transaction.invoiceNumber })}
-              </h2>
-              <p className="text-xs md:text-sm text-muted-foreground mt-0.5">
+              </DialogTitle>
+              <DialogDescription className="text-xs md:text-sm text-muted-foreground mt-0.5">
                 {format(transaction.createdAt, "dd MMMM yyyy HH:mm:ss")}
-              </p>
+              </DialogDescription>
             </div>
             <DialogClose className="shrink-0 rounded-sm opacity-70 hover:opacity-100 transition-opacity mt-0.5">
               <X className="w-5 h-5" />
@@ -428,12 +355,12 @@ export function TransactionDetailsDialog({
                 </Button>
                 <Button
                   variant="outline"
-                  onClick={preparedFile ? performPreparedShare : handleShare}
+                  onClick={handleShare}
                   disabled={isSharing}
                   className="h-10 gap-2 border-green-500 text-green-600 hover:bg-green-50"
                 >
                   <Share2 className="w-4 h-4" />
-                  {isPreparing ? t('preparing') : preparedFile ? (isSharing ? t('sharing') : t('tap_to_share')) : (isSharing ? t('sharing') : t('share_whatsapp'))}
+                  {isSharing ? t('sharing') : t('share_whatsapp')}
                 </Button>
                 {isAdmin && transaction.status === "Completed" && (
                   <>

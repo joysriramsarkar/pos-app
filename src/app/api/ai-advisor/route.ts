@@ -1,15 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import ZAI from 'z-ai-web-dev-sdk';
+import { requireRole } from '@/lib/api-middleware';
+import { db } from '@/lib/db';
 
 export async function POST(request: NextRequest) {
+  const roleError = await requireRole(request, ['ADMIN', 'MANAGER']);
+  if (roleError) return roleError;
+
   try {
     const { reportData, question } = await request.json();
+
+    const currencyRow = await db.setting.findUnique({ where: { key: 'currency_symbol' } });
+    const currencySymbol = currencyRow?.value || '₹';
 
     const zai = await ZAI.create();
 
     const systemPrompt = `তুমি একটি বাংলা মুদি দোকানের AI ব্যবসায়িক উপদেষ্টা। তোমার নাম "লক্ষ্মণ AI"। 
 তুমি সবসময় বাংলায় উত্তর দাও। দোকানের রিপোর্ট ডেটা বিশ্লেষণ করে ব্যবহারিক পরামর্শ দাও।
-সংখ্যা ও পরিমাণ বাংলায় লিখো। টাকার প্রতীক ৳ ব্যবহার করো।
+সংখ্যা ও পরিমাণ বাংলায় লিখো। টাকার প্রতীক ${currencySymbol} ব্যবহার করো।
 পরামর্শগুলো সংক্ষিপ্ত, স্পষ্ট এবং কার্যকর হওয়া চাই।`;
 
     const userPrompt = `দোকানের রিপোর্ট ডেটা:
@@ -36,7 +44,7 @@ ${JSON.stringify(reportData, null, 2)}
     console.error('AI Advisor error:', error);
     return NextResponse.json(
       { success: false, error: message },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

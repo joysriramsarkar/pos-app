@@ -211,9 +211,9 @@ export function TransactionHistory() {
   };
 
   return (
-    <div className="flex flex-col h-full gap-2 md:gap-4 p-2 md:p-4 overflow-hidden">
+    <div className="flex flex-col h-full gap-2 md:gap-4 p-2 md:p-4 overflow-hidden min-h-0">
       <div className="space-y-1 md:space-y-2 shrink-0">
-        <h1 className="text-xl md:text-2xl font-bold">{t('title')}</h1>
+        <h1 className="text-lg md:text-2xl font-bold">{t('title')}</h1>
         <p className="hidden md:block text-muted-foreground">{t('subtitle')}</p>
       </div>
 
@@ -236,14 +236,14 @@ export function TransactionHistory() {
         onReset={handleResetFilters}
       />
 
-      <Card className="flex-1 flex flex-col min-h-[65vh] md:min-h-0 overflow-hidden">
-        <CardHeader className="border-b shrink-0">
-          <CardTitle>{t('transactions')}</CardTitle>
-          <CardDescription>
+      <Card className="flex-1 flex flex-col min-h-0 overflow-hidden">
+        <CardHeader className="border-b shrink-0 py-3 px-3 md:p-6">
+          <CardTitle className="text-base md:text-lg">{t('transactions')}</CardTitle>
+          <CardDescription className="text-xs md:text-sm">
             {pagination && `${t('showing')} ${formatNumber(transactions.length)} ${t('of')} ${formatNumber(pagination.total)} ${t('transactions')}`}
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex-1 p-0 overflow-hidden flex flex-col h-full">
+        <CardContent className="flex-1 p-0 overflow-hidden flex flex-col min-h-0">
           {isLoading ? (
             <div className="flex items-center justify-center flex-1">
               <div className="text-muted-foreground">{t('loading_transactions')}</div>
@@ -263,14 +263,15 @@ export function TransactionHistory() {
       </Card>
 
       {pagination && pagination.totalPages > 1 && (
-        <div className="flex items-center justify-between shrink-0">
-          <div className="text-sm text-muted-foreground">
+        <div className="flex items-center justify-between shrink-0 gap-2 pb-1">
+          <div className="text-xs sm:text-sm text-muted-foreground">
             {t('page')} {formatNumber(pagination.page)} {t('of')} {formatNumber(pagination.totalPages)}
           </div>
           <div className="flex gap-2">
             <Button
               variant="outline"
               size="sm"
+              className="h-9 touch-manipulation"
               onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
               disabled={currentPage === 1}
             >
@@ -279,6 +280,7 @@ export function TransactionHistory() {
             <Button
               variant="outline"
               size="sm"
+              className="h-9 touch-manipulation"
               onClick={() => setCurrentPage(Math.min(pagination.totalPages, currentPage + 1))}
               disabled={currentPage === pagination.totalPages}
             >
@@ -306,6 +308,7 @@ export function TransactionHistory() {
           amountPaid: refundSale.amountPaid ?? 0,
           paymentMethod: refundSale.paymentMethod,
           items: refundSale.items.map(item => ({
+            id: item.id,
             productId: item.productId,
             productName: item.productName,
             quantity: item.quantity ?? 0,

@@ -11,15 +11,15 @@ export function isBengali(): boolean {
 export function formatPriceGlobal(price: number | null | undefined): string {
   const finalPrice = price === null || price === undefined || isNaN(Number(price)) ? 0 : Number(price);
   const isBn = isBengali();
-  
-  // Get active currency symbol from settings store
+
+  // Active currency from settings — never hardcode ৳
   const currencySymbol = useSettingsStore.getState().settings.currency_symbol || '₹';
-  const intlLocale = isBn ? 'bn-BD' : 'en-IN';
 
   const isNegative = finalPrice < 0;
   const absPrice = Math.abs(finalPrice);
 
-  const formattedNum = new Intl.NumberFormat(intlLocale, {
+  // en-IN grouping, then map digits for Bengali UI
+  const formattedNum = new Intl.NumberFormat('en-IN', {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   }).format(absPrice);
@@ -41,7 +41,7 @@ export function formatNumberGlobal(num: number | string | null | undefined, opti
   if (num === null || num === undefined) return '';
   const isBn = isBengali();
   const parsed = typeof num === 'string' ? parseFloat(num) : Number(num);
-  if (isNaN(parsed)) return String(num);
-  const formatted = new Intl.NumberFormat(isBn ? 'bn-BD' : 'en-IN', options).format(parsed);
+  if (isNaN(parsed)) return isBn ? convertEnglishToBengaliNumerals(String(num)) : String(num);
+  const formatted = new Intl.NumberFormat('en-IN', options).format(parsed);
   return isBn ? convertEnglishToBengaliNumerals(formatted) : formatted;
 }

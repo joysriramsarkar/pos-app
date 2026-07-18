@@ -1,7 +1,8 @@
 export const dynamic = 'force-dynamic';
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { requireAuth } from '@/lib/api-middleware';
 
 export interface NotificationItem {
   id: string;
@@ -9,27 +10,43 @@ export interface NotificationItem {
   title: string;
   message: string;
   icon: 'alert' | 'critical' | 'wallet';
+  severity: 'critical' | 'warning' | 'info';
   createdAt: string;
   read: boolean;
   referenceId?: string;
 }
+
+const MAX_OUT_OF_STOCK = 15;
+const MAX_LOW_STOCK = 15;
+const MAX_DUE = 15;
+const MAX_TOTAL = 40;
 
 function toBnNum(num: number): string {
   const bnDigits = ['০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯'];
   return num.toString().replace(/\d/g, (d) => bnDigits[parseInt(d)]);
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const authResult = await requireAuth(request);
+  if (!authResult.authorized) return authResult.response!;
+
+  const headers = { 'Content-Type': 'application/json; charset=utf-8' };
+
   try {
     const notifications: NotificationItem[] = [];
 
-    // 1. Out of stock products (currentStock = 0)
+    // 1. Out of stock — capped, newest first
     const outOfStockProducts = await db.product.findMany({
-      where: {
-        currentStock: 0,
-        isActive: true,
-      },
+      where: { currentStock: 0, isActive: true },
       orderBy: { updatedAt: 'desc' },
+      take: MAX_OUT_OF_STOCK,
+      select: {
+        id: true,
+        name: true,
+        nameBn: true,
+        unit: true,
+        updatedAt: true,
+      },
     });
 
     for (const product of outOfStockProducts) {
@@ -40,22 +57,38 @@ export async function GET() {
         title: 'স্টক শেষ সতর্কতা',
         message: `${name} এর স্টক শেষ!`,
         icon: 'critical',
+        severity: 'critical',
         createdAt: product.updatedAt.toISOString(),
         read: false,
         referenceId: product.id,
       });
     }
 
-    // 2. Low stock products (currentStock > 0 && currentStock <= minStockLevel)
-    const allActiveProducts = await db.product.findMany({
-      where: { isActive: true, currentStock: { gt: 0 } },
-    });
+    // 2. Low stock via SQL (avoid loading entire catalog) — exclude already out of stock
+    const lowStockProducts = await db.$queryRaw<
+      Array<{
+        id: string;
+        name: string;
+        nameBn: string | null;
+        unit: string;
+        currentStock: number;
+        minStockLevel: number;
+        updatedAt: Date;
+      }>
+    >`
+      SELECT id, name, name_bn as "nameBn", unit,
+             CAST(current_stock AS FLOAT) as "currentStock",
+             CAST(min_stock_level AS FLOAT) as "minStockLevel",
+             updated_at as "updatedAt"
+      FROM products
+      WHERE is_active = true
+        AND current_stock > 0
+        AND current_stock <= min_stock_level
+      ORDER BY current_stock ASC, updated_at DESC
+      LIMIT ${MAX_LOW_STOCK}
+    `;
 
-    const lowStockFiltered = allActiveProducts.filter(
-      (p) => p.currentStock <= p.minStockLevel
-    );
-
-    for (const product of lowStockFiltered) {
+    for (const product of lowStockProducts) {
       const name = product.nameBn || product.name;
       notifications.push({
         id: `low-stock-${product.id}`,
@@ -63,13 +96,14 @@ export async function GET() {
         title: 'কম স্টক সতর্কতা',
         message: `${name} এর স্টক কম (${toBnNum(Number(product.currentStock))} ${product.unit} বাকি)`,
         icon: 'alert',
-        createdAt: product.updatedAt.toISOString(),
+        severity: 'warning',
+        createdAt: new Date(product.updatedAt).toISOString(),
         read: false,
         referenceId: product.id,
       });
     }
 
-    // 3. Due payment reminders - customers with totalDue > 0 for more than 7 days
+    // 3. Due reminders — top balances with old open sales (cap)
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
@@ -78,6 +112,8 @@ export async function GET() {
         totalDue: { gt: 0 },
         isActive: true,
       },
+      orderBy: { totalDue: 'desc' },
+      take: MAX_DUE * 2,
       include: {
         sales: {
           where: {
@@ -90,24 +126,25 @@ export async function GET() {
       },
     });
 
+    let dueCount = 0;
     for (const customer of customersWithDue) {
-      // Only add notification if customer has a sale older than 7 days with due
-      if (customer.sales.length > 0) {
-        const due = Number(customer.totalDue);
-        notifications.push({
-          id: `due-payment-${customer.id}`,
-          type: 'due_payment',
-          title: 'বাকি পেমেন্ট সতর্কতা',
-          message: `${customer.name} এর ${toBnNum(Math.round(due))} টাকা বাকি আছে`,
-          icon: 'wallet',
-          createdAt: customer.sales[0].createdAt.toISOString(),
-          read: false,
-          referenceId: customer.id,
-        });
-      }
+      if (dueCount >= MAX_DUE) break;
+      if (customer.sales.length === 0) continue;
+      const due = Number(customer.totalDue);
+      notifications.push({
+        id: `due-payment-${customer.id}`,
+        type: 'due_payment',
+        title: 'বাকি পেমেন্ট সতর্কতা',
+        message: `${customer.name} এর ${toBnNum(Math.round(due))} টাকা বাকি আছে`,
+        icon: 'wallet',
+        severity: 'info',
+        createdAt: customer.sales[0].createdAt.toISOString(),
+        read: false,
+        referenceId: customer.id,
+      });
+      dueCount += 1;
     }
 
-    // Sort notifications: out_of_stock first, then low_stock, then due_payment
     const typeOrder: Record<string, number> = {
       out_of_stock: 0,
       low_stock: 1,
@@ -120,18 +157,35 @@ export async function GET() {
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
 
-    const unreadCount = notifications.filter((n) => !n.read).length;
+    const capped = notifications.slice(0, MAX_TOTAL);
+    const unreadCount = capped.filter((n) => !n.read).length;
+    const truncated =
+      outOfStockProducts.length >= MAX_OUT_OF_STOCK ||
+      lowStockProducts.length >= MAX_LOW_STOCK ||
+      dueCount >= MAX_DUE;
 
-    return NextResponse.json({
-      success: true,
-      data: notifications,
-      unreadCount,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        data: capped,
+        unreadCount,
+        meta: {
+          capped: truncated,
+          maxTotal: MAX_TOTAL,
+          counts: {
+            outOfStock: outOfStockProducts.length,
+            lowStock: lowStockProducts.length,
+            due: dueCount,
+          },
+        },
+      },
+      { headers },
+    );
   } catch (error) {
     console.error('বিজ্ঞপ্তি আনতে ত্রুটি:', error);
     return NextResponse.json(
       { success: false, data: [], unreadCount: 0, error: 'বিজ্ঞপ্তি আনতে ত্রুটি হয়েছে' },
-      { status: 500 }
+      { status: 500, headers },
     );
   }
 }

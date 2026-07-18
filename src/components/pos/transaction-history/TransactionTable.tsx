@@ -94,7 +94,7 @@ export function TransactionTable({
         {transactions.map((transaction: Transaction) => (
           <div 
             key={transaction.id} 
-            className="flex flex-col p-3 hover:bg-muted/50 cursor-pointer transition-colors"
+            className="flex flex-col p-3.5 hover:bg-muted/50 active:bg-muted/60 cursor-pointer transition-colors touch-manipulation min-h-16"
             onClick={() => onViewDetails(transaction)}
           >
             <div className="flex justify-between items-start mb-2">

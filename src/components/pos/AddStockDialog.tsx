@@ -61,7 +61,7 @@ export function AddStockDialog({
 }: AddStockDialogProps) {
   const t = useTranslations('Stock');
   const tc = useTranslations('Common');
-  const { formatPrice: formatPriceLocale } = useNumberFormat();
+  const { formatPrice: formatPriceLocale, currencySymbol } = useNumberFormat();
 
   const [selectedProductId, setSelectedProductId] = useState<string>('');
   const [quantity, setQuantity] = useState<string>('');
@@ -215,7 +215,7 @@ export function AddStockDialog({
           <div className="space-y-2">
               <Label htmlFor="add-stock-price">{t('purchase_price')}</Label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">৳</span>
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">{currencySymbol}</span>
               <Input
                 id="add-stock-price"
                 type="number"
@@ -284,7 +284,7 @@ export function AddStockDialog({
             <div className="space-y-2">
               <Label htmlFor="add-stock-amount-paid">পরিশোধিত টাকা (ঐচ্ছিক)</Label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">৳</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">{currencySymbol}</span>
                 <Input
                   id="add-stock-amount-paid"
                   type="number"

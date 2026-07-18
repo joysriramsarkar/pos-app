@@ -1,5 +1,6 @@
 import { useProductsStore } from '@/stores/pos-store';
 import { ProductsDB } from '@/lib/offline/indexeddb';
+import { fetchAllProductsFromApi } from '@/lib/fetch-all-products';
 
 export async function refreshProductsFromServer(showLoadingState = false): Promise<boolean> {
   const { setProducts, setLoading } = useProductsStore.getState();
@@ -8,12 +9,19 @@ export async function refreshProductsFromServer(showLoadingState = false): Promi
   }
 
   try {
-    const res = await fetch('/api/products?limit=10000');
-    if (!res.ok) return false;
+    const { products, ok } = await fetchAllProductsFromApi({ pageSize: 250 });
+    if (!ok || !products.length) {
+      // still apply partial if any
+      if (products.length) {
+        setProducts(products as never[], false, null);
+        await ProductsDB.upsertMany(products as never[]);
+        return true;
+      }
+      return false;
+    }
 
-    const { data: products, nextCursor } = await res.json();
-    setProducts(products, !!nextCursor, nextCursor ?? null);
-    await ProductsDB.upsertMany(products);
+    setProducts(products as never[], false, null);
+    await ProductsDB.upsertMany(products as never[]);
     return true;
   } catch (error) {
     console.error('Failed to refresh products from server:', error);

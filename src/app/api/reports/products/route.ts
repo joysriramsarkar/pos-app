@@ -1,8 +1,9 @@
 export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { db as prisma } from "@/lib/db";
-import { startOfDay, endOfDay, parseISO, subDays } from "date-fns";
+import { parseISO } from "date-fns";
 import { requirePermission } from "@/lib/api-middleware";
+import { toMoneyNumber } from "@/lib/money";
 
 export async function GET(request: NextRequest) {
   const authResponse = await requirePermission(request, "reports.view");
@@ -43,18 +44,40 @@ export async function GET(request: NextRequest) {
       startDate = new Date(startLocal.getTime() - offsetMs);
     }
 
-    const topProducts = await prisma.saleItem.groupBy({
-      by: ["productId"],
-      _sum: { quantity: true, totalPrice: true },
+    // Load line items with cost snapshot so profit is historical, not live WAC
+    const saleItems = await prisma.saleItem.findMany({
       where: {
         createdAt: { gte: startDate, lte: endDate },
-        sale: { status: "Completed" },
+        sale: { status: { in: ["Completed", "PartialReturn"] } },
+        quantity: { gt: 0 },
       },
-      orderBy: { _sum: { quantity: "desc" } },
+      select: {
+        productId: true,
+        quantity: true,
+        totalPrice: true,
+        costPriceAtSale: true,
+      },
     });
 
+    const byProduct = new Map<
+      string,
+      { quantity: number; revenue: number; cost: number }
+    >();
+
+    for (const item of saleItems) {
+      const qty = Number(item.quantity);
+      const revenue = toMoneyNumber(item.totalPrice);
+      const unitCost = toMoneyNumber(item.costPriceAtSale);
+      const prev = byProduct.get(item.productId) || { quantity: 0, revenue: 0, cost: 0 };
+      prev.quantity += qty;
+      prev.revenue += revenue;
+      prev.cost += unitCost * qty;
+      byProduct.set(item.productId, prev);
+    }
+
+    const productIds = [...byProduct.keys()];
     const productDetails = await prisma.product.findMany({
-      where: { id: { in: topProducts.map((p) => p.productId) } },
+      where: { id: { in: productIds } },
       select: {
         id: true,
         name: true,
@@ -65,20 +88,27 @@ export async function GET(request: NextRequest) {
     });
     const productsMap = new Map(productDetails.map((p) => [p.id, p]));
 
-    const result = topProducts
-      .map((p) => {
-        const details = productsMap.get(p.productId);
-        const revenue = Number(p._sum.totalPrice || 0);
-        const quantity = p._sum.quantity || 0;
-        const profit = revenue - Number(details?.buyingPrice || 0) * Number(quantity);
+    const result = productIds
+      .map((productId) => {
+        const agg = byProduct.get(productId)!;
+        const details = productsMap.get(productId);
+        // Fallback: if snapshot is 0 (legacy rows not backfilled), use current buying price
+        const cost =
+          agg.cost > 0
+            ? agg.cost
+            : toMoneyNumber(details?.buyingPrice || 0) * Number(agg.quantity);
+        const profit = agg.revenue - cost;
+        const margin = agg.revenue > 0 ? (profit / agg.revenue) * 100 : 0;
         return {
-          id: p.productId,
+          id: productId,
           name: details?.name || "Unknown Product",
           nameBn: details?.nameBn,
           unit: details?.unit || "unit",
-          quantity,
-          revenue,
-          profit,
+          quantity: agg.quantity,
+          revenue: Math.round(agg.revenue * 100) / 100,
+          cost: Math.round(cost * 100) / 100,
+          profit: Math.round(profit * 100) / 100,
+          margin: Math.round(margin * 10) / 10,
         };
       })
       .sort((a, b) => b.revenue - a.revenue);

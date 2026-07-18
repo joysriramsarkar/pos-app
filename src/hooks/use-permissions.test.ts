@@ -1,14 +1,14 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 // Mock next-auth/react BEFORE importing the module under test
-const mockUseSession = mock(() => ({ data: null as any }));
+const mockUseSession = vi.fn(() => ({ data: null as any }));
 
-mock.module('next-auth/react', () => ({
+vi.mock('next-auth/react', () => ({
   useSession: mockUseSession,
 }));
 
 // Mock the permissions library to avoid database dependencies in tests
-mock.module('@/lib/permissions-helpers', () => ({
+vi.mock('@/lib/permissions-helpers', () => ({
   roleHasPermission: (role: string, permissionCode: string) => {
     if (role === 'ADMIN') return true;
     if (role === 'MANAGER' && permissionCode === 'reports.view') return true;
