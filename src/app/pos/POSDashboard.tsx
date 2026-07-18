@@ -1463,35 +1463,35 @@ export function POSDashboard() {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 min-h-0 relative">
         {/* Mobile Header */}
-        <header className="lg:hidden shrink-0 border-b border-border/50 bg-card/80 backdrop-blur-md px-3 py-1.5 pt-[calc(env(safe-area-inset-top)+0.35rem)] no-print sticky top-0 z-20">
-          <div className="flex items-center justify-between gap-2 min-h-10">
+        <header className="lg:hidden shrink-0 border-b border-border/50 bg-card/80 backdrop-blur-md px-2.5 py-1 pt-[calc(env(safe-area-inset-top)+0.25rem)] no-print sticky top-0 z-20">
+          <div className="flex items-center justify-between gap-1.5 min-h-9">
             {/* Store Name */}
-            <div className="flex items-center gap-2 min-w-0 flex-1">
-              <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shadow-sm shrink-0">
-                <Store className="w-4 h-4 text-primary" />
+            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+              <div className="w-7 h-7 rounded-md bg-primary/10 flex items-center justify-center shadow-sm shrink-0">
+                <Store className="w-3.5 h-3.5 text-primary" />
               </div>
               <div className="min-w-0">
-                <h1 className="font-bold text-sm bg-linear-to-r from-primary to-primary/70 bg-clip-text text-transparent truncate">{storeName}</h1>
+                <h1 className="font-bold text-xs bg-linear-to-r from-primary to-primary/70 bg-clip-text text-transparent truncate">{storeName}</h1>
                 {currentPage !== 'billing' && (
-                  <p className="text-[10px] text-muted-foreground truncate leading-none mt-0.5">
+                  <p className="text-[9px] text-muted-foreground truncate leading-none mt-0.5">
                     {currentPage === 'menu' ? 'Menu' : (navItems.find(n => n.id === currentPage)?.label ?? currentPage)}
                   </p>
                 )}
               </div>
             </div>
 
-            <div className="flex items-center gap-0.5 shrink-0">
+            <div className="flex items-center gap-0 shrink-0">
               {!isOnline && (
-                <Badge variant="secondary" className="text-[10px] h-6 px-1.5 bg-amber-500/15 text-amber-700 dark:text-amber-400 border-0 mr-1">
-                  <WifiOff className="w-3 h-3 mr-0.5" />
+                <Badge variant="secondary" className="text-[9px] h-5 px-1 bg-amber-500/15 text-amber-700 dark:text-amber-400 border-0 mr-0.5">
+                  <WifiOff className="w-2.5 h-2.5 mr-0.5" />
                   Offline
                 </Badge>
               )}
-              <Button variant="ghost" size="icon" onClick={toggleTheme} className="h-9 w-9 text-muted-foreground hover:text-foreground hover:bg-primary/10 touch-manipulation" aria-label="Toggle theme">
-                {resolvedTheme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              <Button variant="ghost" size="icon" onClick={toggleTheme} className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-primary/10 touch-manipulation" aria-label="Toggle theme">
+                {resolvedTheme === 'dark' ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
               </Button>
-              <Button variant="ghost" size="icon" onClick={toggleLanguage} className="h-9 w-9 text-muted-foreground hover:text-foreground hover:bg-primary/10 touch-manipulation" aria-label="Toggle language">
-                <Languages className="h-4 w-4" />
+              <Button variant="ghost" size="icon" onClick={toggleLanguage} className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-primary/10 touch-manipulation" aria-label="Toggle language">
+                <Languages className="h-3.5 w-3.5" />
               </Button>
               <NotificationBell variant="mobile" />
             </div>
@@ -1536,10 +1536,10 @@ export function POSDashboard() {
 
               {/* Mobile billing: cart + scan button (no product list) */}
               <div className="flex-1 flex flex-col overflow-hidden w-full sm:hidden min-h-0">
-                <div className="p-2 border-b bg-background shrink-0">
-                  <div className="flex flex-row items-center gap-2 w-full">
+                <div className="px-1.5 py-1.5 border-b bg-background shrink-0">
+                  <div className="flex flex-row items-center gap-1.5 w-full">
                     <div className="relative flex-1 min-w-0">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
                       <Input
                         type="search"
                         enterKeyHint="search"
@@ -1549,61 +1549,64 @@ export function POSDashboard() {
                         placeholder="Search name or barcode..."
                         value={mobileSearchQuery}
                         onChange={(e) => handleMobileSearchChange(e.target.value)}
-                        className="pl-9 pr-9 h-11 text-base rounded-xl touch-manipulation"
+                        className="pl-8 pr-8 h-9 text-sm rounded-lg touch-manipulation"
                       />
                       {mobileSearchQuery && (
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="absolute right-1 top-1/2 -translate-y-1/2 h-9 w-9 p-0 touch-manipulation"
+                          className="absolute right-0.5 top-1/2 -translate-y-1/2 h-8 w-8 p-0 touch-manipulation"
                           onClick={() => { setMobileSearchQuery(''); setMobileSearchResults([]); }}
                           aria-label="Clear Search"
                         >
-                          <X className="w-4 h-4" />
+                          <X className="w-3.5 h-3.5" />
                         </Button>
                       )}
                     </div>
-                    <Button size="icon" className="shrink-0 h-11 w-11 rounded-xl touch-manipulation" onClick={handleOpenMobileScanner} aria-label="Scan Barcode">
-                      <ScanLine className="h-5 w-5" />
+                    <Button size="icon" className="shrink-0 h-9 w-9 rounded-lg touch-manipulation" onClick={handleOpenMobileScanner} aria-label="Scan Barcode">
+                      <ScanLine className="h-4 w-4" />
                     </Button>
                   </div>
                 </div>
 
                 {/* Search Results */}
                 {mobileSearchQuery && (
-                  <div className="border-b bg-background max-h-[40dvh] overflow-y-auto overscroll-contain shrink-0 shadow-sm z-10">
-                    <div className="p-2">
-                      <h3 className="text-xs font-medium mb-1.5 px-1 text-muted-foreground">
+                  <div className="border-b bg-background max-h-[38dvh] overflow-y-auto overscroll-contain shrink-0 shadow-sm z-10">
+                    <div className="p-1.5">
+                      <h3 className="text-[10px] font-medium mb-1 px-1 text-muted-foreground uppercase tracking-wide">
                         Results ({mobileSearchResults.length})
                       </h3>
                       {isMobileSearching ? (
-                        <p className="text-sm text-muted-foreground p-2">Searching...</p>
+                        <p className="text-xs text-muted-foreground p-1.5">Searching...</p>
                       ) : mobileSearchResults.length === 0 ? (
-                        <p className="text-sm text-muted-foreground p-2">No products found</p>
+                        <p className="text-xs text-muted-foreground p-1.5">No products found</p>
                       ) : (
-                        <div className="space-y-1">
+                        <div className="space-y-0.5">
                           {mobileSearchResults.slice(0, 15).map((product) => (
                             <button
                               key={product.id}
                               type="button"
-                              className="flex w-full items-center justify-between gap-2 p-3 rounded-xl border bg-card hover:bg-muted/50 active:bg-muted cursor-pointer touch-manipulation text-left min-h-12"
+                              className="flex w-full items-center justify-between gap-2 px-2 py-1.5 rounded-lg border bg-card hover:bg-muted/50 active:bg-muted cursor-pointer touch-manipulation text-left min-h-10"
                               onClick={() => {
                                 addItem(product, 1);
                                 setMobileSearchQuery('');
                                 setMobileSearchResults([]);
+                                if (navigator?.vibrate) navigator.vibrate(30);
                               }}
                             >
                               <div className="flex-1 min-w-0">
-                                <p className="font-medium text-sm truncate">{product.name}</p>
-                                {product.barcode && (
-                                  <p className="text-xs text-muted-foreground font-mono">{product.barcode}</p>
-                                )}
+                                <p className="font-medium text-xs truncate leading-tight">{product.name}</p>
+                                <p className="text-[10px] text-muted-foreground truncate leading-tight">
+                                  {product.barcode ? `${product.barcode} · ` : ''}
+                                  {product.currentStock <= 0 ? (
+                                    <span className="text-destructive">Out of stock</span>
+                                  ) : (
+                                    <span>Stock: {product.currentStock}</span>
+                                  )}
+                                </p>
                               </div>
                               <div className="text-right shrink-0">
-                                <p className="font-semibold text-sm tabular-nums">{formatPrice(product.sellingPrice)}</p>
-                                {product.currentStock <= 0 && (
-                                  <p className="text-xs text-destructive">Out of stock</p>
-                                )}
+                                <p className="font-semibold text-xs tabular-nums text-primary">{formatPrice(product.sellingPrice)}</p>
                               </div>
                             </button>
                           ))}
@@ -1752,10 +1755,10 @@ export function POSDashboard() {
         </main>
       {/* Mobile Bottom Navigation — keyboard খোলা থাকলে হাইড */}
       <nav className={cn(
-        "lg:hidden fixed bottom-0 left-0 right-0 z-30 border-t border-border/60 bg-card/95 backdrop-blur-md px-1 pt-1 bottom-nav pb-[max(0.25rem,env(safe-area-inset-bottom))] transition-transform duration-200 shadow-[0_-4px_16px_-8px_rgba(0,0,0,0.12)]",
+        "lg:hidden fixed bottom-0 left-0 right-0 z-30 border-t border-border/60 bg-card/95 backdrop-blur-md px-0.5 pt-0.5 bottom-nav pb-[max(0.2rem,env(safe-area-inset-bottom))] transition-transform duration-200 shadow-[0_-4px_16px_-8px_rgba(0,0,0,0.12)]",
         isKeyboardOpen ? "translate-y-full pointer-events-none" : "translate-y-0"
       )}>
-        <div className="flex items-stretch justify-between gap-0.5 min-h-14">
+        <div className="flex items-stretch justify-between gap-0.5 min-h-12">
           {mobileBottomNavItems.map((item) => {
             // Direct bottom-nav items always take priority over 'more'
             const directNavIds = new Set(mobileBottomNavItems.filter(i => i.id !== 'more').map(i => i.id));
@@ -1774,24 +1777,24 @@ export function POSDashboard() {
                   }
                 }}
                 className={cn(
-                  'flex flex-col items-center justify-center flex-1 min-w-0 py-1.5 rounded-xl text-xs text-muted-foreground hover:bg-primary/10 hover:text-primary transition touch-manipulation active:scale-95',
+                  'flex flex-col items-center justify-center flex-1 min-w-0 py-1 rounded-lg text-xs text-muted-foreground hover:bg-primary/10 hover:text-primary transition touch-manipulation active:scale-95',
                   isActive ? 'bg-primary/10 text-primary font-semibold' : ''
                 )}
                 aria-label={t(item.id as any)}
                 aria-current={isActive ? 'page' : undefined}
               >
-                <div className="relative">
+                <div className="relative [&>svg]:h-4 [&>svg]:w-4">
                   {item.icon}
                   {/* Cart item count badge on the billing button */}
                   {item.id === 'billing' && cartItemCount > 0 && (
-                    <Badge className="absolute -top-1.5 -right-2 h-4 min-w-4 p-0 flex items-center justify-center text-[8px] text-white bg-red-500 border border-white dark:border-card">
+                    <Badge className="absolute -top-1.5 -right-2 h-3.5 min-w-3.5 p-0 flex items-center justify-center text-[7px] text-white bg-red-500 border border-white dark:border-card">
                       {locale === 'bn' 
                         ? (cartItemCount > 9 ? '৯+' : convertEnglishToBengaliNumerals(cartItemCount)) 
                         : (cartItemCount > 9 ? '9+' : cartItemCount)}
                     </Badge>
                   )}
                 </div>
-                <span className="mt-0.5 text-[10px] leading-none truncate max-w-full px-0.5">{t(item.id as any)}</span>
+                <span className="mt-0.5 text-[9px] leading-none truncate max-w-full px-0.5">{t(item.id as any)}</span>
               </button>
             );
           })}
@@ -1800,11 +1803,12 @@ export function POSDashboard() {
 
       {/* Mobile Cart Sheet — used when accessing cart from billing page header */}
       <Sheet open={mobileCartOpen} onOpenChange={setMobileCartOpen}>
-        <SheetContent side="bottom" className="h-[85vh] rounded-t-2xl p-0 overflow-hidden">
-          <SheetHeader className="px-4 py-2 border-b">
+        <SheetContent side="bottom" className="h-[88dvh] rounded-t-2xl p-0 overflow-hidden pb-[env(safe-area-inset-bottom)]">
+          <SheetHeader className="px-3 py-1.5 border-b">
+            <div className="mx-auto h-1 w-8 rounded-full bg-muted-foreground/30" aria-hidden />
             <SheetTitle className="text-sm font-semibold">{t('cart_nav')}</SheetTitle>
           </SheetHeader>
-          <div className="h-full pb-10">
+          <div className="h-[calc(100%-2.5rem)] overflow-hidden">
             <CartPanel onCheckout={() => { setMobileCartOpen(false); handleOpenCheckout(); }} customers={customers} onScan={handleOpenMobileScanner} />
           </div>
         </SheetContent>

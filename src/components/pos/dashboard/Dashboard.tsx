@@ -174,14 +174,14 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   void sales;
 
   return (
-    <div className="space-y-3 p-3 md:p-4 animate-page-enter overflow-y-auto h-full">
+    <div className="space-y-2 sm:space-y-3 p-2 sm:p-3 md:p-4 animate-page-enter overflow-y-auto h-full">
       {/* Mobile Quick Search - only visible on mobile */}
       <div className="md:hidden">
         <button
-          className="w-full flex items-center gap-3 h-11 px-4 rounded-xl border bg-muted/30 text-muted-foreground text-sm touch-feedback"
+          className="w-full flex items-center gap-2 h-9 px-3 rounded-lg border bg-muted/30 text-muted-foreground text-xs touch-feedback"
           onClick={() => setSearchOpen(true)}
         >
-          <Search className="h-4 w-4 shrink-0" />
+          <Search className="h-3.5 w-3.5 shrink-0" />
           <span>{t('quick_search')}</span>
         </button>
       </div>

@@ -17,6 +17,13 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   output: 'standalone',
   allowedDevOrigins: ["192.168.1.11"],
+  // Prisma/pg must use Node resolution — Turbopack breaks `.prisma/client/default` otherwise,
+  // which 500s /api/auth/* as HTML and surfaces next-auth CLIENT_FETCH_ERROR.
+  serverExternalPackages: [
+    "@prisma/client",
+    "@prisma/adapter-pg",
+    "pg",
+  ],
   experimental: {
     optimizePackageImports: [
       "lucide-react",

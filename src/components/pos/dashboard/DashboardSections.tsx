@@ -71,26 +71,26 @@ export function GreetingHeader({
 
   return (
     <Card className="bg-gradient-to-r from-primary/5 via-primary/3 to-transparent dark:from-primary/10 dark:via-primary/5 dark:to-transparent border-primary/10 shadow-sm">
-      <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-primary/10 dark:bg-primary/20 flex items-center justify-center">
+      <CardContent className="p-2.5 sm:p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg sm:rounded-xl bg-primary/10 dark:bg-primary/20 flex items-center justify-center shrink-0 [&>svg]:h-4 [&>svg]:w-4 sm:[&>svg]:h-5 sm:[&>svg]:w-5">
             {icon}
           </div>
-          <div>
-            <h2 className="text-xl md:text-2xl font-bold">{greeting}, {storeName}</h2>
-            <p className="text-sm text-muted-foreground">{dateLabel} · {subtitle}</p>
+          <div className="min-w-0">
+            <h2 className="text-base sm:text-xl md:text-2xl font-bold truncate">{greeting}, {storeName}</h2>
+            <p className="text-[11px] sm:text-sm text-muted-foreground truncate">{dateLabel} · {subtitle}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground bg-background/60 dark:bg-background/30 rounded-lg px-3 py-1.5">
-          <Clock className="h-4 w-4" />
-          <span>{timeLabel}</span>
+        <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm text-muted-foreground bg-background/60 dark:bg-background/30 rounded-lg px-2 sm:px-3 py-1 sm:py-1.5">
+          <Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+          <span className="tabular-nums">{timeLabel}</span>
           <Button
             variant="outline"
             size="sm"
-            className="ml-2 h-8 gap-1.5 text-xs font-semibold border-primary/30 text-primary hover:bg-primary/10 hover:text-primary animate-pulse"
+            className="ml-auto sm:ml-2 h-7 sm:h-8 gap-1 text-[11px] sm:text-xs font-semibold border-primary/30 text-primary hover:bg-primary/10 hover:text-primary"
             onClick={onOpenDailySummary}
           >
-            <FileText className="h-3.5 w-3.5" />
+            <FileText className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
             {endOfDayLabel}
           </Button>
         </div>
@@ -212,17 +212,17 @@ export function TodaySummaryCard({
   labels,
 }: TodaySummaryCardProps) {
   return (
-    <Card className="shadow-md border-primary/20 bg-gradient-to-r from-primary/5 via-transparent to-primary/5 dark:from-primary/10 dark:via-transparent dark:to-primary/10 animate-stagger-in" style={{ animationDelay: '0.3s' }}>
-      <CardHeader className="pb-3">
-        <div className="flex items-center gap-2">
-          <div className="rounded-lg bg-primary/10 p-1.5">
-            <Receipt className="h-4 w-4 text-primary" />
+    <Card className="shadow-sm sm:shadow-md border-primary/20 bg-gradient-to-r from-primary/5 via-transparent to-primary/5 dark:from-primary/10 dark:via-transparent dark:to-primary/10 animate-stagger-in" style={{ animationDelay: '0.3s' }}>
+      <CardHeader className="px-3 sm:px-6 py-2.5 sm:py-4 pb-2 sm:pb-3">
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          <div className="rounded-md sm:rounded-lg bg-primary/10 p-1 sm:p-1.5">
+            <Receipt className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-primary" />
           </div>
-          <CardTitle className="text-base">{labels.todaySummary}</CardTitle>
+          <CardTitle className="text-sm sm:text-base">{labels.todaySummary}</CardTitle>
         </div>
       </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+      <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6 pt-0">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-1.5 sm:gap-3 md:gap-4">
           <SummaryItem
             icon={<TrendingUp className="h-4 w-4 text-green-600 dark:text-green-400" />}
             iconBg="bg-green-100 dark:bg-green-900/30"
@@ -269,61 +269,61 @@ interface QuickActionsCardProps {
 
 export function QuickActionsCard({ onNavigate, onOpenDailySummary, labels }: QuickActionsCardProps) {
   return (
-    <Card className="shadow-md animate-stagger-in" style={{ animationDelay: '0.35s' }}>
-      <CardHeader>
-        <CardTitle>{labels.quickActions}</CardTitle>
+    <Card className="shadow-sm sm:shadow-md animate-stagger-in" style={{ animationDelay: '0.35s' }}>
+      <CardHeader className="px-3 sm:px-6 py-2.5 sm:py-4">
+        <CardTitle className="text-sm sm:text-base">{labels.quickActions}</CardTitle>
       </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6 pt-0">
+        <div className="grid grid-cols-3 sm:grid-cols-2 md:grid-cols-5 gap-1.5 sm:gap-3">
           <Button
             variant="outline"
-            className="h-auto flex-col gap-2 py-4 bg-gradient-to-b from-green-50/50 to-transparent dark:from-green-900/10 dark:to-transparent hover:from-green-100/70 hover:to-green-50/30 dark:hover:from-green-900/20 dark:hover:to-green-900/10 hover:border-green-300 dark:hover:border-green-700 transition-all duration-200 hover:scale-[1.02] hover:shadow-md touch-feedback"
+            className="h-auto flex-col gap-1 sm:gap-2 py-2.5 sm:py-4 px-1.5 bg-gradient-to-b from-green-50/50 to-transparent dark:from-green-900/10 dark:to-transparent hover:from-green-100/70 hover:to-green-50/30 dark:hover:from-green-900/20 dark:hover:to-green-900/10 hover:border-green-300 dark:hover:border-green-700 transition-all duration-200 hover:scale-[1.02] hover:shadow-md touch-feedback"
             onClick={() => onNavigate?.('billing')}
           >
-            <div className="rounded-full bg-green-100 dark:bg-green-900/30 p-2.5">
-              <ShoppingCart className="h-6 w-6 text-green-600 dark:text-green-400" />
+            <div className="rounded-full bg-green-100 dark:bg-green-900/30 p-1.5 sm:p-2.5">
+              <ShoppingCart className="h-4 w-4 sm:h-6 sm:w-6 text-green-600 dark:text-green-400" />
             </div>
-            <span className="text-sm font-medium">{labels.newSale}</span>
+            <span className="text-[10px] sm:text-sm font-medium leading-tight text-center">{labels.newSale}</span>
           </Button>
           <Button
             variant="outline"
-            className="h-auto flex-col gap-2 py-4 bg-gradient-to-b from-blue-50/50 to-transparent dark:from-blue-900/10 dark:to-transparent hover:from-blue-100/70 hover:to-blue-50/30 dark:hover:from-blue-900/20 dark:hover:to-blue-900/10 hover:border-blue-300 dark:hover:border-blue-700 transition-all duration-200 hover:scale-[1.02] hover:shadow-md touch-feedback"
+            className="h-auto flex-col gap-1 sm:gap-2 py-2.5 sm:py-4 px-1.5 bg-gradient-to-b from-blue-50/50 to-transparent dark:from-blue-900/10 dark:to-transparent hover:from-blue-100/70 hover:to-blue-50/30 dark:hover:from-blue-900/20 dark:hover:to-blue-900/10 hover:border-blue-300 dark:hover:border-blue-700 transition-all duration-200 hover:scale-[1.02] hover:shadow-md touch-feedback"
             onClick={() => onNavigate?.('stock')}
           >
-            <div className="rounded-full bg-blue-100 dark:bg-blue-900/30 p-2.5">
-              <Plus className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+            <div className="rounded-full bg-blue-100 dark:bg-blue-900/30 p-1.5 sm:p-2.5">
+              <Plus className="h-4 w-4 sm:h-6 sm:w-6 text-blue-600 dark:text-blue-400" />
             </div>
-            <span className="text-sm font-medium">{labels.addStock}</span>
+            <span className="text-[10px] sm:text-sm font-medium leading-tight text-center">{labels.addStock}</span>
           </Button>
           <Button
             variant="outline"
-            className="h-auto flex-col gap-2 py-4 bg-gradient-to-b from-purple-50/50 to-transparent dark:from-purple-900/10 dark:to-transparent hover:from-purple-100/70 hover:to-purple-50/30 dark:hover:from-purple-900/20 dark:hover:to-purple-900/10 hover:border-purple-300 dark:hover:border-purple-700 transition-all duration-200 hover:scale-[1.02] hover:shadow-md touch-feedback"
+            className="h-auto flex-col gap-1 sm:gap-2 py-2.5 sm:py-4 px-1.5 bg-gradient-to-b from-purple-50/50 to-transparent dark:from-purple-900/10 dark:to-transparent hover:from-purple-100/70 hover:to-purple-50/30 dark:hover:from-purple-900/20 dark:hover:to-purple-900/10 hover:border-purple-300 dark:hover:border-purple-700 transition-all duration-200 hover:scale-[1.02] hover:shadow-md touch-feedback"
             onClick={() => onNavigate?.('parties')}
           >
-            <div className="rounded-full bg-purple-100 dark:bg-purple-900/30 p-2.5">
-              <Users className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+            <div className="rounded-full bg-purple-100 dark:bg-purple-900/30 p-1.5 sm:p-2.5">
+              <Users className="h-4 w-4 sm:h-6 sm:w-6 text-purple-600 dark:text-purple-400" />
             </div>
-            <span className="text-sm font-medium">{labels.addParty}</span>
+            <span className="text-[10px] sm:text-sm font-medium leading-tight text-center">{labels.addParty}</span>
           </Button>
           <Button
             variant="outline"
-            className="h-auto flex-col gap-2 py-4 bg-gradient-to-b from-orange-50/50 to-transparent dark:from-orange-900/10 dark:to-transparent hover:from-orange-100/70 hover:to-orange-50/30 dark:hover:from-orange-900/20 dark:hover:to-orange-900/10 hover:border-orange-300 dark:hover:border-orange-700 transition-all duration-200 hover:scale-[1.02] hover:shadow-md touch-feedback"
+            className="h-auto flex-col gap-1 sm:gap-2 py-2.5 sm:py-4 px-1.5 bg-gradient-to-b from-orange-50/50 to-transparent dark:from-orange-900/10 dark:to-transparent hover:from-orange-100/70 hover:to-orange-50/30 dark:hover:from-orange-900/20 dark:hover:to-orange-900/10 hover:border-orange-300 dark:hover:border-orange-700 transition-all duration-200 hover:scale-[1.02] hover:shadow-md touch-feedback"
             onClick={() => onNavigate?.('due-collection')}
           >
-            <div className="rounded-full bg-orange-100 dark:bg-orange-900/30 p-2.5">
-              <IndianRupee className="h-6 w-6 text-orange-600 dark:text-orange-400" />
+            <div className="rounded-full bg-orange-100 dark:bg-orange-900/30 p-1.5 sm:p-2.5">
+              <IndianRupee className="h-4 w-4 sm:h-6 sm:w-6 text-orange-600 dark:text-orange-400" />
             </div>
-            <span className="text-sm font-medium">{labels.duePayments}</span>
+            <span className="text-[10px] sm:text-sm font-medium leading-tight text-center">{labels.duePayments}</span>
           </Button>
           <Button
             variant="outline"
-            className="h-auto flex-col gap-2 py-4 bg-gradient-to-b from-emerald-50/50 to-transparent dark:from-emerald-900/10 dark:to-transparent hover:from-emerald-100/70 hover:to-emerald-50/30 dark:hover:from-emerald-900/20 dark:hover:to-emerald-900/10 hover:border-emerald-300 dark:hover:border-emerald-700 transition-all duration-200 hover:scale-[1.02] hover:shadow-md touch-feedback"
+            className="h-auto flex-col gap-1 sm:gap-2 py-2.5 sm:py-4 px-1.5 col-span-2 sm:col-span-1 bg-gradient-to-b from-emerald-50/50 to-transparent dark:from-emerald-900/10 dark:to-transparent hover:from-emerald-100/70 hover:to-emerald-50/30 dark:hover:from-emerald-900/20 dark:hover:to-emerald-900/10 hover:border-emerald-300 dark:hover:border-emerald-700 transition-all duration-200 hover:scale-[1.02] hover:shadow-md touch-feedback"
             onClick={onOpenDailySummary}
           >
-            <div className="rounded-full bg-emerald-100 dark:bg-emerald-900/30 p-2.5">
-              <FileText className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+            <div className="rounded-full bg-emerald-100 dark:bg-emerald-900/30 p-1.5 sm:p-2.5">
+              <FileText className="h-4 w-4 sm:h-6 sm:w-6 text-emerald-600 dark:text-emerald-400" />
             </div>
-            <span className="text-sm font-medium">{labels.dailySummary}</span>
+            <span className="text-[10px] sm:text-sm font-medium leading-tight text-center">{labels.dailySummary}</span>
           </Button>
         </div>
       </CardContent>

@@ -47,14 +47,14 @@ export function MobileSearchDialog({
         <DialogHeader className="sr-only">
           <DialogTitle>{labels.quickSearch}</DialogTitle>
         </DialogHeader>
-        <div className="flex items-center gap-2 px-4 pt-4 pb-2">
-          <Search className="h-4 w-4 text-muted-foreground shrink-0" />
+        <div className="flex items-center gap-2 px-3 pt-3 pb-1.5">
+          <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
           <Input
             ref={searchInputRef}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder={labels.quickSearch}
-            className="border-0 shadow-none focus-visible:ring-0 px-0 text-base"
+            className="border-0 shadow-none focus-visible:ring-0 px-0 text-sm h-9"
           />
           {searchTerm && (
             <Button
@@ -63,24 +63,24 @@ export function MobileSearchDialog({
               className="h-7 w-7 p-0 shrink-0"
               onClick={() => setSearchTerm('')}
             >
-              <X className="h-4 w-4" />
+              <X className="h-3.5 w-3.5" />
             </Button>
           )}
         </div>
         <div className="border-t" />
         <div className="max-h-[60vh] overflow-y-auto">
           {searchTerm.trim() === '' ? (
-            <div className="py-8 text-center text-sm text-muted-foreground">
+            <div className="py-6 text-center text-xs text-muted-foreground">
               {labels.quickSearch}
             </div>
           ) : searchResults.length === 0 ? (
-            <div className="py-8 text-center">
-              <Package className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
-              <p className="text-sm text-muted-foreground">{labels.noResults}</p>
+            <div className="py-6 text-center">
+              <Package className="h-7 w-7 text-muted-foreground/40 mx-auto mb-1.5" />
+              <p className="text-xs text-muted-foreground">{labels.noResults}</p>
             </div>
           ) : (
             <div>
-              <div className="px-4 py-2 text-xs font-medium text-muted-foreground">
+              <div className="px-3 py-1.5 text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
                 {labels.searchResults}
               </div>
               {searchResults.map((product) => {
@@ -88,28 +88,28 @@ export function MobileSearchDialog({
                 return (
                   <button
                     key={product.id}
-                    className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/50 transition-colors touch-feedback ${
+                    className={`w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-muted/50 transition-colors touch-feedback ${
                       isOutOfStock ? 'opacity-50' : ''
                     }`}
                     onClick={() => onSelect(product)}
                     disabled={isOutOfStock}
                   >
-                    <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${
+                    <div className={`h-8 w-8 rounded-md flex items-center justify-center shrink-0 ${
                       isOutOfStock
                         ? 'bg-red-100 dark:bg-red-900/20'
                         : 'bg-emerald-100 dark:bg-emerald-900/20'
                     }`}>
-                      <Package className={`h-4 w-4 ${
+                      <Package className={`h-3.5 w-3.5 ${
                         isOutOfStock
                           ? 'text-red-500'
                           : 'text-emerald-600 dark:text-emerald-400'
                       }`} />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">
+                      <p className="text-xs font-medium truncate leading-tight">
                         {product.nameBn || product.name}
                       </p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-[10px] text-muted-foreground leading-tight">
                         {isOutOfStock
                           ? labels.outOfStock
                           : `${labels.stock}: ${product.currentStock} ${product.unit}`
@@ -117,7 +117,7 @@ export function MobileSearchDialog({
                       </p>
                     </div>
                     <div className="text-right shrink-0">
-                      <p className="text-sm font-bold text-primary">{formatTaka(product.sellingPrice)}</p>
+                      <p className="text-xs font-bold text-primary tabular-nums">{formatTaka(product.sellingPrice)}</p>
                     </div>
                   </button>
                 );

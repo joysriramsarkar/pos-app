@@ -42,10 +42,10 @@ export function CartTotals({
   t,
 }: CartTotalsProps) {
   return (
-    <div className="flex-none mt-auto bg-background border-t p-2 md:p-0 shadow-[0_-8px_20px_-10px_rgba(0,0,0,0.12)] md:shadow-none z-10 shrink-0">
-      <div className="p-2 md:p-3">
-        <Label className="text-[10px] font-semibold text-muted-foreground mb-1.5 block uppercase tracking-wider">{t('payment_method')}</Label>
-        <div className="grid grid-cols-4 gap-1.5">
+    <div className="flex-none mt-auto bg-background border-t p-1.5 md:p-0 shadow-[0_-8px_20px_-10px_rgba(0,0,0,0.12)] md:shadow-none z-10 shrink-0">
+      <div className="p-1.5 md:p-3">
+        <Label className="text-[9px] md:text-[10px] font-semibold text-muted-foreground mb-1 block uppercase tracking-wider">{t('payment_method')}</Label>
+        <div className="grid grid-cols-4 gap-1">
           {paymentMethods
             .filter(({ method }) => method !== 'Due' || customerName)
             .map(({ method, icon, labelKey, color }) => (
@@ -54,25 +54,25 @@ export function CartTotals({
                 type="button"
                 onClick={() => setPaymentMethod(method)}
                 className={cn(
-                  'relative flex flex-col items-center justify-center min-w-0 max-w-full whitespace-nowrap rounded-xl border-2 transition-all duration-200 touch-manipulation h-11 sm:h-9 px-1 py-0.5',
+                  'relative flex flex-col items-center justify-center min-w-0 max-w-full whitespace-nowrap rounded-lg border transition-all duration-200 touch-manipulation h-9 sm:h-9 px-0.5 py-0.5',
                   paymentMethod === method
-                    ? 'border-emerald-600 bg-emerald-500/10 dark:border-emerald-500 shadow-md shadow-emerald-500/10 scale-[1.02]'
+                    ? 'border-emerald-600 bg-emerald-500/10 dark:border-emerald-500 shadow-sm shadow-emerald-500/10'
                     : 'border-border/50 bg-background hover:bg-muted/80 hover:border-emerald-500/30'
                 )}
               >
                 {paymentMethod === method && (
-                  <div className="absolute top-1 right-1 bg-emerald-600 rounded-full p-0.5 shadow-sm">
-                    <Check className="w-2.5 h-2.5 text-white" />
+                  <div className="absolute top-0.5 right-0.5 bg-emerald-600 rounded-full p-0.5 shadow-sm">
+                    <Check className="w-2 h-2 text-white" />
                   </div>
                 )}
                 <div className={cn(
-                  'mb-0.5 transition-transform duration-200 inline-flex items-center justify-center text-muted-foreground',
-                  paymentMethod === method ? 'text-emerald-600 dark:text-emerald-400 scale-110' : 'group-hover:scale-110'
+                  'mb-0.5 transition-transform duration-200 inline-flex items-center justify-center text-muted-foreground scale-90 sm:scale-100',
+                  paymentMethod === method ? 'text-emerald-600 dark:text-emerald-400' : ''
                 )}>
                   {icon}
                 </div>
                 <span className={cn(
-                  'text-[10px] font-bold tracking-tight sm:text-xs',
+                  'text-[9px] sm:text-[10px] font-bold tracking-tight leading-none',
                   paymentMethod === method ? 'text-emerald-600 dark:text-emerald-400' : 'text-foreground'
                 )}>
                   {t(labelKey as any)}
@@ -81,12 +81,12 @@ export function CartTotals({
             ))}
         </div>
 
-        <div className="flex justify-between text-xs mt-2.5 border-t pt-1.5">
+        <div className="flex justify-between text-[11px] md:text-xs mt-1.5 border-t pt-1">
           <span className="text-muted-foreground font-medium">{t('subtotal')}</span>
-          <span className="font-semibold">{formatPrice(subtotal)}</span>
+          <span className="font-semibold tabular-nums">{formatPrice(subtotal)}</span>
         </div>
 
-        <div className="flex justify-between items-center text-xs mt-1">
+        <div className="flex justify-between items-center text-[11px] md:text-xs mt-0.5">
           <span className="text-muted-foreground font-medium">{t('discount')}</span>
           <div className="flex items-center gap-1">
             {showDiscountInput ? (
@@ -94,7 +94,7 @@ export function CartTotals({
                 type="number"
                 value={discount || ''}
                 onChange={handleDiscountChange}
-                className="w-16 h-6 text-right text-xs px-1.5 rounded-md border-emerald-500/30 focus-visible:ring-emerald-500/50"
+                className="w-14 h-6 text-right text-xs px-1.5 rounded-md border-emerald-500/30 focus-visible:ring-emerald-500/50"
                 placeholder="0"
                 min={0}
                 max={subtotal}
@@ -105,7 +105,7 @@ export function CartTotals({
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-6 px-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 rounded-md"
+                className="h-6 px-1.5 text-[11px] md:text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 rounded-md"
                 onClick={() => setShowDiscountInput(true)}
               >
                 {discount > 0 ? formatPrice(discount) : t('add_discount')}
@@ -115,23 +115,23 @@ export function CartTotals({
         </div>
 
         {tax > 0 && (
-          <div className="flex justify-between text-xs mt-1">
+          <div className="flex justify-between text-[11px] md:text-xs mt-0.5">
             <span className="text-muted-foreground font-medium">{t('tax')}</span>
-            <span className="font-semibold">{formatPrice(tax)}</span>
+            <span className="font-semibold tabular-nums">{formatPrice(tax)}</span>
           </div>
         )}
 
-        <Separator className="my-2 bg-border/60" />
+        <Separator className="my-1.5 md:my-2 bg-border/60" />
 
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-1.5">
           <div className="flex items-end justify-between">
-            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{t('total')}</span>
-            <span className="text-xl md:text-2xl font-black text-emerald-600 dark:text-emerald-400 tracking-tight">{formatPrice(total)}</span>
+            <span className="text-[10px] md:text-xs font-bold text-muted-foreground uppercase tracking-wider">{t('total')}</span>
+            <span className="text-lg md:text-2xl font-black text-emerald-600 dark:text-emerald-400 tracking-tight tabular-nums">{formatPrice(total)}</span>
           </div>
           <Button
             size="lg"
             className={cn(
-              "w-full h-12 text-base font-bold rounded-xl shadow-lg transition-all duration-300 touch-manipulation flex items-center justify-center gap-2 btn-shimmer-overlay active:scale-[0.99]",
+              "w-full h-10 md:h-12 text-sm md:text-base font-bold rounded-lg md:rounded-xl shadow-md md:shadow-lg transition-all duration-300 touch-manipulation flex items-center justify-center gap-1.5 btn-shimmer-overlay active:scale-[0.99]",
               isCartEmpty || total <= 0
                 ? "bg-muted text-muted-foreground shadow-none pointer-events-none"
                 : "bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600 hover:shadow-emerald-600/25 hover:-translate-y-0.5 active:translate-y-0"
@@ -139,7 +139,7 @@ export function CartTotals({
             disabled={isCartEmpty || total <= 0}
             onClick={onCheckout}
           >
-            <CreditCard className="w-5 h-5" />
+            <CreditCard className="w-4 h-4 md:w-5 md:h-5" />
             {t('complete_checkout')}
           </Button>
         </div>

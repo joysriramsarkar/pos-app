@@ -77,6 +77,10 @@ export default function LoginPage() {
                 type="text"
                 autoComplete="username"
                 inputMode="text"
+                autoFocus
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="Enter your username"

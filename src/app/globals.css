@@ -222,7 +222,7 @@ body {
 
 /* Bottom nav height token used for content insets */
 :root {
-  --mobile-bottom-nav-height: 4rem;
+  --mobile-bottom-nav-height: 3.5rem;
 }
 
 /* Pulse animation for cart FAB */

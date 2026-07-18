@@ -294,11 +294,11 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
       </div>
 
       {/* Header */}
-      <div className="flex items-center justify-between p-1.5 md:p-2 border-b shrink-0 bg-emerald-50/20 dark:bg-emerald-950/5">
-        <div className="flex items-center gap-2">
-          <ShoppingCart className="w-4 h-4 md:w-5 md:h-5 text-emerald-600 dark:text-emerald-500" />
-          <h2 className="font-semibold text-base">{t('title')}</h2>
-          <Badge variant="secondary" className="ml-1 text-[10px]">
+      <div className="flex items-center justify-between px-1.5 py-1 md:p-2 border-b shrink-0 bg-emerald-50/20 dark:bg-emerald-950/5">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <ShoppingCart className="w-3.5 h-3.5 md:w-5 md:h-5 text-emerald-600 dark:text-emerald-500 shrink-0" />
+          <h2 className="font-semibold text-sm md:text-base truncate">{t('title')}</h2>
+          <Badge variant="secondary" className="ml-0.5 text-[10px] h-5 px-1.5 shrink-0">
             {itemCountDisplay}
           </Badge>
         </div>
@@ -307,21 +307,21 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
             variant="ghost"
             size="sm"
             onClick={handleClearCart}
-            className="text-muted-foreground hover:text-destructive h-7 px-2 text-xs"
+            className="text-muted-foreground hover:text-destructive h-7 px-1.5 text-xs shrink-0"
           >
-            <Trash2 className="w-3 h-3 mr-1" />
+            <Trash2 className="w-3 h-3 mr-0.5" />
             {t('clear')}
           </Button>
         )}
       </div>
 
       {/* Customer Selector */}
-      <div className="px-2 border-b shrink-0 py-1 md:py-2">
-        <Label className="text-xs text-muted-foreground mb-1 block">{t('customer')}</Label>
+      <div className="px-1.5 md:px-2 border-b shrink-0 py-1 md:py-2">
+        <Label className="text-[10px] md:text-xs text-muted-foreground mb-0.5 md:mb-1 block">{t('customer')}</Label>
         <div className="relative">
           <Button
             variant="outline"
-            className="w-full justify-between h-10 md:h-9 text-sm md:text-xs touch-manipulation"
+            className="w-full justify-between h-8 md:h-9 text-xs touch-manipulation"
             onClick={() => setCustomerSearchOpen(!customerSearchOpen)}
           >
             <div className="flex items-center gap-2">
@@ -401,17 +401,17 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
 
       {/* Cart Items */}
       <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
-        <div className="p-1.5 md:p-2 space-y-1.5 pb-2">
+        <div className="p-1 md:p-2 space-y-1 md:space-y-1.5 pb-2">
           {isCartEmpty ? (
-            <div className="flex flex-col items-center justify-center py-8 md:py-12 text-center px-4">
-              <ShoppingCart className="w-10 h-10 md:w-10 md:h-10 text-muted-foreground/50 mb-2" />
-              <p className="text-muted-foreground text-sm">{t('empty')}</p>
-              <p className="text-xs text-muted-foreground/70 mt-1 mb-3">
+            <div className="flex flex-col items-center justify-center py-6 md:py-12 text-center px-4">
+              <ShoppingCart className="w-8 h-8 md:w-10 md:h-10 text-muted-foreground/50 mb-1.5" />
+              <p className="text-muted-foreground text-xs md:text-sm">{t('empty')}</p>
+              <p className="text-[11px] md:text-xs text-muted-foreground/70 mt-0.5 mb-2">
                 {t('empty_desc')}
               </p>
               {onScan && (
-                <Button variant="outline" size="default" onClick={onScan} className="gap-2 h-11 px-4 md:hidden touch-manipulation">
-                  <ScanLine className="w-4 h-4" />
+                <Button variant="outline" size="sm" onClick={onScan} className="gap-1.5 h-9 px-3 md:hidden touch-manipulation">
+                  <ScanLine className="w-3.5 h-3.5" />
                   {t('scan_barcode')}
                 </Button>
               )}
