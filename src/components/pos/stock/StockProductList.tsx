@@ -78,7 +78,7 @@ export function StockProductList({
   const locale = useLocale();
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto bg-background rounded-md border pb-24">
+    <div className="flex-1 min-h-0 overflow-y-auto bg-background rounded-md border pb-20 md:pb-24">
       {isSearching && products.length === 0 ? (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -100,7 +100,7 @@ export function StockProductList({
                 <div
                   key={product.id}
                   className={cn(
-                    'p-3 hover:bg-muted/50 transition-colors border-l-4 flex gap-2.5',
+                    'px-2 py-2 hover:bg-muted/50 transition-colors border-l-4 flex gap-2',
                     getStockBorderClass(product),
                     isSelected && 'bg-emerald-500/5 dark:bg-emerald-500/10'
                   )}
@@ -110,43 +110,33 @@ export function StockProductList({
                       checked={isSelected}
                       onCheckedChange={() => onToggleSelectOne(product.id)}
                       aria-label={product.name}
+                      className="h-4 w-4"
                     />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex justify-between items-start mb-1.5 gap-2">
+                    <div className="flex justify-between items-start gap-1.5">
                       <div className="min-w-0">
-                        <span className="font-semibold text-sm truncate block">
+                        <span className="font-semibold text-xs truncate block leading-tight">
                           {locale === 'bn' ? (product.nameBn || product.name) : (product.name || product.nameBn)}
                         </span>
-                        {((locale === 'bn' && product.nameBn && product.nameBn !== product.name) ||
-                          (locale !== 'bn' && product.name && product.name !== product.nameBn)) && (
-                          <span className="text-xs text-muted-foreground truncate block">
-                            {locale === 'bn' ? product.name : product.nameBn}
-                          </span>
-                        )}
-                        {product.barcode && (
-                          <span className="text-[10px] font-mono text-muted-foreground block">
-                            {product.barcode}
-                          </span>
-                        )}
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          <Badge variant="outline" className="text-[9px] px-1 h-4">
+                        <div className="flex items-center gap-1 mt-0.5 min-w-0">
+                          {product.barcode && (
+                            <span className="text-[9px] font-mono text-muted-foreground truncate">
+                              {product.barcode}
+                            </span>
+                          )}
+                          <Badge variant="outline" className="text-[8px] px-1 h-3.5 shrink-0">
                             {product.category}
                           </Badge>
-                          {product.subCategory && (
-                            <Badge variant="secondary" className="text-[9px] px-1 h-4 font-normal">
-                              {product.subCategory}
-                            </Badge>
-                          )}
                         </div>
                       </div>
-                      <div className="flex flex-col items-end shrink-0 gap-1">
-                        <Badge variant={status.variant} className="text-[10px] h-4.5 px-1.5">
+                      <div className="flex flex-col items-end shrink-0 gap-0.5">
+                        <Badge variant={status.variant} className="text-[9px] h-4 px-1">
                           {status.label}
                         </Badge>
                         <span
                           className={cn(
-                            'text-sm font-bold',
+                            'text-xs font-bold tabular-nums leading-none',
                             product.currentStock < 0 && 'text-red-600',
                             product.currentStock === 0 && 'text-red-600',
                             product.currentStock > 0 &&
@@ -156,21 +146,18 @@ export function StockProductList({
                         >
                           {product.currentStock} {product.unit}
                         </span>
-                        <span className="text-[9px] text-muted-foreground">
-                          {t('min')}: {product.minStockLevel}
-                        </span>
                       </div>
                     </div>
 
-                    <div className="mb-2">
+                    <div className="my-1">
                       <Progress
                         value={getStockLevelPercent(product)}
-                        className={cn('h-1.5', getStockLevelColor(product))}
+                        className={cn('h-1', getStockLevelColor(product))}
                       />
                     </div>
 
-                    <div className="flex justify-between items-center mt-1">
-                      <div className="flex gap-2.5 text-xs text-muted-foreground">
+                    <div className="flex justify-between items-center">
+                      <div className="flex gap-2 text-[10px] text-muted-foreground tabular-nums">
                         <span>
                           {t('buy')}: <span className="font-medium text-foreground">{formatPrice(product.buyingPrice)}</span>
                         </span>
@@ -178,29 +165,29 @@ export function StockProductList({
                           {t('sell')}: <span className="font-medium text-foreground">{formatPrice(product.sellingPrice)}</span>
                         </span>
                       </div>
-                      <div className="flex items-center gap-0.5">
+                      <div className="flex items-center">
                         {product.isActive && (
                           <>
-                            <Button variant="ghost" size="icon" className="h-9 w-9 touch-manipulation" onClick={() => onAddStock?.(product)} aria-label="Add stock">
-                              <Plus className="w-4 h-4 text-green-600" />
+                            <Button variant="ghost" size="icon" className="h-7 w-7 touch-manipulation" onClick={() => onAddStock?.(product)} aria-label="Add stock">
+                              <Plus className="w-3.5 h-3.5 text-green-600" />
                             </Button>
-                            <Button variant="ghost" size="icon" className="h-9 w-9 touch-manipulation" onClick={() => onAdjustStock(product)} aria-label="Adjust stock">
-                              <MinusCircle className="w-4 h-4 text-amber-600" />
+                            <Button variant="ghost" size="icon" className="h-7 w-7 touch-manipulation" onClick={() => onAdjustStock(product)} aria-label="Adjust stock">
+                              <MinusCircle className="w-3.5 h-3.5 text-amber-600" />
                             </Button>
                           </>
                         )}
-                        <Button variant="ghost" size="icon" className="h-9 w-9 touch-manipulation" onClick={() => onEditProduct?.(product)} aria-label="Edit product">
-                          <Edit className="w-4 h-4" />
+                        <Button variant="ghost" size="icon" className="h-7 w-7 touch-manipulation" onClick={() => onEditProduct?.(product)} aria-label="Edit product">
+                          <Edit className="w-3.5 h-3.5" />
                         </Button>
                         {canDelete && product.isActive && (
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-9 w-9 text-destructive touch-manipulation"
+                            className="h-7 w-7 text-destructive touch-manipulation"
                             onClick={() => onDeleteProduct?.(product)}
                             aria-label="Delete product"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <Trash2 className="w-3.5 h-3.5" />
                           </Button>
                         )}
                       </div>

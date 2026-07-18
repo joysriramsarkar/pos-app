@@ -38,7 +38,7 @@ export function ProductCard({ product }: ProductCardProps) {
     <TooltipProvider>
       <Card
         className={cn(
-          'group relative overflow-hidden transition-all duration-300 cursor-pointer rounded-xl border-border/50',
+          'group relative overflow-hidden transition-all duration-300 cursor-pointer rounded-lg sm:rounded-xl border-border/50',
           'lg:hover:shadow-xl lg:hover:-translate-y-1 active:scale-[0.98]',
           'focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
           isOutOfStock && 'border-red-200/50 dark:border-red-900/30'
@@ -51,33 +51,34 @@ export function ProductCard({ product }: ProductCardProps) {
       >
         {/* Low Stock Warning Banner */}
         {isLowStock && !isOutOfStock && (
-          <div className="absolute top-0 left-0 right-0 bg-amber-500/90 backdrop-blur-sm text-white text-[10px] font-semibold tracking-wider uppercase py-1 px-2 text-center z-10 shadow-sm flex items-center justify-center gap-1">
-            <AlertTriangle className="w-3 h-3" />
+          <div className="absolute top-0 left-0 right-0 bg-amber-500/90 backdrop-blur-sm text-white text-[9px] sm:text-[10px] font-semibold tracking-wider uppercase py-0.5 sm:py-1 px-1.5 text-center z-10 shadow-sm flex items-center justify-center gap-1">
+            <AlertTriangle className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
             {t('low_stock')}
           </div>
         )}
 
-        <CardContent className={cn('p-3', isLowStock && !isOutOfStock && 'pt-7')}>
-          <div className="flex flex-col gap-2">
+        <CardContent className={cn('p-2 sm:p-3', isLowStock && !isOutOfStock && 'pt-5 sm:pt-7')}>
+          <div className="flex flex-col gap-1.5 sm:gap-2">
             {/* Product Image or Placeholder */}
-            <div className="aspect-square rounded-lg bg-muted/50 flex items-center justify-center overflow-hidden relative lg:group-hover:bg-muted transition-colors">
+            <div className="aspect-square rounded-md sm:rounded-lg bg-muted/50 flex items-center justify-center overflow-hidden relative lg:group-hover:bg-muted transition-colors">
               {product.imageUrl ? (
                 <img
                   src={product.imageUrl}
                   alt={product.name}
                   className="w-full h-full object-cover"
+                  loading="lazy"
                 />
               ) : (
-                <Package className="w-10 h-10 text-muted-foreground" />
+                <Package className="w-7 h-7 sm:w-10 sm:h-10 text-muted-foreground" />
               )}
             </div>
 
             {/* Product Info */}
-            <div className="space-y-1.5 pt-1">
-              <div className="flex items-start justify-between gap-2">
+            <div className="space-y-1 sm:space-y-1.5 pt-0.5">
+              <div className="flex items-start justify-between gap-1">
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <h3 className="font-medium text-sm line-clamp-2 leading-tight lg:group-hover:text-primary transition-colors">
+                    <h3 className="font-medium text-xs sm:text-sm line-clamp-2 leading-tight lg:group-hover:text-primary transition-colors">
                       {product.name}
                     </h3>
                   </TooltipTrigger>
@@ -89,24 +90,24 @@ export function ProductCard({ product }: ProductCardProps) {
               </div>
 
               {/* Category Badge */}
-              <Badge variant="secondary" className="text-[10px] px-2 py-0 h-4 bg-secondary/50 lg:hover:bg-secondary">
+              <Badge variant="secondary" className="text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0 h-3.5 sm:h-4 bg-secondary/50 lg:hover:bg-secondary max-w-full truncate">
                 {product.category}
               </Badge>
 
               {/* Price & Stock */}
-              <div className="flex flex-col mt-2">
-                <p className="text-lg font-bold text-primary tracking-tight">
+              <div className="flex flex-col mt-0.5 sm:mt-2">
+                <p className="text-sm sm:text-lg font-bold text-primary tracking-tight tabular-nums">
                   {formatPrice(product.sellingPrice)}
-                  <span className="text-xs font-normal text-muted-foreground ml-1 tracking-normal">
+                  <span className="text-[10px] sm:text-xs font-normal text-muted-foreground ml-0.5 tracking-normal">
                     /{product.unit}
                   </span>
                 </p>
-                <div className="flex items-center justify-between text-xs text-muted-foreground mt-0.5">
+                <div className="flex items-center justify-between text-[10px] sm:text-xs text-muted-foreground mt-0.5">
                   <span className={cn(
-                    "font-medium",
+                    "font-medium truncate",
                     isOutOfStock ? "text-red-500 font-bold" : isLowStock ? "text-amber-600 dark:text-amber-500" : ""
                   )}>
-                    {t('stock')}: {product.currentStock} {product.unit} {isOutOfStock && `(${t('out_of_stock')})`}
+                    {t('stock')}: {product.currentStock}{isOutOfStock ? ` (${t('out_of_stock')})` : ''}
                   </span>
                 </div>
               </div>
@@ -116,7 +117,7 @@ export function ProductCard({ product }: ProductCardProps) {
             <Button
               size="sm"
               className={cn(
-                "w-full mt-2 transition-all duration-300 touch-manipulation shadow-xs",
+                "w-full mt-1 sm:mt-2 h-8 sm:h-9 text-xs sm:text-sm transition-all duration-300 touch-manipulation shadow-xs",
                 "lg:opacity-0 lg:-translate-y-2 lg:group-hover:opacity-100 lg:group-hover:translate-y-0",
                 "opacity-100 translate-y-0 bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground"
               )}
@@ -126,7 +127,7 @@ export function ProductCard({ product }: ProductCardProps) {
               }}
               aria-label={t('add_to_cart')}
             >
-              <Plus className="w-4 h-4 mr-1" />
+              <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-0.5" />
               {t('add_to_cart')}
             </Button>
           </div>

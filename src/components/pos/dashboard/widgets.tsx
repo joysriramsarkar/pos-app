@@ -75,28 +75,28 @@ export function StatCard({
 }) {
   const { formatNumber } = useNumberFormat();
   return (
-    <Card className={`overflow-hidden shadow-md bg-gradient-to-br ${cardGradient} animate-stagger-in transition-all duration-200 hover:scale-[1.02] hover:shadow-lg cursor-default`} style={{ animationDelay: `${(staggerDelay ?? 0) * 0.05}s` }}>
-      <CardContent className="p-3 md:p-4">
-        <div className="flex items-center gap-2.5 md:gap-3">
-          <div className={`h-8 w-8 md:h-10 md:w-10 rounded-xl ${iconBg} flex items-center justify-center shadow-md shrink-0`}>
+    <Card className={`overflow-hidden shadow-sm sm:shadow-md bg-gradient-to-br ${cardGradient} animate-stagger-in transition-all duration-200 hover:scale-[1.02] hover:shadow-lg cursor-default`} style={{ animationDelay: `${(staggerDelay ?? 0) * 0.05}s` }}>
+      <CardContent className="p-2 sm:p-3 md:p-4">
+        <div className="flex items-center gap-1.5 sm:gap-2.5 md:gap-3">
+          <div className={`h-7 w-7 sm:h-8 sm:w-8 md:h-10 md:w-10 rounded-lg sm:rounded-xl ${iconBg} flex items-center justify-center shadow-md shrink-0 [&>svg]:h-3.5 [&>svg]:w-3.5 sm:[&>svg]:h-5 sm:[&>svg]:w-5`}>
             {icon}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-[11px] md:text-xs text-muted-foreground/70 truncate font-medium uppercase tracking-wide">{title}</p>
-            <div className="flex items-center gap-1.5 md:gap-2">
-              <p className={`text-lg md:text-xl font-bold whitespace-nowrap leading-tight ${numberPopping ? 'animate-number-pop' : ''}`}>{trendLabel}{value}</p>
+            <p className="text-[10px] sm:text-[11px] md:text-xs text-muted-foreground/70 truncate font-medium uppercase tracking-wide">{title}</p>
+            <div className="flex items-center gap-1 sm:gap-1.5 md:gap-2">
+              <p className={`text-sm sm:text-lg md:text-xl font-bold whitespace-nowrap leading-tight tabular-nums ${numberPopping ? 'animate-number-pop' : ''}`}>{trendLabel}{value}</p>
               {trend && (
-                <span className={`inline-flex items-center text-xs font-medium px-1 py-0.5 rounded-full shrink-0 ${
+                <span className={`inline-flex items-center text-[10px] sm:text-xs font-medium px-0.5 sm:px-1 py-0.5 rounded-full shrink-0 ${
                   trend === 'up'
                     ? 'text-green-700 bg-green-100 dark:text-green-400 dark:bg-green-900/30'
                     : 'text-red-700 bg-red-100 dark:text-red-400 dark:bg-red-900/30'
                 }`}>
-                  {trend === 'up' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
+                  {trend === 'up' ? <ArrowUp className="h-2.5 w-2.5 sm:h-3 sm:w-3" /> : <ArrowDown className="h-2.5 w-2.5 sm:h-3 sm:w-3" />}
                 </span>
               )}
             </div>
             {profitMargin !== undefined && profitMargin !== 0 && (
-              <p className={`text-[10px] md:text-xs mt-0.5 ${profitMargin > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+              <p className={`text-[9px] sm:text-[10px] md:text-xs mt-0.5 ${profitMargin > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                 {profitMargin > 0 ? '+' : ''}{formatNumber(Math.min(Math.max(profitMargin, -999), 999).toFixed(1))}% মার্জিন
               </p>
             )}
@@ -126,13 +126,13 @@ export function SummaryItem({
   valueColor?: string;
 }) {
   return (
-    <div className="flex items-center gap-2.5 p-2.5 md:p-3 rounded-xl bg-background/60 border border-border/40 dark:bg-background/40 dark:border-border/30">
-      <div className={`h-8 w-8 md:h-9 md:w-9 rounded-lg ${iconBg} flex items-center justify-center shrink-0`}>
+    <div className="flex items-center gap-2 p-2 sm:p-2.5 md:p-3 rounded-lg sm:rounded-xl bg-background/60 border border-border/40 dark:bg-background/40 dark:border-border/30">
+      <div className={`h-7 w-7 sm:h-8 sm:w-8 md:h-9 md:w-9 rounded-md sm:rounded-lg ${iconBg} flex items-center justify-center shrink-0 [&>svg]:h-3.5 [&>svg]:w-3.5 sm:[&>svg]:h-4 sm:[&>svg]:w-4`}>
         {icon}
       </div>
       <div className="min-w-0">
-        <p className="text-[10px] md:text-xs text-muted-foreground truncate">{label}</p>
-        <p className={`text-sm md:text-base font-bold whitespace-nowrap ${valueColor || ''}`}>{value}</p>
+        <p className="text-[9px] sm:text-[10px] md:text-xs text-muted-foreground truncate">{label}</p>
+        <p className={`text-xs sm:text-sm md:text-base font-bold whitespace-nowrap tabular-nums ${valueColor || ''}`}>{value}</p>
       </div>
     </div>
   );

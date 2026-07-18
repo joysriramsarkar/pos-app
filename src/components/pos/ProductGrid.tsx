@@ -43,12 +43,22 @@ export function ProductGrid({
 
 
 
+  const isMobile = useIsMobile();
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [localSearchQuery, setLocalSearchQuery] = useState('');
   const [isCameraScannerOpen, setIsCameraScannerOpen] = useState(false);
   const [cameraScanError, setCameraScanError] = useState<string | null>(null);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const hasSetMobileDefaultView = useRef(false);
+
+  // Prefer compact product tiles on phones for denser browsing
+  useEffect(() => {
+    if (isMobile && !hasSetMobileDefaultView.current) {
+      setViewMode('compact');
+      hasSetMobileDefaultView.current = true;
+    }
+  }, [isMobile]);
 
   useEffect(() => {
     if (searchFocusKey && searchInputRef.current) {
@@ -70,7 +80,6 @@ export function ProductGrid({
   const setSelectedCategoryId = useUIStore((state) => state.setSelectedCategoryId);
 
   const isNativeApp = typeof Capacitor !== 'undefined' && Capacitor.isNativePlatform();
-  const isMobile = useIsMobile();
   const showCameraScan = isNativeApp || isMobile;
 
   const { toast } = useToast();
@@ -213,11 +222,11 @@ export function ProductGrid({
     <div className="flex flex-col h-full bg-slate-50/50 dark:bg-background/50">
       {/* Search and Filter Controls */}
       {showSearch && (
-        <div className="flex flex-col gap-3 p-4 border-b border-border/50 bg-background/80 backdrop-blur-md sticky top-0 z-10 shadow-sm">
+        <div className="flex flex-col gap-2 sm:gap-3 p-2 sm:p-4 border-b border-border/50 bg-background/80 backdrop-blur-md sticky top-0 z-10 shadow-sm">
           <label htmlFor="product-search" className="sr-only">Search products</label>
-          <div className="flex gap-2">
+          <div className="flex gap-1.5 sm:gap-2">
             <div className="relative flex-1 group">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground transition-colors group-focus-within:text-primary" />
+              <Search className="absolute left-2.5 sm:left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 sm:w-4 sm:h-4 text-muted-foreground transition-colors group-focus-within:text-primary" />
               <Input
                 id="product-search"
                 name="product-search"
@@ -242,18 +251,18 @@ export function ProductGrid({
                     }
                   }
                 }}
-                className="pl-9 pr-9 h-11 touch-manipulation rounded-xl shadow-xs transition-shadow focus-visible:ring-primary/20"
+                className="pl-8 sm:pl-9 pr-8 sm:pr-9 h-9 sm:h-11 touch-manipulation rounded-lg sm:rounded-xl shadow-xs transition-shadow focus-visible:ring-primary/20 text-sm"
                 aria-label="Search products"
               />
               {searchQuery && (
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="absolute right-2 md:right-1 top-1/2 -translate-y-1/2 h-8 w-8 md:h-7 md:w-7 p-0"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0"
                   onClick={clearSearch}
                   aria-label="Clear search"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="w-3.5 h-3.5" />
                 </Button>
               )}
             </div>
@@ -262,22 +271,22 @@ export function ProductGrid({
                 size="sm"
                 variant="outline"
                 onClick={() => setIsCameraScannerOpen(true)}
-                className="w-full md:w-auto md:hidden"
+                className="h-9 w-9 sm:h-11 sm:w-auto shrink-0 p-0 sm:px-3 md:hidden touch-manipulation"
                 title={t('scan_barcode_title')}
               >
-                <Camera className="w-4 h-4 mr-2" />
-                {t('scan')}
+                <Camera className="w-4 h-4 sm:mr-2" />
+                <span className="hidden sm:inline">{t('scan')}</span>
               </Button>
             )}
           </div>
 
           {showCategories && storeCategories.length > 0 && (
             <ScrollArea className="w-full whitespace-nowrap">
-              <div className="flex gap-2 pb-2">
+              <div className="flex gap-1.5 sm:gap-2 pb-1 sm:pb-2">
                 <Badge
                   variant="outline"
                   className={cn(
-                    "cursor-pointer touch-manipulation transition-all px-3 py-1 text-xs",
+                    "cursor-pointer touch-manipulation transition-all px-2 sm:px-3 py-0.5 sm:py-1 text-[11px] sm:text-xs",
                     selectedCategoryId === null ? "shadow-sm bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-500/20" : "hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-blue-600 dark:hover:text-blue-400 border-border/50 bg-background"
                   )}
                   onClick={() => handleCategorySelect(null)}
@@ -289,7 +298,7 @@ export function ProductGrid({
                     key={category}
                     variant="outline"
                     className={cn(
-                      "cursor-pointer touch-manipulation transition-all px-3 py-1 text-xs",
+                      "cursor-pointer touch-manipulation transition-all px-2 sm:px-3 py-0.5 sm:py-1 text-[11px] sm:text-xs",
                       selectedCategoryId === category ? "shadow-sm bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-500/20" : "hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-blue-600 dark:hover:text-blue-400 border-border/50 bg-background"
                     )}
                     onClick={() => handleCategorySelect(category)}
@@ -301,42 +310,42 @@ export function ProductGrid({
             </ScrollArea>
           )}
 
-          <div className="flex items-center justify-between pt-1">
-            <div className="flex items-center gap-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
               {(searchQuery || selectedCategoryId) && (
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={clearFilters}
-                  className="h-7 text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                  className="h-6 sm:h-7 text-[11px] sm:text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10 px-1.5"
                 >
                   {t('clear_filters')}
                 </Button>
               )}
-              <span className="text-xs font-medium text-muted-foreground bg-muted/50 px-2 py-1 rounded-md">
+              <span className="text-[11px] sm:text-xs font-medium text-muted-foreground bg-muted/50 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-md truncate">
                 {t('product_count', { count: filteredProducts.length })}
               </span>
             </div>
 
             {showViewToggle && (
-              <div className="flex items-center gap-1 bg-muted/30 border border-border/50 rounded-lg p-1 shadow-xs">
+              <div className="flex items-center gap-0.5 bg-muted/30 border border-border/50 rounded-lg p-0.5 sm:p-1 shadow-xs shrink-0">
                 <Button
                   variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
                   size="sm"
-                  className={cn("h-7 w-7 p-0 rounded-md transition-all", viewMode === 'grid' && "shadow-sm bg-background")}
+                  className={cn("h-6 w-6 sm:h-7 sm:w-7 p-0 rounded-md transition-all", viewMode === 'grid' && "shadow-sm bg-background")}
                   onClick={() => setViewMode('grid')}
                   aria-label="Grid view"
                 >
-                  <LayoutGrid className="w-4 h-4" />
+                  <LayoutGrid className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </Button>
                 <Button
                   variant={viewMode === 'compact' ? 'secondary' : 'ghost'}
                   size="sm"
-                  className={cn("h-7 w-7 p-0 rounded-md transition-all", viewMode === 'compact' && "shadow-sm bg-background")}
+                  className={cn("h-6 w-6 sm:h-7 sm:w-7 p-0 rounded-md transition-all", viewMode === 'compact' && "shadow-sm bg-background")}
                   onClick={() => setViewMode('compact')}
                   aria-label="Compact view"
                 >
-                  <Grid3X3 className="w-4 h-4" />
+                  <Grid3X3 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </Button>
               </div>
             )}
@@ -345,32 +354,32 @@ export function ProductGrid({
       )}
 
       <div className="flex-1 min-h-0 overflow-y-auto">
-        <div className="p-4 md:p-5">
+        <div className="p-2 sm:p-4 md:p-5">
           {filteredProducts.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-center bg-card rounded-2xl border border-dashed border-border/60">
-              <Package className="w-12 h-12 text-muted-foreground mb-4" />
-              <p className="text-lg font-medium text-muted-foreground">{t('no_products')}</p>
-              <p className="text-sm text-muted-foreground mt-1">{t('try_adjusting')}</p>
+            <div className="flex flex-col items-center justify-center py-10 sm:py-16 text-center bg-card rounded-xl sm:rounded-2xl border border-dashed border-border/60">
+              <Package className="w-10 h-10 sm:w-12 sm:h-12 text-muted-foreground mb-3" />
+              <p className="text-base sm:text-lg font-medium text-muted-foreground">{t('no_products')}</p>
+              <p className="text-xs sm:text-sm text-muted-foreground mt-1">{t('try_adjusting')}</p>
               {(searchQuery || selectedCategoryId) && (
-                <Button variant="outline" size="sm" onClick={clearFilters} className="mt-4">
+                <Button variant="outline" size="sm" onClick={clearFilters} className="mt-3">
                   {t('clear_all_filters')}
                 </Button>
               )}
             </div>
           ) : viewMode === 'grid' ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
               {filteredProducts.map((product) => (
                 <ProductCard key={product.id} product={product} />
               ))}
             </div>
           ) : (
-            <div className="space-y-6">
+            <div className="space-y-3 sm:space-y-6">
               {Object.entries(productsByCategory).map(([category, categoryProducts]) => (
                 <div key={category}>
-                  <h3 className="font-semibold text-sm text-muted-foreground mb-3 sticky top-0 bg-background py-1">
+                  <h3 className="font-semibold text-xs sm:text-sm text-muted-foreground mb-1.5 sm:mb-3 sticky top-0 bg-background/95 backdrop-blur-sm py-1 z-[1]">
                     {category} ({categoryProducts.length})
                   </h3>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
+                  <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-1.5 sm:gap-2">
                     {categoryProducts.map((product) => (
                       <CompactProductCard key={product.id} product={product} onSelect={onProductSelect} />
                     ))}
@@ -380,9 +389,9 @@ export function ProductGrid({
             </div>
           )}
           {!externalProducts && hasMore && !searchQuery && !selectedCategoryId && (
-            <div ref={observerTarget} className="flex justify-center mt-6 mb-4">
-              <Button variant="outline" onClick={loadMoreProducts} disabled={isLoadingMore}>
-                {isLoadingMore ? 'লোডিং...' : 'Load More Products'}
+            <div ref={observerTarget} className="flex justify-center mt-4 sm:mt-6 mb-3">
+              <Button variant="outline" size="sm" onClick={loadMoreProducts} disabled={isLoadingMore} className="h-9">
+                {isLoadingMore ? tc('loading') : t('load_more')}
               </Button>
             </div>
           )}
@@ -421,17 +430,17 @@ function CompactProductCard({ product, onSelect }: CompactProductCardProps) {
     <button
       onClick={handleClick}
       className={cn(
-        'flex flex-col items-center justify-center p-2.5 rounded-xl border border-border/50 bg-card text-center shadow-xs',
+        'flex flex-col items-center justify-center p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl border border-border/50 bg-card text-center shadow-xs',
         'lg:hover:bg-primary/5 lg:hover:border-primary/20 lg:hover:shadow-md lg:hover:-translate-y-0.5 transition-all duration-200',
         'focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-1',
-        'touch-manipulation min-h-22.5',
+        'touch-manipulation min-h-16 sm:min-h-22.5 active:scale-[0.98]',
         isOutOfStock && 'border-red-200/50 dark:border-red-900/30'
       )}
       aria-label={`${product.name}, ${formatPrice(product.sellingPrice)}`}
     >
-      <span className="text-[11px] font-medium line-clamp-2 mb-1.5 leading-tight">{product.name}</span>
-      <span className="text-sm font-bold text-primary tracking-tight">{formatPrice(product.sellingPrice)}</span>
-      {isOutOfStock && <span className="text-[9px] text-destructive uppercase font-bold mt-1 tracking-wider">Out ({product.currentStock})</span>}
+      <span className="text-[10px] sm:text-[11px] font-medium line-clamp-2 mb-0.5 sm:mb-1.5 leading-tight">{product.name}</span>
+      <span className="text-xs sm:text-sm font-bold text-primary tracking-tight tabular-nums">{formatPrice(product.sellingPrice)}</span>
+      {isOutOfStock && <span className="text-[8px] sm:text-[9px] text-destructive uppercase font-bold mt-0.5 tracking-wider">Out</span>}
     </button>
   );
 }
