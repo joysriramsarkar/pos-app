@@ -119,12 +119,13 @@ export async function POST(request: NextRequest) {
     
     const validatedData = result.data;
 
+    const categoryName = String(validatedData.category).trim();
     const product = await db.product.create({
       data: {
         barcode: validatedData.barcode ? String(validatedData.barcode).trim() : null,
         name: String(validatedData.name).trim(),
         nameBn: validatedData.nameBn ? String(validatedData.nameBn).trim() : null,
-        category: String(validatedData.category).trim(),
+        category: categoryName,
         subCategory: validatedData.subCategory ? String(validatedData.subCategory).trim() : null,
         buyingPrice: validatedData.buyingPrice,
         sellingPrice: validatedData.sellingPrice,
@@ -134,6 +135,9 @@ export async function POST(request: NextRequest) {
         isActive: validatedData.isActive,
       },
     });
+
+    const { ensureCategoryExists } = await import("@/lib/ensure-category");
+    await ensureCategoryExists(categoryName);
 
     const session = await getServerSession(authOptions);
     await logAudit({
@@ -203,13 +207,16 @@ export async function PUT(request: NextRequest) {
 
     const { id, ...validatedData } = result.data;
 
+    const categoryName =
+      validatedData.category !== undefined ? String(validatedData.category).trim() : undefined;
+
     const product = await db.product.update({
       where: { id: body.id },
       data: {
         barcode: validatedData.barcode !== undefined ? (validatedData.barcode ? String(validatedData.barcode).trim() : null) : undefined,
         name: validatedData.name !== undefined ? String(validatedData.name).trim() : undefined,
         nameBn: validatedData.nameBn !== undefined ? (validatedData.nameBn ? String(validatedData.nameBn).trim() : null) : undefined,
-        category: validatedData.category !== undefined ? String(validatedData.category).trim() : undefined,
+        category: categoryName,
         subCategory: validatedData.subCategory !== undefined ? (validatedData.subCategory ? String(validatedData.subCategory).trim() : null) : undefined,
         buyingPrice: validatedData.buyingPrice,
         sellingPrice: validatedData.sellingPrice,
@@ -220,6 +227,11 @@ export async function PUT(request: NextRequest) {
         updatedAt: new Date(),
       },
     });
+
+    if (categoryName) {
+      const { ensureCategoryExists } = await import("@/lib/ensure-category");
+      await ensureCategoryExists(categoryName);
+    }
 
     const session = await getServerSession(authOptions);
     await logAudit({

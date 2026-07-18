@@ -392,9 +392,12 @@ export const useProductsStore = create<ProductsState & ProductsActions>((set, ge
 
   updateProductStock: (productId, quantityChange) => {
     set((state) => ({
-      products: state.products.map((p) =>
-        p.id === productId ? { ...p, currentStock: Number(p.currentStock) + quantityChange } : p
-      ),
+      products: state.products.map((p) => {
+        if (p.id !== productId) return p;
+        // Keep local stock non-negative (matches server auto-adjust / IndexedDB floor)
+        const next = Number(p.currentStock) + quantityChange;
+        return { ...p, currentStock: Math.max(0, Number(next.toFixed(6))) };
+      }),
     }));
   },
 
