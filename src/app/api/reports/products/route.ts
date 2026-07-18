@@ -98,14 +98,17 @@ export async function GET(request: NextRequest) {
             ? agg.cost
             : toMoneyNumber(details?.buyingPrice || 0) * Number(agg.quantity);
         const profit = agg.revenue - cost;
+        const margin = agg.revenue > 0 ? (profit / agg.revenue) * 100 : 0;
         return {
           id: productId,
           name: details?.name || "Unknown Product",
           nameBn: details?.nameBn,
           unit: details?.unit || "unit",
           quantity: agg.quantity,
-          revenue: agg.revenue,
-          profit,
+          revenue: Math.round(agg.revenue * 100) / 100,
+          cost: Math.round(cost * 100) / 100,
+          profit: Math.round(profit * 100) / 100,
+          margin: Math.round(margin * 10) / 10,
         };
       })
       .sort((a, b) => b.revenue - a.revenue);

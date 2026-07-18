@@ -58,7 +58,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex h-screen w-full items-center justify-center bg-muted/40 p-4">
+    <div className="flex min-h-dvh w-full items-center justify-center bg-muted/40 p-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))]">
       <Card className="w-full max-w-sm shadow-lg">
         <CardHeader className="space-y-1 text-center">
           <CardTitle className="text-2xl font-bold tracking-tight">
@@ -75,11 +75,14 @@ export default function LoginPage() {
               <Input
                 id="username"
                 type="text"
+                autoComplete="username"
+                inputMode="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="Enter your username"
                 required
                 disabled={isLoading}
+                className="h-11 text-base"
               />
             </div>
             <div className="space-y-2">
@@ -89,11 +92,13 @@ export default function LoginPage() {
               <Input
                 id="password"
                 type="password"
+                autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 required
                 disabled={isLoading}
+                className="h-11 text-base"
               />
             </div>
 
@@ -105,7 +110,7 @@ export default function LoginPage() {
 
             <Button 
               type="submit" 
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white dark:bg-blue-500 dark:hover:bg-blue-600" 
+              className="w-full h-11 text-base bg-blue-600 hover:bg-blue-700 text-white dark:bg-blue-500 dark:hover:bg-blue-600 touch-manipulation" 
               disabled={isLoading}
             >
               {isLoading ? "Logging in..." : "Login"}

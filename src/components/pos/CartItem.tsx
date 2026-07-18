@@ -187,7 +187,7 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
     <div
       ref={itemRef}
       className={cn(
-        'group flex items-center gap-1.5 p-1 md:p-2 rounded-lg border bg-card transition-all',
+        'group flex items-center gap-1.5 p-2 md:p-2 rounded-xl border bg-card transition-all',
         'hover:shadow-sm',
         isHighlighted && 'ring-2 ring-primary ring-offset-2',
         isOverStock && 'border-destructive bg-destructive/5'
@@ -195,8 +195,8 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
       role="listitem"
       aria-label={`${displayName}, quantity ${item.quantity}, ${formatPrice(item.totalPrice)}`}
     >
-      {/* Drag Handle (for future reordering) */}
-      <div className="text-muted-foreground transition-opacity">
+      {/* Drag Handle (for future reordering) — hide on narrow screens to free space */}
+      <div className="hidden sm:block text-muted-foreground transition-opacity">
         <GripVertical className="w-4 h-4" />
       </div>
 
@@ -204,13 +204,13 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <h4 className="font-medium text-xs truncate">{displayName}</h4>
-            <div className="flex items-center gap-1 mt-0">
-              <span className="text-[10px] text-muted-foreground">
+            <h4 className="font-medium text-sm truncate leading-tight">{displayName}</h4>
+            <div className="flex items-center gap-1 mt-0.5">
+              <span className="text-[11px] text-muted-foreground">
                 {formatPrice(item.unitPrice)}/{item.unit}
               </span>
               {item.barcode && (
-                <Badge variant="outline" className="text-xs px-1 py-0 h-4">
+                <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 hidden sm:inline-flex">
                   {item.barcode}
                 </Badge>
               )}
@@ -218,14 +218,14 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
           </div>
           {/* Total Price */}
           <div className="text-right shrink-0">
-            <p className="font-semibold text-xs md:text-sm">{formatPrice(item.totalPrice)}</p>
+            <p className="font-semibold text-sm tabular-nums">{formatPrice(item.totalPrice)}</p>
           </div>
         </div>
 
         {/* Quantity Controls */}
-        <div className="flex items-center justify-between mt-0.5">
+        <div className="flex items-center justify-between mt-1.5">
           <div
-            className="flex items-center gap-1"
+            className="flex items-center gap-1.5"
             role="group"
             aria-label="Quantity controls"
             tabIndex={0}
@@ -234,12 +234,12 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
             <Button
               variant="outline"
               size="sm"
-              className="h-7 w-7 p-0 touch-manipulation"
+              className="h-9 w-9 sm:h-7 sm:w-7 p-0 touch-manipulation rounded-lg"
               onClick={handleDecrement}
               disabled={item.quantity <= 1 && item.unit === 'piece'}
               aria-label="Decrease quantity"
             >
-              <Minus className="w-3 h-3" />
+              <Minus className="w-3.5 h-3.5" />
             </Button>
 
             {/* Quantity Input */}
@@ -253,7 +253,7 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
               onChange={handleInputChange}
               onKeyDown={handleInputKeyDown}
               onBlur={commitInputValue}
-              className="w-14 h-7 text-center px-1 touch-manipulation text-xs"
+              className="w-16 h-9 sm:w-14 sm:h-7 text-center px-1 touch-manipulation text-sm sm:text-xs font-semibold"
               aria-label="Quantity"
               onWheel={(e) => e.currentTarget.blur()}
               min={0}
@@ -263,18 +263,18 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
             <Button
               variant="outline"
               size="sm"
-              className="h-7 w-7 p-0 touch-manipulation"
+              className="h-9 w-9 sm:h-7 sm:w-7 p-0 touch-manipulation rounded-lg"
               onClick={handleIncrement}
               aria-label="Increase quantity"
             >
-              <Plus className="w-3 h-3" />
+              <Plus className="w-3.5 h-3.5" />
             </Button>
           </div>
 
           <div className="flex items-center gap-2">
             {/* Stock Warning */}
             {isOverStock && (
-              <Badge variant="destructive" className="text-xs">
+              <Badge variant="destructive" className="text-[10px] sm:text-xs max-w-[5.5rem] truncate">
                 {t('only_stock', { stock: availableStock })}
               </Badge>
             )}
@@ -283,17 +283,17 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive touch-manipulation"
+              className="h-9 w-9 sm:h-7 sm:w-7 p-0 text-muted-foreground hover:text-destructive touch-manipulation"
               onClick={handleRemove}
               aria-label="Remove item"
             >
-              <Trash2 className="w-3 h-3 md:w-4 md:h-4" />
+              <Trash2 className="w-4 h-4" />
             </Button>
           </div>
         </div>
 
         {/* Quantity/Price Presets Row */}
-        <div className="flex flex-wrap items-center gap-1.5 mt-1.5 pt-1.5 border-t border-dashed border-border/40">
+        <div className="flex flex-wrap items-center gap-1.5 mt-2 pt-1.5 border-t border-dashed border-border/40">
           <span className="text-[9px] font-medium text-muted-foreground mr-0.5">
             {isWeighted ? t('preset_price', { defaultValue: 'Preset Price:' }) : t('preset_quantity', { defaultValue: 'Preset Qty:' })}
           </span>
@@ -302,16 +302,18 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
               {pricePresets.map((price) => (
                 <button
                   key={price}
+                  type="button"
                   onClick={() => handlePricePreset(price)}
-                  className="h-6 px-1.5 rounded text-[10px] font-medium bg-primary/10 hover:bg-primary/20 text-primary transition-colors touch-manipulation"
+                  className="h-8 sm:h-6 px-2.5 sm:px-1.5 rounded-lg sm:rounded text-xs sm:text-[10px] font-medium bg-primary/10 hover:bg-primary/20 active:bg-primary/25 text-primary transition-colors touch-manipulation"
                 >
                   {currencySymbol}{formatStringNumbers(price)}
                 </button>
               ))}
               <Input
                 type="number"
+                inputMode="decimal"
                 placeholder={t('custom_price', { defaultValue: 'Custom Price' })}
-                className="h-6 w-20 text-[10px] px-1.5 py-0 bg-primary/5 border-primary/20 text-primary focus-visible:ring-1 focus-visible:ring-primary/30"
+                className="h-8 sm:h-6 w-24 sm:w-20 text-xs sm:text-[10px] px-1.5 py-0 bg-primary/5 border-primary/20 text-primary focus-visible:ring-1 focus-visible:ring-primary/30"
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     const val = parseFloat(convertBengaliToEnglishNumerals(e.currentTarget.value));
@@ -334,8 +336,9 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
             QUANTITY_PRESETS.map((qty) => (
               <button
                 key={qty}
+                type="button"
                 onClick={() => handlePiecePreset(qty)}
-                className="h-6 px-1.5 rounded text-[10px] font-medium bg-primary/10 hover:bg-primary/20 text-primary transition-colors touch-manipulation"
+                className="h-8 sm:h-6 min-w-8 px-2.5 sm:px-1.5 rounded-lg sm:rounded text-xs sm:text-[10px] font-medium bg-primary/10 hover:bg-primary/20 active:bg-primary/25 text-primary transition-colors touch-manipulation"
               >
                 {formatStringNumbers(qty)}
               </button>

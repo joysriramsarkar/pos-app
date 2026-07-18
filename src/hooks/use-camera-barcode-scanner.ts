@@ -250,7 +250,6 @@ export function useCameraBarcodeScanner(config: CameraBarcodeScannerConfig) {
       const scanner = new Html5Qrcode(SCANNER_ID, {
         verbose: false,
         experimentalFeatures: { useBarCodeDetectorIfSupported: true },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any);
 
       // Warm permission once so labels are available and UI stays in-page

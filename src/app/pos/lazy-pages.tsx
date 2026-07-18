@@ -91,6 +91,10 @@ export const SupplierReport = dynamic(
   () => import('@/components/pos/SupplierReport').then((m) => ({ default: m.SupplierReport })),
   { ssr: false },
 );
+export const ProfitReport = dynamic(
+  () => import('@/components/pos/ProfitReport').then((m) => ({ default: m.ProfitReport })),
+  { ssr: false },
+);
 export const ProductDialog = dynamic(
   () => import('@/components/pos/ProductDialog').then((m) => m.ProductDialog),
   { ssr: false },

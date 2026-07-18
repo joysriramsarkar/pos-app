@@ -172,6 +172,19 @@
 .safe-area-bottom {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
+.safe-area-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.px-safe {
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
 
 /* Horizontal scroll */
 .scrollbar-none::-webkit-scrollbar {
@@ -185,6 +198,31 @@
 /* Pull-to-refresh prevention */
 .overscroll-contain {
   overscroll-behavior: contain;
+}
+
+/* Mobile UX base */
+html,
+body {
+  overscroll-behavior-y: none;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* Comfortable minimum touch targets on coarse pointers (phones/tablets) */
+@media (pointer: coarse) {
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  .touch-target-sm {
+    min-height: 40px;
+    min-width: 40px;
+  }
+}
+
+/* Bottom nav height token used for content insets */
+:root {
+  --mobile-bottom-nav-height: 4rem;
 }
 
 /* Pulse animation for cart FAB */

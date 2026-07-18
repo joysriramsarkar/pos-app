@@ -3,11 +3,24 @@
  * POS still needs the full catalog in memory for barcode search —
  * this only improves transfer / timeout resilience.
  */
+
+export function isAbortError(error: unknown): boolean {
+  if (!error) return false;
+  if (typeof error === "object") {
+    const e = error as { name?: string; message?: string; code?: number };
+    if (e.name === "AbortError" || e.name === "TimeoutError") return true;
+    if (e.code === 20) return true; // DOMException ABORT_ERR
+    if (typeof e.message === "string" && /abort|cancel/i.test(e.message)) return true;
+  }
+  if (typeof error === "string" && /abort|cancel/i.test(error)) return true;
+  return false;
+}
+
 export async function fetchAllProductsFromApi(options?: {
   pageSize?: number;
   signal?: AbortSignal;
   includeInactive?: boolean;
-}): Promise<{ products: unknown[]; ok: boolean; error?: string }> {
+}): Promise<{ products: unknown[]; ok: boolean; error?: string; aborted?: boolean }> {
   const pageSize = options?.pageSize ?? 250;
   const all: unknown[] = [];
   let cursor: string | null = null;
@@ -15,6 +28,15 @@ export async function fetchAllProductsFromApi(options?: {
 
   try {
     do {
+      if (options?.signal?.aborted) {
+        return {
+          products: all,
+          ok: false,
+          aborted: true,
+          error: "aborted",
+        };
+      }
+
       const qs = new URLSearchParams({ limit: String(pageSize) });
       if (cursor) qs.set("cursor", cursor);
       if (options?.includeInactive) qs.set("includeInactive", "true");
@@ -34,6 +56,14 @@ export async function fetchAllProductsFromApi(options?: {
 
     return { products: all, ok: true };
   } catch (e) {
+    if (isAbortError(e) || options?.signal?.aborted) {
+      return {
+        products: all,
+        ok: false,
+        aborted: true,
+        error: "aborted",
+      };
+    }
     return {
       products: all,
       ok: false,

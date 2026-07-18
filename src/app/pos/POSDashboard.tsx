@@ -36,6 +36,7 @@ import {
   CategoriesReport,
   CustomersReport,
   SupplierReport,
+  ProfitReport,
   ProductDialog,
 } from '@/app/pos/lazy-pages';
 import { type PageType, navItems, mobileBottomNavItems, MORE_MENU_PAGE_IDS } from '@/app/pos/nav-config';
@@ -377,68 +378,121 @@ export function POSDashboard() {
     loadCustomers();
   }, [customers.length, activeUser?.requiresPasswordChange]);
 
-  // Load products on mount
+  // Load products on mount (paginated — allow longer than a single request)
   useEffect(() => {
     if (activeUser?.requiresPasswordChange) return;
+
+    let cancelled = false;
+    const controller = new AbortController();
+    // Full catalog can take multiple pages; 8s was aborting mid-load in dev/slow nets
+    const timeoutId = window.setTimeout(() => {
+      controller.abort(new DOMException('Products load timed out', 'TimeoutError'));
+    }, 45_000);
+
+    const isTimeoutAbort = () => {
+      const reason = controller.signal.reason;
+      return (
+        (reason instanceof DOMException && reason.name === 'TimeoutError') ||
+        (typeof reason === 'object' &&
+          reason !== null &&
+          'name' in reason &&
+          (reason as { name?: string }).name === 'TimeoutError')
+      );
+    };
+
+    const loadFromCache = async () => {
+      try {
+        const cachedProducts = await ProductsDB.getAll();
+        if (!cancelled && cachedProducts.length > 0) {
+          useProductsStore.getState().setProducts(cachedProducts);
+        } else if (!cancelled) {
+          console.warn('No cached products available');
+        }
+      } catch (dbError) {
+        if (!cancelled) console.error('Failed to load products from cache:', dbError);
+      }
+    };
+
     const loadProducts = async () => {
       const { setProducts, setLoading } = useProductsStore.getState();
       const setOnline = useSyncStore.getState().setOnline;
 
       setLoading(true);
       try {
-        // Fetch from API to get actual DB data
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
-        
-        try {
-          const { fetchAllProductsFromApi } = await import('@/lib/fetch-all-products');
-          const { products, ok, error } = await fetchAllProductsFromApi({
-            pageSize: 250,
-            signal: controller.signal,
-          });
-          clearTimeout(timeoutId);
+        const { fetchAllProductsFromApi, isAbortError } = await import('@/lib/fetch-all-products');
+        const { products, ok, error, aborted } = await fetchAllProductsFromApi({
+          pageSize: 250,
+          signal: controller.signal,
+        });
 
-          if (ok && products.length > 0) {
-            setProducts(products as never[], false, null);
-            await ProductsDB.upsertMany(products as never[]);
+        // Effect cleaned up (Strict Mode remount / navigate away) — ignore result
+        if (cancelled) return;
+
+        if (ok && products.length > 0) {
+          setProducts(products as never[], false, null);
+          await ProductsDB.upsertMany(products as never[]);
+          if (!cancelled) setOnline(true);
+          return;
+        }
+
+        if (products.length > 0) {
+          // Partial catalog still usable (timeout mid-pagination)
+          setProducts(products as never[], false, null);
+          await ProductsDB.upsertMany(products as never[]);
+          if (!cancelled) {
             setOnline(true);
-            return;
+            if (aborted) {
+              console.warn('Products load interrupted; using partial catalog:', products.length);
+            }
           }
-          if (products.length > 0) {
-            // partial load still better than empty
-            setProducts(products as never[], false, null);
-            await ProductsDB.upsertMany(products as never[]);
-            setOnline(true);
-            return;
+          return;
+        }
+
+        if (aborted || isAbortError(error)) {
+          if (isTimeoutAbort()) {
+            console.warn('Products load timed out; falling back to cache');
           }
+          // Unmount cancel: cancelled=true already returned above
+        } else {
           console.warn('Products API failed:', error);
-          throw new Error(error || 'API error');
-        } catch (fetchErr) {
-          clearTimeout(timeoutId);
-          throw fetchErr;
         }
+
+        if (cancelled) return;
+        setOnline(false);
+        await loadFromCache();
       } catch (error) {
-        console.error('Failed to load products from API:', error instanceof Error ? error.message : String(error));
-        // Mark as offline since API failed
-        useSyncStore.getState().setOnline(false);
-        
-        try {
-          // Fallback to IndexedDB
-          const cachedProducts = await ProductsDB.getAll();
-          if (cachedProducts.length > 0) {
-            setProducts(cachedProducts);
-          } else {
-            console.warn('No cached products available');
+        if (cancelled) return;
+
+        const { isAbortError } = await import('@/lib/fetch-all-products');
+        if (isAbortError(error)) {
+          if (isTimeoutAbort()) {
+            console.warn('Products load timed out; falling back to cache');
+            useSyncStore.getState().setOnline(false);
+            await loadFromCache();
           }
-        } catch (dbError) {
-          console.error('Failed to load products from cache:', dbError);
+          return;
         }
+
+        console.error(
+          'Failed to load products from API:',
+          error instanceof Error ? error.message : String(error),
+        );
+        useSyncStore.getState().setOnline(false);
+        await loadFromCache();
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          useProductsStore.getState().setLoading(false);
+        }
       }
     };
 
     loadProducts();
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+      controller.abort(new DOMException('Products load cancelled', 'AbortError'));
+    };
   }, [activeUser?.requiresPasswordChange]);
 
   // Load quantity suggestions on mount from last 30 days of sales
@@ -608,12 +662,14 @@ export function POSDashboard() {
     let backPressTimer: ReturnType<typeof setTimeout>;
 
     const handler = CapacitorApp.addListener('backButton', () => {
-      // 1. কোনো dialog খোলা থাকলে বন্ধ করো
+      // 1. কোনো dialog / sheet খোলা থাকলে বন্ধ করো
       if (isCheckoutOpen) { setCheckoutOpen(false); return; }
       if (isAddStockOpen) { setIsAddStockOpen(false); return; }
       if (isProductDialogOpen) { setIsProductDialogOpen(false); return; }
       if (isPrintDialogOpen) { setPrintDialogOpen(false); return; }
       if (isMobileScannerOpen) { setIsMobileScannerOpen(false); return; }
+      if (moreMenuOpen) { setMoreMenuOpen(false); return; }
+      if (mobileCartOpen) { setMobileCartOpen(false); return; }
 
       // 2. billing ছাড়া অন্য পেজে থাকলে billing-এ ফিরে যাও
       if (currentPage !== 'billing') {
@@ -637,7 +693,7 @@ export function POSDashboard() {
       clearTimeout(backPressTimer);
       handler.then(h => h.remove());
     };
-  }, [currentPage, isCheckoutOpen, isAddStockOpen, isProductDialogOpen, isPrintDialogOpen, isMobileScannerOpen, setCheckoutOpen, setPrintDialogOpen, toast]);
+  }, [currentPage, isCheckoutOpen, isAddStockOpen, isProductDialogOpen, isPrintDialogOpen, isMobileScannerOpen, moreMenuOpen, mobileCartOpen, setCheckoutOpen, setPrintDialogOpen, toast]);
 
   // Handle checkout completion
 
@@ -1338,6 +1394,8 @@ export function POSDashboard() {
         return <CustomersReport onBack={() => setCurrentPage('reports')} />;
       case 'supplier-report':
         return <SupplierReport onBack={() => setCurrentPage('reports')} />;
+      case 'profit-report':
+        return <ProfitReport onBack={() => setCurrentPage('reports')} />;
 
       case 'transactions':
         return null;
@@ -1405,38 +1463,43 @@ export function POSDashboard() {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 min-h-0 relative">
         {/* Mobile Header */}
-        <header className="lg:hidden shrink-0 border-b border-border/50 bg-card/80 backdrop-blur-md px-3 py-2 pt-[calc(env(safe-area-inset-top)+0.5rem)] no-print sticky top-0 z-20">
-          <div className="flex items-center justify-between gap-4">
+        <header className="lg:hidden shrink-0 border-b border-border/50 bg-card/80 backdrop-blur-md px-3 py-1.5 pt-[calc(env(safe-area-inset-top)+0.35rem)] no-print sticky top-0 z-20">
+          <div className="flex items-center justify-between gap-2 min-h-10">
             {/* Store Name */}
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shadow-sm">
-                <Store className="w-5 h-5 text-primary" />
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shadow-sm shrink-0">
+                <Store className="w-4 h-4 text-primary" />
               </div>
-              <div>
-                <h1 className="font-bold text-sm bg-linear-to-r from-primary to-primary/70 bg-clip-text text-transparent">{storeName}</h1>
+              <div className="min-w-0">
+                <h1 className="font-bold text-sm bg-linear-to-r from-primary to-primary/70 bg-clip-text text-transparent truncate">{storeName}</h1>
+                {currentPage !== 'billing' && (
+                  <p className="text-[10px] text-muted-foreground truncate leading-none mt-0.5">
+                    {currentPage === 'menu' ? 'Menu' : (navItems.find(n => n.id === currentPage)?.label ?? currentPage)}
+                  </p>
+                )}
               </div>
             </div>
 
-            {/* Page indicator & Bell for non-billing pages */}
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" size="icon" onClick={toggleTheme} className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-primary/10">
+            <div className="flex items-center gap-0.5 shrink-0">
+              {!isOnline && (
+                <Badge variant="secondary" className="text-[10px] h-6 px-1.5 bg-amber-500/15 text-amber-700 dark:text-amber-400 border-0 mr-1">
+                  <WifiOff className="w-3 h-3 mr-0.5" />
+                  Offline
+                </Badge>
+              )}
+              <Button variant="ghost" size="icon" onClick={toggleTheme} className="h-9 w-9 text-muted-foreground hover:text-foreground hover:bg-primary/10 touch-manipulation" aria-label="Toggle theme">
                 {resolvedTheme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               </Button>
-              <Button variant="ghost" size="icon" onClick={toggleLanguage} className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-primary/10">
+              <Button variant="ghost" size="icon" onClick={toggleLanguage} className="h-9 w-9 text-muted-foreground hover:text-foreground hover:bg-primary/10 touch-manipulation" aria-label="Toggle language">
                 <Languages className="h-4 w-4" />
               </Button>
               <NotificationBell variant="mobile" />
-              {currentPage !== 'billing' && (
-                <Badge variant="secondary" className="text-xs shadow-sm">
-                  {currentPage === 'menu' ? 'Menu' : navItems.find(n => n.id === currentPage)?.label}
-                </Badge>
-              )}
             </div>
           </div>
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 flex flex-col min-h-0 overflow-hidden bg-background pb-[calc(4rem+env(safe-area-inset-bottom))] lg:pb-0 lg:rounded-tl-2xl lg:shadow-[-4px_0_24px_-12px_rgba(0,0,0,0.1)] lg:border-t lg:border-l lg:border-border/50">
+        <main className="flex-1 flex flex-col min-h-0 overflow-hidden bg-background pb-[calc(var(--mobile-bottom-nav-height)+env(safe-area-inset-bottom))] lg:pb-0 lg:rounded-tl-2xl lg:shadow-[-4px_0_24px_-12px_rgba(0,0,0,0.1)] lg:border-t lg:border-l lg:border-border/50">
           {/* Dashboard Page */}
           {(currentPage === 'dashboard' || isDashboardMounted) && (
             <motion.div
@@ -1473,51 +1536,57 @@ export function POSDashboard() {
 
               {/* Mobile billing: cart + scan button (no product list) */}
               <div className="flex-1 flex flex-col overflow-hidden w-full sm:hidden min-h-0">
-                <div className="p-1.5 border-b bg-background">
-                  <div className="flex flex-row items-center gap-1.5 w-full">
-                    <div className="relative flex-1">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <div className="p-2 border-b bg-background shrink-0">
+                  <div className="flex flex-row items-center gap-2 w-full">
+                    <div className="relative flex-1 min-w-0">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                       <Input
-                        type="text"
-                        placeholder="Search products by name or barcode..."
+                        type="search"
+                        enterKeyHint="search"
+                        autoComplete="off"
+                        autoCorrect="off"
+                        spellCheck={false}
+                        placeholder="Search name or barcode..."
                         value={mobileSearchQuery}
                         onChange={(e) => handleMobileSearchChange(e.target.value)}
-                        className="pl-9 h-8 text-sm"
+                        className="pl-9 pr-9 h-11 text-base rounded-xl touch-manipulation"
                       />
                       {mobileSearchQuery && (
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 md:h-8 md:w-8 p-0"
+                          className="absolute right-1 top-1/2 -translate-y-1/2 h-9 w-9 p-0 touch-manipulation"
                           onClick={() => { setMobileSearchQuery(''); setMobileSearchResults([]); }}
                           aria-label="Clear Search"
                         >
-                          <X className="w-3 h-3 md:w-4 md:h-4" />
+                          <X className="w-4 h-4" />
                         </Button>
                       )}
                     </div>
-                    <Button size="sm" className="shrink-0 h-8 w-8 p-0" onClick={handleOpenMobileScanner} aria-label="Scan Barcode">
-                      <ScanLine className="h-4 w-4 md:mr-2" />
-                      <span className="hidden md:inline">Scan</span>
+                    <Button size="icon" className="shrink-0 h-11 w-11 rounded-xl touch-manipulation" onClick={handleOpenMobileScanner} aria-label="Scan Barcode">
+                      <ScanLine className="h-5 w-5" />
                     </Button>
                   </div>
                 </div>
 
                 {/* Search Results */}
                 {mobileSearchQuery && (
-                  <div className="border-b bg-background max-h-48 overflow-y-auto">
+                  <div className="border-b bg-background max-h-[40dvh] overflow-y-auto overscroll-contain shrink-0 shadow-sm z-10">
                     <div className="p-2">
-                      <h3 className="text-xs font-medium mb-1.5">Search Results ({mobileSearchResults.length})</h3>
+                      <h3 className="text-xs font-medium mb-1.5 px-1 text-muted-foreground">
+                        Results ({mobileSearchResults.length})
+                      </h3>
                       {isMobileSearching ? (
-                        <p className="text-sm text-muted-foreground">Searching...</p>
+                        <p className="text-sm text-muted-foreground p-2">Searching...</p>
                       ) : mobileSearchResults.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">No products found</p>
+                        <p className="text-sm text-muted-foreground p-2">No products found</p>
                       ) : (
-                        <div className="space-y-2">
+                        <div className="space-y-1">
                           {mobileSearchResults.slice(0, 15).map((product) => (
-                            <div
+                            <button
                               key={product.id}
-                              className="flex items-center justify-between p-1.5 rounded-lg border hover:bg-muted/50 cursor-pointer"
+                              type="button"
+                              className="flex w-full items-center justify-between gap-2 p-3 rounded-xl border bg-card hover:bg-muted/50 active:bg-muted cursor-pointer touch-manipulation text-left min-h-12"
                               onClick={() => {
                                 addItem(product, 1);
                                 setMobileSearchQuery('');
@@ -1527,16 +1596,16 @@ export function POSDashboard() {
                               <div className="flex-1 min-w-0">
                                 <p className="font-medium text-sm truncate">{product.name}</p>
                                 {product.barcode && (
-                                  <p className="text-xs text-muted-foreground">{product.barcode}</p>
+                                  <p className="text-xs text-muted-foreground font-mono">{product.barcode}</p>
                                 )}
                               </div>
-                              <div className="text-right">
-                                <p className="font-semibold text-sm">{formatPrice(product.sellingPrice)}</p>
+                              <div className="text-right shrink-0">
+                                <p className="font-semibold text-sm tabular-nums">{formatPrice(product.sellingPrice)}</p>
                                 {product.currentStock <= 0 && (
                                   <p className="text-xs text-destructive">Out of stock</p>
                                 )}
                               </div>
-                            </div>
+                            </button>
                           ))}
                         </div>
                       )}
@@ -1544,7 +1613,7 @@ export function POSDashboard() {
                   </div>
                 )}
 
-                <div className="flex-1 min-h-0">
+                <div className="flex-1 min-h-0 overflow-hidden">
                   <CartPanel onCheckout={handleOpenCheckout} customers={customers} onScan={handleOpenMobileScanner} />
                 </div>
               </div>
@@ -1647,7 +1716,7 @@ export function POSDashboard() {
           )}
 
           {/* Other sub-reports or pages that do not need caching */}
-          {['stock-statistics', 'expenses-report', 'sales-report', 'payment-report', 'stock-report', 'dues-report', 'products-report', 'categories-report', 'customers-report', 'supplier-report', 'menu'].includes(currentPage) && (
+          {['stock-statistics', 'expenses-report', 'sales-report', 'payment-report', 'stock-report', 'dues-report', 'products-report', 'categories-report', 'customers-report', 'supplier-report', 'profit-report', 'menu'].includes(currentPage) && (
             <motion.div
               key={currentPage}
               initial={{ opacity: 0, y: 8 }}
@@ -1683,10 +1752,10 @@ export function POSDashboard() {
         </main>
       {/* Mobile Bottom Navigation — keyboard খোলা থাকলে হাইড */}
       <nav className={cn(
-        "lg:hidden fixed bottom-0 left-0 right-0 z-30 border-t border-border/60 bg-card/95 backdrop-blur-sm py-1 px-2 bottom-nav pb-safe transition-transform duration-200",
-        isKeyboardOpen ? "translate-y-full" : "translate-y-0"
+        "lg:hidden fixed bottom-0 left-0 right-0 z-30 border-t border-border/60 bg-card/95 backdrop-blur-md px-1 pt-1 bottom-nav pb-[max(0.25rem,env(safe-area-inset-bottom))] transition-transform duration-200 shadow-[0_-4px_16px_-8px_rgba(0,0,0,0.12)]",
+        isKeyboardOpen ? "translate-y-full pointer-events-none" : "translate-y-0"
       )}>
-        <div className="flex items-center justify-between gap-1">
+        <div className="flex items-stretch justify-between gap-0.5 min-h-14">
           {mobileBottomNavItems.map((item) => {
             // Direct bottom-nav items always take priority over 'more'
             const directNavIds = new Set(mobileBottomNavItems.filter(i => i.id !== 'more').map(i => i.id));
@@ -1696,6 +1765,7 @@ export function POSDashboard() {
             return (
               <button
                 key={item.id}
+                type="button"
                 onClick={() => {
                   if (item.id === 'more') {
                     setMoreMenuOpen(true);
@@ -1704,10 +1774,11 @@ export function POSDashboard() {
                   }
                 }}
                 className={cn(
-                  'flex flex-col items-center justify-center flex-1 py-1 rounded-lg text-xs text-muted-foreground hover:bg-primary/10 hover:text-primary transition',
+                  'flex flex-col items-center justify-center flex-1 min-w-0 py-1.5 rounded-xl text-xs text-muted-foreground hover:bg-primary/10 hover:text-primary transition touch-manipulation active:scale-95',
                   isActive ? 'bg-primary/10 text-primary font-semibold' : ''
                 )}
                 aria-label={t(item.id as any)}
+                aria-current={isActive ? 'page' : undefined}
               >
                 <div className="relative">
                   {item.icon}
@@ -1720,7 +1791,7 @@ export function POSDashboard() {
                     </Badge>
                   )}
                 </div>
-                <span className="mt-0.5 text-[10px] leading-none">{t(item.id as any)}</span>
+                <span className="mt-0.5 text-[10px] leading-none truncate max-w-full px-0.5">{t(item.id as any)}</span>
               </button>
             );
           })}
@@ -1741,12 +1812,13 @@ export function POSDashboard() {
 
       {/* More Menu Bottom Sheet */}
       <Sheet open={moreMenuOpen} onOpenChange={setMoreMenuOpen}>
-        <SheetContent side="bottom" className="rounded-t-2xl p-0 max-h-[70vh] overflow-hidden">
+        <SheetContent side="bottom" className="rounded-t-2xl p-0 max-h-[80dvh] overflow-hidden pb-[env(safe-area-inset-bottom)]">
           <SheetHeader className="px-4 pt-4 pb-2 border-b">
+            <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-muted-foreground/30" aria-hidden />
             <SheetTitle className="text-base font-semibold">{t('more')}</SheetTitle>
           </SheetHeader>
-          <div className="p-4 overflow-y-auto max-h-[55vh] space-y-4">
-            <div className="grid grid-cols-4 gap-3">
+          <div className="p-4 overflow-y-auto max-h-[calc(80dvh-5rem)] space-y-4 overscroll-contain">
+            <div className="grid grid-cols-4 gap-2">
               {filteredMoreMenuItems.map((item) => {
                 const isActive = currentPage === item.id;
                 return (

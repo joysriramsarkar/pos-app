@@ -21,7 +21,7 @@ import type { Sale, PrintFormat } from "@/types/pos";
 import { printToIframe } from "@/lib/printUtility";
 import { useSettingsStore } from "@/stores/settings-store";
 import { Share2, Printer } from "lucide-react";
-import { shareInvoiceAsPdf } from "@/lib/invoicePdf";
+import { shareInvoiceFromSale, preloadPdfLibs } from "@/lib/invoicePdf";
 import { useToast } from '@/hooks/use-toast';
 import { useTranslations } from 'next-intl';
 
@@ -224,6 +224,8 @@ export function PrintDialog({
     if (!open) return;
     setSelectedFormat(mapPaperSizeToFormat(settings.print_paper_size));
     if (settings.print_footer) setFooterMessage(settings.print_footer);
+    // Warm html2canvas + jsPDF while user picks format / options
+    preloadPdfLibs();
   }, [open, settings.print_paper_size, settings.print_footer]);
 
   const handlePrint = () => {
@@ -262,21 +264,17 @@ export function PrintDialog({
     if (!sale || isSharing) return;
     setIsSharing(true);
     try {
-      const html = buildInvoiceHtml(
+      const result = await shareInvoiceFromSale(
         sale,
         selectedFormat,
-        showLogo,
-        showGst,
+        {
+          name: storeConfig.name,
+          nameBn: storeConfig.nameBn,
+          address: storeConfig.address,
+          phone: storeConfig.phone,
+          gstNumber: storeConfig.gstNumber,
+        },
         footerMessage,
-        storeConfig,
-        getPageStyle(selectedFormat),
-      );
-
-      const result = await shareInvoiceAsPdf(
-        html,
-        selectedFormat,
-        sale.invoiceNumber,
-        storeConfig.name,
       );
 
       if (result === 'downloaded') {

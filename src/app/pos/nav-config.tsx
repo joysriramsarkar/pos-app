@@ -37,7 +37,8 @@ export type PageType =
   | 'products-report'
   | 'categories-report'
   | 'customers-report'
-  | 'supplier-report';
+  | 'supplier-report'
+  | 'profit-report';
 
 export type MainNavId = Exclude<
   PageType,
@@ -52,6 +53,7 @@ export type MainNavId = Exclude<
   | 'categories-report'
   | 'customers-report'
   | 'supplier-report'
+  | 'profit-report'
 >;
 
 export const navItems: { id: MainNavId; label: string; icon: ReactNode }[] = [
