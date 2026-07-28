@@ -25,6 +25,7 @@ import {
   ReconciliationCard,
 } from './DashboardSections';
 import { getComparison, getGreetingKey } from './utils';
+import { normalizeSearchText } from '@/lib/utils';
 
 export function Dashboard({ onNavigate }: DashboardProps) {
   const t = useTranslations('Dashboard');
@@ -48,49 +49,12 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
 
-  useEffect(() => {
-    fetchStats();
-  }, []);
-
-  // Stats are fetched once on mount. Manual refresh can be triggered via the refresh button.
-  // Removed: automatic refetch on every sales update — this was causing excessive API calls.
-
-  // Number pop animation when stats change
-  useEffect(() => {
-    if (stats && prevStats && (
-      stats.todaySales !== prevStats.todaySales ||
-      stats.todayOrders !== prevStats.todayOrders ||
-      stats.todayProfit !== prevStats.todayProfit
-    )) {
-      setNumberPopping(true);
-      const timer = setTimeout(() => setNumberPopping(false), 300);
-      return () => clearTimeout(timer);
-    }
-    if (stats) {
-      setPrevStats(stats);
-    }
-  }, [stats]);
-
-  // Auto-update time every minute
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 60000);
-    return () => clearInterval(timer);
-  }, []);
-
-  // Focus search input when dialog opens
-  useEffect(() => {
-    if (searchOpen) {
-      setTimeout(() => searchInputRef.current?.focus(), 100);
-    } else {
-      setSearchTerm('');
-    }
-  }, [searchOpen]);
-
   const fetchStats = useCallback(async () => {
     try {
-      const res = await fetch(`/api/stats?tzOffset=${new Date().getTimezoneOffset()}`);
+      const res = await fetch(`/api/stats?tzOffset=${new Date().getTimezoneOffset()}&_t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache' }
+      });
       const data = await res.json();
       if (data.success) {
         setStats(data.data);
@@ -102,17 +66,28 @@ export function Dashboard({ onNavigate }: DashboardProps) {
     }
   }, []);
 
+  useEffect(() => {
+    fetchStats();
+  }, [fetchStats, sales]);
+
+  // Refetch on window focus
+  useEffect(() => {
+    const handleFocus = () => fetchStats();
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [fetchStats]);
+
   const formatTaka = (amount: number) => formatPrice(amount);
 
   // Search results for mobile quick search
   const searchResults = useMemo(() => {
     if (!searchTerm.trim()) return [];
-    const term = searchTerm.toLowerCase();
+    const term = normalizeSearchText(searchTerm);
     return products
       .filter((p) => p.isActive && (
-        p.name.toLowerCase().includes(term) ||
-        p.nameBn?.toLowerCase().includes(term) ||
-        (p.barcode && p.barcode.includes(term))
+        normalizeSearchText(p.name).includes(term) ||
+        (p.nameBn && normalizeSearchText(p.nameBn).includes(term)) ||
+        (p.barcode && p.barcode.includes(searchTerm.trim()))
       ))
       .slice(0, 8);
   }, [products, searchTerm]);

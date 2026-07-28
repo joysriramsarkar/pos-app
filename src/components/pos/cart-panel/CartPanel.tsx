@@ -26,6 +26,7 @@ import { useNumberFormat } from '@/hooks/use-number-format';
 import { useTranslations, useLocale } from 'next-intl';
 import type { CartPanelProps } from './types';
 import { normalizeAndValidatePhone } from './utils';
+import { toast as sonnerToast } from 'sonner';
 import { AddCustomerDialog } from './AddCustomerDialog';
 import { CartTotals } from './CartTotals';
 
@@ -218,6 +219,9 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
       setShowAddPartyDialog(false);
       setNewParty({ name: '', nameEn: '', phone: '', address: '', notes: '' });
       setIsNameEnTouched(false);
+      sonnerToast.success('নতুন গ্রাহক তৈরি হয়েছে', {
+        description: `${newCustomer.name} কার্টে যোগ করা হয়েছে`,
+      });
       toast({
         title: t('customer_added'),
         description: t('customer_added_desc', { name: newCustomer.name }),

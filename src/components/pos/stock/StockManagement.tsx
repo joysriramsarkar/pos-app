@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 import type { Product } from '@/types/pos';
 import { useProductsStore } from '@/stores/pos-store';
-import { convertBengaliToEnglishNumerals, convertEnglishToBengaliNumerals } from '@/lib/utils';
+import { convertBengaliToEnglishNumerals, convertEnglishToBengaliNumerals, normalizeSearchText } from '@/lib/utils';
 import { toast } from 'sonner';
 import { ProductsDB } from '@/lib/offline/indexeddb';
 import { useNumberFormat } from '@/hooks/use-number-format';
@@ -108,16 +108,15 @@ export function StockManagement({
 
         const prev = prevStoreCountRef.current;
         if (storeProducts.length > prev) {
-          const lowerQuery = searchQuery.toLowerCase();
-          const normalizedBarcode = convertBengaliToEnglishNumerals(searchQuery);
+          const normalizedQuery = normalizeSearchText(searchQuery);
           const newlyAdded = storeProducts.filter(
             (p) =>
               !syncedResults.some((r) => r.id === p.id) &&
               p.isActive &&
-              (p.name.toLowerCase().includes(lowerQuery) ||
-                p.nameBn?.includes(searchQuery) ||
+              (normalizeSearchText(p.name).includes(normalizedQuery) ||
+                (p.nameBn && normalizeSearchText(p.nameBn).includes(normalizedQuery)) ||
                 p.barcode?.includes(searchQuery) ||
-                convertBengaliToEnglishNumerals(p.barcode || '').includes(normalizedBarcode))
+                convertBengaliToEnglishNumerals(p.barcode || '').includes(normalizedQuery))
           );
 
           if (newlyAdded.length > 0) {
@@ -144,15 +143,14 @@ export function StockManagement({
         return;
       }
 
-      const lowerQuery = query.toLowerCase();
-      const normalizedBarcode = convertBengaliToEnglishNumerals(query);
+      const normalizedQuery = normalizeSearchText(query);
       const localMatches = storeProducts.filter(
         (p) =>
           p.isActive &&
-          (p.name.toLowerCase().includes(lowerQuery) ||
-            p.nameBn?.includes(query) ||
+          (normalizeSearchText(p.name).includes(normalizedQuery) ||
+            (p.nameBn && normalizeSearchText(p.nameBn).includes(normalizedQuery)) ||
             p.barcode?.includes(query) ||
-            convertBengaliToEnglishNumerals(p.barcode || '').includes(normalizedBarcode))
+            convertBengaliToEnglishNumerals(p.barcode || '').includes(normalizedQuery))
       );
       setSearchResults(localMatches);
       setIsSearching(true);

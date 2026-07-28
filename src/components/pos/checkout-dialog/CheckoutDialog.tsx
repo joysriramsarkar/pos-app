@@ -335,7 +335,7 @@ export function CheckoutDialog({
 
   const saleForPrint = lastSale ? {
     ...lastSale,
-    customer: lastSale.customer || customer ? {
+    customer: (lastSale.customer || customer) ? {
       id: customerId || lastSale.customerId || '',
       name: customer?.name || activeTab.customerName || lastSale.customer?.name || '',
       phone: customer?.phone || lastSale.customer?.phone || '',

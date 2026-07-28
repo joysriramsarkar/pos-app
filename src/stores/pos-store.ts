@@ -6,7 +6,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { CartItem, PaymentMethod, Product, Customer, Sale } from '@/types/pos';
 import { v4 as uuidv4 } from 'uuid';
-import { convertBengaliToEnglishNumerals } from '@/lib/utils';
+import { convertBengaliToEnglishNumerals, normalizeSearchText } from '@/lib/utils';
 import Decimal from 'decimal.js';
 import { multiplyMoney, toMoneyNumber } from '@/lib/money';
 
@@ -443,13 +443,12 @@ export const useProductsStore = create<ProductsState & ProductsActions>((set, ge
   },
 
   searchProducts: (query) => {
-    const lowerQuery = query.toLowerCase();
-    const normalizedQuery = convertBengaliToEnglishNumerals(query);
+    const normalizedQuery = normalizeSearchText(query);
     return get().products.filter(
       (p) =>
         p.isActive &&
-        (p.name.toLowerCase().includes(lowerQuery) ||
-          p.nameBn?.includes(query) ||
+        (normalizeSearchText(p.name).includes(normalizedQuery) ||
+          (p.nameBn && normalizeSearchText(p.nameBn).includes(normalizedQuery)) ||
           p.barcode?.includes(query) ||
           convertBengaliToEnglishNumerals(p.barcode || '').includes(normalizedQuery))
     );

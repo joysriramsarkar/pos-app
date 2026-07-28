@@ -108,7 +108,8 @@ export async function POST(
           },
         });
 
-        // Update product stock and calculate WAC
+        // Update product stock and calculate WAC (FEATURE DISABLED TEMPORARILY)
+        /*
         const product = await tx.product.findUnique({
           where: { id: orderItem.productId },
         });
@@ -149,6 +150,7 @@ export async function POST(
             createdAt: order.createdAt,
           },
         });
+        */
       }
 
       // Calculate receivedTotalAmount
@@ -261,7 +263,7 @@ export async function POST(
     return NextResponse.json({
       success: true,
       data: mappedOrder,
-      message: 'অর্ডার প্রাপ্ত হয়েছে এবং স্টক আপডেট হয়েছে',
+      message: 'অর্ডার প্রাপ্ত হয়েছে',
     });
   } catch (error) {
     console.error('ক্রয় অর্ডার প্রাপ্ত ত্রুটি:', error);

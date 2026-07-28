@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import { useProductsStore } from '@/stores/pos-store';
 import { useNumberFormat } from '@/hooks/use-number-format';
 import { Supplier } from '@/types/pos';
-import { convertBengaliToEnglishNumerals } from '@/lib/utils';
+import { convertBengaliToEnglishNumerals, normalizeSearchText } from '@/lib/utils';
 import { toast } from 'sonner';
 import PurchaseStatistics from '../PurchaseStatistics';
 import type { PurchaseOrder, FormItem, ReceiveItem, DateFilter, ViewMode } from './types';
@@ -188,15 +188,14 @@ export default function PurchaseOrderManagement() {
     const q = productSearch.trim();
     let result = availableProducts;
     if (q) {
-      const lowerQuery = q.toLowerCase();
-      const normalizedQuery = convertBengaliToEnglishNumerals(q);
+      const normalizedQuery = normalizeSearchText(q);
       result = availableProducts.filter(
         (p) =>
-          p.name.toLowerCase().includes(lowerQuery) ||
-          p.nameBn?.includes(q) ||
+          normalizeSearchText(p.name).includes(normalizedQuery) ||
+          (p.nameBn && normalizeSearchText(p.nameBn).includes(normalizedQuery)) ||
           p.barcode?.includes(q) ||
           convertBengaliToEnglishNumerals(p.barcode || '').includes(normalizedQuery) ||
-          p.category.toLowerCase().includes(lowerQuery)
+          normalizeSearchText(p.category).includes(normalizedQuery)
       );
     }
     // Sort supplier's products first
@@ -309,8 +308,9 @@ export default function PurchaseOrderManagement() {
       const data = await res.json();
       if (data.success) {
         if (directReceive) {
-          toast.success('ক্রয় সফল হয়েছে এবং স্টক আপডেট হয়েছে');
-          // Update local stock in Zustand store and IndexedDB database
+          toast.success('ক্রয় সফল হয়েছে');
+          // Update local stock in Zustand store and IndexedDB database (FEATURE DISABLED TEMPORARILY)
+          /*
           try {
             const productsStore = useProductsStore.getState();
             const { ProductsDB } = await import('@/lib/offline/indexeddb');
@@ -322,6 +322,7 @@ export default function PurchaseOrderManagement() {
           } catch (dbError) {
             console.error('Failed to update local stock cache:', dbError);
           }
+          */
         } else {
           toast.success(t('order_created'));
         }
@@ -434,9 +435,10 @@ export default function PurchaseOrderManagement() {
       });
       const data = await res.json();
       if (data.success) {
-        toast.success(t('order_received'), { description: t('stock_updated') });
+        toast.success(t('order_received'));
 
-        // Update local stock in Zustand store and IndexedDB database
+        // Update local stock in Zustand store and IndexedDB database (FEATURE DISABLED TEMPORARILY)
+        /*
         try {
           const productsStore = useProductsStore.getState();
           const { ProductsDB } = await import('@/lib/offline/indexeddb');
@@ -451,6 +453,7 @@ export default function PurchaseOrderManagement() {
         } catch (dbError) {
           console.error('Failed to update local stock cache:', dbError);
         }
+        */
 
         setShowReceiveDialog(false);
         setShowDetailDialog(false);

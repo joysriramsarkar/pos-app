@@ -211,7 +211,7 @@ export function TransactionHistory() {
   };
 
   return (
-    <div className="flex flex-col h-full gap-2 md:gap-4 p-2 md:p-4 overflow-hidden min-h-0">
+    <div className="flex flex-col h-full gap-2 md:gap-4 p-2 md:p-4 overflow-hidden min-h-0 min-w-0 w-full max-w-full">
       <div className="space-y-1 md:space-y-2 shrink-0">
         <h1 className="text-lg md:text-2xl font-bold">{t('title')}</h1>
         <p className="hidden md:block text-muted-foreground">{t('subtitle')}</p>

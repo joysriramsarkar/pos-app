@@ -71,6 +71,10 @@ export function ProductDialog({
   const [isUnitOpen, setIsUnitOpen] = useState(false);
   const pendingTranslationRef = useRef<string | null>(null);
   const isAnySelectOpen = isCategoryOpen || isSubCategoryOpen || isUnitOpen;
+  const isAnySelectOpenRef = useRef(isAnySelectOpen);
+  useEffect(() => {
+    isAnySelectOpenRef.current = isAnySelectOpen;
+  }, [isAnySelectOpen]);
 
   const t = useTranslations('ProductDialog');
   const tc = useTranslations('Common');
@@ -174,7 +178,7 @@ export function ProductDialog({
           if (data && data[1] && data[1][0] && data[1][0][1] && data[1][0][1][0]) {
             const translated = data[1][0][1][0];
             // If any dropdown is currently open, buffer the result
-            if (isAnySelectOpen) {
+            if (isAnySelectOpenRef.current) {
               pendingTranslationRef.current = translated;
             } else {
               // Double check if it hasn't been touched while fetching

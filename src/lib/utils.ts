@@ -54,3 +54,15 @@ export function convertEnglishToBengaliNumerals(input: string | number): string 
   return String(input).replace(/[0-9]/g, (match) => englishToBengali[match] || match);
 }
 
+/**
+ * Normalize search text: converts Bengali numerals to English, converts to lowercase,
+ * and strips apostrophes, quotes, and hyphens so "lay's" and "lays" match identically.
+ */
+export function normalizeSearchText(input: string): string {
+  if (!input) return '';
+  return convertBengaliToEnglishNumerals(input)
+    .toLowerCase()
+    .replace(/[''"`-]/g, '')
+    .trim();
+}
+

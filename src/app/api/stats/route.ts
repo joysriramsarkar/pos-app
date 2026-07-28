@@ -1,5 +1,5 @@
-// ড্যাশবোর্ড স্ট্যাটস প্রতি ৩০ সেকেন্ডে একবার রিফ্রেশ হবে — real-time লাগে না
-export const revalidate = 30;
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 // ============================================================================
 // Stats API Route - Lakhan Bhandar POS
 // ============================================================================
@@ -9,7 +9,11 @@ import { db } from '@/lib/db';
 import { requirePermission } from '@/lib/api-middleware';
 import { aggregateSalePayments } from '@/lib/sale-payment-breakdown';
 
-const jsonHeaders = { 'Content-Type': 'application/json; charset=utf-8' };
+const jsonHeaders = {
+  'Content-Type': 'application/json; charset=utf-8',
+  'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+  'Prisma-Cache': 'no-cache'
+};
 
 export async function GET(request: NextRequest) {
   const authError = await requirePermission(request, 'sales.view');
