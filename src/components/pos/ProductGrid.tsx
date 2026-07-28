@@ -11,7 +11,7 @@ import { CameraScannerDialog } from './CameraScannerDialog';
 import { Capacitor } from '@capacitor/core';
 import type { Product } from '@/types/pos';
 import { useProductsStore, useUIStore, useCartStore } from '@/stores/pos-store';
-import { cn, convertBengaliToEnglishNumerals } from '@/lib/utils';
+import { cn, convertBengaliToEnglishNumerals, normalizeSearchText } from '@/lib/utils';
 import { useTranslations } from 'next-intl';
 
 const cleanSearchQuery = (q: string) => q.replace(/rs\.?|₹|৳|'/gi, '').trim();
@@ -110,12 +110,11 @@ export function ProductGrid({
       if (selectedCategoryId && product.category !== selectedCategoryId) return false;
       if (searchQuery) {
         const cleaned = cleanSearchQuery(searchQuery);
-        const lowerQuery = cleaned.toLowerCase();
-        const normalizedQuery = convertBengaliToEnglishNumerals(cleaned);
+        const normalizedQuery = normalizeSearchText(cleaned);
 
         return (
-          product.name.toLowerCase().replace(/'/g, '').includes(lowerQuery) ||
-          (product.nameBn && product.nameBn.replace(/'/g, '').includes(cleaned)) ||
+          normalizeSearchText(product.name).includes(normalizedQuery) ||
+          (product.nameBn && normalizeSearchText(product.nameBn).includes(normalizedQuery)) ||
           product.barcode?.includes(cleaned) ||
           convertBengaliToEnglishNumerals(product.barcode || '').includes(normalizedQuery) ||
           product.sellingPrice.toString() === normalizedQuery

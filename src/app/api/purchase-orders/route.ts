@@ -257,7 +257,8 @@ export async function POST(request: NextRequest) {
               },
             });
 
-            // Update product stock and WAC and create stock history
+            // Update product stock and WAC and create stock history (FEATURE DISABLED TEMPORARILY)
+            /*
             for (const item of p.items) {
               const qty = Number(item.quantity);
               const unitPrice = Number(item.buyingPrice);
@@ -302,6 +303,7 @@ export async function POST(request: NextRequest) {
                 },
               });
             }
+            */
 
 
             if (actualAmountPaid > 0) {
@@ -435,7 +437,7 @@ export async function POST(request: NextRequest) {
     };
 
     return NextResponse.json(
-      { success: true, data: mappedOrder, message: isPaid ? 'ক্রয় সফল হয়েছে এবং স্টক আপডেট হয়েছে' : 'ক্রয় অর্ডার তৈরি হয়েছে' },
+      { success: true, data: mappedOrder, message: isPaid ? 'ক্রয় সফল হয়েছে' : 'ক্রয় অর্ডার তৈরি হয়েছে' },
       { status: 201 }
     );
   } catch (error) {

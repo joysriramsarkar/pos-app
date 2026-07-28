@@ -1736,7 +1736,7 @@ export function POSDashboard() {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: currentPage === 'transactions' ? 1 : 0, y: currentPage === 'transactions' ? 0 : 8 }}
               transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className={cn("flex-1 min-h-0 flex flex-col", currentPage !== 'transactions' && "hidden")}
+              className={cn("flex-1 min-h-0 min-w-0 flex flex-col", currentPage !== 'transactions' && "hidden")}
             >
               <TransactionHistory />
             </motion.div>
