@@ -863,7 +863,7 @@ export function POSDashboard() {
       // Queue is already created in processOfflineSale - use background sync only
       
       // ২. ইউজারকে সাথে সাথে সাকসেস স্ক্রিন দেখিয়ে দিন, যাতে সে পরবর্তী বিলিং শুরু করতে পারে
-      toast({ title: 'সফল', description: 'বিলিং সম্পন্ন হয়েছে।' });
+      toast({ title: 'সফল', description: 'বিলিং সম্পন্ন হয়েছে।', duration: 1500 });
 
       // ৩. ব্যাকগ্রাউন্ডে ডাটাবেস সিঙ্ক ট্রিগার করুন (নেটওয়ার্ক থাকলে সিঙ্ক হবে, না থাকলে কিউতে জমা থাকবে)
       if (isOnline) {

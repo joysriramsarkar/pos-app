@@ -4,6 +4,7 @@ import type { Transaction } from '@/components/pos/transaction-history/types';
 export interface Last7DayData {
   date: string;
   day: string;
+  rawDate?: string;
   sales: number;
   expenses: number;
 }

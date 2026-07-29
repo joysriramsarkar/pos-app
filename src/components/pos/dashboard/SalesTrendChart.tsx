@@ -37,6 +37,17 @@ export function SalesTrendChart({ chartData, todaySales }: SalesTrendChartProps)
   const t = useTranslations('Dashboard');
   const { formatPrice, formatNumber, formatStringNumbers } = useNumberFormat();
 
+  const translatedChartConfig = {
+    sales: {
+      label: t('sales_chart'),
+      color: 'var(--chart-1)',
+    },
+    expenses: {
+      label: t('expenses_chart'),
+      color: 'var(--chart-3)',
+    },
+  };
+
   return (
     <Card className="shadow-md animate-stagger-in bg-gradient-to-b from-background to-muted/10 dark:from-background dark:to-muted/5 overflow-hidden" style={{ animationDelay: '0.25s' }}>
       <CardHeader className="pb-2 px-3 sm:px-6">
@@ -52,7 +63,7 @@ export function SalesTrendChart({ chartData, todaySales }: SalesTrendChartProps)
       </CardHeader>
       <CardContent>
         {chartData.length > 0 && chartData.some(d => d.sales > 0 || d.expenses > 0) ? (
-          <ChartContainer config={chartConfig} className="h-[220px] sm:h-[280px] w-full aspect-auto">
+          <ChartContainer config={translatedChartConfig} className="h-[220px] sm:h-[280px] w-full aspect-auto">
             <BarChart data={chartData} margin={{ top: 10, right: 4, left: -12, bottom: 0 }}>
               <defs>
                 <linearGradient id="salesGradient" x1="0" y1="0" x2="0" y2="1">
@@ -80,7 +91,7 @@ export function SalesTrendChart({ chartData, todaySales }: SalesTrendChartProps)
                   strokeDasharray="6 3"
                   strokeWidth={1.5}
                   label={{
-                    value: 'গড়',
+                    value: t('average'),
                     position: 'right',
                     fill: 'hsl(var(--muted-foreground))',
                     fontSize: 10,

@@ -349,6 +349,8 @@
     "sales_trend": "Sales Trend",
     "last_7_days": "Last 7 Days",
     "no_sales_trend": "No Sales Trend",
+    "average": "Average",
+    "margin_suffix": "% Margin",
     "day": "Day",
     "amount": "Amount",
     "quick_search": "Quick Search",

@@ -30,7 +30,7 @@ import { normalizeSearchText } from '@/lib/utils';
 export function Dashboard({ onNavigate, refreshKey }: DashboardProps) {
   const t = useTranslations('Dashboard');
   const tBilling = useTranslations('Billing');
-  const { formatPrice, formatDate } = useNumberFormat();
+  const { formatPrice, formatDate, isBn } = useNumberFormat();
   const { settings } = useSettingsStore();
   const products = useProductsStore((state) => state.products);
   const sales = useSalesStore((state) => state.sales);
@@ -110,6 +110,13 @@ export function Dashboard({ onNavigate, refreshKey }: DashboardProps) {
   }, [onNavigate, toast, t]);
 
   const getBengaliDate = () => {
+    if (!isBn) {
+      const dayName = formatDate(currentTime, { weekday: 'long' });
+      const date = formatDate(currentTime, { day: 'numeric' });
+      const month = formatDate(currentTime, { month: 'long' });
+      const year = formatDate(currentTime, { year: 'numeric' });
+      return `${dayName}, ${month} ${date}, ${year}`;
+    }
     const bengaliDays = ['রবিবার', 'সোমবার', 'মঙ্গলবার', 'বুধবার', 'বৃহস্পতিবার', 'শুক্রবার', 'শনিবার'];
     const dayName = bengaliDays[currentTime.getDay()];
     const date = formatDate(currentTime, { day: 'numeric' });
@@ -144,11 +151,21 @@ export function Dashboard({ onNavigate, refreshKey }: DashboardProps) {
   const ordersComparison = getComparison(stats?.todayOrders ?? 0, stats?.yesterdayOrders ?? 0);
   const expensesComparison = getComparison(stats?.todayExpenses ?? 0, stats?.yesterdayExpenses ?? 0);
 
-  const chartData = stats?.last7DaysSales?.map((d) => ({
-    date: d.day?.substring(0, 3) || d.date,
-    sales: d.sales,
-    expenses: d.expenses,
-  })) ?? [];
+  const chartData = stats?.last7DaysSales?.map((d, index, arr) => {
+    let dayLabel = '';
+    if (d.rawDate) {
+      dayLabel = formatDate(d.rawDate, { weekday: 'short' });
+    } else {
+      const targetDate = new Date();
+      targetDate.setDate(targetDate.getDate() - (arr.length - 1 - index));
+      dayLabel = formatDate(targetDate, { weekday: 'short' });
+    }
+    return {
+      date: dayLabel,
+      sales: d.sales,
+      expenses: d.expenses,
+    };
+  }) ?? [];
 
   // Keep sales in deps so unused var warning doesn't fire if eslint tracks store usage
   void sales;

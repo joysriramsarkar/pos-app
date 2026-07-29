@@ -12,7 +12,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { UserPlus, Phone, MapPin, Languages } from 'lucide-react';
+import { UserPlus, Phone, MapPin, Languages, Loader2 } from 'lucide-react';
 import { convertBengaliToEnglishNumerals } from '@/lib/utils';
 
 export interface NewPartyForm {
@@ -31,6 +31,7 @@ interface AddCustomerDialogProps {
   setIsNameEnTouched: (v: boolean) => void;
   onSubmit: () => void;
   onCancel: () => void;
+  isSubmitting?: boolean;
   labels: {
     addNewCustomer: string;
     enterCustomerDetails: string;
@@ -56,6 +57,7 @@ export function AddCustomerDialog({
   setIsNameEnTouched,
   onSubmit,
   onCancel,
+  isSubmitting = false,
   labels,
 }: AddCustomerDialogProps) {
   return (
@@ -140,15 +142,22 @@ export function AddCustomerDialog({
         </div>
 
         <DialogFooter className="gap-2 sm:gap-0">
-          <Button variant="outline" onClick={onCancel}>
+          <Button variant="outline" onClick={onCancel} disabled={isSubmitting}>
             {labels.cancel}
           </Button>
           <Button
             onClick={onSubmit}
-            disabled={!newParty.name}
+            disabled={!newParty.name || isSubmitting}
             className="bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600"
           >
-            {labels.createCustomer}
+            {isSubmitting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                {labels.createCustomer}
+              </>
+            ) : (
+              labels.createCustomer
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>

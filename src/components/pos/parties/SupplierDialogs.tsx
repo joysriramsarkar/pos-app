@@ -20,7 +20,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   ArrowUpRight,
   ArrowDownRight,
@@ -63,72 +62,74 @@ export function SupplierLedgerDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="md:max-w-2xl w-[95vw] max-h-[90dvh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <FileText className="w-5 h-5" />
-            লেজার খাতা - {supplier?.name}
-          </DialogTitle>
-          <DialogDescription>
-            সাপ্লায়ারের লেনদেনের ইতিহাস ও বকেয়া খতিয়ান
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent className="md:max-w-2xl w-[95vw] max-h-[90dvh] flex flex-col overflow-hidden p-0">
+        <div className="flex-shrink-0 px-4 pt-5 sm:px-6 sm:pt-6 pb-3">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 min-w-0">
+              <FileText className="w-5 h-5 shrink-0" />
+              <span className="truncate">লেজার খাতা - {supplier?.name}</span>
+            </DialogTitle>
+            <DialogDescription>
+              সাপ্লায়ারের লেনদেনের ইতিহাস ও বকেয়া খতিয়ান
+            </DialogDescription>
+          </DialogHeader>
+        </div>
 
-        <div className="space-y-4">
-          <Card className="bg-muted/50">
-            <CardContent className="p-4">
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground font-medium">বর্তমান বকেয়া</span>
-                <span className="text-2xl font-bold text-red-600">
-                  {formatPrice(s?.totalDue || 0)}
-                </span>
-              </div>
-              <div className="flex justify-between items-center mt-2 pt-2 border-t border-border/40 text-sm">
-                <span className="text-muted-foreground">মোট ক্রয়: {formatPrice(s?.totalPurchases || 0)}</span>
-                <span className="text-muted-foreground">মোট পরিশোধ: {formatPrice(s?.totalPaid || 0)}</span>
-              </div>
-            </CardContent>
-          </Card>
+        <div className="flex-1 overflow-y-auto px-4 sm:px-6 pb-5 sm:pb-6">
+          <div className="space-y-4">
+            <Card className="bg-muted/50">
+              <CardContent className="p-4">
+                <div className="flex justify-between items-center gap-2">
+                  <span className="text-muted-foreground font-medium shrink-0">বর্তমান বকেয়া</span>
+                  <span className="text-xl sm:text-2xl font-bold text-red-600 tabular-nums">
+                    {formatPrice(s?.totalDue || 0)}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center mt-2 pt-2 border-t border-border/40 text-sm gap-2">
+                  <span className="text-muted-foreground truncate">মোট ক্রয়: {formatPrice(s?.totalPurchases || 0)}</span>
+                  <span className="text-muted-foreground shrink-0">মোট পরিশোধ: {formatPrice(s?.totalPaid || 0)}</span>
+                </div>
+              </CardContent>
+            </Card>
 
-          <ScrollArea className="h-75">
-            <div className="space-y-2 pr-2">
+            <div className="space-y-2">
               {ledgerEntries.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-8">কোনো লেনদেন পাওয়া যায়নি</p>
+                <p className="text-sm text-muted-foreground text-center py-8">কোনো লেনদেন পাওয়া যায়নি</p>
               ) : (
                 ledgerEntries.map((entry) => (
                   <div
                     key={entry.id}
                     className={cn(
-                      "flex items-center justify-between p-3 rounded-lg border",
+                      "flex items-center justify-between gap-2 p-3 rounded-lg border overflow-hidden",
                       entry.entryType === 'credit' ? 'bg-red-50 border-red-100 dark:bg-red-950/20 dark:border-red-900/30' : 'bg-green-50 border-green-100 dark:bg-green-950/20 dark:border-green-900/30'
                     )}
                   >
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
                       <div className={cn(
-                        "w-8 h-8 rounded-full flex items-center justify-center shrink-0",
+                        "w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center shrink-0",
                         entry.entryType === 'credit' ? 'bg-red-100 dark:bg-red-900/30' : 'bg-green-100 dark:bg-green-900/30'
                       )}>
                         {entry.entryType === 'credit' ? (
-                          <ArrowUpRight className="w-4 h-4 text-red-600" />
+                          <ArrowUpRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-red-600" />
                         ) : (
-                          <ArrowDownRight className="w-4 h-4 text-green-600" />
+                          <ArrowDownRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-600" />
                         )}
                       </div>
-                      <div className="min-w-0">
-                        <p className="font-medium text-sm truncate">{entry.description}</p>
-                        <p className="text-xs text-muted-foreground">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-xs sm:text-sm truncate">{entry.description}</p>
+                        <p className="text-xs text-muted-foreground truncate">
                           {formatDate(entry.createdAt)} • {entry.referenceId}
                         </p>
                       </div>
                     </div>
                     <div className="text-right shrink-0">
                       <p className={cn(
-                        "font-semibold",
+                        "font-semibold text-sm tabular-nums",
                         entry.entryType === 'credit' ? 'text-red-600' : 'text-green-600'
                       )}>
                         {entry.entryType === 'credit' ? '+' : '-'}{formatPrice(entry.amount)}
                       </p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-xs text-muted-foreground tabular-nums">
                         Bal: {formatPrice(entry.balanceAfter)}
                       </p>
                     </div>
@@ -136,7 +137,7 @@ export function SupplierLedgerDialog({
                 ))
               )}
             </div>
-          </ScrollArea>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

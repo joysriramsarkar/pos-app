@@ -301,6 +301,7 @@ export async function GET(request: NextRequest) {
       last7DaysSales.push({
         date: dateStr,
         day: dayName,
+        rawDate: dayStart.toISOString(),
         sales: daySalesTotal,
         expenses: dayExpensesTotal,
       });

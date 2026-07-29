@@ -12,6 +12,7 @@ import {
   Minus,
 } from 'lucide-react';
 import { useNumberFormat } from '@/hooks/use-number-format';
+import { useTranslations } from 'next-intl';
 import type { ComparisonResult } from './types';
 
 export function ComparisonBadge({
@@ -74,6 +75,7 @@ export function StatCard({
   numberPopping?: boolean;
 }) {
   const { formatNumber } = useNumberFormat();
+  const t = useTranslations('Dashboard');
   return (
     <Card className={`overflow-hidden shadow-sm sm:shadow-md bg-gradient-to-br ${cardGradient} animate-stagger-in transition-all duration-200 hover:scale-[1.02] hover:shadow-lg cursor-default`} style={{ animationDelay: `${(staggerDelay ?? 0) * 0.05}s` }}>
       <CardContent className="p-2 sm:p-3 md:p-4">
@@ -97,7 +99,7 @@ export function StatCard({
             </div>
             {profitMargin !== undefined && profitMargin !== 0 && (
               <p className={`text-[9px] sm:text-[10px] md:text-xs mt-0.5 ${profitMargin > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                {profitMargin > 0 ? '+' : ''}{formatNumber(Math.min(Math.max(profitMargin, -999), 999).toFixed(1))}% মার্জিন
+                {profitMargin > 0 ? '+' : ''}{formatNumber(Math.min(Math.max(profitMargin, -999), 999).toFixed(1))}{t('margin_suffix')}
               </p>
             )}
             {comparison && comparisonLabel && comparison.direction !== 'same' && (

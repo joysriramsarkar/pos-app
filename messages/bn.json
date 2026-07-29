@@ -349,6 +349,8 @@
     "sales_trend": "বিক্রয় প্রবণতা",
     "last_7_days": "গত ৭ দিন",
     "no_sales_trend": "বিক্রয়ের তথ্য নেই",
+    "average": "গড়",
+    "margin_suffix": "% মার্জিন",
     "day": "দিন",
     "amount": "পরিমাণ",
     "quick_search": "পণ্য, ক্রেতা খুঁজুন...",

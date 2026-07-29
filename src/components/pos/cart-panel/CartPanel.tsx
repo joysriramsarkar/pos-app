@@ -51,6 +51,7 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
     notes: '',
   });
   const [isNameEnTouched, setIsNameEnTouched] = useState(false);
+  const [isSubmittingParty, setIsSubmittingParty] = useState(false);
 
   const tabs = useCartStore((state) => state.tabs);
   const activeTabId = useCartStore((state) => state.activeTabId);
@@ -185,7 +186,7 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
   const { toast } = useToast();
 
   const handleAddPartyFromCart = async () => {
-    if (!newParty.name) return;
+    if (!newParty.name || isSubmittingParty) return;
 
     // Normalize and validate phone number
     let normalizedPhone: string | null = null;
@@ -201,6 +202,7 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
       }
     }
 
+    setIsSubmittingParty(true);
     try {
       const response = await fetch('/api/customers', {
         method: 'POST',
@@ -233,6 +235,8 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
         description: error instanceof Error ? error.message : t('unexpected_error'),
         variant: 'destructive',
       });
+    } finally {
+      setIsSubmittingParty(false);
     }
   };
 
@@ -450,6 +454,7 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
         setNewParty={setNewParty}
         setIsNameEnTouched={setIsNameEnTouched}
         onSubmit={handleAddPartyFromCart}
+        isSubmitting={isSubmittingParty}
         onCancel={() => {
           setShowAddPartyDialog(false);
           setNewParty({ name: '', nameEn: '', phone: '', address: '', notes: '' });
