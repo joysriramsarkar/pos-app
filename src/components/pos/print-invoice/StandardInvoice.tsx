@@ -160,7 +160,23 @@ export function StandardInvoice({
         <div>
           <div style={{ fontWeight: 700, marginBottom: 3 }}>{L.paymentDetails}</div>
           <div>{L.method}: <strong>{formatReceiptPaymentMethod(String(sale.paymentMethod ?? ''))}</strong></div>
-          <div>{L.status}: <strong style={{ color: sale.paymentStatus === 'Paid' ? '#16a34a' : sale.paymentStatus === 'Partial' ? '#d97706' : '#dc2626' }}>{formatReceiptPaymentStatus(String(sale.paymentStatus ?? ''))}</strong></div>
+          <div>{L.status}: <strong style={{ 
+            color: (() => {
+              const paid = toMoneyNumber(sale.amountPaid);
+              const total = toMoneyNumber(sale.totalAmount);
+              return paid === 0 ? '#dc2626' : paid < total ? '#d97706' : '#16a34a';
+            })()
+          }}>{formatReceiptPaymentStatus(
+            (() => {
+              const status = String(sale.paymentStatus ?? '').toUpperCase();
+              if (status === 'CANCELLED' || status === 'REFUNDED') return sale.paymentStatus || '';
+              const total = toMoneyNumber(sale.totalAmount);
+              const paid = toMoneyNumber(sale.amountPaid);
+              if (paid === 0) return 'Due';
+              if (paid < total) return 'Partial';
+              return 'Paid';
+            })()
+          )}</strong></div>
         </div>
         {sale.notes && (
           <div style={{ textAlign: 'right' }}>

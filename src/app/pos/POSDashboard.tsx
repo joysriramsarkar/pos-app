@@ -766,6 +766,7 @@ export function POSDashboard() {
       customerId: paymentData.customerId,
       paymentMethod: paymentData.paymentMethod,
       amountPaid: paymentData.amountPaid,
+      paymentStatus: paymentStatus,
       amountReceived: paymentData.amountReceived ?? (paymentData.cashAmount ?? 0) + (paymentData.upiAmount ?? 0),
       cashAmount: paymentData.cashAmount,
       upiAmount: paymentData.upiAmount,
@@ -1551,7 +1552,7 @@ export function POSDashboard() {
                     <div className="relative flex-1 min-w-0">
                       <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
                       <Input
-                        type="search"
+                        type="text"
                         enterKeyHint="search"
                         autoComplete="off"
                         autoCorrect="off"

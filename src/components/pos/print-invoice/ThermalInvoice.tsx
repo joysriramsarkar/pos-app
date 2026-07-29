@@ -128,7 +128,7 @@ export function ThermalInvoice({
 
       {/* Items Table */}
       <div className={`${fontSize} overflow-hidden ${sectionPadding} py-1`}>
-        <table className="w-full border-separate border-spacing-0">
+        <table className="w-full border-separate border-spacing-0" style={{ tableLayout: 'fixed' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid #000' }}>
               <th className="text-left w-[52%] font-bold pb-1">{L.item}</th>
@@ -140,8 +140,8 @@ export function ThermalInvoice({
           <tbody>
             {sale.items.map((item) => (
               <tr key={item.id} style={{ borderBottom: '1px dotted #ccc' }}>
-                <td className="w-[52%] pr-1 align-top py-0.5 whitespace-normal">{item.productName}</td>
-                <td className="w-[16%] text-right align-top py-0.5">{formatReceiptNumber(item.quantity)}{(item as any).unit || (item as any).product?.unit ? ` ${(item as any).unit || (item as any).product?.unit}` : ''}</td>
+                <td className="w-[52%] pr-1 align-top py-0.5 whitespace-normal break-words">{item.productName}</td>
+                <td className="w-[16%] text-right align-top py-0.5 whitespace-normal break-words">{formatReceiptNumber(item.quantity)}{(item as any).unit || (item as any).product?.unit ? ` ${(item as any).unit || (item as any).product?.unit}` : ''}</td>
                 <td className="w-[16%] text-right align-top py-0.5">{formatReceiptNumber(Number(item.unitPrice ?? 0), { maximumFractionDigits: 0 })}</td>
                 <td className="w-[16%] text-right align-top py-0.5 font-medium">{formatReceiptNumber(Number(item.totalPrice ?? 0), { maximumFractionDigits: 0 })}</td>
               </tr>
@@ -188,7 +188,19 @@ export function ThermalInvoice({
         </div>
         <div className="flex justify-between min-w-0">
           <span className="text-[#888]">{L.status}</span>
-          <span className="font-semibold">{formatReceiptPaymentStatus(String(sale.paymentStatus ?? ''))}</span>
+          <span className="font-semibold">
+            {formatReceiptPaymentStatus(
+              (() => {
+                const status = String(sale.paymentStatus ?? '').toUpperCase();
+                if (status === 'CANCELLED' || status === 'REFUNDED') return sale.paymentStatus || '';
+                const total = toMoneyNumber(sale.totalAmount);
+                const paid = toMoneyNumber(sale.amountPaid);
+                if (paid === 0) return 'Due';
+                if (paid < total) return 'Partial';
+                return 'Paid';
+              })()
+            )}
+          </span>
         </div>
         {toMoneyNumber(sale.amountPaid ?? 0) < toMoneyNumber(sale.totalAmount ?? 0) && (
           <div className="flex justify-between min-w-0">

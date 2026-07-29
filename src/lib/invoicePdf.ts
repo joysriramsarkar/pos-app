@@ -281,11 +281,11 @@ function renderInvoiceToCanvas(
   const col = {
     idx: pad,
     name: pad + (isThermal ? 18 : 28),
-    qty: cssWidth - pad - (isThermal ? 130 : 170),
-    rate: cssWidth - pad - (isThermal ? 85 : 110),
+    qty: cssWidth - pad - (isThermal ? 85 : 170),
+    rate: cssWidth - pad - (isThermal ? 45 : 110),
     amt: cssWidth - pad,
   };
-  const nameMax = col.qty - col.name - 6;
+  const nameMax = col.qty - col.name - (isThermal ? 45 : 60);
 
   setFont(ctx, base - 1, 'bold');
   ctx.fillStyle = '#000';
@@ -359,7 +359,16 @@ function renderInvoiceToCanvas(
   drawRow(
     d,
     L.status,
-    formatReceiptPaymentStatus(String(sale.paymentStatus || ''), receiptLang),
+    formatReceiptPaymentStatus(
+      (() => {
+        const status = String(sale.paymentStatus || '').toUpperCase();
+        if (status === 'CANCELLED' || status === 'REFUNDED') return sale.paymentStatus || '';
+        if (paid === 0) return 'Due';
+        if (paid < total) return 'Partial';
+        return 'Paid';
+      })(),
+      receiptLang
+    ),
     base - 1,
     { bold: true },
   );
