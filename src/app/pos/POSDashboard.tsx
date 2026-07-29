@@ -173,6 +173,15 @@ export function POSDashboard() {
     isAuditPageMounted,
   ]);
 
+  // Bump refresh key each time the dashboard page becomes active
+  const prevPageRef = useRef<string>('');
+  useEffect(() => {
+    if (currentPage === 'dashboard' && prevPageRef.current !== 'dashboard') {
+      setDashboardRefreshKey((k) => k + 1);
+    }
+    prevPageRef.current = currentPage;
+  }, [currentPage]);
+
   // Settings store
   const { settings } = useSettingsStore();
   const storeName = settings?.store_name || STORE_CONFIG.name;
@@ -201,6 +210,7 @@ export function POSDashboard() {
   const [scannedItems, setScannedItems] = useState<{ name: string; qty: number }[]>([]);
   const [liveScanError, setLiveScanError] = useState<string | null>(null);
   const [mobileSearchQuery, setMobileSearchQuery] = useState('');
+  const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0);
 
   // Store hooks
   const products = useProductsStore((state) => state.products);
@@ -1256,7 +1266,7 @@ export function POSDashboard() {
   const renderPageContent = () => {
     switch (currentPage) {
       case 'dashboard':
-        return <Dashboard onNavigate={handleNavigate} />;
+        return <Dashboard onNavigate={handleNavigate} refreshKey={dashboardRefreshKey} />;
       case 'billing':
         return (
           <div className="flex h-full">
@@ -1508,7 +1518,7 @@ export function POSDashboard() {
               transition={{ duration: 0.2, ease: 'easeInOut' }}
               className={cn("flex-1 min-h-0 min-w-0 flex flex-col", currentPage !== 'dashboard' && "hidden")}
             >
-              <Dashboard onNavigate={handleNavigate} />
+              <Dashboard onNavigate={handleNavigate} refreshKey={dashboardRefreshKey} />
             </motion.div>
           )}
 

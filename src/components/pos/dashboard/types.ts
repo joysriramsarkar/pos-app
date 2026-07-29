@@ -65,6 +65,7 @@ export const chartConfig = {
 
 export interface DashboardProps {
   onNavigate?: (page: string) => void;
+  refreshKey?: number;
 }
 
 export type ComparisonResult = {

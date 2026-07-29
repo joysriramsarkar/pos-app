@@ -27,7 +27,7 @@ import {
 import { getComparison, getGreetingKey } from './utils';
 import { normalizeSearchText } from '@/lib/utils';
 
-export function Dashboard({ onNavigate }: DashboardProps) {
+export function Dashboard({ onNavigate, refreshKey }: DashboardProps) {
   const t = useTranslations('Dashboard');
   const tBilling = useTranslations('Billing');
   const { formatPrice, formatDate } = useNumberFormat();
@@ -69,6 +69,11 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   useEffect(() => {
     fetchStats();
   }, [fetchStats, sales]);
+
+  // Refetch whenever dashboard tab becomes active (refreshKey bumps on navigation)
+  useEffect(() => {
+    if (refreshKey !== undefined) fetchStats();
+  }, [refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Refetch on window focus
   useEffect(() => {

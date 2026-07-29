@@ -29,7 +29,7 @@ export function SupplierDetailDialog({
 }: SupplierDetailDialogProps) {
   return (
     <Dialog open={!!selectedSupplierId} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl p-6">
+      <DialogContent className="max-w-3xl w-[95vw] max-h-[90dvh] overflow-y-auto rounded-2xl p-4 md:p-6">
         <DialogHeader className="border-b pb-4">
           <DialogTitle className="flex items-center gap-2 text-xl font-bold">
             <Truck className="w-5 h-5 text-indigo-600" />
@@ -85,7 +85,7 @@ export function SupplierDetailDialog({
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="p-3.5 rounded-xl border border-slate-100 bg-indigo-50/30 dark:bg-indigo-950/10 flex flex-col justify-center">
-                  <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold uppercase tracking-wider">মোট ক্রয়</span>
+                  <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold uppercase tracking-wider">মোট ক্রয়</span>
                   <span className="text-base font-black text-indigo-700 dark:text-indigo-300 mt-1">{formatPrice(supplierDetail.totalPurchases || 0)}</span>
                 </div>
                 <div className="p-3.5 rounded-xl border border-slate-100 bg-emerald-50/30 dark:bg-emerald-950/10 flex flex-col justify-center">
@@ -93,7 +93,7 @@ export function SupplierDetailDialog({
                   <span className="text-base font-black text-emerald-700 dark:text-emerald-300 mt-1">{formatPrice(supplierDetail.totalPaid || 0)}</span>
                 </div>
                 <div className="col-span-2 p-3.5 rounded-xl border border-red-100 bg-red-50/30 dark:bg-red-950/10 flex flex-col justify-center">
-                  <span className="text-[10px] text-red-600 dark:text-red-400 font-semibold uppercase tracking-wider">বকেয়া পাওনা</span>
+                  <span className="text-[10px] text-red-600 dark:text-red-400 font-semibold uppercase tracking-wider">বকেয়া পাওনা</span>
                   <span className="text-lg font-black text-red-700 dark:text-red-300 mt-1">{formatPrice(supplierDetail.totalDue || 0)}</span>
                 </div>
               </div>
@@ -104,7 +104,37 @@ export function SupplierDetailDialog({
                 <FileText className="w-4 h-4 text-indigo-600" />
                 লেনদেন ও খাতার হিসাব
               </h3>
-              <div className="rounded-xl border overflow-hidden">
+
+              {/* Mobile Card View */}
+              <div className="sm:hidden space-y-2">
+                {!supplierDetail.ledgerEntries || supplierDetail.ledgerEntries.length === 0 ? (
+                  <p className="text-center py-6 text-muted-foreground text-xs">কোনো লেনদেন পাওয়া যায়নি</p>
+                ) : (
+                  supplierDetail.ledgerEntries.map((entry: any) => {
+                    const isCredit = entry.entryType === 'credit';
+                    return (
+                      <div key={entry.id} className={`p-3 rounded-lg border text-xs ${isCredit ? 'bg-indigo-50/50 border-indigo-100 dark:bg-indigo-950/20' : 'bg-emerald-50/50 border-emerald-100 dark:bg-emerald-950/20'}`}>
+                        <div className="flex justify-between items-start mb-1">
+                          <span className={`font-semibold ${isCredit ? 'text-indigo-700' : 'text-emerald-700'}`}>
+                            {isCredit ? 'ক্রয় (Credit)' : 'পরিশোধ (Debit)'}
+                          </span>
+                          <span className={`font-bold ${isCredit ? 'text-indigo-600' : 'text-emerald-600'}`}>
+                            {isCredit ? '+' : '-'}{formatPrice(entry.amount)}
+                          </span>
+                        </div>
+                        <p className="text-muted-foreground truncate">{entry.description}</p>
+                        <div className="flex justify-between mt-1 text-[10px] text-muted-foreground">
+                          <span>{formatDate(new Date(entry.createdAt), { day: '2-digit', month: 'short', year: '2-digit' })}</span>
+                          <span>জের: {formatPrice(entry.balanceAfter)}</span>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Desktop Table View */}
+              <div className="hidden sm:block rounded-xl border overflow-hidden">
                 <div className="max-h-[300px] overflow-y-auto">
                   <Table>
                     <TableHeader className="bg-slate-50/50 sticky top-0 backdrop-blur-md">
@@ -113,13 +143,13 @@ export function SupplierDetailDialog({
                         <TableHead className="w-20 text-xs font-semibold">ধরণ</TableHead>
                         <TableHead className="text-xs font-semibold">বিবরণ</TableHead>
                         <TableHead className="text-right text-xs font-semibold">পরিমাণ</TableHead>
-                        <TableHead className="text-right text-xs font-semibold">জের (বকেয়া)</TableHead>
+                        <TableHead className="text-right text-xs font-semibold">জের (বকেয়া)</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {!supplierDetail.ledgerEntries || supplierDetail.ledgerEntries.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={5} className="text-center py-8 text-muted-foreground text-xs">কোনো লেনদেন পাওয়া যায়নি</TableCell>
+                          <TableCell colSpan={5} className="text-center py-8 text-muted-foreground text-xs">কোনো লেনদেন পাওয়া যায়নি</TableCell>
                         </TableRow>
                       ) : (
                         supplierDetail.ledgerEntries.map((entry: any) => {
@@ -129,7 +159,7 @@ export function SupplierDetailDialog({
                               <TableCell className="text-xs text-muted-foreground">{formatDate(new Date(entry.createdAt), { day: '2-digit', month: 'short', year: '2-digit' })}</TableCell>
                               <TableCell className="text-xs">
                                 <Badge variant={isCredit ? "secondary" : "default"} className={`text-[10px] px-1.5 py-0 h-5 font-semibold ${isCredit ? "bg-indigo-50 text-indigo-700 hover:bg-indigo-50 border-indigo-200" : "bg-emerald-50 text-emerald-700 hover:bg-emerald-50 border-emerald-200"}`}>
-                                  {isCredit ? 'ক্রয় (Credit)' : 'পরিশোধ (Debit)'}
+                                  {isCredit ? 'ক্রয় (Credit)' : 'পরিশোধ (Debit)'}
                                 </Badge>
                               </TableCell>
                               <TableCell className="text-xs font-medium max-w-[200px] truncate" title={entry.description}>{entry.description}</TableCell>
@@ -148,7 +178,7 @@ export function SupplierDetailDialog({
             </div>
           </div>
         ) : (
-          <div className="text-center py-12 text-muted-foreground text-sm">সরবরাহকারীর কোনো বিবরণ পাওয়া যায়নি।</div>
+          <div className="text-center py-12 text-muted-foreground text-sm">সরবরাহকারীর কোনো বিবরণ পাওয়া যায়নি।</div>
         )}
       </DialogContent>
     </Dialog>
