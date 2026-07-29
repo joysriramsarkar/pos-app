@@ -1,5 +1,4 @@
-// প্রতি ৩০ সেকেন্ডে একবার কাস্টমার তালিকা ডেটাবেস থেকে রিফ্রেশ হবে
-export const revalidate = 30;
+export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { CustomerInputSchema } from '@/schemas';

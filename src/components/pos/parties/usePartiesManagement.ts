@@ -21,7 +21,7 @@ import {
   type SupplierWithBalances,
 } from './types';
 
-export function usePartiesManagement() {
+export function usePartiesManagement(refreshKey?: number) {
   const t = useTranslations('Parties');
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -286,7 +286,7 @@ export function usePartiesManagement() {
       customersController.abort();
       suppliersController.abort();
     };
-  }, [setCustomers]);
+  }, [setCustomers, refreshKey]);
 
   // Filter and sort customers
   const filteredCustomers = useMemo(() => {

@@ -173,11 +173,14 @@ export function POSDashboard() {
     isAuditPageMounted,
   ]);
 
-  // Bump refresh key each time the dashboard page becomes active
+  // Bump refresh key each time the dashboard or parties page becomes active
   const prevPageRef = useRef<string>('');
   useEffect(() => {
     if (currentPage === 'dashboard' && prevPageRef.current !== 'dashboard') {
       setDashboardRefreshKey((k) => k + 1);
+    }
+    if (currentPage === 'parties' && prevPageRef.current !== 'parties') {
+      setPartiesRefreshKey((k) => k + 1);
     }
     prevPageRef.current = currentPage;
   }, [currentPage]);
@@ -211,6 +214,7 @@ export function POSDashboard() {
   const [liveScanError, setLiveScanError] = useState<string | null>(null);
   const [mobileSearchQuery, setMobileSearchQuery] = useState('');
   const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0);
+  const [partiesRefreshKey, setPartiesRefreshKey] = useState(0);
 
   // Store hooks
   const products = useProductsStore((state) => state.products);
@@ -1382,7 +1386,7 @@ export function POSDashboard() {
       case 'stock-statistics':
         return <ProductStatistics onBack={() => setCurrentPage('stock')} />;
       case 'parties':
-        return <PartiesManagement />;
+        return <PartiesManagement refreshKey={partiesRefreshKey} />;
       case 'due-collection':
         return <DueCollection />;
       case 'purchase-orders':
@@ -1665,7 +1669,7 @@ export function POSDashboard() {
               transition={{ duration: 0.2, ease: 'easeInOut' }}
               className={cn("flex-1 min-h-0 min-w-0 flex flex-col", currentPage !== 'parties' && "hidden")}
             >
-              <PartiesManagement />
+              <PartiesManagement refreshKey={partiesRefreshKey} />
             </motion.div>
           )}
 

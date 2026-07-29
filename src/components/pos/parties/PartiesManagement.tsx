@@ -36,7 +36,11 @@ import {
 } from './SupplierDialogs';
 import { usePartiesManagement } from './usePartiesManagement';
 
-export function PartiesManagement() {
+interface PartiesManagementProps {
+  refreshKey?: number;
+}
+
+export function PartiesManagement({ refreshKey }: PartiesManagementProps = {}) {
   const {
     t,
     searchInputRef,
@@ -150,7 +154,7 @@ export function PartiesManagement() {
     hasPartyChanges,
     resetPartyForm,
     EMPTY_PARTY_FORM,
-  } = usePartiesManagement();
+  } = usePartiesManagement(refreshKey);
 
   return (
     <div className="flex flex-col h-full">
