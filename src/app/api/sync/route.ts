@@ -350,8 +350,11 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
       throw new Error("Prepaid balance can only be used with a selected customer");
     }
 
-    if (changeAsPrepayment.gt(0) && amountReceived.lt(addMoney(externalPaidAmount, changeAsPrepayment))) {
-      throw new Error("Received amount does not cover sale payment and prepaid change");
+    if (
+      (changeAsPrepayment.gt(0) || debtRepaymentAmount.gt(0)) &&
+      amountReceived.lt(addMoney(externalPaidAmount, addMoney(changeAsPrepayment, debtRepaymentAmount)))
+    ) {
+      throw new Error("Received amount does not cover sale payment, prepaid change, and due clearance");
     }
 
     // CREATE PHASE: sale rows use blended cost (owned @ WAC, shortage @ 0)
@@ -396,7 +399,13 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
     (sale as { autoAdjusted?: typeof autoAdjusted }).autoAdjusted = autoAdjusted;
 
     // Update customer due/prepaid if applicable
-    if (saleData.customerId && (amountPaid.lt(totalAmount) || prepaidToUse.gt(0) || changeAsPrepayment.gt(0))) {
+    if (
+      saleData.customerId &&
+      (amountPaid.lt(totalAmount) ||
+        prepaidToUse.gt(0) ||
+        changeAsPrepayment.gt(0) ||
+        debtRepaymentAmount.gt(0))
+    ) {
       const dueAmount = subtractMoney(totalAmount, amountPaid);
 
       // Fetch customer BEFORE updating with raw SELECT FOR UPDATE for concurrency safety
@@ -411,6 +420,10 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
       if (customer) {
         const currentTotalDue = toMoneyDecimal(customer.totalDue);
         const currentPrepaidBalance = toMoneyDecimal(customer.prepaidBalance);
+
+        if (debtRepaymentAmount.gt(currentTotalDue)) {
+          throw new Error(`Debt repayment amount (${debtRepaymentAmount.toString()}) cannot exceed current total due (${currentTotalDue.toString()})`);
+        }
 
         if (prepaidToUse.gt(0)) {
             if (currentPrepaidBalance.lt(prepaidToUse)) {
@@ -502,18 +515,12 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
           if (totalDueIncrement.gt(0) || totalDueDecrement.gt(0) || prepaidBalanceIncrement.gt(0) || prepaidBalanceDecrement.gt(0)) {
              const dataUpdate: any = { updatedAt: new Date() };
              if (totalDueIncrement.gt(0) || totalDueDecrement.gt(0)) {
-               if (totalDueIncrement.gt(totalDueDecrement)) {
-                 dataUpdate.totalDue = { increment: totalDueIncrement.minus(totalDueDecrement) };
-               } else {
-                 dataUpdate.totalDue = { decrement: totalDueDecrement.minus(totalDueIncrement) };
-               }
+               const newTotalDue = currentTotalDue.plus(totalDueIncrement).minus(totalDueDecrement);
+               dataUpdate.totalDue = newTotalDue.gt(0) ? newTotalDue : new Decimal(0);
              }
              if (prepaidBalanceIncrement.gt(0) || prepaidBalanceDecrement.gt(0)) {
-               if (prepaidBalanceIncrement.gt(prepaidBalanceDecrement)) {
-                 dataUpdate.prepaidBalance = { increment: prepaidBalanceIncrement.minus(prepaidBalanceDecrement) };
-               } else {
-                 dataUpdate.prepaidBalance = { decrement: prepaidBalanceDecrement.minus(prepaidBalanceIncrement) };
-               }
+               const newPrepaidBalance = currentPrepaidBalance.plus(prepaidBalanceIncrement).minus(prepaidBalanceDecrement);
+               dataUpdate.prepaidBalance = newPrepaidBalance.gt(0) ? newPrepaidBalance : new Decimal(0);
              }
 
              await tx.customer.update({

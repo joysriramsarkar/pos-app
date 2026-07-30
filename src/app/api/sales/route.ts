@@ -262,8 +262,11 @@ async function handlePost(request: NextRequest, ctx: RouteContext) {
     if (!customerId && (prepaidToUse.gt(0) || changeAsPrepayment.gt(0))) {
       return NextResponse.json({ success: false, error: "Prepaid balance can only be used with a selected customer" }, { status: 400 });
     }
-    if (changeAsPrepayment.gt(0) && amountReceived.lt(addMoney(externalPaidAmount, changeAsPrepayment))) {
-      return NextResponse.json({ success: false, error: "Received amount does not cover sale payment and prepaid change" }, { status: 400 });
+    if (
+      (changeAsPrepayment.gt(0) || debtRepaymentAmount.gt(0)) &&
+      amountReceived.lt(addMoney(externalPaidAmount, addMoney(changeAsPrepayment, debtRepaymentAmount)))
+    ) {
+      return NextResponse.json({ success: false, error: "Received amount does not cover sale payment, prepaid change, and due clearance" }, { status: 400 });
     }
 
     let paymentStatus = "Paid";
@@ -348,6 +351,10 @@ async function handlePost(request: NextRequest, ctx: RouteContext) {
 
           const currentTotalDue = toMoneyDecimal(customer.totalDue);
           const currentPrepaidBalance = toMoneyDecimal(customer.prepaidBalance);
+
+          if (debtRepaymentAmount.gt(currentTotalDue)) {
+            throw new Error(`Debt repayment amount (${debtRepaymentAmount.toString()}) cannot exceed current total due (${currentTotalDue.toString()})`);
+          }
 
           const dueAmount = subtractMoney(totalAmount, amountPaidValue);
 
@@ -448,22 +455,12 @@ async function handlePost(request: NextRequest, ctx: RouteContext) {
           ) {
             const dataUpdate: Prisma.CustomerUpdateInput = { updatedAt: new Date() };
             if (totalDueIncrement.gt(0) || totalDueDecrement.gt(0)) {
-              if (totalDueIncrement.gt(totalDueDecrement)) {
-                dataUpdate.totalDue = { increment: totalDueIncrement.minus(totalDueDecrement) };
-              } else {
-                dataUpdate.totalDue = { decrement: totalDueDecrement.minus(totalDueIncrement) };
-              }
+              const newTotalDue = currentTotalDue.plus(totalDueIncrement).minus(totalDueDecrement);
+              dataUpdate.totalDue = newTotalDue.gt(0) ? newTotalDue : new Decimal(0);
             }
             if (prepaidBalanceIncrement.gt(0) || prepaidBalanceDecrement.gt(0)) {
-              if (prepaidBalanceIncrement.gt(prepaidBalanceDecrement)) {
-                dataUpdate.prepaidBalance = {
-                  increment: prepaidBalanceIncrement.minus(prepaidBalanceDecrement),
-                };
-              } else {
-                dataUpdate.prepaidBalance = {
-                  decrement: prepaidBalanceDecrement.minus(prepaidBalanceIncrement),
-                };
-              }
+              const newPrepaidBalance = currentPrepaidBalance.plus(prepaidBalanceIncrement).minus(prepaidBalanceDecrement);
+              dataUpdate.prepaidBalance = newPrepaidBalance.gt(0) ? newPrepaidBalance : new Decimal(0);
             }
 
             await tx.customer.update({
