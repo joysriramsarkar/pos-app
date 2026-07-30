@@ -1562,7 +1562,7 @@ export function POSDashboard() {
         </header>
 
         {/* Page Content */}
-        <main className="relative flex-1 flex flex-col min-h-0 overflow-hidden bg-background pb-[calc(var(--mobile-bottom-nav-height)+env(safe-area-inset-bottom))] lg:pb-0 lg:rounded-tl-2xl lg:shadow-[-4px_0_24px_-12px_rgba(0,0,0,0.1)] lg:border-t lg:border-l lg:border-border/50">
+        <main className="relative flex-1 flex flex-col min-h-0 overflow-hidden bg-background lg:rounded-tl-2xl lg:shadow-[-4px_0_24px_-12px_rgba(0,0,0,0.1)] lg:border-t lg:border-l lg:border-border/50">
           {/* Dashboard Page */}
           {(currentPage === 'dashboard' || isDashboardMounted) && (
             <motion.div
