@@ -37,6 +37,7 @@ model Product {
 
   @@index([isActive])
   @@index([category, isActive])
+  @@index([category, isActive, name])
   @@index([name])
   @@map("products")
 }
@@ -117,6 +118,7 @@ model LedgerEntry {
   @@index([customerId])
   @@index([createdAt])
   @@index([customerId, createdAt])
+  @@index([customerId, entryType, createdAt])
   @@map("ledger_entries")
 }
 
@@ -155,6 +157,8 @@ model Sale {
   @@index([userId])
   @@index([createdAt])
   @@index([status])
+  @@index([createdAt, status])
+  @@index([customerId, createdAt])
   @@map("sales")
 }
 
@@ -430,6 +434,7 @@ model AuditLog {
   @@index([entityType])
   @@index([action])
   @@index([createdAt])
+  @@index([createdAt, action])
   @@map("audit_logs")
 }
 

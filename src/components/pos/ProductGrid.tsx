@@ -124,15 +124,18 @@ export function ProductGrid({
     });
   }, [products, searchQuery, selectedCategoryId]);
 
+  const [renderLimit, setRenderLimit] = useState(50);
+
   // Group products by category for display
   const productsByCategory = useMemo(() => {
     const grouped: Record<string, Product[]> = {};
-    filteredProducts.forEach((product) => {
+    const displayedProducts = filteredProducts.slice(0, renderLimit);
+    displayedProducts.forEach((product) => {
       if (!grouped[product.category]) grouped[product.category] = [];
       grouped[product.category].push(product);
     });
     return grouped;
-  }, [filteredProducts]);
+  }, [filteredProducts, renderLimit]);
 
   const handleSearchChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -140,6 +143,7 @@ export function ProductGrid({
       if (externalProducts) { setLocalSearchQuery(query); return; }
       // Store raw value — conversion only happens at barcode match time
       setSearchQuery(query);
+      setRenderLimit(50); // Reset render limit on search
     },
     [externalProducts, setSearchQuery]
   );
@@ -147,6 +151,7 @@ export function ProductGrid({
   const clearSearch = useCallback(() => {
     if (externalProducts) setLocalSearchQuery('');
     else setSearchQuery('');
+    setRenderLimit(50);
   }, [externalProducts, setSearchQuery]);
 
   const handleCameraBarcode = useCallback(
@@ -173,6 +178,7 @@ export function ProductGrid({
   const handleCategorySelect = useCallback(
     (category: string | null) => {
       setSelectedCategoryId(category === selectedCategoryId ? null : category);
+      setRenderLimit(50); // Reset render limit on category change
     },
     [selectedCategoryId, setSelectedCategoryId]
   );
@@ -180,6 +186,7 @@ export function ProductGrid({
   const clearFilters = useCallback(() => {
     clearSearch();
     setSelectedCategoryId(null);
+    setRenderLimit(50);
   }, [clearSearch, setSelectedCategoryId]);
 
 
@@ -187,8 +194,12 @@ export function ProductGrid({
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting && hasMore && !isLoadingMore) {
-          loadMoreProducts();
+        if (entries[0].isIntersecting) {
+          if (renderLimit < filteredProducts.length) {
+            setRenderLimit(prev => prev + 50);
+          } else if (hasMore && !isLoadingMore) {
+            loadMoreProducts();
+          }
         }
       },
       { threshold: 0.5 }
@@ -197,7 +208,7 @@ export function ProductGrid({
       observer.observe(observerTarget.current);
     }
     return () => observer.disconnect();
-  }, [hasMore, isLoadingMore]);
+  }, [hasMore, isLoadingMore, renderLimit, filteredProducts.length, loadMoreProducts]);
 
   const loadMoreProducts = useCallback(async () => {
     if (isLoadingMore || !hasMore || !nextCursor || externalProducts) return;
@@ -367,7 +378,7 @@ export function ProductGrid({
             </div>
           ) : viewMode === 'grid' ? (
             <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
-              {filteredProducts.map((product) => (
+              {filteredProducts.slice(0, renderLimit).map((product) => (
                 <ProductCard key={product.id} product={product} />
               ))}
             </div>

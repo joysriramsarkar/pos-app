@@ -32,7 +32,7 @@ const ProductSyncPayloadSchema = z.union([
 
 import { requireAuth } from "@/lib/api-middleware";
 import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/lib/auth";
 
 // GET /api/sync - Get pending sync items or sync status
 export async function GET(request: NextRequest) {

@@ -11,7 +11,7 @@ import { ProductInputSchema } from '@/schemas';
 import { requirePermission } from '@/lib/api-middleware';
 import { logAudit } from '@/lib/audit';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+import { authOptions } from '@/lib/auth';
 
 const MAX_PRODUCT_LIMIT = 10000;
 

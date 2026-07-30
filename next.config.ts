@@ -10,7 +10,7 @@ const allowedOrigins = (rawOrigins ?? "http://localhost:3000")
   .map((o) => o.trim());
 
 const withBundleAnalyzer = bundleAnalyzer({
-  enabled: process.env.ANALYZE === "true",
+  enabled: process.env.BUNDLE_ANALYZE === "true",
 });
 
 const nextConfig: NextConfig = {
