@@ -108,6 +108,19 @@ export function POSDashboard() {
   const locale = useLocale();
   const { formatPrice } = useNumberFormat();
   const [currentPage, setCurrentPage] = useState<PageType>('billing');
+  // নেভিগেশন হিস্ট্রি স্ট্যাক — হার্ডওয়্যার ব্যাক বাটন যেন সরাসরি 'billing'-এ না গিয়ে
+  // ঠিক আগের পেজে ফেরে (স্ক্রিনের Back বাটনের মতোই)
+  const navStackRef = useRef<PageType[]>(['billing']);
+  useEffect(() => {
+    const stack = navStackRef.current;
+    if (stack[stack.length - 1] === currentPage) return;
+    // ঠিক আগের এন্ট্রিতে ফেরত গেলে (onBack/back-button দিয়ে) সেটাকে push না করে pop করি
+    if (stack.length > 1 && stack[stack.length - 2] === currentPage) {
+      stack.pop();
+    } else {
+      stack.push(currentPage);
+    }
+  }, [currentPage]);
   const [isDashboardMounted, setIsDashboardMounted] = useState(false);
   const [isStockMounted, setIsStockMounted] = useState(false);
   const [isPartiesMounted, setIsPartiesMounted] = useState(false);
@@ -122,6 +135,28 @@ export function POSDashboard() {
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [searchFocusKey, setSearchFocusKey] = useState(0);
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
+  const [isNavVisible, setIsNavVisible] = useState(true);
+  const [lastScrollY, setLastScrollY] = useState(0);
+
+  // Scroll tracking logic for mobile navigation
+  useEffect(() => {
+    const handleScroll = (e: Event) => {
+      const target = e.target as HTMLElement;
+      if (!target || typeof target.scrollTop !== 'number') return;
+      const currentScrollY = target.scrollTop;
+      
+      if (currentScrollY > lastScrollY && currentScrollY > 60) {
+        setIsNavVisible(false);
+      } else {
+        setIsNavVisible(true);
+      }
+      setLastScrollY(currentScrollY);
+    };
+
+    window.addEventListener("scroll", handleScroll, { passive: true, capture: true });
+    return () => window.removeEventListener("scroll", handleScroll, { capture: true } as EventListenerOptions);
+  }, [lastScrollY]);
+
   // isProcessingPayment is now per-tab via UIStore
 
   const { theme, resolvedTheme, setTheme } = useTheme();
@@ -685,9 +720,16 @@ export function POSDashboard() {
       if (moreMenuOpen) { setMoreMenuOpen(false); return; }
       if (mobileCartOpen) { setMobileCartOpen(false); return; }
 
-      // 2. billing ছাড়া অন্য পেজে থাকলে billing-এ ফিরে যাও
+      // 2. billing ছাড়া অন্য পেজে থাকলে নেভিগেশন স্ট্যাকের ঠিক আগের পেজে ফিরে যাও
+      // (স্ক্রিনের Back বাটন যেভাবে নির্দিষ্ট প্যারেন্ট পেজে ফেরায়, একই আচরণ এখানেও)
       if (currentPage !== 'billing') {
-        setCurrentPage('billing');
+        const stack = navStackRef.current;
+        if (stack.length > 1) {
+          stack.pop();
+          setCurrentPage(stack[stack.length - 1]);
+        } else {
+          setCurrentPage('billing');
+        }
         return;
       }
 
@@ -1520,14 +1562,14 @@ export function POSDashboard() {
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 flex flex-col min-h-0 overflow-hidden bg-background pb-[calc(var(--mobile-bottom-nav-height)+env(safe-area-inset-bottom))] lg:pb-0 lg:rounded-tl-2xl lg:shadow-[-4px_0_24px_-12px_rgba(0,0,0,0.1)] lg:border-t lg:border-l lg:border-border/50">
+        <main className="relative flex-1 flex flex-col min-h-0 overflow-hidden bg-background pb-[calc(var(--mobile-bottom-nav-height)+env(safe-area-inset-bottom))] lg:pb-0 lg:rounded-tl-2xl lg:shadow-[-4px_0_24px_-12px_rgba(0,0,0,0.1)] lg:border-t lg:border-l lg:border-border/50">
           {/* Dashboard Page */}
           {(currentPage === 'dashboard' || isDashboardMounted) && (
             <motion.div
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: currentPage === 'dashboard' ? 1 : 0, y: currentPage === 'dashboard' ? 0 : 8 }}
               transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className={cn("flex-1 min-h-0 min-w-0 flex flex-col", currentPage !== 'dashboard' && "hidden")}
+              className={cn("absolute inset-0 flex flex-col", currentPage !== 'dashboard' && "pointer-events-none")}
             >
               <Dashboard onNavigate={handleNavigate} refreshKey={dashboardRefreshKey} />
             </motion.div>
@@ -1538,7 +1580,7 @@ export function POSDashboard() {
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: currentPage === 'billing' ? 1 : 0, y: currentPage === 'billing' ? 0 : 8 }}
             transition={{ duration: 0.2, ease: 'easeInOut' }}
-            className={cn("flex-1 min-h-0 min-w-0 flex flex-col", currentPage !== 'billing' && "hidden")}
+            className={cn("absolute inset-0 flex flex-col", currentPage !== 'billing' && "pointer-events-none")}
           >
             <div className="flex h-full">
               {/* Product Grid (desktop only) */}
@@ -1655,7 +1697,7 @@ export function POSDashboard() {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: currentPage === 'stock' ? 1 : 0, y: currentPage === 'stock' ? 0 : 8 }}
               transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className={cn("flex-1 min-h-0 min-w-0 flex flex-col", currentPage !== 'stock' && "hidden")}
+              className={cn("absolute inset-0 flex flex-col", currentPage !== 'stock' && "pointer-events-none")}
             >
               <StockManagement
                 onAddProduct={handleAddProduct}
@@ -1673,7 +1715,7 @@ export function POSDashboard() {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: currentPage === 'parties' ? 1 : 0, y: currentPage === 'parties' ? 0 : 8 }}
               transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className={cn("flex-1 min-h-0 min-w-0 flex flex-col", currentPage !== 'parties' && "hidden")}
+              className={cn("absolute inset-0 flex flex-col", currentPage !== 'parties' && "pointer-events-none")}
             >
               <PartiesManagement refreshKey={partiesRefreshKey} />
             </motion.div>
@@ -1685,7 +1727,7 @@ export function POSDashboard() {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: currentPage === 'due-collection' ? 1 : 0, y: currentPage === 'due-collection' ? 0 : 8 }}
               transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className={cn("flex-1 min-h-0 min-w-0 flex flex-col", currentPage !== 'due-collection' && "hidden")}
+              className={cn("absolute inset-0 flex flex-col", currentPage !== 'due-collection' && "pointer-events-none")}
             >
               <DueCollection />
             </motion.div>
@@ -1697,7 +1739,7 @@ export function POSDashboard() {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: currentPage === 'purchase-orders' ? 1 : 0, y: currentPage === 'purchase-orders' ? 0 : 8 }}
               transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className={cn("flex-1 min-h-0 min-w-0 flex flex-col", currentPage !== 'purchase-orders' && "hidden")}
+              className={cn("absolute inset-0 flex flex-col", currentPage !== 'purchase-orders' && "pointer-events-none")}
             >
               <PurchaseOrderManagement />
             </motion.div>
@@ -1709,7 +1751,7 @@ export function POSDashboard() {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: currentPage === 'reports' ? 1 : 0, y: currentPage === 'reports' ? 0 : 8 }}
               transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className={cn("flex-1 min-h-0 min-w-0 flex flex-col", currentPage !== 'reports' && "hidden")}
+              className={cn("absolute inset-0 flex flex-col", currentPage !== 'reports' && "pointer-events-none")}
             >
               <Reports onNavigate={handleNavigate} />
             </motion.div>
@@ -1721,7 +1763,7 @@ export function POSDashboard() {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: currentPage === 'expenses' ? 1 : 0, y: currentPage === 'expenses' ? 0 : 8 }}
               transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className={cn("flex-1 min-h-0 min-w-0 flex flex-col", currentPage !== 'expenses' && "hidden")}
+              className={cn("absolute inset-0 flex flex-col", currentPage !== 'expenses' && "pointer-events-none")}
             >
               <Expenses onReport={() => setCurrentPage('expenses-report')} />
             </motion.div>
@@ -1733,31 +1775,34 @@ export function POSDashboard() {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: currentPage === 'settings' ? 1 : 0, y: currentPage === 'settings' ? 0 : 8 }}
               transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className={cn("flex-1 min-h-0 min-w-0 flex flex-col", currentPage !== 'settings' && "hidden")}
+              className={cn("absolute inset-0 flex flex-col", currentPage !== 'settings' && "pointer-events-none")}
             >
               <SettingsManagement />
             </motion.div>
           )}
 
           {/* Other sub-reports or pages that do not need caching */}
-          {['stock-statistics', 'expenses-report', 'sales-report', 'payment-report', 'stock-report', 'dues-report', 'products-report', 'categories-report', 'customers-report', 'supplier-report', 'profit-report', 'menu'].includes(currentPage) && (
-            <motion.div
-              key={currentPage}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className="flex-1 flex flex-col min-h-0 min-w-0"
-            >
-              {renderPageContent()}
-            </motion.div>
-          )}
+          <AnimatePresence mode="wait">
+            {['stock-statistics', 'expenses-report', 'sales-report', 'payment-report', 'stock-report', 'dues-report', 'products-report', 'categories-report', 'customers-report', 'supplier-report', 'profit-report', 'menu'].includes(currentPage) && (
+              <motion.div
+                key={currentPage}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.2, ease: 'easeInOut' }}
+                className="absolute inset-0 flex flex-col"
+              >
+                {renderPageContent()}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {(currentPage === 'transactions' || isTransactionsPageMounted) && (
             <motion.div
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: currentPage === 'transactions' ? 1 : 0, y: currentPage === 'transactions' ? 0 : 8 }}
               transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className={cn("flex-1 min-h-0 min-w-0 flex flex-col", currentPage !== 'transactions' && "hidden")}
+              className={cn("absolute inset-0 flex flex-col", currentPage !== 'transactions' && "pointer-events-none")}
             >
               <TransactionHistory />
             </motion.div>
@@ -1768,18 +1813,22 @@ export function POSDashboard() {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: currentPage === 'audit' ? 1 : 0, y: currentPage === 'audit' ? 0 : 8 }}
               transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className={cn("flex-1 min-h-0 flex flex-col", currentPage !== 'audit' && "hidden")}
+              className={cn("absolute inset-0 flex flex-col", currentPage !== 'audit' && "pointer-events-none")}
             >
               <AuditLogs />
             </motion.div>
           )}
         </main>
-      {/* Mobile Bottom Navigation — keyboard খোলা থাকলে হাইড */}
-      <nav className={cn(
-        "lg:hidden fixed bottom-0 left-0 right-0 z-30 border-t border-border/60 bg-card/95 backdrop-blur-md px-0.5 pt-0.5 bottom-nav pb-[max(0.2rem,env(safe-area-inset-bottom))] transition-transform duration-200 shadow-[0_-4px_16px_-8px_rgba(0,0,0,0.12)]",
-        isKeyboardOpen ? "translate-y-full pointer-events-none" : "translate-y-0"
-      )}>
-        <div className="flex items-stretch justify-between gap-0.5 min-h-12">
+      {/* Liquid Glass Bottom Navigation */}
+      <nav
+        className={cn(
+          "lg:hidden fixed z-30 liquid-glass-nav transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)]",
+          (isKeyboardOpen || !isNavVisible)
+            ? "translate-y-[150%] opacity-0 pointer-events-none" // Scroll/Keyboard এ হাইড
+            : "translate-y-0 opacity-100" // ডিফল্ট অবস্থায় শো
+        )}
+      >
+        <div className="flex items-stretch justify-between gap-1">
           {mobileBottomNavItems.map((item) => {
             // Direct bottom-nav items always take priority over 'more'
             const directNavIds = new Set(mobileBottomNavItems.filter(i => i.id !== 'more').map(i => i.id));
@@ -1798,8 +1847,10 @@ export function POSDashboard() {
                   }
                 }}
                 className={cn(
-                  'flex flex-col items-center justify-center flex-1 min-w-0 py-1 rounded-lg text-xs text-muted-foreground hover:bg-primary/10 hover:text-primary transition touch-manipulation active:scale-95',
-                  isActive ? 'bg-primary/10 text-primary font-semibold' : ''
+                  "flex flex-col items-center justify-center flex-1 min-w-0 py-1.5 px-1 rounded-full transition-all duration-300 touch-manipulation active:scale-95",
+                  isActive
+                    ? "nav-item-active text-foreground font-semibold"
+                    : "text-muted-foreground hover:text-foreground"
                 )}
                 aria-label={t(item.id as any)}
                 aria-current={isActive ? 'page' : undefined}
@@ -1815,7 +1866,7 @@ export function POSDashboard() {
                     </Badge>
                   )}
                 </div>
-                <span className="mt-0.5 text-[9px] leading-none truncate max-w-full px-0.5">{t(item.id as any)}</span>
+                <span className="text-[10px] mt-0.5 truncate w-full text-center whitespace-nowrap">{t(item.id as any)}</span>
               </button>
             );
           })}
