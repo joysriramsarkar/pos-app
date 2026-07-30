@@ -829,9 +829,15 @@ export function POSDashboard() {
 
     if (paymentData.customerId) {
       const dueAmount = paymentData.total - paymentData.amountPaid;
+      const debtRepay = paymentData.debtRepaymentAmount || 0;
       if (dueAmount > 0) {
         updateCustomerDue(paymentData.customerId, dueAmount);
         CustomersDB.updateDue(paymentData.customerId, dueAmount).catch(console.error);
+      }
+      // পুরনো বাকি কমানো (debtRepaymentAmount negative হিসেবে পাঠানো হচ্ছে)
+      if (debtRepay > 0) {
+        updateCustomerDue(paymentData.customerId, -debtRepay);
+        CustomersDB.updateDue(paymentData.customerId, -debtRepay).catch(console.error);
       }
     }
 

@@ -49,8 +49,8 @@ export function usePartiesManagement(refreshKey?: number) {
   const [dueEntryDescription, setDueEntryDescription] = useState('');
   const [isNameEnTouched, setIsNameEnTouched] = useState(false);
 
-  const [customerSort, setCustomerSort] = useState<string>('name-asc');
-  const [supplierSort, setSupplierSort] = useState<string>('name-asc');
+  const [customerSort, setCustomerSort] = useState<string>('due-desc');
+  const [supplierSort, setSupplierSort] = useState<string>('due-desc');
 
   const [showDetailsDialog, setShowDetailsDialog] = useState(false);
   const [detailsCustomerId, setDetailsCustomerId] = useState<string | null>(null);
@@ -446,6 +446,7 @@ export function usePartiesManagement(refreshKey?: number) {
           paymentMethod: supplierPaymentMethod,
           supplierId: selectedSupplier.id,
           supplierName: selectedSupplier.name,
+          date: new Date().toISOString().split('T')[0],
         }),
       });
 

@@ -171,7 +171,11 @@ export function ProductDialog({
             .replace(/\b(green)\b/gi, 'sobuj')
             .replace(/\b(blue)\b/gi, 'nil')
             .replace(/\b(black)\b/gi, 'kalo')
-            .replace(/\b(white)\b/gi, 'sada');
+            .replace(/\b(white)\b/gi, 'sada')
+            // Unit suffix: ml/mL/ML/Ml → মিলি, g/G → গ্রাম, l/L → লিটার (supports optional spaces like "200 ml", "500 g", "1 L")
+            .replace(/([০-৯\d]+)\s*(?:ml|mL|ML|Ml)\b/gi, '$1 মিলি')
+            .replace(/([০-৯\d]+)\s*(?:g|G)\b/g, '$1 গ্রাম')
+            .replace(/([০-৯\d]+)\s*(?:l|L)\b/g, '$1 লিটার');
 
           const res = await fetch(`https://inputtools.google.com/request?text=${encodeURIComponent(processedName)}&itc=bn-t-i0-und&num=1&cp=0&cs=1&ie=utf-8&oe=utf-8&app=demopage`);
           const data = await res.json();

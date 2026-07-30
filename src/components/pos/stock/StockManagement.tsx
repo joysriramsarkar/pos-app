@@ -83,12 +83,31 @@ export function StockManagement({
   // Use search results when actively searching, otherwise use store products
   const products: Product[] = searchResults !== null ? searchResults : storeProducts;
 
-  // Reset category filter when viewing inactive products
+  // Reset category filter and fetch inactive products when viewing inactive products
   useEffect(() => {
-    if (stockFilter === 'inactive' && categoryFilter !== 'all') {
+    if (stockFilter === 'inactive') {
       setCategoryFilter('all');
+      setIsSearching(true);
+      fetch('/api/products?includeInactive=true&limit=10000')
+        .then((res) => res.json())
+        .then((json) => {
+          if (json.data) {
+            const parsedData = json.data.map((p: any) => ({
+              ...p,
+              currentStock: Number(p.currentStock) || 0,
+              minStockLevel: Number(p.minStockLevel) || 0,
+              buyingPrice: Number(p.buyingPrice) || 0,
+              sellingPrice: Number(p.sellingPrice) || 0,
+            }));
+            setSearchResults(parsedData.filter((p: any) => !p.isActive));
+          }
+        })
+        .catch(console.error)
+        .finally(() => setIsSearching(false));
+    } else if (!searchQuery) {
+      setSearchResults(null);
     }
-  }, [stockFilter, categoryFilter]);
+  }, [stockFilter, searchQuery]);
 
   const prevStoreCountRef = useRef(storeProducts.length);
   useEffect(() => {
@@ -112,7 +131,6 @@ export function StockManagement({
           const newlyAdded = storeProducts.filter(
             (p) =>
               !syncedResults.some((r) => r.id === p.id) &&
-              p.isActive &&
               (normalizeSearchText(p.name).includes(normalizedQuery) ||
                 (p.nameBn && normalizeSearchText(p.nameBn).includes(normalizedQuery)) ||
                 p.barcode?.includes(searchQuery) ||
@@ -139,25 +157,39 @@ export function StockManagement({
       setSearchQuery(query);
       if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
       if (!query.trim()) {
-        setSearchResults(null);
+        if (stockFilter === 'inactive') {
+          setIsSearching(true);
+          fetch('/api/products?includeInactive=true&limit=10000')
+            .then((res) => res.json())
+            .then((json) => {
+              if (json.data) {
+                const parsedData = json.data.map((p: any) => ({
+                  ...p,
+                  currentStock: Number(p.currentStock) || 0,
+                  minStockLevel: Number(p.minStockLevel) || 0,
+                  buyingPrice: Number(p.buyingPrice) || 0,
+                  sellingPrice: Number(p.sellingPrice) || 0,
+                }));
+                setSearchResults(parsedData.filter((p: any) => !p.isActive));
+              }
+            })
+            .catch(console.error)
+            .finally(() => setIsSearching(false));
+        } else {
+          setSearchResults(null);
+        }
         return;
       }
 
-      const normalizedQuery = normalizeSearchText(query);
-      const localMatches = storeProducts.filter(
-        (p) =>
-          p.isActive &&
-          (normalizeSearchText(p.name).includes(normalizedQuery) ||
-            (p.nameBn && normalizeSearchText(p.nameBn).includes(normalizedQuery)) ||
-            p.barcode?.includes(query) ||
-            convertBengaliToEnglishNumerals(p.barcode || '').includes(normalizedQuery))
-      );
-      setSearchResults(localMatches);
+      const searchUrl = stockFilter === 'inactive'
+        ? `/api/products?search=${encodeURIComponent(query)}&includeInactive=true`
+        : `/api/products?search=${encodeURIComponent(query)}`;
+
       setIsSearching(true);
 
       searchTimerRef.current = setTimeout(async () => {
         try {
-          const res = await fetch(`/api/products?search=${encodeURIComponent(query)}`);
+          const res = await fetch(searchUrl);
           if (res.ok) {
             const { data } = await res.json();
             const parsedData = data.map((p: any) => ({
@@ -167,10 +199,7 @@ export function StockManagement({
               buyingPrice: Number(p.buyingPrice) || 0,
               sellingPrice: Number(p.sellingPrice) || 0,
             }));
-            const localOnlyMatches = localMatches.filter(
-              (local) => !parsedData.some((server: any) => server.id === local.id)
-            );
-            setSearchResults([...parsedData, ...localOnlyMatches]);
+            setSearchResults(parsedData);
           }
         } catch {
           // keep local results if network fails
@@ -179,7 +208,7 @@ export function StockManagement({
         }
       }, 300);
     },
-    [storeProducts]
+    [stockFilter, storeProducts]
   );
 
   // Infinite scroll: load more when sentinel is visible

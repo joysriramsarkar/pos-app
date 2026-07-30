@@ -77,6 +77,13 @@ export function Expenses({ onReport }: ExpensesProps) {
   const { toast } = useToast();
   const currency = useSettingsStore((s) => s.settings.currency_symbol || '₹');
 
+  // ৯১খ: সাপ্লায়ার due prompt
+  const [showSupplierDuePrompt, setShowSupplierDuePrompt] = useState(false);
+  const [pendingExpensePayload, setPendingExpensePayload] = useState<object | null>(null);
+  const [pendingSupplierDue, setPendingSupplierDue] = useState(0);
+  const [pendingSupplierName, setPendingSupplierName] = useState('');
+  const [pendingSupplierId, setPendingSupplierId] = useState('');
+
   const today = format(new Date(), 'yyyy-MM-dd');
   const yesterday = useMemo(() => format(new Date(Date.now() - 24 * 60 * 60 * 1000), 'yyyy-MM-dd'), []);
 
@@ -170,6 +177,53 @@ export function Expenses({ onReport }: ExpensesProps) {
 
   const handleAddExpense = async () => {
     if (!amount || !category) return;
+
+    // ৯১খ: সাপ্লায়ার পেমেন্টে due থাকলে জিজ্ঞেস করা
+    if (category === 'Supplier Payment' && supplierId && supplierId !== 'none') {
+      const selectedSupplier = suppliers.find(s => s.id === supplierId);
+      if (selectedSupplier) {
+        try {
+          const res = await fetch(`/api/suppliers?id=${supplierId}`);
+          if (res.ok) {
+            const { data } = await res.json();
+            const totalDue = parseFloat(data.totalDue || 0);
+            if (totalDue > 0) {
+              let finalNotes = notes.trim();
+              if (paymentMethod === 'Mixed') {
+                const cAmt = parseFloat(cashAmount) || 0;
+                const uAmt = parseFloat(upiAmount) || 0;
+                const breakdown = `[নগদ: ${cAmt}, ইউপিআই: ${uAmt}]`;
+                finalNotes = finalNotes ? `${finalNotes} ${breakdown}` : breakdown;
+              }
+              const payload = {
+                id: uuidv4(),
+                amount: parseFloat(convertBengaliToEnglishNumerals(amount)),
+                category,
+                notes: finalNotes || null,
+                paymentMethod,
+                date: selectedDate,
+                supplierId,
+              };
+              setPendingExpensePayload(payload);
+              setPendingSupplierDue(totalDue);
+              setPendingSupplierName(selectedSupplier.name);
+              setPendingSupplierId(supplierId);
+              setShowSupplierDuePrompt(true);
+              return;
+            }
+          }
+        } catch {
+          // due চেক ব্যর্থ হলে সরাসরি expense যোগ করা
+        }
+      }
+    }
+
+    await doAddExpense(false);
+  };
+
+  // Actual expense POST (isPreviousDuePayment = পূর্বের বাকির পরিশোধ)
+  const doAddExpense = async (isPreviousDuePayment: boolean) => {
+    if (!amount || !category) return;
     setIsLoading(true);
     let finalNotes = notes.trim();
     if (paymentMethod === 'Mixed') {
@@ -208,6 +262,37 @@ export function Expenses({ onReport }: ExpensesProps) {
       toast({ title: 'Error', description: 'Failed to add expense.', variant: 'destructive' });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Pending payload দিয়ে expense যোগ (prompt থেকে)
+  const doAddExpenseFromPayload = async (isPreviousDuePayment: boolean) => {
+    if (!pendingExpensePayload) return;
+    setIsLoading(true);
+    try {
+      const res = await fetch('/api/expenses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(pendingExpensePayload),
+      });
+      if (res.ok) {
+        toast({ title: t('expense_added') });
+        setAmount('');
+        setNotes('');
+        setPaymentMethod('Cash');
+        setCashAmount('');
+        setUpiAmount('');
+        setSupplierId('');
+        fetchExpenses();
+      } else {
+        toast({ title: 'Error', description: 'Failed to add expense.', variant: 'destructive' });
+      }
+    } catch {
+      toast({ title: 'Error', description: 'Failed to add expense.', variant: 'destructive' });
+    } finally {
+      setIsLoading(false);
+      setShowSupplierDuePrompt(false);
+      setPendingExpensePayload(null);
     }
   };
 
@@ -526,6 +611,38 @@ export function Expenses({ onReport }: ExpensesProps) {
             <AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
             <AlertDialogAction onClick={handleDeleteExpense} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
               {t('delete')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ৯১খ: সাপ্লায়ার due prompt */}
+      <AlertDialog open={showSupplierDuePrompt} onOpenChange={(open) => { if (!open) { setShowSupplierDuePrompt(false); setPendingExpensePayload(null); } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>সাপ্লায়ার পেমেন্ট</AlertDialogTitle>
+            <AlertDialogDescription>
+              <strong>{pendingSupplierName}</strong>-এর কাছে বর্তমানে{' '}
+              <strong className="text-red-600">{currency}{pendingSupplierDue.toFixed(2)}</strong> বকেয়া আছে।
+              <br /><br />
+              এই পেমেন্টটি কি পূর্বের বাকির পরিশোধ, নাকি নতুন পেমেন্ট?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+            <AlertDialogCancel onClick={() => { setShowSupplierDuePrompt(false); setPendingExpensePayload(null); }}>
+              বাতিল
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-orange-600 hover:bg-orange-700 text-white"
+              onClick={() => doAddExpenseFromPayload(false)}
+            >
+              নতুন পেমেন্ট
+            </AlertDialogAction>
+            <AlertDialogAction
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              onClick={() => doAddExpenseFromPayload(true)}
+            >
+              পূর্বের বাকির পরিশোধ
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
