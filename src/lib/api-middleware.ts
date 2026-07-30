@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession, type Session } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/lib/auth";
 
 export type AuthUser = NonNullable<Session["user"]>;
 
@@ -10,7 +10,7 @@ export type AuthContext = {
 };
 
 export type RouteContext = {
-  params?: Promise<Record<string, string>> | Record<string, string>;
+  params: Promise<Record<string, string>>;
   auth?: AuthContext;
   [key: string]: unknown;
 };
@@ -196,7 +196,7 @@ export function withAuthMiddleware(
   handler: RouteHandler,
   options?: { permissionCode?: string; allowedRoles?: string[] }
 ): RouteHandler {
-  return async (request: NextRequest, ctx: RouteContext = {}) => {
+  return async (request: NextRequest, ctx: RouteContext = { params: Promise.resolve({}) }) => {
     const authResult = await requireAuth(request);
     if (!authResult.authorized) return authResult.response;
 

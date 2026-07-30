@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/lib/auth";
 import { requirePermission, getAuthenticatedUser } from "@/lib/api-middleware";
 import { logAudit } from "@/lib/audit";
 import { mapRefundMethod, processSaleReturn } from "@/lib/sale-returns";

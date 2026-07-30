@@ -42,7 +42,12 @@ import {
 import { type PageType, navItems, mobileBottomNavItems, MORE_MENU_PAGE_IDS } from '@/app/pos/nav-config';
 import { AddStockDialog, type StockEntryData } from '@/components/pos/AddStockDialog';
 import type { ProductFormData } from '@/components/pos/ProductDialog';
-import { CameraScannerDialog } from '@/components/pos/CameraScannerDialog';
+import dynamic from 'next/dynamic';
+
+const CameraScannerDialog = dynamic(
+  () => import('@/components/pos/CameraScannerDialog').then((mod) => mod.CameraScannerDialog),
+  { ssr: false }
+);
 import { CheckoutDialog, type PaymentData } from '@/components/pos/CheckoutDialog';
 import { PrintDialog } from '@/components/pos/PrintDialog';
 import { Button } from '@/components/ui/button';
@@ -82,6 +87,7 @@ import {
   Sun,
   Moon,
   Truck,
+  Loader2,
 } from 'lucide-react';
 import { useCartStore, useProductsStore, useSyncStore, useUIStore, useCustomersStore, useSalesStore, useQuantityUsageStore } from '@/stores/pos-store';
 import { useSettingsStore } from '@/stores/settings-store';
@@ -100,7 +106,6 @@ import { useToast } from '@/hooks/use-toast';
 import { generateInvoiceNumber } from '@/lib/invoice';
 import { Capacitor } from '@capacitor/core';
 import { App as CapacitorApp } from '@capacitor/app';
-import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning';
 
 export function POSDashboard() {
   const t = useTranslations('Navigation');
@@ -1504,7 +1509,14 @@ export function POSDashboard() {
 
   // ✅ HYDRATION GUARD: Prevent SSR/client mismatch by not rendering until hydrated
   if (!isHydrated) {
-    return null;
+    return (
+      <div className="h-dvh w-full flex items-center justify-center bg-slate-100/50 dark:bg-background">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground animate-pulse">Loading Workspace...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -1692,12 +1704,12 @@ export function POSDashboard() {
           </motion.div>
 
           {/* Stock Page */}
-          {(currentPage === 'stock' || isStockMounted) && (
+          {currentPage === 'stock' && (
             <motion.div
               initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: currentPage === 'stock' ? 1 : 0, y: currentPage === 'stock' ? 0 : 8 }}
+              animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className={cn("absolute inset-0 flex flex-col", currentPage !== 'stock' && "pointer-events-none")}
+              className="absolute inset-0 flex flex-col"
             >
               <StockManagement
                 onAddProduct={handleAddProduct}
@@ -1710,72 +1722,72 @@ export function POSDashboard() {
           )}
 
           {/* Parties Page */}
-          {(currentPage === 'parties' || isPartiesMounted) && (
+          {currentPage === 'parties' && (
             <motion.div
               initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: currentPage === 'parties' ? 1 : 0, y: currentPage === 'parties' ? 0 : 8 }}
+              animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className={cn("absolute inset-0 flex flex-col", currentPage !== 'parties' && "pointer-events-none")}
+              className="absolute inset-0 flex flex-col"
             >
               <PartiesManagement refreshKey={partiesRefreshKey} />
             </motion.div>
           )}
 
           {/* Due Collection Page */}
-          {(currentPage === 'due-collection' || isDueCollectionMounted) && (
+          {currentPage === 'due-collection' && (
             <motion.div
               initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: currentPage === 'due-collection' ? 1 : 0, y: currentPage === 'due-collection' ? 0 : 8 }}
+              animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className={cn("absolute inset-0 flex flex-col", currentPage !== 'due-collection' && "pointer-events-none")}
+              className="absolute inset-0 flex flex-col"
             >
               <DueCollection />
             </motion.div>
           )}
 
           {/* Purchase Orders Page */}
-          {(currentPage === 'purchase-orders' || isPurchaseOrdersMounted) && (
+          {currentPage === 'purchase-orders' && (
             <motion.div
               initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: currentPage === 'purchase-orders' ? 1 : 0, y: currentPage === 'purchase-orders' ? 0 : 8 }}
+              animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className={cn("absolute inset-0 flex flex-col", currentPage !== 'purchase-orders' && "pointer-events-none")}
+              className="absolute inset-0 flex flex-col"
             >
               <PurchaseOrderManagement />
             </motion.div>
           )}
 
           {/* Reports Page */}
-          {(currentPage === 'reports' || isReportsMounted) && (
+          {currentPage === 'reports' && (
             <motion.div
               initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: currentPage === 'reports' ? 1 : 0, y: currentPage === 'reports' ? 0 : 8 }}
+              animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className={cn("absolute inset-0 flex flex-col", currentPage !== 'reports' && "pointer-events-none")}
+              className="absolute inset-0 flex flex-col"
             >
               <Reports onNavigate={handleNavigate} />
             </motion.div>
           )}
 
           {/* Expenses Page */}
-          {(currentPage === 'expenses' || isExpensesMounted) && (
+          {currentPage === 'expenses' && (
             <motion.div
               initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: currentPage === 'expenses' ? 1 : 0, y: currentPage === 'expenses' ? 0 : 8 }}
+              animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className={cn("absolute inset-0 flex flex-col", currentPage !== 'expenses' && "pointer-events-none")}
+              className="absolute inset-0 flex flex-col"
             >
               <Expenses onReport={() => setCurrentPage('expenses-report')} />
             </motion.div>
           )}
 
           {/* Settings Page */}
-          {(currentPage === 'settings' || isSettingsMounted) && (
+          {currentPage === 'settings' && (
             <motion.div
               initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: currentPage === 'settings' ? 1 : 0, y: currentPage === 'settings' ? 0 : 8 }}
+              animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className={cn("absolute inset-0 flex flex-col", currentPage !== 'settings' && "pointer-events-none")}
+              className="absolute inset-0 flex flex-col"
             >
               <SettingsManagement />
             </motion.div>
@@ -1797,23 +1809,23 @@ export function POSDashboard() {
             )}
           </AnimatePresence>
 
-          {(currentPage === 'transactions' || isTransactionsPageMounted) && (
+          {(currentPage === 'transactions') && (
             <motion.div
               initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: currentPage === 'transactions' ? 1 : 0, y: currentPage === 'transactions' ? 0 : 8 }}
+              animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className={cn("absolute inset-0 flex flex-col", currentPage !== 'transactions' && "pointer-events-none")}
+              className="absolute inset-0 flex flex-col"
             >
               <TransactionHistory />
             </motion.div>
           )}
           {/* Users management has been moved inside Settings */}
-          {(currentPage === 'audit' || isAuditPageMounted) && (
+          {(currentPage === 'audit') && (
             <motion.div
               initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: currentPage === 'audit' ? 1 : 0, y: currentPage === 'audit' ? 0 : 8 }}
+              animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className={cn("absolute inset-0 flex flex-col", currentPage !== 'audit' && "pointer-events-none")}
+              className="absolute inset-0 flex flex-col"
             >
               <AuditLogs />
             </motion.div>
