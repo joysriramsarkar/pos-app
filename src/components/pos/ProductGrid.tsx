@@ -191,6 +191,23 @@ export function ProductGrid({
 
 
   const observerTarget = useRef<HTMLDivElement>(null);
+
+  const loadMoreProducts = useCallback(async () => {
+    if (isLoadingMore || !hasMore || !nextCursor || externalProducts) return;
+    setIsLoadingMore(true);
+    try {
+      const res = await fetch(`/api/products?limit=50&cursor=${nextCursor}`);
+      if (res.ok) {
+        const { data, nextCursor: newNextCursor } = await res.json();
+        appendProducts(data, !!newNextCursor, newNextCursor);
+      }
+    } catch (error) {
+      console.error('Error loading more products', error);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [isLoadingMore, hasMore, nextCursor, externalProducts, appendProducts]);
+
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
@@ -209,22 +226,6 @@ export function ProductGrid({
     }
     return () => observer.disconnect();
   }, [hasMore, isLoadingMore, renderLimit, filteredProducts.length, loadMoreProducts]);
-
-  const loadMoreProducts = useCallback(async () => {
-    if (isLoadingMore || !hasMore || !nextCursor || externalProducts) return;
-    setIsLoadingMore(true);
-    try {
-      const res = await fetch(`/api/products?limit=50&cursor=${nextCursor}`);
-      if (res.ok) {
-        const { data, nextCursor: newNextCursor } = await res.json();
-        appendProducts(data, !!newNextCursor, newNextCursor);
-      }
-    } catch (error) {
-      console.error('Error loading more products', error);
-    } finally {
-      setIsLoadingMore(false);
-    }
-  }, [isLoadingMore, hasMore, nextCursor, externalProducts, appendProducts]);
 
 
 
