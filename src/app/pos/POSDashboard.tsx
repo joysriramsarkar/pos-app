@@ -5,9 +5,11 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState, useMemo, useRef } from 'react';
 import { useBarcodeScanner } from '@/hooks/useBarcodeScanner';
 import { useProductCRUD } from '@/hooks/useProductCRUD';
+import { usePosCustomers } from '@/hooks/use-pos-customers';
+import { usePosProducts } from '@/hooks/use-pos-products';
+import { usePosConnectivity } from '@/hooks/use-pos-connectivity';
 import { useTranslations, useLocale } from 'next-intl';
 import type { Product as ProductType } from '@/types/pos';
-import { motion, AnimatePresence } from 'framer-motion';
 import { useTheme } from '@/components/providers/ThemeProvider';
 import { useLogout } from '@/hooks/use-logout';
 import {
@@ -48,8 +50,15 @@ const CameraScannerDialog = dynamic(
   () => import('@/components/pos/CameraScannerDialog').then((mod) => mod.CameraScannerDialog),
   { ssr: false }
 );
-import { CheckoutDialog, type PaymentData } from '@/components/pos/CheckoutDialog';
-import { PrintDialog } from '@/components/pos/PrintDialog';
+const CheckoutDialog = dynamic(
+  () => import('@/components/pos/CheckoutDialog').then((mod) => mod.CheckoutDialog),
+  { ssr: false }
+);
+const PrintDialog = dynamic(
+  () => import('@/components/pos/PrintDialog').then((mod) => mod.PrintDialog),
+  { ssr: false }
+);
+import type { PaymentData } from '@/components/pos/CheckoutDialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -143,24 +152,10 @@ export function POSDashboard() {
   const [isNavVisible, setIsNavVisible] = useState(true);
   const [lastScrollY, setLastScrollY] = useState(0);
 
-  // Scroll tracking logic for mobile navigation
-  useEffect(() => {
-    const handleScroll = (e: Event) => {
-      const target = e.target as HTMLElement;
-      if (!target || typeof target.scrollTop !== 'number') return;
-      const currentScrollY = target.scrollTop;
-      
-      if (currentScrollY > lastScrollY && currentScrollY > 60) {
-        setIsNavVisible(false);
-      } else {
-        setIsNavVisible(true);
-      }
-      setLastScrollY(currentScrollY);
-    };
-
-    window.addEventListener("scroll", handleScroll, { passive: true, capture: true });
-    return () => window.removeEventListener("scroll", handleScroll, { capture: true } as EventListenerOptions);
-  }, [lastScrollY]);
+  // Scroll tracking logic for mobile navigation has been disabled 
+  // because it causes the bottom nav to disappear completely and get stuck 
+  // when scrolling inside modals or cart panels on mobile.
+  // The nav will now always be visible unless the keyboard is open.
 
   // isProcessingPayment is now per-tab via UIStore
 
@@ -347,23 +342,14 @@ export function POSDashboard() {
     return filteredNavItems.filter(item => !directNavIds.has(item.id));
   }, [filteredNavItems]);
 
-  // Mobile product search - server-side with offline fallback
-  const [mobileSearchResults, setMobileSearchResults] = useState<ProductType[]>([]);
-  const [isMobileSearching, setIsMobileSearching] = useState(false);
-
-  const handleMobileSearchChange = useCallback((query: string) => {
-    setMobileSearchQuery(query);
+  const mobileSearchResults = useMemo(() => {
+    if (!mobileSearchQuery.trim()) return [];
     
-    if (!query.trim()) {
-      setMobileSearchResults([]);
-      return;
-    }
-    
-    const cleaned = query.replace(/rs\.?|₹|৳|'/gi, '').trim();
+    const cleaned = mobileSearchQuery.replace(/rs\.?|₹|৳|'/gi, '').trim();
     const lowerQuery = cleaned.toLowerCase();
     const normalizedQuery = convertBengaliToEnglishNumerals(cleaned).replace(/\s+/g, '');
     
-    const results = products.filter(p => {
+    return products.filter(p => {
       if (!p.isActive) return false;
       return (
         p.name.toLowerCase().replace(/'/g, '').includes(lowerQuery) ||
@@ -372,9 +358,11 @@ export function POSDashboard() {
         convertBengaliToEnglishNumerals(p.barcode || '').includes(normalizedQuery)
       );
     });
-    
-    setMobileSearchResults(results);
-  }, [products]);
+  }, [mobileSearchQuery, products]);
+
+  const handleMobileSearchChange = useCallback((query: string) => {
+    setMobileSearchQuery(query);
+  }, []);
 
   // ✅ HYDRATION TRACKING: Prevent SSR/client mismatch
   useEffect(() => {
@@ -397,266 +385,9 @@ export function POSDashboard() {
     return () => vv.removeEventListener('resize', handleResize);
   }, []);
 
-  // Load customers on mount
-  useEffect(() => {
-    if (activeUser?.requiresPasswordChange) return;
-    const loadCustomers = async () => {
-      const { setCustomers, setLoading: setCustomersLoading } = useCustomersStore.getState();
-      setCustomersLoading(true);
-      try {
-        // First load from IndexedDB for instant search
-        const cachedCustomers = await CustomersDB.getAll();
-        if (cachedCustomers.length > 0) {
-          setCustomers(cachedCustomers);
-          setCustomersLoading(false);
-        }
-
-        // Then fetch from API to update
-        const res = await fetch('/api/customers');
-        if (res.ok) {
-          const { data } = await res.json();
-          setCustomers(data);
-          // Update IndexedDB with fresh data
-          await CustomersDB.upsertMany(data);
-        }
-      } catch {
-        // If API fails, keep cached data
-        if (customers.length === 0) {
-          const cachedCustomers = await CustomersDB.getAll();
-          setCustomers(cachedCustomers);
-        }
-      } finally {
-        setCustomersLoading(false);
-      }
-    };
-    loadCustomers();
-  }, [customers.length, activeUser?.requiresPasswordChange]);
-
-  // Load products on mount (paginated — allow longer than a single request)
-  useEffect(() => {
-    if (activeUser?.requiresPasswordChange) return;
-
-    let cancelled = false;
-    const controller = new AbortController();
-    // Full catalog can take multiple pages; 8s was aborting mid-load in dev/slow nets
-    const timeoutId = window.setTimeout(() => {
-      controller.abort(new DOMException('Products load timed out', 'TimeoutError'));
-    }, 45_000);
-
-    const isTimeoutAbort = () => {
-      const reason = controller.signal.reason;
-      return (
-        (reason instanceof DOMException && reason.name === 'TimeoutError') ||
-        (typeof reason === 'object' &&
-          reason !== null &&
-          'name' in reason &&
-          (reason as { name?: string }).name === 'TimeoutError')
-      );
-    };
-
-    const loadFromCache = async () => {
-      try {
-        const cachedProducts = await ProductsDB.getAll();
-        if (!cancelled && cachedProducts.length > 0) {
-          useProductsStore.getState().setProducts(cachedProducts);
-        } else if (!cancelled) {
-          console.warn('No cached products available');
-        }
-      } catch (dbError) {
-        if (!cancelled) console.error('Failed to load products from cache:', dbError);
-      }
-    };
-
-    const loadProducts = async () => {
-      const { setProducts, setLoading } = useProductsStore.getState();
-      const setOnline = useSyncStore.getState().setOnline;
-
-      setLoading(true);
-      try {
-        const { fetchAllProductsFromApi, isAbortError } = await import('@/lib/fetch-all-products');
-        const { products, ok, error, aborted } = await fetchAllProductsFromApi({
-          pageSize: 250,
-          signal: controller.signal,
-        });
-
-        // Effect cleaned up (Strict Mode remount / navigate away) — ignore result
-        if (cancelled) return;
-
-        if (ok && products.length > 0) {
-          setProducts(products as never[], false, null);
-          await ProductsDB.upsertMany(products as never[]);
-          if (!cancelled) setOnline(true);
-          return;
-        }
-
-        if (products.length > 0) {
-          // Partial catalog still usable (timeout mid-pagination)
-          setProducts(products as never[], false, null);
-          await ProductsDB.upsertMany(products as never[]);
-          if (!cancelled) {
-            setOnline(true);
-            if (aborted) {
-              console.warn('Products load interrupted; using partial catalog:', products.length);
-            }
-          }
-          return;
-        }
-
-        if (aborted || isAbortError(error)) {
-          if (isTimeoutAbort()) {
-            console.warn('Products load timed out; falling back to cache');
-          }
-          // Unmount cancel: cancelled=true already returned above
-        } else {
-          console.warn('Products API failed:', error);
-        }
-
-        if (cancelled) return;
-        setOnline(false);
-        await loadFromCache();
-      } catch (error) {
-        if (cancelled) return;
-
-        const { isAbortError } = await import('@/lib/fetch-all-products');
-        if (isAbortError(error)) {
-          if (isTimeoutAbort()) {
-            console.warn('Products load timed out; falling back to cache');
-            useSyncStore.getState().setOnline(false);
-            await loadFromCache();
-          }
-          return;
-        }
-
-        console.error(
-          'Failed to load products from API:',
-          error instanceof Error ? error.message : String(error),
-        );
-        useSyncStore.getState().setOnline(false);
-        await loadFromCache();
-      } finally {
-        if (!cancelled) {
-          useProductsStore.getState().setLoading(false);
-        }
-      }
-    };
-
-    loadProducts();
-
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timeoutId);
-      controller.abort(new DOMException('Products load cancelled', 'AbortError'));
-    };
-  }, [activeUser?.requiresPasswordChange]);
-
-  // Load quantity suggestions on mount from last 30 days of sales
-  useEffect(() => {
-    if (activeUser?.requiresPasswordChange) return;
-    const loadQuantitySuggestions = async () => {
-      try {
-        const res = await fetch('/api/products/quantity-suggestions');
-        if (res.ok) {
-          const { data } = await res.json();
-          useQuantityUsageStore.getState().mergeUsage(data);
-        }
-      } catch (error) {
-        console.error('Failed to load quantity suggestions:', error);
-      }
-    };
-    loadQuantitySuggestions();
-  }, [activeUser?.requiresPasswordChange]);
-
-  // Refresh products when tab becomes visible or after offline sync completes
-  useEffect(() => {
-    if (activeUser?.requiresPasswordChange) return;
-
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible' && navigator.onLine) {
-        refreshProductsFromServer().catch(console.error);
-      }
-    };
-
-    const handleSyncComplete = () => {
-      if (navigator.onLine) {
-        refreshProductsFromServer().catch(console.error);
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibility);
-    window.addEventListener('offlineSyncComplete', handleSyncComplete);
-
-    const intervalId = window.setInterval(() => {
-      if (document.visibilityState === 'visible' && navigator.onLine) {
-        refreshProductsFromServer().catch(console.error);
-      }
-    }, 60_000);
-
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibility);
-      window.removeEventListener('offlineSyncComplete', handleSyncComplete);
-      window.clearInterval(intervalId);
-    };
-  }, [activeUser?.requiresPasswordChange]);
-
-  // Monitor online status - check both navigator.onLine AND actual API connectivity
-  useEffect(() => {
-    const checkConnectivity = async () => {
-      const setOnline = useSyncStore.getState().setOnline;
-
-      // First check navigator.onLine
-      if (!navigator.onLine) {
-        setOnline(false);
-        return;
-      }
-
-      // Try to verify connection by testing a simple API call
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
-        
-        try {
-          const response = await fetch('/api/auth/session', {
-            method: 'GET',
-            signal: controller.signal,
-          });
-          
-          clearTimeout(timeoutId);
-          
-          if (response.ok) {
-            setOnline(true);
-          } else {
-            setOnline(false);
-          }
-        } catch (fetchErr) {
-          clearTimeout(timeoutId);
-          throw fetchErr;
-        }
-      } catch (error) {
-        setOnline(false);
-      }
-    };
-
-    // Check on mount
-    checkConnectivity();
-
-    // Check periodically (every 5 minutes — reduced to avoid background load)
-    const interval = setInterval(checkConnectivity, 300000);
-
-    // Listen to navigator online/offline events
-    const handleOnline = () => checkConnectivity();
-    const handleOffline = () => {
-      useSyncStore.getState().setOnline(false);
-    };
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
+  usePosCustomers(activeUser);
+  usePosProducts(activeUser);
+  usePosConnectivity();
 
   // Barcode scanner handler
   const lastScannedRef = useRef<{ barcode: string; time: number }>({ barcode: '', time: 0 });
@@ -1207,12 +938,9 @@ export function POSDashboard() {
       </div>
 
       <div className="flex-1 p-3 space-y-1.5 overflow-y-auto">
-        {filteredNavItems.map((item, index) => (
-          <motion.button
+        {filteredNavItems.map((item) => (
+          <button
             key={item.id}
-            initial={{ opacity: 0, x: -12 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.2, delay: index * 0.03, ease: 'easeOut' }}
             onClick={() => handleNavigate(item.id)}
             className={cn(
               'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all duration-200 font-medium group',
@@ -1231,7 +959,7 @@ export function POSDashboard() {
             {currentPage === item.id && (
               <ChevronRight className="w-4 h-4 opacity-60" />
             )}
-          </motion.button>
+          </button>
         ))}
       </div>
 
@@ -1360,7 +1088,7 @@ export function POSDashboard() {
                         variant="ghost"
                         size="sm"
                         className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 md:h-8 md:w-8 p-0"
-                        onClick={() => { setMobileSearchQuery(''); setMobileSearchResults([]); }}
+                        onClick={() => { setMobileSearchQuery(''); }}
                         aria-label="Clear Search"
                       >
                         <X className="w-3 h-3 md:w-4 md:h-4" />
@@ -1379,9 +1107,7 @@ export function POSDashboard() {
                 <div className="border-b bg-background max-h-48 overflow-y-auto">
                   <div className="p-2">
                     <h3 className="text-xs font-medium mb-1.5">Search Results ({mobileSearchResults.length})</h3>
-                    {isMobileSearching ? (
-                      <p className="text-sm text-muted-foreground">Searching...</p>
-                    ) : mobileSearchResults.length === 0 ? (
+                    {mobileSearchResults.length === 0 ? (
                       <p className="text-sm text-muted-foreground">No products found</p>
                     ) : (
                       <div className="space-y-2">
@@ -1392,7 +1118,6 @@ export function POSDashboard() {
                             onClick={() => {
                               addItem(product, 1);
                               setMobileSearchQuery('');
-                              setMobileSearchResults([]);
                             }}
                           >
                             <div className="flex-1 min-w-0">
@@ -1577,22 +1302,16 @@ export function POSDashboard() {
         <main className="relative flex-1 flex flex-col min-h-0 overflow-hidden bg-background lg:rounded-tl-2xl lg:shadow-[-4px_0_24px_-12px_rgba(0,0,0,0.1)] lg:border-t lg:border-l lg:border-border/50">
           {/* Dashboard Page */}
           {(currentPage === 'dashboard' || isDashboardMounted) && (
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: currentPage === 'dashboard' ? 1 : 0, y: currentPage === 'dashboard' ? 0 : 8 }}
-              transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className={cn("absolute inset-0 flex flex-col", currentPage !== 'dashboard' && "pointer-events-none")}
+            <div
+              className={cn("absolute inset-0 flex flex-col animate-page-enter", currentPage !== 'dashboard' && "hidden")}
             >
               <Dashboard onNavigate={handleNavigate} refreshKey={dashboardRefreshKey} />
-            </motion.div>
+            </div>
           )}
 
           {/* Billing Page */}
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: currentPage === 'billing' ? 1 : 0, y: currentPage === 'billing' ? 0 : 8 }}
-            transition={{ duration: 0.2, ease: 'easeInOut' }}
-            className={cn("absolute inset-0 flex flex-col", currentPage !== 'billing' && "pointer-events-none")}
+          <div
+            className={cn("absolute inset-0 flex flex-col animate-page-enter", currentPage !== 'billing' && "hidden")}
           >
             <div className="flex h-full">
               {/* Product Grid (desktop only) */}
@@ -1631,7 +1350,7 @@ export function POSDashboard() {
                           variant="ghost"
                           size="sm"
                           className="absolute right-0.5 top-1/2 -translate-y-1/2 h-8 w-8 p-0 touch-manipulation"
-                          onClick={() => { setMobileSearchQuery(''); setMobileSearchResults([]); }}
+                          onClick={() => { setMobileSearchQuery(''); }}
                           aria-label="Clear Search"
                         >
                           <X className="w-3.5 h-3.5" />
@@ -1651,9 +1370,7 @@ export function POSDashboard() {
                       <h3 className="text-[10px] font-medium mb-1 px-1 text-muted-foreground uppercase tracking-wide">
                         Results ({mobileSearchResults.length})
                       </h3>
-                      {isMobileSearching ? (
-                        <p className="text-xs text-muted-foreground p-1.5">Searching...</p>
-                      ) : mobileSearchResults.length === 0 ? (
+                      {mobileSearchResults.length === 0 ? (
                         <p className="text-xs text-muted-foreground p-1.5">No products found</p>
                       ) : (
                         <div className="space-y-0.5">
@@ -1665,7 +1382,6 @@ export function POSDashboard() {
                               onClick={() => {
                                 addItem(product, 1);
                                 setMobileSearchQuery('');
-                                setMobileSearchResults([]);
                                 if (navigator?.vibrate) navigator.vibrate(30);
                               }}
                             >
@@ -1701,16 +1417,11 @@ export function POSDashboard() {
                 <CartPanel onCheckout={handleOpenCheckout} customers={customers} onScan={handleOpenMobileScanner} />
               </aside>
             </div>
-          </motion.div>
+          </div>
 
           {/* Stock Page */}
           {currentPage === 'stock' && (
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className="absolute inset-0 flex flex-col"
-            >
+            <div className="absolute inset-0 flex flex-col animate-page-enter">
               <StockManagement
                 onAddProduct={handleAddProduct}
                 onEditProduct={handleEditProduct}
@@ -1718,117 +1429,68 @@ export function POSDashboard() {
                 onDeleteProduct={handleDeleteProduct}
                 onStatistics={() => setCurrentPage('stock-statistics')}
               />
-            </motion.div>
+            </div>
           )}
 
           {/* Parties Page */}
           {currentPage === 'parties' && (
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className="absolute inset-0 flex flex-col"
-            >
+            <div className="absolute inset-0 flex flex-col animate-page-enter">
               <PartiesManagement refreshKey={partiesRefreshKey} />
-            </motion.div>
+            </div>
           )}
 
           {/* Due Collection Page */}
           {currentPage === 'due-collection' && (
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className="absolute inset-0 flex flex-col"
-            >
+            <div className="absolute inset-0 flex flex-col animate-page-enter">
               <DueCollection />
-            </motion.div>
+            </div>
           )}
 
           {/* Purchase Orders Page */}
           {currentPage === 'purchase-orders' && (
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className="absolute inset-0 flex flex-col"
-            >
+            <div className="absolute inset-0 flex flex-col animate-page-enter">
               <PurchaseOrderManagement />
-            </motion.div>
+            </div>
           )}
 
           {/* Reports Page */}
           {currentPage === 'reports' && (
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className="absolute inset-0 flex flex-col"
-            >
+            <div className="absolute inset-0 flex flex-col animate-page-enter">
               <Reports onNavigate={handleNavigate} />
-            </motion.div>
+            </div>
           )}
 
           {/* Expenses Page */}
           {currentPage === 'expenses' && (
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className="absolute inset-0 flex flex-col"
-            >
+            <div className="absolute inset-0 flex flex-col animate-page-enter">
               <Expenses onReport={() => setCurrentPage('expenses-report')} />
-            </motion.div>
+            </div>
           )}
 
           {/* Settings Page */}
           {currentPage === 'settings' && (
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className="absolute inset-0 flex flex-col"
-            >
+            <div className="absolute inset-0 flex flex-col animate-page-enter">
               <SettingsManagement />
-            </motion.div>
+            </div>
           )}
 
           {/* Other sub-reports or pages that do not need caching */}
-          <AnimatePresence mode="wait">
-            {['stock-statistics', 'expenses-report', 'sales-report', 'payment-report', 'stock-report', 'dues-report', 'products-report', 'categories-report', 'customers-report', 'supplier-report', 'profit-report', 'menu'].includes(currentPage) && (
-              <motion.div
-                key={currentPage}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -8 }}
-                transition={{ duration: 0.2, ease: 'easeInOut' }}
-                className="absolute inset-0 flex flex-col"
-              >
-                {renderPageContent()}
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {['stock-statistics', 'expenses-report', 'sales-report', 'payment-report', 'stock-report', 'dues-report', 'products-report', 'categories-report', 'customers-report', 'supplier-report', 'profit-report', 'menu'].includes(currentPage) && (
+            <div key={currentPage} className="absolute inset-0 flex flex-col animate-page-enter">
+              {renderPageContent()}
+            </div>
+          )}
 
           {(currentPage === 'transactions') && (
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className="absolute inset-0 flex flex-col"
-            >
+            <div className="absolute inset-0 flex flex-col animate-page-enter">
               <TransactionHistory />
-            </motion.div>
+            </div>
           )}
           {/* Users management has been moved inside Settings */}
           {(currentPage === 'audit') && (
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className="absolute inset-0 flex flex-col"
-            >
+            <div className="absolute inset-0 flex flex-col animate-page-enter">
               <AuditLogs />
-            </motion.div>
+            </div>
           )}
         </main>
       {/* Liquid Glass Bottom Navigation */}

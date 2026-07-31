@@ -313,7 +313,7 @@ body {
   content: '';
   position: absolute;
   top: 0;
-  left: -100%;
+  left: 0;
   width: 60%;
   height: 100%;
   background: linear-gradient(
@@ -323,12 +323,13 @@ body {
     transparent 100%
   );
   animation: btn-shimmer-slide 5s ease-in-out infinite;
+  will-change: transform;
 }
 
 @keyframes btn-shimmer-slide {
-  0% { left: -100%; }
-  40% { left: 100%; }
-  100% { left: 100%; }
+  0% { transform: translateX(-100%); }
+  40% { transform: translateX(100%); }
+  100% { transform: translateX(100%); }
 }
 
 /* Urgency pulse for out-of-stock indicator */
@@ -515,8 +516,38 @@ body.barcode-scanner-active *:not(.barcode-scanner-overlay):not(.barcode-scanner
     inset 0 -1px 0 rgba(0, 0, 0, 0.2);
 }
 
+/* Generic Liquid Glass Panel without fixed positioning */
+.liquid-glass-panel {
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  
+  background: rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(32px) saturate(200%);
+  -webkit-backdrop-filter: blur(32px) saturate(200%);
+  
+  transform: translateZ(0);
+  will-change: transform, backdrop-filter, opacity;
+
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.05);
+
+  padding: 6px;
+}
+
+.dark .liquid-glass-panel {
+  background: rgba(30, 30, 30, 0.35);
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+}
+
 /* Active item pill */
-.liquid-glass-nav .nav-item-active {
+.liquid-glass-nav .nav-item-active,
+.liquid-glass-panel .nav-item-active {
   background: rgba(0, 0, 0, 0.06);
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
   border-radius: 9999px;

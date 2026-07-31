@@ -46,9 +46,12 @@ export function PartiesManagement({ refreshKey }: PartiesManagementProps = {}) {
     searchInputRef,
     activeTab,
     setActiveTab,
-    searchInput,
-    setSearchInput,
-    clearSearchQuery,
+    customerSearchInput,
+    setCustomerSearchInput,
+    clearCustomerSearch,
+    supplierSearchInput,
+    setSupplierSearchInput,
+    clearSupplierSearch,
     selectedCustomer,
     showLedger,
     setShowLedger,
@@ -186,78 +189,22 @@ export function PartiesManagement({ refreshKey }: PartiesManagementProps = {}) {
         <div className="flex overflow-x-auto snap-x gap-2 mb-3 md:mb-4 scrollbar-none md:grid md:grid-cols-3 md:overflow-visible">
           <Card className="bg-muted/50 min-w-[7.5rem] snap-start shrink-0 md:min-w-0 md:shrink">
             <CardContent className="p-2.5 md:p-3">
-              <p className="text-[10px] md:text-xs text-muted-foreground line-clamp-2 leading-tight">{activeTab === 'customer' ? t('total_due') : 'মোট বকেয়া (সাপ্লায়ার)'}</p>
+              <p className="text-[10px] md:text-xs text-muted-foreground line-clamp-2 leading-tight">{activeTab === 'customer' ? t('total_due') : t('total_due_supplier') || 'মোট বকেয়া (সাপ্লায়ার)'}</p>
               <p className="text-base md:text-lg font-bold text-red-600 tabular-nums">{formatPrice(activeTab === 'customer' ? totalDue : totalSupplierDue)}</p>
             </CardContent>
           </Card>
           <Card className="bg-muted/50 min-w-[7.5rem] snap-start shrink-0 md:min-w-0 md:shrink">
             <CardContent className="p-2.5 md:p-3">
-              <p className="text-[10px] md:text-xs text-muted-foreground line-clamp-2 leading-tight">{activeTab === 'customer' ? t('customers_with_due') : 'বকেয়া আছে এমন সাপ্লায়ার'}</p>
+              <p className="text-[10px] md:text-xs text-muted-foreground line-clamp-2 leading-tight">{activeTab === 'customer' ? t('customers_with_due') : t('suppliers_with_due') || 'বকেয়া আছে এমন সাপ্লায়ার'}</p>
               <p className="text-base md:text-lg font-bold tabular-nums">{activeTab === 'customer' ? customersWithDue : suppliersWithDue}</p>
             </CardContent>
           </Card>
           <Card className="bg-muted/50 min-w-[7.5rem] snap-start shrink-0 md:min-w-0 md:shrink">
             <CardContent className="p-2.5 md:p-3">
-              <p className="text-[10px] md:text-xs text-muted-foreground line-clamp-2 leading-tight">{activeTab === 'customer' ? t('total_customers') : 'মোট সাপ্লায়ার'}</p>
+              <p className="text-[10px] md:text-xs text-muted-foreground line-clamp-2 leading-tight">{activeTab === 'customer' ? t('total_customers') : t('total_suppliers') || 'মোট সাপ্লায়ার'}</p>
               <p className="text-base md:text-lg font-bold tabular-nums">{activeTab === 'customer' ? customers.filter(c => c.isActive).length : suppliers.filter(s => s.isActive).length}</p>
             </CardContent>
           </Card>
-        </div>
-
-        {/* Search and Sort */}
-        <div className="flex flex-col sm:flex-row gap-2">
-          <div className="relative flex-1">
-            <label htmlFor="parties-search" className="sr-only">Search by name or phone</label>
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-            <Input
-              id="parties-search"
-              name="parties-search"
-              ref={searchInputRef}
-              placeholder="Search by name or phone..."
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              className="pl-9 h-11 sm:h-10 text-base sm:text-sm"
-            />
-            {searchInput && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="absolute right-1 top-1/2 -translate-y-1/2 h-9 w-9 p-0 touch-manipulation"
-                onClick={clearSearchQuery}
-              >
-                <X className="w-4 h-4" />
-              </Button>
-            )}
-          </div>
-
-          <div className="w-full sm:w-[200px]">
-            {activeTab === 'customer' ? (
-              <Select value={customerSort} onValueChange={setCustomerSort}>
-                <SelectTrigger className="w-full h-11 sm:h-10 bg-background">
-                  <SelectValue placeholder={t('sort_by') || 'Sort By'} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="name-asc">{t('sort_name_asc') || 'Name (A-Z)'}</SelectItem>
-                  <SelectItem value="name-desc">{t('sort_name_desc') || 'Name (Z-A)'}</SelectItem>
-                  <SelectItem value="due-desc">{t('sort_due_desc') || 'Dues (High to Low)'}</SelectItem>
-                  <SelectItem value="due-asc">{t('sort_due_asc') || 'Dues (Low to High)'}</SelectItem>
-                </SelectContent>
-              </Select>
-            ) : (
-              <Select value={supplierSort} onValueChange={setSupplierSort}>
-                <SelectTrigger className="w-full h-11 sm:h-10 bg-background">
-                  <SelectValue placeholder={t('sort_by') || 'Sort By'} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="name-asc">{t('sort_name_asc') || 'Name (A-Z)'}</SelectItem>
-                  <SelectItem value="name-desc">{t('sort_name_desc') || 'Name (Z-A)'}</SelectItem>
-                  <SelectItem value="due-desc">{t('sort_due_desc') || 'Dues (High to Low)'}</SelectItem>
-                  <SelectItem value="due-asc">{t('sort_due_asc') || 'Dues (Low to High)'}</SelectItem>
-                  <SelectItem value="purchases-desc">{t('sort_purchases_desc') || 'Total Purchases (High to Low)'}</SelectItem>
-                </SelectContent>
-              </Select>
-            )}
-          </div>
         </div>
       </div>
 
@@ -265,21 +212,26 @@ export function PartiesManagement({ refreshKey }: PartiesManagementProps = {}) {
       <div className="shrink-0 border-b">
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as PartyType)}>
           <TabsList className="w-full rounded-none bg-transparent h-12">
-            <TabsTrigger value="customer" className="flex-1 data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none">
-              Customers ({filteredCustomers.length})
+            <TabsTrigger value="customer" className="flex-1 data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none font-bold">
+              {t('customers_tab') || 'Customers'} ({filteredCustomers.length})
             </TabsTrigger>
-            <TabsTrigger value="supplier" className="flex-1 data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none">
-              Suppliers ({filteredSuppliers.length})
+            <TabsTrigger value="supplier" className="flex-1 data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none font-bold">
+              {t('suppliers_tab') || 'Suppliers'} ({filteredSuppliers.length})
             </TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
 
       {/* Content */}
-      <div className="flex-1 min-h-0 overflow-y-auto">
+      <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
         {activeTab === 'customer' ? (
           <CustomersPanel
             customers={filteredCustomers}
+            searchInput={customerSearchInput}
+            onSearchChange={setCustomerSearchInput}
+            onClearSearch={clearCustomerSearch}
+            sortValue={customerSort}
+            onSortChange={setCustomerSort}
             formatPrice={formatPrice}
             onEdit={handleEditParty}
             onViewLedger={handleViewLedger}
@@ -297,6 +249,11 @@ export function PartiesManagement({ refreshKey }: PartiesManagementProps = {}) {
         ) : (
           <SuppliersPanel
             suppliers={filteredSuppliers}
+            searchInput={supplierSearchInput}
+            onSearchChange={setSupplierSearchInput}
+            onClearSearch={clearSupplierSearch}
+            sortValue={supplierSort}
+            onSortChange={setSupplierSort}
             formatPrice={formatPrice}
             onEdit={handleEditParty}
             onViewLedger={handleViewSupplierLedger}

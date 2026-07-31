@@ -29,6 +29,7 @@ import {
 import type { Supplier } from '@/types/pos';
 import { cn, convertBengaliToEnglishNumerals } from '@/lib/utils';
 import { useTranslations } from 'next-intl';
+import { useNumberFormat } from '@/hooks/use-number-format';
 import type { SupplierWithBalances } from './types';
 
 interface SupplierLedgerEntry {
@@ -59,6 +60,8 @@ export function SupplierLedgerDialog({
   formatDate,
 }: SupplierLedgerDialogProps) {
   const s = supplier as SupplierWithBalances | null;
+  const t = useTranslations('Parties');
+  const { isBn } = useNumberFormat();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -67,10 +70,10 @@ export function SupplierLedgerDialog({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 min-w-0">
               <FileText className="w-5 h-5 shrink-0" />
-              <span className="truncate">লেজার খাতা - {supplier?.name}</span>
+              <span className="truncate">{t('ledger_title') || 'লেজার খাতা'} - {supplier?.name}</span>
             </DialogTitle>
             <DialogDescription>
-              সাপ্লায়ারের লেনদেনের ইতিহাস ও বকেয়া খতিয়ান
+              {t('transaction_history') || 'সাপ্লায়ারের লেনদেনের ইতিহাস ও বকেয়া খতিয়ান'}
             </DialogDescription>
           </DialogHeader>
         </div>
@@ -80,43 +83,50 @@ export function SupplierLedgerDialog({
             <Card className="bg-muted/50">
               <CardContent className="p-4">
                 <div className="flex justify-between items-center gap-2">
-                  <span className="text-muted-foreground font-medium shrink-0">বর্তমান বকেয়া</span>
+                  <span className="text-muted-foreground font-medium shrink-0">{t('current_due') || 'বর্তমান বকেয়া'}</span>
                   <span className="text-xl sm:text-2xl font-bold text-red-600 tabular-nums">
                     {formatPrice(s?.totalDue || 0)}
                   </span>
                 </div>
                 <div className="flex justify-between items-center mt-2 pt-2 border-t border-border/40 text-sm gap-2">
-                  <span className="text-muted-foreground truncate">মোট ক্রয়: {formatPrice(s?.totalPurchases || 0)}</span>
-                  <span className="text-muted-foreground shrink-0">মোট পরিশোধ: {formatPrice(s?.totalPaid || 0)}</span>
+                  <span className="text-muted-foreground truncate">{t('total_spent') || 'মোট ক্রয়'}: {formatPrice(s?.totalPurchases || 0)}</span>
+                  <span className="text-muted-foreground shrink-0">{t('payment') || 'মোট পরিশোধ'}: {formatPrice(s?.totalPaid || 0)}</span>
                 </div>
               </CardContent>
             </Card>
 
             <div className="space-y-2">
               {ledgerEntries.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-8">কোনো লেনদেন পাওয়া যায়নি</p>
+                <p className="text-sm text-muted-foreground text-center py-8">{t('no_transactions') || 'কোনো লেনদেন পাওয়া যায়নি'}</p>
               ) : (
-                ledgerEntries.map((entry) => (
-                  <div
-                    key={entry.id}
-                    className={cn(
-                      "flex items-center justify-between gap-2 p-3 rounded-lg border overflow-hidden",
-                      entry.entryType === 'credit' ? 'bg-red-50 border-red-100 dark:bg-red-950/20 dark:border-red-900/30' : 'bg-green-50 border-green-100 dark:bg-green-950/20 dark:border-green-900/30'
-                    )}
-                  >
-                    <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-                      <div className={cn(
-                        "w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center shrink-0",
-                        entry.entryType === 'credit' ? 'bg-red-100 dark:bg-red-900/30' : 'bg-green-100 dark:bg-green-900/30'
-                      )}>
-                        {entry.entryType === 'credit' ? (
-                          <ArrowUpRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-red-600" />
-                        ) : (
-                          <ArrowDownRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-600" />
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="font-medium text-xs sm:text-sm truncate">{entry.description}</p>
+                ledgerEntries.map((entry) => {
+                  const desc = entry.description || '';
+                  const formattedDesc = desc
+                    .replace(/^স্টক ক্রয়:/, isBn ? 'স্টক ক্রয়:' : 'Stock Purchase:')
+                    .replace(/^Purchase:/, isBn ? 'স্টক ক্রয়:' : 'Stock Purchase:')
+                    .replace(/^Paid supplier:/, isBn ? 'সাপ্লায়ারকে পরিশোধ:' : 'Paid supplier:')
+                    .replace(/^Paid for direct purchase:/, isBn ? 'সরাসরি ক্রয়ের জন্য পরিশোধ:' : 'Paid for direct purchase:');
+                  return (
+                    <div
+                      key={entry.id}
+                      className={cn(
+                        "flex items-center justify-between gap-2 p-3 rounded-lg border overflow-hidden",
+                        entry.entryType === 'credit' ? 'bg-red-50 border-red-100 dark:bg-red-950/20 dark:border-red-900/30' : 'bg-green-50 border-green-100 dark:bg-green-950/20 dark:border-green-900/30'
+                      )}
+                    >
+                      <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+                        <div className={cn(
+                          "w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center shrink-0",
+                          entry.entryType === 'credit' ? 'bg-red-100 dark:bg-red-900/30' : 'bg-green-100 dark:bg-green-900/30'
+                        )}>
+                          {entry.entryType === 'credit' ? (
+                            <ArrowUpRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-red-600" />
+                          ) : (
+                            <ArrowDownRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-600" />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium text-xs sm:text-sm truncate">{formattedDesc}</p>
                         <p className="text-xs text-muted-foreground truncate">
                           {formatDate(entry.createdAt)} • {entry.referenceId}
                         </p>
@@ -134,7 +144,8 @@ export function SupplierLedgerDialog({
                       </p>
                     </div>
                   </div>
-                ))
+                );
+              })
               )}
             </div>
           </div>
@@ -180,21 +191,22 @@ export function SupplierPaymentDialog({
   onSubmit,
 }: SupplierPaymentDialogProps) {
   const s = supplier as SupplierWithBalances | null;
+  const t = useTranslations('Parties');
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-sm w-[95vw] max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>টাকা পরিশোধ করুন</DialogTitle>
+          <DialogTitle>{t('record_payment') || 'টাকা পরিশোধ করুন'}</DialogTitle>
           <DialogDescription>
-            {supplier?.name} এর বকেয়া পরিশোধের পেমেন্ট রেকর্ড
+            {t('record_payment_from') || 'পেমেন্ট রেকর্ড করুন'} ({supplier?.name})
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
           <div className="p-3 bg-muted rounded-lg">
             <div className="flex justify-between items-center">
-              <span className="text-sm text-muted-foreground">বর্তমান বকেয়া</span>
+              <span className="text-sm text-muted-foreground">{t('current_due') || 'বর্তমান বকেয়া'}</span>
               <span className="font-bold text-red-600">
                 {formatPrice(s?.totalDue || 0)}
               </span>
@@ -202,7 +214,7 @@ export function SupplierPaymentDialog({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="supplier-payment-dialog-amount">পরিশোধের পরিমাণ</Label>
+            <Label htmlFor="supplier-payment-dialog-amount">{t('payment_amount') || 'পরিশোধের পরিমাণ'}</Label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">{currencySymbol}</span>
               <Input
@@ -223,7 +235,7 @@ export function SupplierPaymentDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label>পেমেন্ট পদ্ধতি</Label>
+            <Label>{t('payment_method') || 'পেমেন্ট পদ্ধতি'}</Label>
             <Select value={paymentMethod} onValueChange={(v) => {
               setPaymentMethod(v);
               if (v === 'Mixed' && paymentAmount) {
@@ -237,9 +249,9 @@ export function SupplierPaymentDialog({
             }}>
               <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="Cash">Cash (নগদ)</SelectItem>
-                <SelectItem value="UPI">UPI (ইউপিআই)</SelectItem>
-                <SelectItem value="Mixed">Mixed (মিশ্র)</SelectItem>
+                <SelectItem value="Cash">Cash</SelectItem>
+                <SelectItem value="UPI">UPI</SelectItem>
+                <SelectItem value="Mixed">Mixed</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -254,7 +266,7 @@ export function SupplierPaymentDialog({
               <div className="space-y-2">
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1.5">
-                    <Label className="text-xs">নগদ</Label>
+                    <Label className="text-xs">Cash</Label>
                     <Input type="text" value={cashAmount} onChange={(e) => {
                       const val = convertBengaliToEnglishNumerals(e.target.value).replace(/[^0-9.]/g, '');
                       setCashAmount(val);
@@ -264,7 +276,7 @@ export function SupplierPaymentDialog({
                     }} className="h-9" />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs">ইউপিআই</Label>
+                    <Label className="text-xs">UPI</Label>
                     <Input type="text" value={upiAmount} onChange={(e) => {
                       const val = convertBengaliToEnglishNumerals(e.target.value).replace(/[^0-9.]/g, '');
                       setUpiAmount(val);
@@ -275,8 +287,8 @@ export function SupplierPaymentDialog({
                   </div>
                 </div>
                 <div className={`text-xs px-2 py-1.5 rounded-lg flex items-center justify-between ${isMixedOk ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400' : 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400'}`}>
-                  <span>নগদ {cashVal} + ইউপিআই {upiVal}</span>
-                  <span className="font-semibold">{isMixedOk ? '✓ মিলেছে' : `বাকি: ${formatPrice(Math.abs(totalAmt - mixedSum))}`}</span>
+                  <span>Cash {cashVal} + UPI {upiVal}</span>
+                  <span className="font-semibold">{isMixedOk ? '✓' : `${t('due_col') || 'বাকি'}: ${formatPrice(Math.abs(totalAmt - mixedSum))}`}</span>
                 </div>
               </div>
             );
@@ -298,14 +310,14 @@ export function SupplierPaymentDialog({
               size="sm"
               onClick={() => setPaymentAmount((s?.totalDue || 0).toString())}
             >
-              সম্পূর্ণ বকেয়া
+              {t('full_amount') || 'সম্পূর্ণ বকেয়া'}
             </Button>
           </div>
         </div>
 
         <DialogFooter className="gap-2 sm:gap-0">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
-            বাতিল
+            {t('cancel') || 'বাতিল'}
           </Button>
           <Button
             onClick={onSubmit}
@@ -315,10 +327,10 @@ export function SupplierPaymentDialog({
             {isSubmitting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                রেকর্ড হচ্ছে...
+                ...
               </>
             ) : (
-              'পেমেন্ট রেকর্ড করুন'
+              t('record_payment') || 'পেমেন্ট রেকর্ড করুন'
             )}
           </Button>
         </DialogFooter>
@@ -358,15 +370,15 @@ export function SupplierDueEntryDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-sm w-[95vw] max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>সাপ্লায়ার ম্যানুয়াল বাকি এন্ট্রি</DialogTitle>
+          <DialogTitle>{t('due_entry_title') || 'সাপ্লায়ার ম্যানুয়াল বাকি এন্ট্রি'}</DialogTitle>
           <DialogDescription>
-            {supplier?.name || ''} এর জন্য ম্যানুয়াল বাকি এন্ট্রি রেকর্ড করুন
+            {t('due_entry') || 'বাকি এন্ট্রি'} ({supplier?.name || ''})
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
           <div className="space-y-2">
-            <Label htmlFor="supplier-due-entry-amount">বাকির পরিমাণ</Label>
+            <Label htmlFor="supplier-due-entry-amount">{t('due_entry_amount') || 'বাকির পরিমাণ'}</Label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">{currencySymbol}</span>
               <Input
@@ -410,10 +422,10 @@ export function SupplierDueEntryDialog({
             {isSubmitting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                এন্ট্রি হচ্ছে...
+                ...
               </>
             ) : (
-              'বাকি এন্ট্রি'
+              t('due_entry') || 'বাকি এন্ট্রি'
             )}
           </Button>
         </DialogFooter>

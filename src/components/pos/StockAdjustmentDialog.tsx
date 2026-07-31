@@ -23,7 +23,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { useProductsStore } from '@/stores/pos-store';
 import type { Product } from '@/types/pos';
-import { MinusCircle } from 'lucide-react';
+import { MinusCircle, Loader2 } from 'lucide-react';
 import { convertBengaliToEnglishNumerals } from '@/lib/utils';
 
 interface StockAdjustmentDialogProps {
@@ -155,9 +155,16 @@ export function StockAdjustmentDialog({ product, open, onOpenChange }: StockAdju
           <Button
             onClick={handleSubmit}
             disabled={isSubmitting || !quantity || !reason.trim()}
-            className="bg-amber-500 hover:bg-amber-600 text-white"
+            className="bg-amber-500 hover:bg-amber-600 text-white flex items-center gap-2"
           >
-            {isSubmitting ? tc('loading') : t('save_btn')}
+            {isSubmitting ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>{tc('loading')}</span>
+              </>
+            ) : (
+              t('save_btn')
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>

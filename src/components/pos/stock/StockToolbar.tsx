@@ -1,6 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
+import { useNumberFormat } from '@/hooks/use-number-format';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -69,6 +70,7 @@ export function StockToolbar({
 }: StockToolbarProps) {
   const t = useTranslations('Stock');
   const tc = useTranslations('Common');
+  const { formatNumber } = useNumberFormat();
 
   return (
     <div className="flex flex-col gap-1.5 sm:gap-2 shrink-0">
@@ -80,7 +82,7 @@ export function StockToolbar({
             <span className="truncate">{t('title')}</span>
           </h1>
           <p className="text-[11px] md:text-xs text-muted-foreground">
-            {itemCount} {t('items')}
+            {formatNumber(itemCount)} {t('items')}
           </p>
         </div>
 

@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Package, Calendar, User } from 'lucide-react';
+import { Package, Calendar, User, Loader2 } from 'lucide-react';
 import type { Product, Supplier } from '@/types/pos';
 import { useProductsStore } from '@/stores/pos-store';
 import { cn, convertBengaliToEnglishNumerals } from '@/lib/utils';
@@ -61,7 +61,7 @@ export function AddStockDialog({
 }: AddStockDialogProps) {
   const t = useTranslations('Stock');
   const tc = useTranslations('Common');
-  const { formatPrice: formatPriceLocale, currencySymbol } = useNumberFormat();
+  const { formatPrice: formatPriceLocale, currencySymbol, formatNumber } = useNumberFormat();
 
   const [selectedProductId, setSelectedProductId] = useState<string>('');
   const [quantity, setQuantity] = useState<string>('');
@@ -133,8 +133,10 @@ export function AddStockDialog({
         notes: notes || undefined,
       };
 
-      onSubmit?.(data);
+      await onSubmit?.(data);
       onOpenChange(false);
+    } catch (err) {
+      console.error('Failed to submit stock entry:', err);
     } finally {
       setIsSubmitting(false);
     }
@@ -176,7 +178,7 @@ export function AddStockDialog({
                     <div className="flex items-center justify-between gap-4">
                       <span>{product.nameBn || product.name}</span>
                       <Badge variant="outline" className="text-xs">
-                        {t('stock')}: {product.currentStock}
+                        {t('stock')}: {formatNumber(product.currentStock)}
                       </Badge>
                     </div>
                   </SelectItem>
@@ -185,8 +187,8 @@ export function AddStockDialog({
             </Select>
             {selectedProduct && (
               <p className="text-xs text-muted-foreground">
-                {t('current_stock_label')}: {selectedProduct.currentStock} {selectedProduct.unit} • 
-                {t('min_level')}: {selectedProduct.minStockLevel}
+                {t('current_stock_label')}: {formatNumber(selectedProduct.currentStock)} {selectedProduct.unit} • 
+                {t('min_level')}: {formatNumber(selectedProduct.minStockLevel)}
               </p>
             )}
           </div>
@@ -316,11 +318,18 @@ export function AddStockDialog({
         </div>
 
         <DialogFooter className="gap-2 sm:gap-0">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
             {tc('cancel')}
           </Button>
-          <Button onClick={handleSubmit} disabled={!isValid || isSubmitting} className="bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600">
-            {isSubmitting ? t('saving') : t('add_stock_btn')}
+          <Button onClick={handleSubmit} disabled={!isValid || isSubmitting} className="bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 flex items-center gap-2">
+            {isSubmitting ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>{t('saving')}</span>
+              </>
+            ) : (
+              t('add_stock_btn')
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>

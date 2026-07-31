@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/table';
 import { convertBengaliToEnglishNumerals } from '@/lib/utils';
 import { Loader2 } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import type { PurchaseOrder, ReceiveItem } from './types';
 
 interface ReceiveStockDialogProps {
@@ -26,6 +27,8 @@ interface ReceiveStockDialogProps {
   setReceiveItems: (items: ReceiveItem[]) => void;
   receiveAmountPaid: string;
   setReceiveAmountPaid: (value: string) => void;
+  receiveUpdateStock: boolean;
+  setReceiveUpdateStock: (value: boolean) => void;
   receivePaymentMethod: string;
   setReceivePaymentMethod: (value: string) => void;
   receiveCashAmount: string;
@@ -47,6 +50,8 @@ export function ReceiveStockDialog({
   setReceiveItems,
   receiveAmountPaid,
   setReceiveAmountPaid,
+  receiveUpdateStock,
+  setReceiveUpdateStock,
   receivePaymentMethod,
   setReceivePaymentMethod,
   receiveCashAmount,
@@ -221,6 +226,22 @@ export function ReceiveStockDialog({
             })()}
           </div>
         )}
+
+        {/* Update Stock Checkbox */}
+        <div className="flex items-center space-x-2 py-2">
+          <Checkbox
+            id="receive-update-stock"
+            checked={receiveUpdateStock}
+            onCheckedChange={(checked) => setReceiveUpdateStock(checked === true)}
+          />
+          <label
+            htmlFor="receive-update-stock"
+            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+          >
+            স্টক আপডেট করুন (Update Stock)
+          </label>
+        </div>
+
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>{tc('cancel')}</Button>
           <Button onClick={onReceive} disabled={saving}>

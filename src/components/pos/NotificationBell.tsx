@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
+import { useNumberFormat } from '@/hooks/use-number-format';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -13,6 +14,12 @@ interface NotificationItem {
   type: 'low_stock' | 'out_of_stock' | 'due_payment';
   title: string;
   message: string;
+  productName?: string;
+  productNameBn?: string | null;
+  currentStock?: number;
+  unit?: string;
+  customerName?: string;
+  dueAmount?: number;
   icon: 'alert' | 'critical' | 'wallet';
   createdAt: string;
   read: boolean;
@@ -68,6 +75,7 @@ interface NotificationBellProps {
 
 export default function NotificationBell({ variant = 'desktop' }: NotificationBellProps) {
   const t = useTranslations('Notifications');
+  const { isBn, formatPrice, formatNumber } = useNumberFormat();
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -166,7 +174,7 @@ export default function NotificationBell({ variant = 'desktop' }: NotificationBe
             <Badge
               className="absolute -top-1 -right-1 h-5 min-w-5 p-0 flex items-center justify-center text-[10px] font-bold bg-red-500 text-white border-0 animate-pulse"
             >
-              {effectiveUnreadCount > 9 ? '৯+' : effectiveUnreadCount}
+              {effectiveUnreadCount > 9 ? (isBn ? '৯+' : '9+') : formatNumber(effectiveUnreadCount)}
             </Badge>
           )}
         </Button>
@@ -231,14 +239,32 @@ export default function NotificationBell({ variant = 'desktop' }: NotificationBe
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-2">
                           <p className={`text-xs font-medium line-clamp-2 ${read ? 'text-muted-foreground' : 'text-foreground'}`}>
-                            {notification.title}
+                            {notification.type === 'out_of_stock'
+                              ? (isBn ? 'স্টক শেষ সতর্কতা' : 'Out of Stock Alert')
+                              : notification.type === 'low_stock'
+                              ? (isBn ? 'কম স্টক সতর্কতা' : 'Low Stock Alert')
+                              : notification.type === 'due_payment'
+                              ? (isBn ? 'বাকি পেমেন্ট সতর্কতা' : 'Due Payment Alert')
+                              : notification.title}
                           </p>
                           {!read && (
                             <div className="h-2 w-2 rounded-full bg-emerald-500 shrink-0 mt-1" />
                           )}
                         </div>
                         <p className={`text-xs mt-0.5 line-clamp-2 ${read ? 'text-muted-foreground/70' : 'text-muted-foreground'}`}>
-                          {notification.message}
+                          {notification.type === 'out_of_stock'
+                            ? (isBn
+                                ? `${notification.productNameBn || notification.productName || 'পণ্য'} এর স্টক শেষ!`
+                                : `${notification.productName || 'Product'} is out of stock!`)
+                            : notification.type === 'low_stock'
+                            ? (isBn
+                                ? `${notification.productNameBn || notification.productName || 'পণ্য'} এর স্টক কম (${formatNumber(notification.currentStock ?? 0)} ${notification.unit || ''} বাকি)`
+                                : `${notification.productName || 'Product'} is low on stock (${formatNumber(notification.currentStock ?? 0)} ${notification.unit || ''} left)`)
+                            : notification.type === 'due_payment'
+                            ? (isBn
+                                ? `${notification.customerName || 'ক্রেতা'} এর ${formatPrice(notification.dueAmount ?? 0)} টাকা বাকি আছে`
+                                : `${notification.customerName || 'Customer'} has a due of ${formatPrice(notification.dueAmount ?? 0)}`)
+                            : notification.message}
                         </p>
                         <div className="flex items-center justify-between mt-1.5">
                           <span className="text-[10px] text-muted-foreground/60">

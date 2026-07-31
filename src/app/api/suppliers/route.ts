@@ -90,7 +90,7 @@ export async function GET(request: NextRequest) {
           entryType: 'credit' as const,
           amount: Number(p.totalAmount),
           referenceId: p.invoiceNumber || `PUR-${p.id.substring(0, 8)}`,
-          description: p.notes || `স্টক ক্রয়: ${p.invoiceNumber || 'রসিদ ছাড়া'}`,
+          description: p.notes || `Purchase: ${p.invoiceNumber || 'Direct'}`,
           createdAt: p.createdAt,
         });
       }

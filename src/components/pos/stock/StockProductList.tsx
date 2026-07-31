@@ -69,6 +69,7 @@ interface MobileProductCardProps {
   onEditProduct?: (product: Product) => void;
   onDeleteProduct?: (product: Product) => void;
   formatPrice: (n: number) => string;
+  formatNumber: (n: number | string) => string;
 }
 
 const MobileProductCard = React.memo(function MobileProductCard({
@@ -85,6 +86,7 @@ const MobileProductCard = React.memo(function MobileProductCard({
   onEditProduct,
   onDeleteProduct,
   formatPrice,
+  formatNumber,
 }: MobileProductCardProps) {
   const status = getStockStatus(product, t);
 
@@ -114,7 +116,7 @@ const MobileProductCard = React.memo(function MobileProductCard({
             <div className="flex items-center gap-1 mt-0.5 min-w-0">
               {product.barcode && (
                 <span className="text-[9px] font-mono text-muted-foreground truncate">
-                  {product.barcode}
+                  {formatNumber(product.barcode)}
                 </span>
               )}
               <Badge variant="outline" className="text-[8px] px-1 h-3.5 shrink-0">
@@ -136,7 +138,7 @@ const MobileProductCard = React.memo(function MobileProductCard({
                   'text-amber-600'
               )}
             >
-              {product.currentStock} {product.unit}
+              {formatNumber(product.currentStock)} {product.unit}
             </span>
           </div>
         </div>
@@ -256,7 +258,7 @@ const DesktopProductRow = React.memo(function DesktopProductRow({
             </p>
           )}
           {product.barcode && (
-            <p className="text-xs text-muted-foreground font-mono">{product.barcode}</p>
+            <p className="text-xs text-muted-foreground font-mono">{formatNumber(product.barcode)}</p>
           )}
         </div>
       </TableCell>
@@ -292,9 +294,9 @@ const DesktopProductRow = React.memo(function DesktopProductRow({
                   'text-amber-600'
               )}
             >
-              {product.currentStock} {product.unit}
+              {formatNumber(product.currentStock)} {product.unit}
             </span>
-            <span className="text-xs text-muted-foreground">/ {product.minStockLevel}</span>
+            <span className="text-xs text-muted-foreground">/ {formatNumber(product.minStockLevel)}</span>
           </div>
           <Progress
             value={getStockLevelPercent(product)}
@@ -424,6 +426,7 @@ export function StockProductList({
                   onEditProduct={onEditProduct}
                   onDeleteProduct={onDeleteProduct}
                   formatPrice={formatPrice}
+                  formatNumber={formatNumber}
                 />
               )}
             />

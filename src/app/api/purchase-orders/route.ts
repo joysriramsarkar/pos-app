@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { supplierId, items, expectedDate, notes, directReceive, amountPaid, paymentMethod, cashAmount, upiAmount, gstPercentage } = body;
+    const { supplierId, items, expectedDate, notes, directReceive, updateStock, amountPaid, paymentMethod, cashAmount, upiAmount, gstPercentage } = body;
 
     if (!items || items.length === 0) {
       return NextResponse.json(
@@ -257,53 +257,53 @@ export async function POST(request: NextRequest) {
               },
             });
 
-            // Update product stock and WAC and create stock history (FEATURE DISABLED TEMPORARILY)
-            /*
-            for (const item of p.items) {
-              const qty = Number(item.quantity);
-              const unitPrice = Number(item.buyingPrice);
+            // Update product stock and WAC and create stock history conditionally
+            if (updateStock) {
+              for (const item of p.items) {
+                const qty = Number(item.quantity);
+                const unitPrice = Number(item.buyingPrice);
 
-              const product = await tx.product.findUnique({
-                where: { id: item.productId }
-              });
+                const product = await tx.product.findUnique({
+                  where: { id: item.productId }
+                });
 
-              const updateData: any = {
-                currentStock: { increment: qty },
-                updatedAt: new Date(),
-              };
+                const updateData: any = {
+                  currentStock: { increment: qty },
+                  updatedAt: new Date(),
+                };
 
-              if (unitPrice > 0) {
-                const currentStock = Number(product?.currentStock) || 0;
-                const newStock = currentStock + qty;
-                if (newStock > 0) {
-                  const currentPrice = product?.buyingPrice !== null && product?.buyingPrice !== undefined
-                    ? Number(product.buyingPrice)
-                    : unitPrice;
-                  const wac = ((currentStock * currentPrice) + (qty * unitPrice)) / newStock;
-                  updateData.buyingPrice = toUnitPriceNumber(wac);
-                } else {
-                  updateData.buyingPrice = toUnitPriceNumber(unitPrice);
+                if (unitPrice > 0) {
+                  const currentStock = Number(product?.currentStock) || 0;
+                  const newStock = currentStock + qty;
+                  if (newStock > 0) {
+                    const currentPrice = product?.buyingPrice !== null && product?.buyingPrice !== undefined
+                      ? Number(product.buyingPrice)
+                      : unitPrice;
+                    const wac = ((currentStock * currentPrice) + (qty * unitPrice)) / newStock;
+                    updateData.buyingPrice = toUnitPriceNumber(wac);
+                  } else {
+                    updateData.buyingPrice = toUnitPriceNumber(unitPrice);
+                  }
                 }
+
+                await tx.product.update({
+                  where: { id: item.productId },
+                  data: updateData,
+                });
+
+                await tx.stockHistory.create({
+                  data: {
+                    productId: item.productId,
+                    changeType: 'purchase',
+                    quantity: qty,
+                    reason: `Direct Purchase: ${p.invoiceNumber}`,
+                    referenceId: p.id,
+                    purchaseId: p.id,
+                    createdAt: purchaseDate,
+                  },
+                });
               }
-
-              await tx.product.update({
-                where: { id: item.productId },
-                data: updateData,
-              });
-
-              await tx.stockHistory.create({
-                data: {
-                  productId: item.productId,
-                  changeType: 'purchase',
-                  quantity: qty,
-                  reason: `Direct Purchase: ${p.invoiceNumber}`,
-                  referenceId: p.id,
-                  purchaseId: p.id,
-                  createdAt: purchaseDate,
-                },
-              });
             }
-            */
 
 
             if (actualAmountPaid > 0) {

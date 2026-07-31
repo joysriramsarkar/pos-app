@@ -28,6 +28,7 @@ interface MobileSearchDialogProps {
     outOfStock: string;
     stock: string;
   };
+  isBn?: boolean;
 }
 
 export function MobileSearchDialog({
@@ -40,6 +41,7 @@ export function MobileSearchDialog({
   onSelect,
   formatTaka,
   labels,
+  isBn = false,
 }: MobileSearchDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -107,7 +109,7 @@ export function MobileSearchDialog({
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium truncate leading-tight">
-                        {product.nameBn || product.name}
+                        {isBn ? (product.nameBn || product.name) : (product.name || product.nameBn)}
                       </p>
                       <p className="text-[10px] text-muted-foreground leading-tight">
                         {isOutOfStock

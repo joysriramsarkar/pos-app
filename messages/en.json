@@ -774,7 +774,18 @@
     "total_spent": "Total Spent",
     "orders": "Orders",
     "avg_order": "Avg Order",
-    "top_products_label": "Top Products"
+    "top_products_label": "Top Products",
+    "total_due_supplier": "Total Supplier Due",
+    "suppliers_with_due": "Suppliers with Due",
+    "total_suppliers": "Total Suppliers",
+    "last_1_year_data": "Last 1 year data",
+    "no_purchase_data": "No purchase data found",
+    "no_purchase_yet": "This customer has not made any purchases yet",
+    "category_breakdown": "Category Breakdown",
+    "monthly_purchases": "Monthly Purchases",
+    "month": "Month",
+    "total_expense": "Total Expense",
+    "no_transactions": "No transactions found"
   },
   "PasswordChange": {
     "title": "Change Password",
@@ -941,7 +952,7 @@
     "order_number": "Order Number",
     "supplier": "Supplier",
     "date": "Date",
-    "expected_date": "Expected Date",
+    "expected_date": "Delivery Date",
     "status": "Status",
     "amount": "Amount",
     "actions": "Actions",

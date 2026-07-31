@@ -58,16 +58,18 @@ export function CustomerLedgerDialog({
   formatPrice,
   formatDate,
 }: CustomerLedgerDialogProps) {
+  const t = useTranslations('Parties');
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="md:max-w-2xl w-[95vw] max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileText className="w-5 h-5" />
-            Ledger - {customer?.name}
+            {t('ledger_title') || 'Ledger'} - {customer?.name}
           </DialogTitle>
           <DialogDescription>
-            Transaction history and due balance
+            {t('transaction_history') || 'Transaction history and due balance'}
           </DialogDescription>
         </DialogHeader>
 
@@ -75,13 +77,13 @@ export function CustomerLedgerDialog({
           <Card className="bg-muted/50">
             <CardContent className="p-4">
               <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">Current Due</span>
+                <span className="text-muted-foreground">{t('current_due') || 'Current Due'}</span>
                 <span className="text-2xl font-bold text-red-600">
                   {formatPrice(customer?.totalDue || 0)}
                 </span>
               </div>
               <div className="flex justify-between items-center mt-2">
-                <span className="text-muted-foreground">Prepaid Balance</span>
+                <span className="text-muted-foreground">{t('prepaid_balance') || 'Prepaid Balance'}</span>
                 <span className="text-2xl font-bold text-green-600">
                   {formatPrice(customer?.prepaidBalance || 0)}
                 </span>
@@ -634,6 +636,8 @@ export function CustomerDetailsDialog({
   formatPrice,
   formatNumber,
 }: CustomerDetailsDialogProps) {
+  const t = useTranslations('Parties');
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg w-[95vw] max-h-[90dvh] overflow-y-auto">
@@ -644,34 +648,34 @@ export function CustomerDetailsDialog({
           </DialogTitle>
           <DialogDescription className="flex items-center gap-1">
             {customerPhone && <span>{customerPhone}</span>}
-            <span className="text-[10px] text-muted-foreground ml-auto">গত ১ বছরের তথ্য</span>
+            <span className="text-[10px] text-muted-foreground ml-auto">{t('last_1_year_data') || 'গত ১ বছরের তথ্য'}</span>
           </DialogDescription>
         </DialogHeader>
 
         {loading ? (
           <div className="py-10 text-center text-xs text-muted-foreground flex flex-col items-center gap-2">
             <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-            <span>লোড হচ্ছে...</span>
+            <span>{t('loading') || 'লোড হচ্ছে...'}</span>
           </div>
         ) : !detail || (detail.orderCount === 0 && !detail.topProducts?.length) ? (
           <div className="py-10 text-center text-xs text-muted-foreground">
             <ShoppingBag className="w-8 h-8 mx-auto mb-2 opacity-30" />
-            <p>কোনো কেনাকাটার তথ্য পাওয়া যায়নি।</p>
-            <p className="text-[10px] mt-1">এই গ্রাহক এখনো কোনো কেনাকাটা করেননি।</p>
+            <p>{t('no_purchase_data') || 'কোনো কেনাকাটার তথ্য পাওয়া যায়নি।'}</p>
+            <p className="text-[10px] mt-1">{t('no_purchase_yet') || 'এই গ্রাহক এখনো কোনো কেনাকাটা করেননি।'}</p>
           </div>
         ) : (
           <div className="space-y-4 pt-1">
             <div className="grid grid-cols-3 gap-2">
               <div className="bg-indigo-50 dark:bg-indigo-950/20 rounded-xl p-3 text-center border border-indigo-100 dark:border-indigo-900/30">
-                <p className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold uppercase tracking-wider mb-0.5">মোট কেনাকাটা</p>
+                <p className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold uppercase tracking-wider mb-0.5">{t('total_spent') || 'মোট কেনাকাটা'}</p>
                 <p className="text-sm font-extrabold text-indigo-700 dark:text-indigo-300">{formatPrice(detail.totalSpent ?? 0)}</p>
               </div>
               <div className="bg-muted/50 rounded-xl p-3 text-center border border-border/40">
-                <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-0.5">অর্ডার সংখ্যা</p>
+                <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-0.5">{t('orders') || 'অর্ডার সংখ্যা'}</p>
                 <p className="text-sm font-extrabold">{formatNumber(detail.orderCount ?? 0)}</p>
               </div>
               <div className="bg-muted/50 rounded-xl p-3 text-center border border-border/40">
-                <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-0.5">গড় মূল্য</p>
+                <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-0.5">{t('avg_order') || 'গড় মূল্য'}</p>
                 <p className="text-sm font-extrabold">{formatPrice(detail.aov ?? 0)}</p>
               </div>
             </div>
@@ -680,15 +684,15 @@ export function CustomerDetailsDialog({
               <div>
                 <p className="text-xs font-semibold mb-2 flex items-center gap-1.5">
                   <span className="w-1.5 h-4 bg-indigo-500 rounded-full inline-block"></span>
-                  শীর্ষ ক্রয়কৃত পণ্য
+                  {t('top_products_label') || 'শীর্ষ ক্রয়কৃত পণ্য'}
                 </p>
                 <div className="rounded-lg overflow-hidden border border-border/50">
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-muted/40">
-                        <TableHead className="text-[10px] py-1.5 font-bold">পণ্যের নাম</TableHead>
-                        <TableHead className="text-right text-[10px] py-1.5 font-bold">পরিমাণ</TableHead>
-                        <TableHead className="text-right text-[10px] py-1.5 font-bold">মোট মূল্য</TableHead>
+                        <TableHead className="text-[10px] py-1.5 font-bold">{t('product_name') || 'পণ্যের নাম'}</TableHead>
+                        <TableHead className="text-right text-[10px] py-1.5 font-bold">{t('qty') || 'পরিমাণ'}</TableHead>
+                        <TableHead className="text-right text-[10px] py-1.5 font-bold">{t('total_price') || 'মোট মূল্য'}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -709,7 +713,7 @@ export function CustomerDetailsDialog({
               <div>
                 <p className="text-xs font-semibold mb-2 flex items-center gap-1.5">
                   <span className="w-1.5 h-4 bg-emerald-500 rounded-full inline-block"></span>
-                  ক্যাটেগরি অনুযায়ী খরচ
+                  {t('category_breakdown') || 'ক্যাটেগরি অনুযায়ী খরচ'}
                 </p>
                 <div className="space-y-1.5">
                   {[...detail.categoryBreakdown]
@@ -735,14 +739,14 @@ export function CustomerDetailsDialog({
               <div>
                 <p className="text-xs font-semibold mb-2 flex items-center gap-1.5">
                   <span className="w-1.5 h-4 bg-blue-500 rounded-full inline-block"></span>
-                  মাসওয়ারি কেনাকাটা
+                  {t('monthly_purchases') || 'মাসওয়ারি কেনাকাটা'}
                 </p>
                 <div className="rounded-lg overflow-hidden border border-border/50">
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-muted/40">
-                        <TableHead className="text-[10px] py-1.5 font-bold">মাস</TableHead>
-                        <TableHead className="text-right text-[10px] py-1.5 font-bold">মোট খরচ</TableHead>
+                        <TableHead className="text-[10px] py-1.5 font-bold">{t('month') || 'মাস'}</TableHead>
+                        <TableHead className="text-right text-[10px] py-1.5 font-bold">{t('total_expense') || 'মোট খরচ'}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>

@@ -19,12 +19,13 @@ export async function POST(
   try {
     const { id } = await context.params;
     const body = await request.json();
-    const { receivedItems, amountPaid, paymentMethod, cashAmount, upiAmount } = body as {
+    const { receivedItems, amountPaid, paymentMethod, cashAmount, upiAmount, updateStock } = body as {
       receivedItems: { id: string; receivedQty: number }[];
       amountPaid?: number;
       paymentMethod?: string;
       cashAmount?: number;
       upiAmount?: number;
+      updateStock?: boolean;
     };
 
     if (!receivedItems || receivedItems.length === 0) {
@@ -108,49 +109,49 @@ export async function POST(
           },
         });
 
-        // Update product stock and calculate WAC (FEATURE DISABLED TEMPORARILY)
-        /*
-        const product = await tx.product.findUnique({
-          where: { id: orderItem.productId },
-        });
+        // Update product stock and calculate WAC conditionally
+        if (updateStock) {
+          const product = await tx.product.findUnique({
+            where: { id: orderItem.productId },
+          });
 
-        const updateData: any = {
-          currentStock: { increment: qty },
-          updatedAt: new Date(),
-        };
+          const updateData: any = {
+            currentStock: { increment: qty },
+            updatedAt: new Date(),
+          };
 
-        if (unitPrice > 0) {
-          const currentStock = Number(product?.currentStock) || 0;
-          const newStock = currentStock + qty;
-          if (newStock > 0) {
-            const currentPrice = product?.buyingPrice !== null && product?.buyingPrice !== undefined
-              ? Number(product.buyingPrice)
-              : unitPrice;
-            const wac = ((currentStock * currentPrice) + (qty * unitPrice)) / newStock;
-            updateData.buyingPrice = toUnitPriceNumber(wac);
-          } else {
-            updateData.buyingPrice = toUnitPriceNumber(unitPrice);
+          if (unitPrice > 0) {
+            const currentStock = Number(product?.currentStock) || 0;
+            const newStock = currentStock + qty;
+            if (newStock > 0) {
+              const currentPrice = product?.buyingPrice !== null && product?.buyingPrice !== undefined
+                ? Number(product.buyingPrice)
+                : unitPrice;
+              const wac = ((currentStock * currentPrice) + (qty * unitPrice)) / newStock;
+              updateData.buyingPrice = toUnitPriceNumber(wac);
+            } else {
+              updateData.buyingPrice = toUnitPriceNumber(unitPrice);
+            }
           }
+
+          await tx.product.update({
+            where: { id: orderItem.productId },
+            data: updateData,
+          });
+
+          // Create stock entry history
+          await tx.stockHistory.create({
+            data: {
+              productId: orderItem.productId,
+              changeType: 'purchase',
+              quantity: qty,
+              reason: `Purchase Order Received: ${order.invoiceNumber}`,
+              referenceId: order.id,
+              purchaseId: order.id,
+              createdAt: order.createdAt,
+            },
+          });
         }
-
-        await tx.product.update({
-          where: { id: orderItem.productId },
-          data: updateData,
-        });
-
-        // Create stock entry history
-        await tx.stockHistory.create({
-          data: {
-            productId: orderItem.productId,
-            changeType: 'purchase',
-            quantity: qty,
-            reason: `Purchase Order Received: ${order.invoiceNumber}`,
-            referenceId: order.id,
-            purchaseId: order.id,
-            createdAt: order.createdAt,
-          },
-        });
-        */
       }
 
       // Calculate receivedTotalAmount
