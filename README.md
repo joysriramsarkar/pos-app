@@ -25,7 +25,7 @@
 - 📊 **Dashboard & Reports**: Real-time sales stats with cash/UPI reconciliation, category/product/customer reports, expense tracking, consistent chart labels/colors from settings.
 - 🛡️ **Audit Logs**: Database-level logging of all critical actions (sales, stock changes, user modifications).
 - 🔐 **Role-Based Access**: Admin / Manager / Cashier / Viewer roles via NextAuth.js with per-permission checks on every API route.
-- ⚡ **Performance**: Composite DB indexes on products table (`isActive`, `category+isActive`, `name`). Sales API uses field-level `select` to minimise data transfer.
+- ⚡ **Performance**: Virtualized stock management list (`react-virtuoso`) for high-performance 60fps rendering of large product catalogs. Composite DB indexes on products table (`isActive`, `category+isActive`, `name`). Sales API uses field-level `select` to minimise data transfer.
 
 ---
 
