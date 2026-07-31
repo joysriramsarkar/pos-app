@@ -179,9 +179,10 @@ export async function GET(request: NextRequest) {
     const productIds = [...new Set(todaySaleItems.map((item) => item.productId))];
     const products = await db.product.findMany({
       where: { id: { in: productIds } },
-      select: { id: true, buyingPrice: true },
+      select: { id: true, buyingPrice: true, nameBn: true },
     });
     const productBuyingPriceMap = new Map(products.map((p) => [p.id, Number(p.buyingPrice)]));
+    const productNameBnMap = new Map(products.map((p) => [p.id, p.nameBn]));
 
     // Weighted average unit cost per product from snapshots (for return net-out)
     const costAggByProduct = todaySaleItems.reduce<
@@ -268,12 +269,9 @@ export async function GET(request: NextRequest) {
           quantity: 0,
           revenue: 0,
         };
-        const fullProduct = await db.product.findUnique({
-          where: { id: item.productId },
-          select: { nameBn: true },
-        });
-        if (fullProduct?.nameBn) {
-          productSalesMap[item.productId].nameBn = fullProduct.nameBn;
+        const nameBn = productNameBnMap.get(item.productId);
+        if (nameBn) {
+          productSalesMap[item.productId].nameBn = nameBn;
         }
       }
       productSalesMap[item.productId].quantity += Number(item.quantity);
