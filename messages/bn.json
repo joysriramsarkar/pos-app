@@ -774,7 +774,18 @@
     "total_spent": "মোট কেনাকাটা",
     "orders": "অর্ডার সংখ্যা",
     "avg_order": "গড় অর্ডার মূল্য",
-    "top_products_label": "শীর্ষ ক্রয়কৃত পণ্য"
+    "top_products_label": "শীর্ষ ক্রয়কৃত পণ্য",
+    "total_due_supplier": "মোট বকেয়া (সাপ্লায়ার)",
+    "suppliers_with_due": "বকেয়া আছে এমন সাপ্লায়ার",
+    "total_suppliers": "মোট সাপ্লায়ার",
+    "last_1_year_data": "গত ১ বছরের তথ্য",
+    "no_purchase_data": "কোনো কেনাকাটার তথ্য পাওয়া যায়নি।",
+    "no_purchase_yet": "এই গ্রাহক এখনো কোনো কেনাকাটা করেননি।",
+    "category_breakdown": "ক্যাটেগরি অনুযায়ী খরচ",
+    "monthly_purchases": "মাসওয়ারি কেনাকাটা",
+    "month": "মাস",
+    "total_expense": "মোট খরচ",
+    "no_transactions": "কোনো লেনদেন পাওয়া যায়নি"
   },
   "PasswordChange": {
     "title": "পাসওয়ার্ড পরিবর্তন করুন",
@@ -957,7 +968,7 @@
     "quantity": "পরিমাণ",
     "unit_price": "একক মূল্য",
     "total_price": "মোট মূল্য",
-    "expected_date": "প্রত্যাশিত তারিখ",
+    "expected_date": "ডেলিভারি তারিখ",
     "notes": "নোট",
     "create_order": "অর্ডার তৈরি করুন",
     "place_order": "অর্ডার করুন",

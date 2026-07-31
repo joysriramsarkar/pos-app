@@ -47,7 +47,7 @@ export function DailySummary({ open, onOpenChange }: DailySummaryProps) {
   const [data, setData] = useState<DailySummaryData | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const { formatPrice: formatTaka, formatNumber } = useNumberFormat();
+  const { formatPrice: formatTaka, formatNumber, isBn } = useNumberFormat();
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -103,7 +103,7 @@ export function DailySummary({ open, onOpenChange }: DailySummaryProps) {
           <DialogDescription>{t('end_of_day')}</DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 min-h-0 -mx-6 px-6">
+        <div className="flex-1 min-h-0 overflow-y-auto -mx-6 px-6">
           <div id="receipt-content" className="py-2 space-y-4">
             {loading ? (
               <DailySummarySkeleton />
@@ -306,7 +306,7 @@ export function DailySummary({ open, onOpenChange }: DailySummaryProps) {
                             {formatNumber(idx + 1)}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">{product.nameBn || product.name}</p>
+                            <p className="text-sm font-medium truncate">{isBn ? (product.nameBn || product.name) : (product.name || product.nameBn)}</p>
                           </div>
                           <div className="text-right shrink-0">
                             <p className="text-sm font-semibold">{formatTaka(product.revenue)}</p>
@@ -395,24 +395,24 @@ export function DailySummary({ open, onOpenChange }: DailySummaryProps) {
               </div>
             )}
           </div>
-        </ScrollArea>
+        </div>
 
-        {/* Action Buttons */}
-        <div className="flex gap-3 pt-2 border-t no-print shrink-0">
+        {/* Action Buttons with Liquid Glass Effect */}
+        <div className="flex gap-3 mt-4 liquid-glass-panel no-print shrink-0">
           <Button
-            className="flex-1 h-11 bg-primary hover:bg-primary/90 shadow-md font-semibold"
+            className="flex-1 h-12 bg-primary/90 hover:bg-primary dark:bg-primary/80 dark:hover:bg-primary text-primary-foreground backdrop-blur-md shadow-md font-semibold transition-all active:scale-[0.98] rounded-full"
             onClick={handlePrint}
             disabled={loading || !data}
           >
-            <Printer className="h-4 w-4 mr-1.5" />
+            <Printer className="h-5 w-5 mr-2" />
             {t('print_report')}
           </Button>
           <Button
             variant="outline"
-            className="flex-1 h-11"
+            className="flex-1 h-12 bg-background/50 hover:bg-accent/70 backdrop-blur-md border-slate-200/80 dark:border-slate-800/80 transition-all active:scale-[0.98] rounded-full"
             onClick={() => onOpenChange(false)}
           >
-            <X className="h-4 w-4 mr-1.5" />
+            <X className="h-5 w-5 mr-2" />
             {t('close')}
           </Button>
         </div>

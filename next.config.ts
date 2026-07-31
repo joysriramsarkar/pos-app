@@ -28,6 +28,8 @@ const nextConfig: NextConfig = {
     optimizePackageImports: [
       "lucide-react",
       "recharts",
+      "date-fns",
+      "date-fns-tz",
     ],
     // inlineCss is disabled because it can break modern CSS parsing for color functions
     // such as oklch() used by Tailwind / modern UI libs.

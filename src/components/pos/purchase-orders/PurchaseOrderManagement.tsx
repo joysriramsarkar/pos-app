@@ -56,8 +56,10 @@ export default function PurchaseOrderManagement() {
   const [formGstPercentage, setFormGstPercentage] = useState('');
   const [formCashAmount, setFormCashAmount] = useState('');
   const [formUpiAmount, setFormUpiAmount] = useState('');
+  const [formUpdateStock, setFormUpdateStock] = useState(false);
 
   // Receive form state
+  const [receiveUpdateStock, setReceiveUpdateStock] = useState(false);
   const [receiveItems, setReceiveItems] = useState<ReceiveItem[]>([]);
   const [receiveAmountPaid, setReceiveAmountPaid] = useState<string>('');
   const [receivePaymentMethod, setReceivePaymentMethod] = useState('Cash');
@@ -268,6 +270,7 @@ export default function PurchaseOrderManagement() {
     setFormGstPercentage('');
     setFormCashAmount('');
     setFormUpiAmount('');
+    setFormUpdateStock(false);
   };
 
   const handleCreateOrder = async (directReceive = false) => {
@@ -298,6 +301,7 @@ export default function PurchaseOrderManagement() {
           expectedDate: formExpectedDate || null,
           notes: formNotes || null,
           directReceive,
+          updateStock: formUpdateStock,
           amountPaid: (directReceive && formAmountPaid) ? parseFloat(formAmountPaid) : undefined,
           paymentMethod: directReceive ? formPaymentMethod : undefined,
           cashAmount: (directReceive && formPaymentMethod === 'Mixed') ? (parseFloat(formCashAmount) || 0) : undefined,
@@ -309,20 +313,21 @@ export default function PurchaseOrderManagement() {
       if (data.success) {
         if (directReceive) {
           toast.success('ক্রয় সফল হয়েছে');
-          // Update local stock in Zustand store and IndexedDB database (FEATURE DISABLED TEMPORARILY)
-          /*
-          try {
-            const productsStore = useProductsStore.getState();
-            const { ProductsDB } = await import('@/lib/offline/indexeddb');
-            for (const item of formItems) {
-              const parsedQty = parseFloat(item.quantity as string) || 0;
-              productsStore.updateProductStock(item.productId, parsedQty);
-              await ProductsDB.updateStock(item.productId, parsedQty);
+          
+          if (formUpdateStock) {
+            try {
+              const productsStore = useProductsStore.getState();
+              const { ProductsDB } = await import('@/lib/offline/indexeddb');
+              for (const item of formItems) {
+                const parsedQty = parseFloat(item.quantity as string) || 0;
+                productsStore.updateProductStock(item.productId, parsedQty);
+                await ProductsDB.updateStock(item.productId, parsedQty);
+              }
+            } catch (dbError) {
+              console.error('Failed to update local stock cache:', dbError);
             }
-          } catch (dbError) {
-            console.error('Failed to update local stock cache:', dbError);
           }
-          */
+
         } else {
           toast.success(t('order_created'));
         }
@@ -428,6 +433,7 @@ export default function PurchaseOrderManagement() {
         body: JSON.stringify({
           receivedItems: validItems.map((i) => ({ id: i.id, receivedQty: i.receivedQty })),
           amountPaid: receiveAmountPaid ? parseFloat(receiveAmountPaid) : undefined,
+          updateStock: receiveUpdateStock,
           paymentMethod: receivePaymentMethod,
           cashAmount: receivePaymentMethod === 'Mixed' ? (parseFloat(receiveCashAmount) || 0) : undefined,
           upiAmount: receivePaymentMethod === 'Mixed' ? (parseFloat(receiveUpiAmount) || 0) : undefined,
@@ -437,23 +443,23 @@ export default function PurchaseOrderManagement() {
       if (data.success) {
         toast.success(t('order_received'));
 
-        // Update local stock in Zustand store and IndexedDB database (FEATURE DISABLED TEMPORARILY)
-        /*
-        try {
-          const productsStore = useProductsStore.getState();
-          const { ProductsDB } = await import('@/lib/offline/indexeddb');
-          for (const item of validItems) {
-            const orderItem = selectedOrder.items.find((i) => i.id === item.id);
-            if (orderItem) {
-              const parsedRcvQty = parseFloat(item.receivedQty as string) || 0;
-              productsStore.updateProductStock(orderItem.productId, parsedRcvQty);
-              await ProductsDB.updateStock(orderItem.productId, parsedRcvQty);
+        if (receiveUpdateStock) {
+          try {
+            const productsStore = useProductsStore.getState();
+            const { ProductsDB } = await import('@/lib/offline/indexeddb');
+            for (const item of validItems) {
+              const orderItem = selectedOrder.items.find((i) => i.id === item.id);
+              if (orderItem) {
+                const parsedRcvQty = parseFloat(item.receivedQty as string) || 0;
+                productsStore.updateProductStock(orderItem.productId, parsedRcvQty);
+                await ProductsDB.updateStock(orderItem.productId, parsedRcvQty);
+              }
             }
+          } catch (dbError) {
+            console.error('Failed to update local stock cache:', dbError);
           }
-        } catch (dbError) {
-          console.error('Failed to update local stock cache:', dbError);
         }
-        */
+
 
         setShowReceiveDialog(false);
         setShowDetailDialog(false);
@@ -518,6 +524,8 @@ export default function PurchaseOrderManagement() {
         setFormExpectedDate={setFormExpectedDate}
         formNotes={formNotes}
         setFormNotes={setFormNotes}
+        formUpdateStock={formUpdateStock}
+        setFormUpdateStock={setFormUpdateStock}
         formAmountPaid={formAmountPaid}
         setFormAmountPaid={setFormAmountPaid}
         formProductId={formProductId}
@@ -575,6 +583,8 @@ export default function PurchaseOrderManagement() {
         setReceiveItems={setReceiveItems}
         receiveAmountPaid={receiveAmountPaid}
         setReceiveAmountPaid={setReceiveAmountPaid}
+        receiveUpdateStock={receiveUpdateStock}
+        setReceiveUpdateStock={setReceiveUpdateStock}
         receivePaymentMethod={receivePaymentMethod}
         setReceivePaymentMethod={setReceivePaymentMethod}
         receiveCashAmount={receiveCashAmount}

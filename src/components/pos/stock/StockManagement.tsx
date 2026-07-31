@@ -454,7 +454,7 @@ export function StockManagement({
                   {formatPrice(totalStockValue)}
                 </p>
                 <p className="text-[9px] text-green-600/70 dark:text-green-500/70">
-                  {activeProducts.length} {t('items')}
+                  {formatNumber(activeProducts.length)} {t('items')}
                 </p>
               </CardContent>
             </Card>
@@ -497,10 +497,10 @@ export function StockManagement({
                   <span className="text-[10px] text-muted-foreground leading-tight">{t('out_of_stock')}</span>
                 </div>
                 <p className="text-sm font-bold text-red-600 dark:text-red-400 tabular-nums">
-                  {outOfStockCount}
+                  {formatNumber(outOfStockCount)}
                 </p>
                 <p className="text-[9px] text-red-500/70 dark:text-red-400/70">
-                  {lowStockCount} {t('low_stock')}
+                  {formatNumber(lowStockCount)} {t('low_stock')}
                 </p>
               </CardContent>
             </Card>

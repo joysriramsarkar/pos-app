@@ -42,7 +42,7 @@ export function CartTotals({
   t,
 }: CartTotalsProps) {
   return (
-    <div className="flex-none mt-auto bg-background border-t p-1.5 md:p-0 shadow-[0_-8px_20px_-10px_rgba(0,0,0,0.12)] md:shadow-none z-10 shrink-0 pb-16 lg:pb-0">
+    <div className="flex-none mt-auto bg-background border-t p-1.5 md:p-0 shadow-[0_-8px_20px_-10px_rgba(0,0,0,0.12)] md:shadow-none z-10 shrink-0 pb-[72px] lg:pb-0">
 
       <div className="p-1.5 md:p-3">
         <Label className="text-[9px] md:text-[10px] font-semibold text-muted-foreground mb-1 block uppercase tracking-wider">{t('payment_method')}</Label>

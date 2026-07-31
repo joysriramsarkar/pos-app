@@ -26,7 +26,8 @@ export function usePartiesManagement(refreshKey?: number) {
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const [activeTab, setActiveTab] = useState<PartyType>('customer');
-  const { inputValue: searchInput, searchQuery, setInputValue: setSearchInput, clearSearch: clearSearchQuery } = useDebouncedSearch();
+  const { inputValue: customerSearchInput, searchQuery: customerSearchQuery, setInputValue: setCustomerSearchInput, clearSearch: clearCustomerSearch } = useDebouncedSearch();
+  const { inputValue: supplierSearchInput, searchQuery: supplierSearchQuery, setInputValue: setSupplierSearchInput, clearSearch: clearSupplierSearch } = useDebouncedSearch();
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [showLedger, setShowLedger] = useState(false);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
@@ -291,8 +292,8 @@ export function usePartiesManagement(refreshKey?: number) {
   // Filter and sort customers
   const filteredCustomers = useMemo(() => {
     let result = customers.filter(c => c.isActive);
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
+    if (customerSearchQuery) {
+      const query = customerSearchQuery.toLowerCase();
       result = result.filter(c =>
         c.isActive && (
           c.name.toLowerCase().includes(query) ||
@@ -316,13 +317,13 @@ export function usePartiesManagement(refreshKey?: number) {
       }
       return 0;
     });
-  }, [customers, searchQuery, customerSort]);
+  }, [customers, customerSearchQuery, customerSort]);
 
   // Filter and sort suppliers
   const filteredSuppliers = useMemo(() => {
     let result = suppliers.filter(s => s.isActive);
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
+    if (supplierSearchQuery) {
+      const query = supplierSearchQuery.toLowerCase();
       result = result.filter(s =>
         s.isActive && (
           s.name.toLowerCase().includes(query) ||
@@ -349,7 +350,7 @@ export function usePartiesManagement(refreshKey?: number) {
       }
       return 0;
     });
-  }, [suppliers, searchQuery, supplierSort]);
+  }, [suppliers, supplierSearchQuery, supplierSort]);
 
   const totalDue = customers.reduce((sum, c) => sum + toMoneyNumber(c.totalDue), 0);
   const customersWithDue = customers.filter(c => toMoneyNumber(c.totalDue) > 0).length;
@@ -889,9 +890,6 @@ export function usePartiesManagement(refreshKey?: number) {
     searchInputRef,
     activeTab,
     setActiveTab,
-    searchInput,
-    setSearchInput,
-    clearSearchQuery,
     selectedCustomer,
     showLedger,
     setShowLedger,
@@ -928,6 +926,12 @@ export function usePartiesManagement(refreshKey?: number) {
     dueEntryDescription,
     setDueEntryDescription,
     setIsNameEnTouched,
+    customerSearchInput,
+    setCustomerSearchInput,
+    clearCustomerSearch,
+    supplierSearchInput,
+    setSupplierSearchInput,
+    clearSupplierSearch,
     customerSort,
     setCustomerSort,
     supplierSort,

@@ -73,7 +73,7 @@ export function Dashboard({ onNavigate, refreshKey }: DashboardProps) {
   // Refetch whenever dashboard tab becomes active (refreshKey bumps on navigation)
   useEffect(() => {
     if (refreshKey !== undefined) fetchStats();
-  }, [refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [refreshKey, fetchStats]);
 
   // Refetch on window focus
   useEffect(() => {
@@ -192,6 +192,7 @@ export function Dashboard({ onNavigate, refreshKey }: DashboardProps) {
         searchResults={searchResults}
         onSelect={handleSearchSelect}
         formatTaka={formatTaka}
+        isBn={isBn}
         labels={{
           quickSearch: t('quick_search'),
           noResults: t('no_results'),
@@ -296,6 +297,7 @@ export function Dashboard({ onNavigate, refreshKey }: DashboardProps) {
         stats={stats}
         formatTaka={formatTaka}
         getTimeAgo={getTimeAgo}
+        isBn={isBn}
         onNavigate={onNavigate}
         onSelectTransaction={(tx) => {
           setSelectedTransaction(tx);

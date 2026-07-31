@@ -1,6 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
+import { useNumberFormat } from '@/hooks/use-number-format';
 import { Supplier } from '@/types/pos';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,6 +22,7 @@ import {
 import { cn, convertBengaliToEnglishNumerals } from '@/lib/utils';
 import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Plus, Loader2, Trash2, Check, ChevronsUpDown,
 } from 'lucide-react';
@@ -55,6 +57,8 @@ interface PurchaseOrderFormDialogProps {
   setFormExpectedDate: (value: string) => void;
   formNotes: string;
   setFormNotes: (value: string) => void;
+  formUpdateStock: boolean;
+  setFormUpdateStock: (value: boolean) => void;
   formAmountPaid: string;
   setFormAmountPaid: (value: string) => void;
   formProductId: string;
@@ -109,6 +113,8 @@ export function PurchaseOrderFormDialog({
   setFormExpectedDate,
   formNotes,
   setFormNotes,
+  formUpdateStock,
+  setFormUpdateStock,
   formAmountPaid,
   setFormAmountPaid,
   formProductId,
@@ -148,6 +154,7 @@ export function PurchaseOrderFormDialog({
   const t = useTranslations('PurchaseOrders');
   const tb = useTranslations('Billing');
   const tc = useTranslations('Common');
+  const { isBn } = useNumberFormat();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -269,7 +276,7 @@ export function PurchaseOrderFormDialog({
                             value={product.id}
                             onSelect={() => {
                               setFormProductId(product.id);
-                              setFormProductName(product.nameBn || product.name);
+                              setFormProductName(isBn ? (product.nameBn || product.name) : (product.name || product.nameBn) || '');
                               setProductOpen(false);
                             }}
                           >
@@ -279,7 +286,7 @@ export function PurchaseOrderFormDialog({
                                 formProductId === product.id ? 'opacity-100' : 'opacity-0'
                               )}
                             />
-                            <span className="truncate">{product.nameBn || product.name}</span>
+                            <span className="truncate">{isBn ? (product.nameBn || product.name) : (product.name || product.nameBn)}</span>
                             {supplierProductIds.has(product.id) && (
                               <Badge variant="secondary" className="ml-2 text-[10px] py-0 px-1 font-semibold text-indigo-600 bg-indigo-50 border-indigo-100 dark:bg-indigo-950/20 dark:text-indigo-400">
                                 সাপ্লায়ারের
@@ -593,6 +600,21 @@ export function PurchaseOrderFormDialog({
               value={formExpectedDate}
               onChange={(e) => setFormExpectedDate(e.target.value)}
             />
+          </div>
+
+          {/* Update Stock Checkbox */}
+          <div className="flex items-center space-x-2 py-2">
+            <Checkbox
+              id="update-stock"
+              checked={formUpdateStock}
+              onCheckedChange={(checked) => setFormUpdateStock(checked === true)}
+            />
+            <label
+              htmlFor="update-stock"
+              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+            >
+              স্টক আপডেট করুন (Update Stock)
+            </label>
           </div>
 
           {/* Notes */}

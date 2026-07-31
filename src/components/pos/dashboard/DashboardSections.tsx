@@ -445,6 +445,7 @@ interface LowStockAndTransactionsProps {
     walkIn: string;
     due: string;
   };
+  isBn?: boolean;
 }
 
 export function LowStockAndTransactions({
@@ -454,6 +455,7 @@ export function LowStockAndTransactions({
   onNavigate,
   onSelectTransaction,
   labels,
+  isBn = false,
 }: LowStockAndTransactionsProps) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-stagger-in" style={{ animationDelay: '0.45s' }}>
@@ -486,7 +488,7 @@ export function LowStockAndTransactions({
                     }`} />
                     <div className="min-w-0">
                       <p className="font-medium text-sm truncate">
-                        {product.nameBn || product.name}
+                        {isBn ? (product.nameBn || product.name) : (product.name || product.nameBn)}
                       </p>
                       <p className={`text-xs ${
                         product.currentStock === 0

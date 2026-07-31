@@ -25,7 +25,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
-import { Package, Barcode, RefreshCw, Languages, ScanLine, X } from 'lucide-react';
+import { Package, Barcode, RefreshCw, Languages, ScanLine, X, Loader2 } from 'lucide-react';
 import { useProductsStore } from '@/stores/pos-store';
 import { cn, convertBengaliToEnglishNumerals } from '@/lib/utils';
 import { v4 as uuidv4 } from 'uuid';
@@ -604,11 +604,20 @@ export function ProductDialog({
       )}
 
         <DialogFooter className="gap-2 sm:gap-0">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
             {tc('cancel')}
           </Button>
-          <Button onClick={handleSubmit} disabled={!isValid || isSubmitting}>
-            {isSubmitting ? t('saving') : isEditing ? t('update_product') : t('add_product_btn')}
+          <Button onClick={handleSubmit} disabled={!isValid || isSubmitting} className="flex items-center gap-2">
+            {isSubmitting ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>{t('saving')}</span>
+              </>
+            ) : isEditing ? (
+              t('update_product')
+            ) : (
+              t('add_product_btn')
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>
