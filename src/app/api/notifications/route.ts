@@ -9,8 +9,14 @@ export interface NotificationItem {
   type: 'low_stock' | 'out_of_stock' | 'due_payment';
   title: string;
   message: string;
+  productName?: string;
+  productNameBn?: string | null;
+  currentStock?: number;
+  unit?: string;
+  customerName?: string;
+  dueAmount?: number;
   icon: 'alert' | 'critical' | 'wallet';
-  severity: 'critical' | 'warning' | 'info';
+  severity?: 'critical' | 'warning' | 'info';
   createdAt: string;
   read: boolean;
   referenceId?: string;

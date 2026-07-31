@@ -8,23 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Bell, BellRing, AlertTriangle, CircleAlert, Wallet, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
-
-interface NotificationItem {
-  id: string;
-  type: 'low_stock' | 'out_of_stock' | 'due_payment';
-  title: string;
-  message: string;
-  productName?: string;
-  productNameBn?: string | null;
-  currentStock?: number;
-  unit?: string;
-  customerName?: string;
-  dueAmount?: number;
-  icon: 'alert' | 'critical' | 'wallet';
-  createdAt: string;
-  read: boolean;
-  referenceId?: string;
-}
+import type { NotificationItem } from '@/app/api/notifications/route';
 
 interface NotificationsResponse {
   success: boolean;
