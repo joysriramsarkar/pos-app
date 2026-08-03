@@ -5,12 +5,12 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Search, X, Grid3X3, LayoutGrid, Package, Camera } from 'lucide-react';
+import { Search, X, Grid3X3, LayoutGrid, Package, Camera, Loader2 } from 'lucide-react';
 import { ProductCard } from './ProductCard';
 import { CameraScannerDialog } from './CameraScannerDialog';
 import { Capacitor } from '@capacitor/core';
 import type { Product } from '@/types/pos';
-import { useProductsStore, useUIStore, useCartStore } from '@/stores/pos-store';
+import { useProductsStore, useUIStore, useCartStore, useProductUsageStore } from '@/stores/pos-store';
 import { cn, convertBengaliToEnglishNumerals, normalizeSearchText } from '@/lib/utils';
 import { useTranslations } from 'next-intl';
 
@@ -68,6 +68,7 @@ export function ProductGrid({
   }, [searchFocusKey]);
 
   const storeProducts = useProductsStore((state) => state.products);
+  const isStoreLoading = useProductsStore((state) => state.isLoading);
   const storeCategories = useProductsStore((state) => state.categories);
   const hasMore = useProductsStore((state) => state.hasMore);
   const nextCursor = useProductsStore((state) => state.nextCursor);
@@ -103,9 +104,11 @@ export function ProductGrid({
     return map;
   }, [products]);
 
+  const productUsage = useProductUsageStore((state) => state.usage);
+
   // Filter products based on search and category
   const filteredProducts = useMemo(() => {
-    return products.filter((product) => {
+    const filtered = products.filter((product) => {
       if (!product.isActive) return false;
       if (selectedCategoryId && product.category !== selectedCategoryId) return false;
       if (searchQuery) {
@@ -122,7 +125,18 @@ export function ProductGrid({
       }
       return true;
     });
-  }, [products, searchQuery, selectedCategoryId]);
+
+    if (searchQuery) {
+      filtered.sort((a, b) => {
+        const usageA = productUsage[a.id] || 0;
+        const usageB = productUsage[b.id] || 0;
+        if (usageB !== usageA) return usageB - usageA;
+        return a.name.localeCompare(b.name);
+      });
+    }
+
+    return filtered;
+  }, [products, searchQuery, selectedCategoryId, productUsage]);
 
   const [renderLimit, setRenderLimit] = useState(50);
 
@@ -366,7 +380,12 @@ export function ProductGrid({
 
       <div className="flex-1 min-h-0 overflow-y-auto">
         <div className="p-2 sm:p-4 md:p-5">
-          {filteredProducts.length === 0 ? (
+          {isStoreLoading && filteredProducts.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-10 sm:py-16 text-center bg-card rounded-xl sm:rounded-2xl border border-dashed border-border/60">
+              <Loader2 className="w-10 h-10 sm:w-12 sm:h-12 text-primary animate-spin mb-3" />
+              <p className="text-base sm:text-lg font-medium text-muted-foreground">{tc('loading')}</p>
+            </div>
+          ) : filteredProducts.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-10 sm:py-16 text-center bg-card rounded-xl sm:rounded-2xl border border-dashed border-border/60">
               <Package className="w-10 h-10 sm:w-12 sm:h-12 text-muted-foreground mb-3" />
               <p className="text-base sm:text-lg font-medium text-muted-foreground">{t('no_products')}</p>

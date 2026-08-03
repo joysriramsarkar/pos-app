@@ -77,6 +77,11 @@ interface PurchaseOrderFormDialogProps {
   setFormPaymentMethod: (value: string) => void;
   formGstPercentage: string;
   setFormGstPercentage: (value: string) => void;
+  formDiscountType: 'percent' | 'fixed';
+  setFormDiscountType: (value: 'percent' | 'fixed') => void;
+  formDiscountValue: string;
+  setFormDiscountValue: (value: string) => void;
+  discountAmount: number;
   formCashAmount: string;
   setFormCashAmount: (value: string) => void;
   formUpiAmount: string;
@@ -133,6 +138,11 @@ export function PurchaseOrderFormDialog({
   setFormPaymentMethod,
   formGstPercentage,
   setFormGstPercentage,
+  formDiscountType,
+  setFormDiscountType,
+  formDiscountValue,
+  setFormDiscountValue,
+  discountAmount,
   formCashAmount,
   setFormCashAmount,
   formUpiAmount,
@@ -154,7 +164,7 @@ export function PurchaseOrderFormDialog({
   const t = useTranslations('PurchaseOrders');
   const tb = useTranslations('Billing');
   const tc = useTranslations('Common');
-  const { isBn } = useNumberFormat();
+  const { isBn, formatNumber } = useNumberFormat();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -547,7 +557,7 @@ export function PurchaseOrderFormDialog({
           {formItems.length > 0 && (
             <div className="bg-muted/50 rounded-lg p-3 space-y-2 border border-border/50">
               <div className="flex justify-between items-center text-sm">
-                <span className="text-muted-foreground">সাবটোটাল ({formItems.length} প্রকার, {totalItemCount} আইটেম):</span>
+                <span className="text-muted-foreground">সাবটোটাল ({formatNumber(formItems.length)} প্রকার, {formatNumber(totalItemCount)} আইটেম):</span>
                 <span className="font-semibold">{formatPrice(formSubtotal)}</span>
               </div>
 
@@ -568,6 +578,36 @@ export function PurchaseOrderFormDialog({
                   </div>
                 </div>
                 <span className="font-medium text-muted-foreground">{gstAmount > 0 ? '+' : ''}{formatPrice(gstAmount)}</span>
+              </div>
+
+              <div className="flex justify-between items-center text-sm">
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground">ডিসকাউন্ট (Discount):</span>
+                  <div className="flex items-center gap-1">
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      placeholder="0"
+                      value={formDiscountValue}
+                      onChange={(e) => setFormDiscountValue(convertBengaliToEnglishNumerals(e.target.value))}
+                      className="h-7 w-20 text-xs"
+                    />
+                    <Select
+                      value={formDiscountType}
+                      onValueChange={(val: 'percent' | 'fixed') => setFormDiscountType(val)}
+                    >
+                      <SelectTrigger className="h-7 w-14 text-xs px-1.5">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="percent">%</SelectItem>
+                        <SelectItem value="fixed">{currencySymbol}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <span className="font-medium text-destructive">{discountAmount > 0 ? '-' : ''}{formatPrice(discountAmount)}</span>
               </div>
 
               <Separator className="my-1" />

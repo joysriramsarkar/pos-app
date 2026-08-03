@@ -10,4 +10,4 @@ export interface StockManagementProps {
 
 export type SortField = 'name' | 'stock' | 'price' | 'category';
 export type SortOrder = 'asc' | 'desc';
-export type StockFilter = 'all' | 'low' | 'out' | 'inactive';
+export type StockFilter = 'all' | 'low' | 'out' | 'inactive' | 'no_barcode';

@@ -32,6 +32,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { CameraScannerDialog } from '../CameraScannerDialog';
 import { useCameraBarcodeScanner } from '@/hooks/use-camera-barcode-scanner';
 import { Capacitor } from '@capacitor/core';
+import { bumpSubcategoryUsage, getSortedSubcategories } from '@/lib/subcategory-usage';
 import {
   DEFAULT_CATEGORIES,
   generateBarcode,
@@ -66,10 +67,10 @@ export function ProductDialog({
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isWebScannerOpen, setIsWebScannerOpen] = useState(false);
   const [isNameBnTouched, setIsNameBnTouched] = useState(!!product);
+  const [isNameTouched, setIsNameTouched] = useState(!!product);
   const [isCategoryOpen, setIsCategoryOpen] = useState(false);
   const [isSubCategoryOpen, setIsSubCategoryOpen] = useState(false);
   const [isUnitOpen, setIsUnitOpen] = useState(false);
-  const pendingTranslationRef = useRef<string | null>(null);
   const isAnySelectOpen = isCategoryOpen || isSubCategoryOpen || isUnitOpen;
   const isAnySelectOpenRef = useRef(isAnySelectOpen);
   useEffect(() => {
@@ -102,10 +103,10 @@ export function ProductDialog({
   const categories = useProductsStore((state) => state.categories);
   const products = useProductsStore((state) => state.products);
   const allCategories = useMemo(() => [...new Set([...DEFAULT_CATEGORIES, ...categories])].sort(), [categories]);
-  const allSubCategories = useMemo(() =>
-    [...new Set(products.map((p) => p.subCategory).filter(Boolean) as string[])].sort(),
-    [products]
-  );
+  const allSubCategories = useMemo(() => {
+    const subSet = [...new Set(products.map((p) => p.subCategory).filter(Boolean) as string[])];
+    return getSortedSubcategories(category, subSet);
+  }, [products, category]);
 
   const isEditing = !!product;
 
@@ -141,71 +142,96 @@ export function ProductDialog({
         setMinStockLevel('5');
         setIsActive(true);
         setIsNameBnTouched(false);
+        setIsNameTouched(false);
       }
     }
   }, [open, product]);
 
-  // Auto-translate name to Bengali
+
+  // Auto-translate Bengali name to English
+  const pendingEnglishTranslationRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!name.trim()) {
-      if (!isNameBnTouched) setNameBn('');
+    if (!nameBn.trim()) {
+      if (!isNameTouched) setName('');
       return;
     }
     
     const timeoutId = setTimeout(async () => {
-      if (!isNameBnTouched) {
+      if (!isNameTouched) {
         try {
-          // Convert English digits to Bengali digits first
-          const englishDigits = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+          let preProcessedName = nameBn.trim();
+          
+          // Convert Bengali digits to English digits
           const bengaliDigits = ['০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯'];
-          let digitConvertedName = name.trim();
-          for (let i = 0; i < englishDigits.length; i++) {
-            digitConvertedName = digitConvertedName.split(englishDigits[i]).join(bengaliDigits[i]);
+          const englishDigits = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+          for (let i = 0; i < bengaliDigits.length; i++) {
+            preProcessedName = preProcessedName.split(bengaliDigits[i]).join(englishDigits[i]);
           }
 
-          const processedName = digitConvertedName
-            .replace(/\b(rs|rupees?)\b\.?\s*([০-৯0-9]+)/gi, '$2 taka') // Swap "Rs. 20" to "20 taka"
-            .replace(/\b(rs|rupees?)\b\.?/gi, 'taka') // Fallback for standalone "Rs"
-            .replace(/\b(yellow)\b/gi, 'holud')
-            .replace(/\b(red)\b/gi, 'lal')
-            .replace(/\b(green)\b/gi, 'sobuj')
-            .replace(/\b(blue)\b/gi, 'nil')
-            .replace(/\b(black)\b/gi, 'kalo')
-            .replace(/\b(white)\b/gi, 'sada')
-            // Unit suffix: ml/mL/ML/Ml → মিলি, g/G → গ্রাম, l/L → লিটার (supports optional spaces like "200 ml", "500 g", "1 L")
-            .replace(/([০-৯\d]+)\s*(?:ml|mL|ML|Ml)\b/gi, '$1 মিলি')
-            .replace(/([০-৯\d]+)\s*(?:g|G)\b/g, '$1 গ্রাম')
-            .replace(/([০-৯\d]+)\s*(?:l|L)\b/g, '$1 লিটার');
+          preProcessedName = preProcessedName
+            // Currency
+            .replace(/([0-9]+)\s*(?:টাকা|ট|taka|tk)/gi, 'Rs. $1')
+            // Units
+            .replace(/([0-9]+)\s*(?:মিলি|ml)/gi, '$1 ml')
+            .replace(/([0-9]+)\s*(?:গ্রাম|গ্রা|g)/gi, '$1 g')
+            .replace(/([0-9]+)\s*(?:লিটার|লি|l)/gi, '$1 L')
+            .replace(/([0-9]+)\s*(?:পিস|p|pc|pcs)/gi, '$1 pcs')
+            // Colors with word boundaries
+            .replace(/(^|\s)হলুদ(?=\s|$)/g, '$1Yellow')
+            .replace(/(^|\s)লাল(?=\s|$)/g, '$1Red')
+            .replace(/(^|\s)সবুজ(?=\s|$)/g, '$1Green')
+            .replace(/(^|\s)নীল(?=\s|$)/g, '$1Blue')
+            .replace(/(^|\s)কালো(?=\s|$)/g, '$1Black')
+            .replace(/(^|\s)সাদা(?=\s|$)/g, '$1White');
 
-          const res = await fetch(`https://inputtools.google.com/request?text=${encodeURIComponent(processedName)}&itc=bn-t-i0-und&num=1&cp=0&cs=1&ie=utf-8&oe=utf-8&app=demopage`);
+          const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=bn&tl=en&dt=t&q=${encodeURIComponent(preProcessedName)}`);
           const data = await res.json();
-          if (data && data[1] && data[1][0] && data[1][0][1] && data[1][0][1][0]) {
-            const translated = data[1][0][1][0];
-            // If any dropdown is currently open, buffer the result
+          if (data && data[0] && data[0][0] && data[0][0][0]) {
+            let translated = data[0][0][0] as string;
+            
+            // Post-processing to ensure correct formatting
+            translated = translated
+              .replace(/\b(?:rs|rupees?)\b\.?\s*([0-9]+)/gi, 'Rs. $1')
+              .replace(/([0-9]+)\s*(?:rs|rupees?)\b\.?/gi, 'Rs. $1')
+              .replace(/([0-9]+)\s*ml\b/gi, '$1 ml')
+              .replace(/([0-9]+)\s*g\b/gi, '$1 g')
+              .replace(/([0-9]+)\s*l\b/gi, '$1 L')
+              .replace(/([0-9]+)\s*kg\b/gi, '$1 kg');
+
+            // Capitalize the first letter of each word for nicer formatting
+            translated = translated.replace(/\b\w/g, (c: string) => c.toUpperCase());
+            translated = translated
+              .replace(/\bRs\.?\b/ig, 'Rs.')
+              .replace(/\bMl\b/g, 'ml')
+              .replace(/\bKg\b/g, 'kg')
+              .replace(/\bG\b/g, 'g')
+              .replace(/\bL\b/g, 'L');
+
             if (isAnySelectOpenRef.current) {
-              pendingTranslationRef.current = translated;
+              pendingEnglishTranslationRef.current = translated;
             } else {
-              // Double check if it hasn't been touched while fetching
-              setNameBn((prev) => isNameBnTouched ? prev : translated);
+              setName((prev) => isNameTouched ? prev : translated);
             }
           }
         } catch (err) {
-          console.error("Auto-translate failed:", err);
+          console.error("Auto-translate Bn->En failed:", err);
         }
       }
     }, 800);
 
     return () => clearTimeout(timeoutId);
-  }, [name, isNameBnTouched, isAnySelectOpen]);
+  }, [nameBn, isNameTouched, isAnySelectOpen]);
 
   // Apply buffered translation once all dropdowns close
   useEffect(() => {
-    if (!isAnySelectOpen && pendingTranslationRef.current !== null) {
-      const pending = pendingTranslationRef.current;
-      pendingTranslationRef.current = null;
-      setNameBn((prev) => isNameBnTouched ? prev : pending);
+    if (!isAnySelectOpen) {
+      if (pendingEnglishTranslationRef.current !== null) {
+        const pending = pendingEnglishTranslationRef.current;
+        pendingEnglishTranslationRef.current = null;
+        setName((prev) => isNameTouched ? prev : pending);
+      }
     }
-  }, [isAnySelectOpen, isNameBnTouched]);
+  }, [isAnySelectOpen, isNameTouched]);
 
   const handleGenerateBarcode = () => {
     setBarcode(generateBarcode());
@@ -213,8 +239,8 @@ export function ProductDialog({
 
   const handleSubmit = async () => {
     setFormError(null);
-    if (!name.trim()) {
-      setFormError(t('name_required'));
+    if (!nameBn.trim()) {
+      setFormError('বাংলা নাম আবশ্যক');
       return;
     }
     if (!isCategoryValid) {
@@ -234,18 +260,25 @@ export function ProductDialog({
 
     setIsSubmitting(true);
     try {
+      const finalCategory = category === 'new_category_custom_value' ? newCategory.trim() : category;
+      const finalSubCategory =
+        subCategory === '__none__' || subCategory === ''
+          ? undefined
+          : subCategory === 'new_subcat_custom_value'
+          ? newSubCategory.trim() || undefined
+          : subCategory.trim() || undefined;
+
+      if (finalCategory && finalSubCategory) {
+        bumpSubcategoryUsage(finalCategory, finalSubCategory);
+      }
+
       const data: ProductFormData = {
         id: product?.id,
-        name: name.trim(),
-        nameBn: nameBn || undefined,
+        name: name.trim() || nameBn.trim(),
+        nameBn: nameBn.trim() || undefined,
         barcode: barcode || undefined,
-        category: category === 'new_category_custom_value' ? newCategory.trim() : category,
-        subCategory:
-          subCategory === '__none__' || subCategory === ''
-            ? undefined
-            : subCategory === 'new_subcat_custom_value'
-            ? newSubCategory.trim() || undefined
-            : subCategory.trim() || undefined,
+        category: finalCategory,
+        subCategory: finalSubCategory,
         buyingPrice: bp,
         sellingPrice: sp,
         unit,
@@ -281,14 +314,14 @@ export function ProductDialog({
     isActive !== product?.isActive
   ) : true;
 
-  const isValid = name && isCategoryValid && buyingPrice && sellingPrice && hasChanges;
+  const isValid = nameBn && isCategoryValid && buyingPrice && sellingPrice && hasChanges;
 
   // Calculate profit margin
   const profitMargin = buyingPrice && sellingPrice && parseFloat(buyingPrice) > 0
     ? (((parseFloat(sellingPrice) - parseFloat(buyingPrice)) / parseFloat(buyingPrice)) * 100).toFixed(1)
     : null;
 
-  const showNameError = formError && !name.trim();
+  const showNameBnError = formError && !nameBn.trim();
   const showCategoryError = formError && !isCategoryValid;
   const showBuyingPriceError = formError && (isNaN(parseFloat(buyingPrice)) || parseFloat(buyingPrice) < 0);
   const showSellingPriceError = formError && (isNaN(parseFloat(sellingPrice)) || parseFloat(sellingPrice) < 0);
@@ -307,23 +340,11 @@ export function ProductDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-4">
-          {/* Product Name */}
-          <div className="space-y-2">
-            <Label htmlFor="product-form-name">{t('product_name')}</Label>
-            <Input
-              id="product-form-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder={t('product_name_placeholder')}
-              className={showNameError ? 'border-destructive focus-visible:ring-destructive' : ''}
-            />
-          </div>
-
           {/* Bengali Name */}
           <div className="space-y-2">
             <Label htmlFor="product-form-nameBn" className="flex items-center gap-2">
               <Languages className="w-4 h-4" />
-              {t('bengali_name')}
+              {t('bengali_name')} <span className="text-destructive">*</span>
             </Label>
             <Input
               id="product-form-nameBn"
@@ -333,6 +354,21 @@ export function ProductDialog({
                 setIsNameBnTouched(true);
               }}
               placeholder={t('bengali_name_placeholder')}
+              className={showNameBnError ? 'border-destructive focus-visible:ring-destructive' : ''}
+            />
+          </div>
+
+          {/* Product Name */}
+          <div className="space-y-2">
+            <Label htmlFor="product-form-name">{t('product_name')} <span className="text-muted-foreground text-xs font-normal">{t('optional')}</span></Label>
+            <Input
+              id="product-form-name"
+              value={name}
+              onChange={(e) => {
+                setName(e.target.value);
+                setIsNameTouched(true);
+              }}
+              placeholder={t('product_name_placeholder')}
             />
           </div>
 
@@ -484,7 +520,7 @@ export function ProductDialog({
               </SelectTrigger>
               <SelectContent>
                 {UNITS.map((u) => (
-                  <SelectItem key={u.value} value={u.value}>{u.label}</SelectItem>
+                  <SelectItem key={u.value} value={u.value}>{t(`units.${u.value}`)}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

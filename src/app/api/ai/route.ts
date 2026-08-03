@@ -18,10 +18,26 @@ export async function POST(request: NextRequest) {
   if (roleCheck) return roleCheck;
 
   try {
-    const body = await request.json();
-    const { summary } = body;
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { success: false, error: 'Invalid JSON body' },
+        { status: 400 },
+      );
+    }
 
-    if (!summary) {
+    if (!body || typeof body !== 'object') {
+      return NextResponse.json(
+        { success: false, error: 'Invalid JSON body' },
+        { status: 400 },
+      );
+    }
+
+    const { summary } = body as { summary?: Record<string, unknown> };
+
+    if (!summary || typeof summary !== 'object') {
       return NextResponse.json(
         { success: false, error: "Summary data is required" },
         { status: 400 },
@@ -31,12 +47,14 @@ export async function POST(request: NextRequest) {
     const currencyRow = await db.setting.findUnique({ where: { key: "currency_symbol" } });
     const currencySymbol = currencyRow?.value || "₹";
 
-    const margin = parseFloat(summary.profitMargin ?? "0");
-    const growth = summary.revenueGrowth ?? 0;
-    const salesCount = summary.totalSalesCount ?? 0;
-    const revenue = summary.totalRevenue ?? 0;
-    const profit = summary.totalProfit ?? 0;
-    const topPayment = Object.entries(summary.paymentBreakdown ?? {}).sort((a, b) => (b[1] as number) - (a[1] as number))[0]?.[0] ?? "N/A";
+    const summaryData = summary as Record<string, unknown>;
+    const margin = parseFloat(String(summaryData.profitMargin ?? "0"));
+    const growth = Number(summaryData.revenueGrowth ?? 0);
+    const salesCount = Number(summaryData.totalSalesCount ?? 0);
+    const revenue = Number(summaryData.totalRevenue ?? 0);
+    const profit = Number(summaryData.totalProfit ?? 0);
+    const paymentBreakdown = (summaryData.paymentBreakdown as Record<string, unknown> | undefined) ?? {};
+    const topPayment = Object.entries(paymentBreakdown).sort((a, b) => (Number(b[1]) || 0) - (Number(a[1]) || 0))[0]?.[0] ?? "N/A";
 
     // Structured prompt context — gives the rule-based engine enough signal for specific advice
     const insights: string[] = [];

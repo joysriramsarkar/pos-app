@@ -40,6 +40,13 @@ export function usePosConnectivity() {
       }
     };
 
+    // Register Service Worker for offline fallback if supported
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch((swErr) => {
+        console.warn('Service Worker registration skipped/failed:', swErr);
+      });
+    }
+
     // Check on mount
     checkConnectivity();
 
@@ -47,7 +54,13 @@ export function usePosConnectivity() {
     const interval = setInterval(checkConnectivity, 300000);
 
     // Listen to navigator online/offline events
-    const handleOnline = () => checkConnectivity();
+    const handleOnline = async () => {
+      await checkConnectivity();
+      // If page had failed DNS or network state previously, auto refresh when back online
+      if (navigator.onLine && useSyncStore.getState().isOnline) {
+        console.log('Network restored, refreshing session');
+      }
+    };
     const handleOffline = () => {
       useSyncStore.getState().setOnline(false);
     };

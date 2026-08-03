@@ -41,17 +41,39 @@ export async function POST(request: NextRequest) {
   const userId = (session?.user as { id?: string })?.id || null;
 
   try {
-    const body = await request.json();
-    const { saleId, items, refundMethod = "Cash", reason } = body;
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { success: false, error: "Invalid JSON body" },
+        { status: 400 },
+      );
+    }
 
-    if (!saleId || !Array.isArray(items) || items.length === 0) {
+    if (!body || typeof body !== "object") {
+      return NextResponse.json(
+        { success: false, error: "Invalid JSON body" },
+        { status: 400 },
+      );
+    }
+
+    const { saleId, items, refundMethod = "Cash", reason } = body as {
+      saleId?: unknown;
+      items?: unknown;
+      refundMethod?: unknown;
+      reason?: unknown;
+    };
+
+    if (typeof saleId !== "string" || !saleId || !Array.isArray(items) || items.length === 0) {
       return NextResponse.json(
         { success: false, error: "saleId and items are required" },
         { status: 400 },
       );
     }
 
-    const mappedMethod = mapRefundMethod(refundMethod);
+    const refundMethodValue = typeof refundMethod === "string" ? refundMethod : undefined;
+    const mappedMethod = mapRefundMethod(refundMethodValue);
     if (!mappedMethod) {
       return NextResponse.json(
         { success: false, error: "Invalid refund method. Use Cash, Due, or Prepaid." },
@@ -76,7 +98,7 @@ export async function POST(request: NextRequest) {
           quantity: Number(i.quantity),
         })),
         refundMethod: mappedMethod,
-        reason,
+        reason: typeof reason === "string" ? reason : null,
         userId,
       }),
     );
