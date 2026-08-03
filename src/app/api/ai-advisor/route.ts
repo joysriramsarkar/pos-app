@@ -8,7 +8,31 @@ export async function POST(request: NextRequest) {
   if (roleError) return roleError;
 
   try {
-    const { reportData, question } = await request.json();
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { success: false, error: 'Invalid JSON body' },
+        { status: 400 },
+      );
+    }
+
+    if (!body || typeof body !== 'object') {
+      return NextResponse.json(
+        { success: false, error: 'Invalid JSON body' },
+        { status: 400 },
+      );
+    }
+
+    const { reportData, question } = body as { reportData?: unknown; question?: string };
+
+    if (!reportData || typeof reportData !== 'object') {
+      return NextResponse.json(
+        { success: false, error: 'Report data is required' },
+        { status: 400 },
+      );
+    }
 
     const currencyRow = await db.setting.findUnique({ where: { key: 'currency_symbol' } });
     const currencySymbol = currencyRow?.value || '₹';

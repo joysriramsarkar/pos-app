@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Loader2, Save, Upload, X } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 interface ProfileTabProps {
   localSettings: AppSettings;
@@ -18,18 +19,21 @@ interface ProfileTabProps {
 
 export default function ProfileTab({ localSettings, handleChange, handleSave, isSaving, hasChanges }: ProfileTabProps) {
   const t = useTranslations("Settings");
+  const { toast } = useToast();
   const logoInputRef = useRef<HTMLInputElement>(null);
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 200 * 1024) {
-      alert(t("logo_size_error"));
+      toast({ variant: "destructive", title: t("logo_size_error") });
+      e.target.value = "";
       return;
     }
     const reader = new FileReader();
     reader.onload = () => handleChange("store_logo", reader.result as string);
     reader.readAsDataURL(file);
+    e.target.value = "";
   };
 
   return (
@@ -46,6 +50,8 @@ export default function ProfileTab({ localSettings, handleChange, handleSave, is
               <div className="relative w-20 h-20 rounded-lg border overflow-hidden bg-muted shrink-0">
                 <img src={localSettings.store_logo} alt="Store logo" className="w-full h-full object-contain" />
                 <button
+                  type="button"
+                  aria-label={t("remove_logo")}
                   onClick={() => handleChange("store_logo", "")}
                   className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center"
                 >
@@ -58,7 +64,7 @@ export default function ProfileTab({ localSettings, handleChange, handleSave, is
               </div>
             )}
             <div className="space-y-1">
-              <Button variant="outline" size="sm" onClick={() => logoInputRef.current?.click()}>
+              <Button type="button" variant="outline" size="sm" onClick={() => logoInputRef.current?.click()}>
                 <Upload className="w-3.5 h-3.5 mr-1.5" />
                 {t("upload_logo")}
               </Button>
@@ -96,7 +102,7 @@ export default function ProfileTab({ localSettings, handleChange, handleSave, is
         </div>
 
         <div className="pt-2 flex justify-end">
-          <Button onClick={() => handleSave(["store_name", "store_name_bn", "store_address", "store_phone", "store_gst", "store_logo"])} disabled={isSaving || !hasChanges()} className="bg-primary text-primary-foreground hover:bg-primary/90">
+          <Button type="button" onClick={() => handleSave(["store_name", "store_name_bn", "store_address", "store_phone", "store_gst", "store_logo"])} disabled={isSaving || !hasChanges()} className="bg-primary text-primary-foreground hover:bg-primary/90">
             {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
             {t("save")}
           </Button>

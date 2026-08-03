@@ -21,7 +21,9 @@ export const authOptions: NextAuthOptions = {
         }
 
         const reqHeaders = await headers();
-        const ip = reqHeaders.get("x-real-ip")?.trim() || reqHeaders.get("x-forwarded-for")?.split(",")[0].trim() || "127.0.0.1";
+        const rawRealIp = reqHeaders.get("x-real-ip")?.trim();
+        const rawForwardedFor = reqHeaders.get("x-forwarded-for")?.split(",")[0]?.trim();
+        const ip = rawRealIp || rawForwardedFor || "127.0.0.1";
 
         // Rate limit by IP
         if (ipLoginLimiter) {

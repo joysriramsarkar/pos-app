@@ -12,7 +12,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { currentPassword, newPassword } = await request.json();
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+
+    if (!body || typeof body !== "object") {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+
+    const { currentPassword, newPassword } = body as { currentPassword?: unknown; newPassword?: unknown };
+
+    if (typeof currentPassword !== "string" || typeof newPassword !== "string") {
+      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
 
     if (!currentPassword || !newPassword) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });

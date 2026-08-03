@@ -54,6 +54,8 @@ export default function PurchaseOrderManagement() {
   const [supplierOpen, setSupplierOpen] = useState(false);
   const [formPaymentMethod, setFormPaymentMethod] = useState('Cash');
   const [formGstPercentage, setFormGstPercentage] = useState('');
+  const [formDiscountType, setFormDiscountType] = useState<'percent' | 'fixed'>('percent');
+  const [formDiscountValue, setFormDiscountValue] = useState('0');
   const [formCashAmount, setFormCashAmount] = useState('');
   const [formUpiAmount, setFormUpiAmount] = useState('');
   const [formUpdateStock, setFormUpdateStock] = useState(false);
@@ -248,7 +250,12 @@ export default function PurchaseOrderManagement() {
     setFormItems(formItems.map((i) => (i.productId === productId ? { ...i, [field]: value } : i)));
   };
 
-  const { formSubtotal, gstAmount, formTotal, totalItemCount } = computeFormTotals(formItems, formGstPercentage);
+  const { formSubtotal, discountAmount, gstAmount, formTotal, totalItemCount } = computeFormTotals(
+    formItems,
+    formGstPercentage,
+    formDiscountType,
+    formDiscountValue
+  );
 
   const formPaidVal = parseFloat(formAmountPaid) || 0;
   const formDueAmount = Math.round((formTotal - formPaidVal + Number.EPSILON) * 100) / 100;
@@ -268,6 +275,8 @@ export default function PurchaseOrderManagement() {
     setSupplierOpen(false);
     setFormPaymentMethod('Cash');
     setFormGstPercentage('');
+    setFormDiscountType('percent');
+    setFormDiscountValue('0');
     setFormCashAmount('');
     setFormUpiAmount('');
     setFormUpdateStock(false);
@@ -544,6 +553,11 @@ export default function PurchaseOrderManagement() {
         setFormPaymentMethod={setFormPaymentMethod}
         formGstPercentage={formGstPercentage}
         setFormGstPercentage={setFormGstPercentage}
+        formDiscountType={formDiscountType}
+        setFormDiscountType={setFormDiscountType}
+        formDiscountValue={formDiscountValue}
+        setFormDiscountValue={setFormDiscountValue}
+        discountAmount={discountAmount}
         formCashAmount={formCashAmount}
         setFormCashAmount={setFormCashAmount}
         formUpiAmount={formUpiAmount}

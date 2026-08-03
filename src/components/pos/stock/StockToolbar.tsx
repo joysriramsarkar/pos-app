@@ -166,6 +166,7 @@ export function StockToolbar({
             <SelectItem value="all">{t('all_items')}</SelectItem>
             <SelectItem value="low">{t('low_stock')}</SelectItem>
             <SelectItem value="out">{t('out_of_stock')}</SelectItem>
+            <SelectItem value="no_barcode">{t('no_barcode')}</SelectItem>
             <SelectItem value="inactive">{t('inactive')}</SelectItem>
           </SelectContent>
         </Select>

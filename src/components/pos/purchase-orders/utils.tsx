@@ -65,6 +65,8 @@ export function filterOrdersByDate(
 export function computeFormTotals(
   formItems: { quantity: number | string; unitPrice: number | string; gstPercentage?: number | string }[],
   formGstPercentage: string,
+  formDiscountType: 'percent' | 'fixed' = 'percent',
+  formDiscountValue: string | number = 0,
 ) {
   const generalGstRate = parseFloat(formGstPercentage) || 0;
   let formSubtotal = 0;
@@ -86,11 +88,18 @@ export function computeFormTotals(
 
   formSubtotal = Math.round((formSubtotal + Number.EPSILON) * 100) / 100;
   gstAmount = Math.round((gstAmount + Number.EPSILON) * 100) / 100;
-  const formTotal = Math.round((formSubtotal + gstAmount + Number.EPSILON) * 100) / 100;
+
+  const discountVal = typeof formDiscountValue === 'string' ? parseFloat(formDiscountValue) || 0 : formDiscountValue;
+  let discountAmount = formDiscountType === 'percent'
+    ? (formSubtotal * discountVal) / 100
+    : Math.min(discountVal, formSubtotal);
+  discountAmount = Math.round((discountAmount + Number.EPSILON) * 100) / 100;
+
+  const formTotal = Math.max(0, Math.round((formSubtotal - discountAmount + gstAmount + Number.EPSILON) * 100) / 100);
   const totalItemCount = formItems.reduce(
     (sum, i) => sum + (parseFloat(i.quantity as string) || 0),
     0,
   );
 
-  return { formSubtotal, gstAmount, formTotal, totalItemCount };
+  return { formSubtotal, discountAmount, gstAmount, formTotal, totalItemCount };
 }

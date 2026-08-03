@@ -45,7 +45,7 @@ export function MobileSearchDialog({
 }: MobileSearchDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="top-[10%] translate-y-0 max-w-lg p-0 gap-0">
+      <DialogContent showCloseButton={false} className="top-[10%] translate-y-0 max-w-lg p-0 gap-0">
         <DialogHeader className="sr-only">
           <DialogTitle>{labels.quickSearch}</DialogTitle>
         </DialogHeader>
@@ -70,7 +70,7 @@ export function MobileSearchDialog({
           )}
         </div>
         <div className="border-t" />
-        <div className="max-h-[60vh] overflow-y-auto">
+        <div className="max-h-[60vh] overflow-y-auto overscroll-contain">
           {searchTerm.trim() === '' ? (
             <div className="py-6 text-center text-xs text-muted-foreground">
               {labels.quickSearch}

@@ -257,6 +257,8 @@ export function StockManagement({
         result = result.filter((p) => p.currentStock <= p.minStockLevel && p.currentStock > 0);
       } else if (stockFilter === 'out') {
         result = result.filter((p) => p.currentStock === 0);
+      } else if (stockFilter === 'no_barcode') {
+        result = result.filter((p) => !p.barcode || p.barcode.trim() === '');
       }
     }
 

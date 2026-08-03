@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ export default function BackupTab() {
   const [showRestorePrompt, setShowRestorePrompt] = useState(false);
   const [restoreConfirmText, setRestoreConfirmText] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const restoreInputRef = useRef<HTMLInputElement>(null);
 
   const handleBackup = async () => {
     setIsBackuping(true);
@@ -37,9 +38,15 @@ export default function BackupTab() {
   };
 
   const handleRestoreClick = async () => {
-    await handleBackup();
+    if (isBackuping || isRestoring) return;
     setShowRestorePrompt(true);
   };
+
+  useEffect(() => {
+    if (showRestorePrompt) {
+      window.setTimeout(() => restoreInputRef.current?.focus(), 0);
+    }
+  }, [showRestorePrompt]);
 
   const confirmRestore = () => {
     if (restoreConfirmText === "RESTORE") {
@@ -68,7 +75,7 @@ export default function BackupTab() {
       const data = await response.json();
       if (data.success) {
         toast({ title: t("restore_success"), description: t("restore_success_desc") });
-        setTimeout(() => window.location.reload(), 2000);
+        window.setTimeout(() => window.location.reload(), 1500);
       } else {
         throw new Error(data.error || "Failed to restore");
       }
@@ -118,11 +125,20 @@ export default function BackupTab() {
               <div className="space-y-2 mt-4 p-4 border border-destructive/50 rounded-md bg-destructive/10">
                 <p className="text-sm font-bold text-destructive">{t("restore_confirm_prompt")}</p>
                 <input
+                  ref={restoreInputRef}
                   type="text"
                   className="w-full p-2 text-sm border rounded-md bg-background"
                   value={restoreConfirmText}
                   onChange={(e) => setRestoreConfirmText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && restoreConfirmText === "RESTORE") {
+                      e.preventDefault();
+                      confirmRestore();
+                    }
+                  }}
                   placeholder="RESTORE"
+                  autoComplete="off"
+                  spellCheck={false}
                 />
                 <div className="flex gap-2">
                   <Button variant="outline" className="flex-1" onClick={() => { setShowRestorePrompt(false); setRestoreConfirmText(""); }}>

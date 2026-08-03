@@ -115,6 +115,7 @@ import { useToast } from '@/hooks/use-toast';
 import { generateInvoiceNumber } from '@/lib/invoice';
 import { Capacitor } from '@capacitor/core';
 import { App as CapacitorApp } from '@capacitor/app';
+import { resolveBackNavigation } from '@/lib/back-navigation';
 
 export function POSDashboard() {
   const t = useTranslations('Navigation');
@@ -447,29 +448,45 @@ export function POSDashboard() {
     let backPressTimer: ReturnType<typeof setTimeout>;
 
     const handler = CapacitorApp.addListener('backButton', () => {
-      // 1. কোনো dialog / sheet খোলা থাকলে বন্ধ করো
-      if (isCheckoutOpen) { setCheckoutOpen(false); return; }
-      if (isAddStockOpen) { setIsAddStockOpen(false); return; }
-      if (isProductDialogOpen) { setIsProductDialogOpen(false); return; }
-      if (isPrintDialogOpen) { setPrintDialogOpen(false); return; }
-      if (isMobileScannerOpen) { setIsMobileScannerOpen(false); return; }
-      if (moreMenuOpen) { setMoreMenuOpen(false); return; }
-      if (mobileCartOpen) { setMobileCartOpen(false); return; }
+      const hasOpenOverlay = Boolean(
+        isCheckoutOpen ||
+        isAddStockOpen ||
+        isProductDialogOpen ||
+        isPrintDialogOpen ||
+        isMobileScannerOpen ||
+        moreMenuOpen ||
+        mobileCartOpen
+      );
 
-      // 2. billing ছাড়া অন্য পেজে থাকলে নেভিগেশন স্ট্যাকের ঠিক আগের পেজে ফিরে যাও
-      // (স্ক্রিনের Back বাটন যেভাবে নির্দিষ্ট প্যারেন্ট পেজে ফেরায়, একই আচরণ এখানেও)
-      if (currentPage !== 'billing') {
+      const backAction = resolveBackNavigation({
+        currentPage,
+        stack: navStackRef.current,
+        hasOpenOverlay,
+      });
+
+      if (backAction.kind === 'close-overlay') {
+        if (isCheckoutOpen) { setCheckoutOpen(false); return; }
+        if (isAddStockOpen) { setIsAddStockOpen(false); return; }
+        if (isProductDialogOpen) { setIsProductDialogOpen(false); return; }
+        if (isPrintDialogOpen) { setPrintDialogOpen(false); return; }
+        if (isMobileScannerOpen) { setIsMobileScannerOpen(false); return; }
+        if (moreMenuOpen) { setMoreMenuOpen(false); return; }
+        if (mobileCartOpen) { setMobileCartOpen(false); return; }
+        return;
+      }
+
+      if (backAction.kind === 'navigate') {
         const stack = navStackRef.current;
         if (stack.length > 1) {
           stack.pop();
-          setCurrentPage(stack[stack.length - 1]);
-        } else {
-          setCurrentPage('billing');
+        }
+        const targetPage = backAction.page ?? 'billing';
+        if (targetPage !== currentPage) {
+          setCurrentPage(targetPage);
         }
         return;
       }
 
-      // 3. billing-এ থাকলে দু'বার back চাপলে exit
       if (backPressedOnce) {
         clearTimeout(backPressTimer);
         CapacitorApp.exitApp();

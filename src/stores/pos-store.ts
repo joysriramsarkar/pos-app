@@ -141,6 +141,8 @@ export const useCartStore = create<CartState & CartActions>()(
           console.warn('Cannot add item with quantity <= 0');
           return;
         }
+
+        useProductUsageStore.getState().recordUsage(product.id);
         
         const tab = get().getActiveTab();
         const currentItems = tab.items;
@@ -699,3 +701,33 @@ export const useQuantityUsageStore = create<QuantityUsageState & QuantityUsageAc
     }
   )
 );
+
+// ============================================================================
+// PRODUCT USAGE STORE (for sorting search results)
+// ============================================================================
+
+interface ProductUsageState {
+  usage: Record<string, number>;
+}
+
+interface ProductUsageActions {
+  recordUsage: (productId: string) => void;
+  getUsage: (productId: string) => number;
+}
+
+export const useProductUsageStore = create<ProductUsageState & ProductUsageActions>()(
+  persist(
+    (set, get) => ({
+      usage: {},
+      recordUsage: (productId) => set((state) => ({
+        usage: { ...state.usage, [productId]: (state.usage[productId] || 0) + 1 }
+      })),
+      getUsage: (productId) => get().usage[productId] || 0,
+    }),
+    {
+      name: 'lakhan-bhandar-product-usage',
+      storage: createJSONStorage(() => localStorage),
+    }
+  )
+);
+

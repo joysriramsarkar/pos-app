@@ -78,7 +78,18 @@ export function makeFormatters(isBn: boolean, currencySymbol: string = '₹') {
     return `${sign}${formatted}`;
   };
 
-  return { formatNumber, formatPrice, formatDate, formatStringNumbers, formatCompact, formatCompactUnit, isBn, currencySymbol: symbol };
+  /**
+   * Quantity and unit formatter — uses non-breaking space (\u00A0) / no-break format
+   * so quantity number and unit suffix (e.g. "৫টি") never break separately across lines.
+   */
+  const formatQuantityWithUnit = (qty: number | string, unit?: string): string => {
+    const numStr = formatNumber(qty);
+    const u = unit || (isBn ? 'টি' : 'pcs');
+    const separator = u.startsWith('টি') ? '' : '\u00A0';
+    return `${numStr}${separator}${u}`;
+  };
+
+  return { formatNumber, formatPrice, formatDate, formatStringNumbers, formatCompact, formatCompactUnit, formatQuantityWithUnit, isBn, currencySymbol: symbol };
 }
 
 export function useNumberFormat() {

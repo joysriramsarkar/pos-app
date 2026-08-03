@@ -96,10 +96,9 @@ export const proxy = withAuth(
       return applyCors(request, new NextResponse(null, { status: 204 }));
     }
 
-    const ip =
-      request.headers.get("x-real-ip")?.trim() ??
-      request.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
-      "unknown";
+    const rawRealIp = request.headers.get("x-real-ip")?.trim();
+    const rawForwardedFor = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+    const ip = rawRealIp || rawForwardedFor || "unknown";
 
     if (await isRateLimited(ip, pathname)) {
       return applyCors(
