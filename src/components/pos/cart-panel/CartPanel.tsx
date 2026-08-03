@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState, useEffect, useMemo } from 'react';
+import { useCallback, useState, useEffect, useMemo, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { toMoneyNumber } from '@/lib/money';
 import { Button } from '@/components/ui/button';
@@ -37,9 +37,19 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
   const tc = useTranslations('Common');
   const locale = useLocale();
 
-  const [showDiscountInput, setShowDiscountInput] = useState(false);
   const [customerSearchOpen, setCustomerSearchOpen] = useState(false);
   const [customerSearchQuery, setCustomerSearchQuery] = useState('');
+  const customerDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (customerDropdownRef.current && !customerDropdownRef.current.contains(e.target as Node)) {
+        setCustomerSearchOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
   const [searchedCustomers, setSearchedCustomers] = useState<Customer[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showAddPartyDialog, setShowAddPartyDialog] = useState(false);
@@ -69,7 +79,6 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
   const getTotal = useCartStore((state) => state.getTotal);
   const getItemCount = useCartStore((state) => state.getItemCount);
   const clearCart = useCartStore((state) => state.clearCart);
-  const setDiscount = useCartStore((state) => state.setDiscount);
   const setCustomer = useCartStore((state) => state.setCustomer);
   const setPaymentMethod = useCartStore((state) => state.setPaymentMethod);
 
@@ -126,14 +135,6 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
       onCheckout();
     }
   }, [items.length, total, setCheckoutOpen, onCheckout]);
-
-  const handleDiscountChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const value = parseFloat(convertBengaliToEnglishNumerals(e.target.value));
-      setDiscount(isNaN(value) ? 0 : Math.max(0, value));
-    },
-    [setDiscount]
-  );
 
   const handleCustomerSelect = useCallback(
     (customer: Customer | null) => {
@@ -255,7 +256,7 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
   const isCartEmpty = items.length === 0;
   const isBn = locale === 'bn';
   const displayCount = isBn ? convertEnglishToBengaliNumerals(itemCount) : itemCount;
-  const itemCountDisplay = itemCount === 0 ? t('empty') : `${displayCount} ${itemCount === 1 ? t('item') : t('items')}`;
+  const itemCountDisplay = itemCount === 0 ? t('empty') : `${displayCount}${isBn ? '' : ' '}${itemCount === 1 ? t('item') : t('items')}`;
 
   return (
     <div className="flex flex-col h-full bg-background min-h-0">
@@ -326,7 +327,7 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
       {/* Customer Selector */}
       <div className="px-1.5 md:px-2 border-b shrink-0 py-1 md:py-2">
         <Label className="text-[10px] md:text-xs text-muted-foreground mb-0.5 md:mb-1 block">{t('customer')}</Label>
-        <div className="relative">
+        <div className="relative" ref={customerDropdownRef}>
           <Button
             variant="outline"
             className="w-full justify-between h-8 md:h-9 text-xs touch-manipulation"
@@ -438,9 +439,6 @@ export function CartPanel({ onCheckout, customers = [], onScan }: CartPanelProps
         discount={discount}
         tax={tax}
         total={total}
-        showDiscountInput={showDiscountInput}
-        setShowDiscountInput={setShowDiscountInput}
-        handleDiscountChange={handleDiscountChange}
         isCartEmpty={isCartEmpty}
         onCheckout={handleCheckout}
         formatPrice={formatPrice}

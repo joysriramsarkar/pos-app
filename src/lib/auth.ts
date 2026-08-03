@@ -5,6 +5,11 @@ import { db } from "@/lib/db";
 import { headers } from "next/headers";
 import { ipLoginLimiter, usernameLoginLimiter, checkLocalRateLimit } from "@/lib/rate-limit";
 
+function sanitizeLogInput(input: unknown): string {
+  if (typeof input !== "string") return String(input);
+  return input.replace(/[\r\n\t]/g, "_");
+}
+
 export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
@@ -14,7 +19,7 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" }
       },
       async authorize(credentials) {
-        console.log("[NextAuth] authorize called with username:", credentials?.username);
+        console.log("[NextAuth] authorize called with username:", sanitizeLogInput(credentials?.username));
         if (!credentials?.username || !credentials?.password) {
           console.log("[NextAuth] missing credentials");
           return null;
@@ -29,13 +34,13 @@ export const authOptions: NextAuthOptions = {
         if (ipLoginLimiter) {
           const { success } = await ipLoginLimiter.limit(ip);
           if (!success) {
-            console.log("[NextAuth] rate limit exceeded for IP:", ip);
+            console.log("[NextAuth] rate limit exceeded for IP:", sanitizeLogInput(ip));
             throw new Error("Too many login attempts from this IP. Please try again in a minute.");
           }
         } else {
           const { success } = await checkLocalRateLimit(`login:ip:${ip}`, 10, 60000);
           if (!success) {
-            console.log("[NextAuth] rate limit exceeded (local) for IP:", ip);
+            console.log("[NextAuth] rate limit exceeded (local) for IP:", sanitizeLogInput(ip));
             throw new Error("Too many login attempts. Please try again in a minute.");
           }
         }
@@ -44,13 +49,13 @@ export const authOptions: NextAuthOptions = {
         if (usernameLoginLimiter) {
           const { success } = await usernameLoginLimiter.limit(credentials.username);
           if (!success) {
-            console.log("[NextAuth] rate limit exceeded for username:", credentials.username);
+            console.log("[NextAuth] rate limit exceeded for username:", sanitizeLogInput(credentials.username));
             throw new Error("Too many login attempts for this account. Please try again in a minute.");
           }
         } else {
           const { success } = await checkLocalRateLimit(`login:username:${credentials.username}`, 5, 60000);
           if (!success) {
-            console.log("[NextAuth] rate limit exceeded (local) for username:", credentials.username);
+            console.log("[NextAuth] rate limit exceeded (local) for username:", sanitizeLogInput(credentials.username));
             throw new Error("Too many login attempts for this account. Please try again in a minute.");
           }
         }
@@ -84,7 +89,7 @@ export const authOptions: NextAuthOptions = {
         if (!isPasswordValid) {
           console.log("[NextAuth] invalid password");
           const newFailedAttempts = user.failedLoginAttempts + 1;
-          const updates: any = { failedLoginAttempts: newFailedAttempts };
+          const updates: { failedLoginAttempts: number; lockedUntil?: Date } = { failedLoginAttempts: newFailedAttempts };
           if (newFailedAttempts >= 5) {
             updates.lockedUntil = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
           }
@@ -95,7 +100,7 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
-        console.log("[NextAuth] login successful for user:", user.username);
+        console.log("[NextAuth] login successful for user:", sanitizeLogInput(user.username));
         if (user.failedLoginAttempts > 0 || user.lockedUntil) {
           await db.user.update({
             where: { id: user.id },

@@ -8,7 +8,7 @@ import { Package, AlertTriangle, Plus } from 'lucide-react';
 import type { Product } from '@/types/pos';
 import { useCartStore } from '@/stores/pos-store';
 import { cn } from '@/lib/utils';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 import { useNumberFormat } from '@/hooks/use-number-format';
 
 interface ProductCardProps {
@@ -18,10 +18,14 @@ interface ProductCardProps {
 export function ProductCard({ product }: ProductCardProps) {
   const addItem = useCartStore((state) => state.addItem);
   const t = useTranslations('Billing');
+  const locale = useLocale();
   const { formatPrice } = useNumberFormat();
   
   const isLowStock = product.currentStock <= product.minStockLevel;
   const isOutOfStock = product.currentStock <= 0;
+
+  const isBn = locale === 'bn';
+  const displayName = isBn ? (product.nameBn || product.name) : (product.name || product.nameBn);
 
   const handleAddToCart = () => {
     addItem(product, 1);
@@ -47,7 +51,7 @@ export function ProductCard({ product }: ProductCardProps) {
         onKeyDown={handleKeyDown}
         onClick={handleAddToCart}
         role="button"
-        aria-label={`${t('add_to_cart')} ${product.name}, ${formatPrice(product.sellingPrice)} / ${product.unit}`}
+        aria-label={`${t('add_to_cart')} ${displayName}, ${formatPrice(product.sellingPrice)} / ${product.unit}`}
       >
         {/* Low Stock Warning Banner */}
         {isLowStock && !isOutOfStock && (
@@ -79,7 +83,7 @@ export function ProductCard({ product }: ProductCardProps) {
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <h3 className="font-medium text-xs sm:text-sm line-clamp-2 leading-tight lg:group-hover:text-primary transition-colors">
-                      {product.name}
+                      {displayName}
                     </h3>
                   </TooltipTrigger>
                   <TooltipContent side="top" className="max-w-50">

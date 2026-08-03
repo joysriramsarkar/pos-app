@@ -49,6 +49,7 @@ interface CartActions {
   addItem: (product: Product, quantity?: number) => void;
   removeItem: (itemId: string) => void;
   updateQuantity: (itemId: string, quantity: number) => void;
+  setItemDiscount: (itemId: string, discount: number) => void;
   clearCart: () => void;
   setDiscount: (discount: number) => void;
   setTax: (tax: number) => void;
@@ -178,8 +179,12 @@ export const useCartStore = create<CartState & CartActions>()(
       },
 
       removeItem: (itemId: string) => {
+        const currentTab = get().getActiveTab();
+        const newItems = currentTab.items.filter((item) => item.id !== itemId);
+        const newDiscount = newItems.reduce((sum, item) => sum + (item.discount || 0), 0);
         get()._updateActiveTab({
-          items: get().getActiveTab().items.filter((item) => item.id !== itemId),
+          items: newItems,
+          discount: newDiscount,
         });
       },
 
@@ -188,12 +193,31 @@ export const useCartStore = create<CartState & CartActions>()(
           get().removeItem(itemId);
           return;
         }
+        const currentTab = get().getActiveTab();
+        const newItems = currentTab.items.map((item) => {
+          if (item.id === itemId) {
+            const newTotalPrice = multiplyMoney(quantity, item.unitPrice).toNumber();
+            const newDiscount = Math.min(item.discount || 0, newTotalPrice);
+            return { ...item, quantity, totalPrice: newTotalPrice, discount: newDiscount };
+          }
+          return item;
+        });
+        const newDiscountTotal = newItems.reduce((sum, item) => sum + (item.discount || 0), 0);
         get()._updateActiveTab({
-          items: get().getActiveTab().items.map((item) =>
-            item.id === itemId
-              ? { ...item, quantity, totalPrice: multiplyMoney(quantity, item.unitPrice).toNumber() }
-              : item
-          ),
+          items: newItems,
+          discount: newDiscountTotal,
+        });
+      },
+
+      setItemDiscount: (itemId: string, discount: number) => {
+        const currentTab = get().getActiveTab();
+        const newItems = currentTab.items.map((item) =>
+          item.id === itemId ? { ...item, discount } : item
+        );
+        const newDiscount = newItems.reduce((sum, item) => sum + (item.discount || 0), 0);
+        get()._updateActiveTab({
+          items: newItems,
+          discount: newDiscount,
         });
       },
 
@@ -703,26 +727,60 @@ export const useQuantityUsageStore = create<QuantityUsageState & QuantityUsageAc
 );
 
 // ============================================================================
-// PRODUCT USAGE STORE (for sorting search results)
+// PRODUCT USAGE STORE (for sorting search results based on monthly sales or local usage)
 // ============================================================================
 
 interface ProductUsageState {
   usage: Record<string, number>;
+  monthlyTopSales: Record<string, number>;
+  lastFetched: number | null;
 }
 
 interface ProductUsageActions {
   recordUsage: (productId: string) => void;
   getUsage: (productId: string) => number;
+  fetchMonthlyTopSales: () => Promise<void>;
+  getSortWeight: (productId: string) => number;
 }
 
 export const useProductUsageStore = create<ProductUsageState & ProductUsageActions>()(
   persist(
     (set, get) => ({
       usage: {},
+      monthlyTopSales: {},
+      lastFetched: null,
       recordUsage: (productId) => set((state) => ({
         usage: { ...state.usage, [productId]: (state.usage[productId] || 0) + 1 }
       })),
       getUsage: (productId) => get().usage[productId] || 0,
+      fetchMonthlyTopSales: async () => {
+        const { lastFetched } = get();
+        const now = Date.now();
+        // Fetch at most once per hour (3600000 ms)
+        if (lastFetched && now - lastFetched < 3600000) return;
+
+        try {
+          const res = await fetch('/api/reports/products?days=30');
+          if (res.ok) {
+            const data = await res.json();
+            const monthlyTopSales: Record<string, number> = {};
+            data.topProducts?.forEach((p: any, index: number) => {
+              // Higher score for higher rank. e.g. top 1 gets max score.
+              monthlyTopSales[p.id] = p.quantity * 1000 + p.revenue; 
+            });
+            set({ monthlyTopSales, lastFetched: now });
+          }
+        } catch (error) {
+          console.error("Failed to fetch monthly top products", error);
+        }
+      },
+      getSortWeight: (productId) => {
+        const state = get();
+        // Favor monthly top sales, fallback to local usage
+        const monthlyScore = state.monthlyTopSales[productId] || 0;
+        const localUsage = state.usage[productId] || 0;
+        return monthlyScore > 0 ? monthlyScore : localUsage;
+      }
     }),
     {
       name: 'lakhan-bhandar-product-usage',
@@ -730,4 +788,5 @@ export const useProductUsageStore = create<ProductUsageState & ProductUsageActio
     }
   )
 );
+
 

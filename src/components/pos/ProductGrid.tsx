@@ -12,7 +12,7 @@ import { Capacitor } from '@capacitor/core';
 import type { Product } from '@/types/pos';
 import { useProductsStore, useUIStore, useCartStore, useProductUsageStore } from '@/stores/pos-store';
 import { cn, convertBengaliToEnglishNumerals, normalizeSearchText } from '@/lib/utils';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 
 const cleanSearchQuery = (q: string) => q.replace(/rs\.?|₹|৳|'/gi, '').trim();
 import { useToast } from '@/hooks/use-toast';
@@ -69,6 +69,7 @@ export function ProductGrid({
 
   const storeProducts = useProductsStore((state) => state.products);
   const isStoreLoading = useProductsStore((state) => state.isLoading);
+  const lastUpdated = useProductsStore((state) => state.lastUpdated);
   const storeCategories = useProductsStore((state) => state.categories);
   const hasMore = useProductsStore((state) => state.hasMore);
   const nextCursor = useProductsStore((state) => state.nextCursor);
@@ -77,6 +78,7 @@ export function ProductGrid({
 
   const storeSearchQuery = useUIStore((state) => state.searchQuery);
   const selectedCategoryId = useUIStore((state) => state.selectedCategoryId);
+  const [selectedSubCategoryId, setSelectedSubCategoryId] = useState<string | null>(null);
   const setSearchQuery = useUIStore((state) => state.setSearchQuery);
   const setSelectedCategoryId = useUIStore((state) => state.setSelectedCategoryId);
 
@@ -105,12 +107,19 @@ export function ProductGrid({
   }, [products]);
 
   const productUsage = useProductUsageStore((state) => state.usage);
+  const getSortWeight = useProductUsageStore((state) => state.getSortWeight);
+  const fetchMonthlyTopSales = useProductUsageStore((state) => state.fetchMonthlyTopSales);
+
+  useEffect(() => {
+    fetchMonthlyTopSales();
+  }, [fetchMonthlyTopSales]);
 
   // Filter products based on search and category
   const filteredProducts = useMemo(() => {
     const filtered = products.filter((product) => {
       if (!product.isActive) return false;
       if (selectedCategoryId && product.category !== selectedCategoryId) return false;
+      if (selectedSubCategoryId && product.subCategory !== selectedSubCategoryId) return false;
       if (searchQuery) {
         const cleaned = cleanSearchQuery(searchQuery);
         const normalizedQuery = normalizeSearchText(cleaned);
@@ -128,17 +137,29 @@ export function ProductGrid({
 
     if (searchQuery) {
       filtered.sort((a, b) => {
-        const usageA = productUsage[a.id] || 0;
-        const usageB = productUsage[b.id] || 0;
+        const usageA = getSortWeight(a.id);
+        const usageB = getSortWeight(b.id);
         if (usageB !== usageA) return usageB - usageA;
         return a.name.localeCompare(b.name);
       });
     }
 
     return filtered;
-  }, [products, searchQuery, selectedCategoryId, productUsage]);
+  }, [products, searchQuery, selectedCategoryId, selectedSubCategoryId, getSortWeight]);
 
-  const [renderLimit, setRenderLimit] = useState(50);
+  const [renderLimit, setRenderLimit] = useState(100);
+
+  // Get dynamic subcategories based on selected category
+  const currentSubCategories = useMemo(() => {
+    if (!selectedCategoryId) return [];
+    const subcats = new Set<string>();
+    products.forEach(p => {
+      if (p.category === selectedCategoryId && p.subCategory) {
+        subcats.add(p.subCategory);
+      }
+    });
+    return Array.from(subcats).sort();
+  }, [products, selectedCategoryId]);
 
   // Group products by category for display
   const productsByCategory = useMemo(() => {
@@ -165,7 +186,7 @@ export function ProductGrid({
   const clearSearch = useCallback(() => {
     if (externalProducts) setLocalSearchQuery('');
     else setSearchQuery('');
-    setRenderLimit(50);
+    setRenderLimit(100);
   }, [externalProducts, setSearchQuery]);
 
   const handleCameraBarcode = useCallback(
@@ -192,15 +213,25 @@ export function ProductGrid({
   const handleCategorySelect = useCallback(
     (category: string | null) => {
       setSelectedCategoryId(category === selectedCategoryId ? null : category);
-      setRenderLimit(50); // Reset render limit on category change
+      setSelectedSubCategoryId(null); // Reset subcategory when main category changes
+      setRenderLimit(100); // Reset render limit on category change
     },
     [selectedCategoryId, setSelectedCategoryId]
+  );
+
+  const handleSubCategorySelect = useCallback(
+    (subCategory: string | null) => {
+      setSelectedSubCategoryId(subCategory === selectedSubCategoryId ? null : subCategory);
+      setRenderLimit(100);
+    },
+    [selectedSubCategoryId]
   );
 
   const clearFilters = useCallback(() => {
     clearSearch();
     setSelectedCategoryId(null);
-    setRenderLimit(50);
+    setSelectedSubCategoryId(null);
+    setRenderLimit(100);
   }, [clearSearch, setSelectedCategoryId]);
 
 
@@ -227,13 +258,13 @@ export function ProductGrid({
       (entries) => {
         if (entries[0].isIntersecting) {
           if (renderLimit < filteredProducts.length) {
-            setRenderLimit(prev => prev + 50);
+            setRenderLimit(prev => prev + 100);
           } else if (hasMore && !isLoadingMore) {
             loadMoreProducts();
           }
         }
       },
-      { threshold: 0.5 }
+      { threshold: 0.1, rootMargin: '200px' }
     );
     if (observerTarget.current) {
       observer.observe(observerTarget.current);
@@ -335,9 +366,39 @@ export function ProductGrid({
             </ScrollArea>
           )}
 
+          {showCategories && selectedCategoryId && currentSubCategories.length > 0 && (
+            <ScrollArea className="w-full whitespace-nowrap">
+              <div className="flex gap-1.5 sm:gap-2 pb-1 sm:pb-2">
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "cursor-pointer touch-manipulation transition-all px-2 sm:px-3 py-0.5 sm:py-1 text-[11px] sm:text-xs",
+                    selectedSubCategoryId === null ? "shadow-sm bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-500/20" : "hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-purple-600 dark:hover:text-purple-400 border-border/50 bg-background"
+                  )}
+                  onClick={() => handleSubCategorySelect(null)}
+                >
+                  {tc('all')}
+                </Badge>
+                {currentSubCategories.map((subCategory) => (
+                  <Badge
+                    key={subCategory}
+                    variant="outline"
+                    className={cn(
+                      "cursor-pointer touch-manipulation transition-all px-2 sm:px-3 py-0.5 sm:py-1 text-[11px] sm:text-xs",
+                      selectedSubCategoryId === subCategory ? "shadow-sm bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-500/20" : "hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-purple-600 dark:hover:text-purple-400 border-border/50 bg-background"
+                    )}
+                    onClick={() => handleSubCategorySelect(subCategory)}
+                  >
+                    {subCategory}
+                  </Badge>
+                ))}
+              </div>
+            </ScrollArea>
+          )}
+
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-              {(searchQuery || selectedCategoryId) && (
+              {(searchQuery || selectedCategoryId || selectedSubCategoryId) && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -380,7 +441,7 @@ export function ProductGrid({
 
       <div className="flex-1 min-h-0 overflow-y-auto">
         <div className="p-2 sm:p-4 md:p-5">
-          {isStoreLoading && filteredProducts.length === 0 ? (
+          {(isStoreLoading || (!externalProducts && lastUpdated === null)) && filteredProducts.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-10 sm:py-16 text-center bg-card rounded-xl sm:rounded-2xl border border-dashed border-border/60">
               <Loader2 className="w-10 h-10 sm:w-12 sm:h-12 text-primary animate-spin mb-3" />
               <p className="text-base sm:text-lg font-medium text-muted-foreground">{tc('loading')}</p>
@@ -418,7 +479,7 @@ export function ProductGrid({
               ))}
             </div>
           )}
-          {!externalProducts && hasMore && !searchQuery && !selectedCategoryId && (
+          {!externalProducts && hasMore && !searchQuery && !selectedCategoryId && !selectedSubCategoryId && (
             <div ref={observerTarget} className="flex justify-center mt-4 sm:mt-6 mb-3">
               <Button variant="outline" size="sm" onClick={loadMoreProducts} disabled={isLoadingMore} className="h-9">
                 {isLoadingMore ? tc('loading') : t('load_more')}
@@ -447,6 +508,7 @@ interface CompactProductCardProps {
 
 function CompactProductCard({ product, onSelect }: CompactProductCardProps) {
   const addItem = useCartStore((state) => state.addItem);
+  const locale = useLocale();
   const isOutOfStock = product.currentStock <= 0;
 
   const handleClick = () => {
@@ -455,6 +517,9 @@ function CompactProductCard({ product, onSelect }: CompactProductCardProps) {
   };
 
   const { formatPrice } = useNumberFormat();
+  
+  const isBn = locale === 'bn';
+  const displayName = isBn ? (product.nameBn || product.name) : (product.name || product.nameBn);
 
   return (
     <button
@@ -466,9 +531,9 @@ function CompactProductCard({ product, onSelect }: CompactProductCardProps) {
         'touch-manipulation min-h-16 sm:min-h-22.5 active:scale-[0.98]',
         isOutOfStock && 'border-red-200/50 dark:border-red-900/30'
       )}
-      aria-label={`${product.name}, ${formatPrice(product.sellingPrice)}`}
+      aria-label={`${displayName}, ${formatPrice(product.sellingPrice)}`}
     >
-      <span className="text-[10px] sm:text-[11px] font-medium line-clamp-2 mb-0.5 sm:mb-1.5 leading-tight">{product.name}</span>
+      <span className="text-[10px] sm:text-[11px] font-medium line-clamp-2 mb-0.5 sm:mb-1.5 leading-tight">{displayName}</span>
       <span className="text-xs sm:text-sm font-bold text-primary tracking-tight tabular-nums">{formatPrice(product.sellingPrice)}</span>
       {isOutOfStock && <span className="text-[8px] sm:text-[9px] text-destructive uppercase font-bold mt-0.5 tracking-wider">Out</span>}
     </button>

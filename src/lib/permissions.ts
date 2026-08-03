@@ -19,6 +19,7 @@ export async function hasPermission(
   try {
     const user = await db.user.findUnique({
       where: { id: userId },
+      select: { isActive: true, role: true },
     });
 
     if (!user || !user.isActive) {
@@ -33,6 +34,7 @@ export async function hasPermission(
           code: permissionCode,
         },
       },
+      select: { id: true },
     });
 
     return !!permission;
@@ -83,6 +85,7 @@ export async function getUserPermissions(userId: string): Promise<string[]> {
   try {
     const user = await db.user.findUnique({
       where: { id: userId },
+      select: { isActive: true, role: true },
     });
 
     if (!user || !user.isActive) {

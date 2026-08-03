@@ -162,13 +162,13 @@ export async function applySaleStockPlans(
     if (plan.requiredQty <= 0) continue;
 
     if (plan.stockBefore >= plan.requiredQty) {
-      await tx.product.update({
-        where: { id: plan.productId },
-        data: {
-          currentStock: { decrement: plan.requiredQty },
-          updatedAt: new Date(),
-        },
-      });
+      // Use conditional decrement to prevent negative stock under concurrent load
+      await tx.$executeRaw`
+        UPDATE products
+        SET current_stock = GREATEST(0, current_stock - ${plan.requiredQty}),
+            updated_at = NOW()
+        WHERE id = ${plan.productId}
+      `;
     } else {
       // gap to invent so: stockBefore + gap - required = 0
       const gap = Number((plan.requiredQty - plan.stockBefore).toFixed(6));

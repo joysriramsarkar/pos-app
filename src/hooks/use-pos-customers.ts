@@ -3,8 +3,6 @@ import { useCustomersStore } from '@/stores/pos-store';
 import { CustomersDB } from '@/lib/offline/indexeddb';
 
 export function usePosCustomers(activeUser: any) {
-  const customers = useCustomersStore((state) => state.customers);
-
   useEffect(() => {
     if (activeUser?.requiresPasswordChange) return;
     const loadCustomers = async () => {
@@ -28,7 +26,8 @@ export function usePosCustomers(activeUser: any) {
         }
       } catch {
         // If API fails, keep cached data
-        if (customers.length === 0) {
+        const currentCustomers = useCustomersStore.getState().customers;
+        if (currentCustomers.length === 0) {
           const cachedCustomers = await CustomersDB.getAll();
           setCustomers(cachedCustomers);
         }
@@ -37,5 +36,5 @@ export function usePosCustomers(activeUser: any) {
       }
     };
     loadCustomers();
-  }, [customers.length, activeUser?.requiresPasswordChange]);
+  }, [activeUser?.requiresPasswordChange]);
 }

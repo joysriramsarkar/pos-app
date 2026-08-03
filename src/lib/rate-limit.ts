@@ -37,6 +37,16 @@ export const salesCreateLimiter = redis
 // Local in-memory fallback store
 const localMemoryMap = new Map<string, { count: number; resetAt: number }>();
 
+// Periodically clean up expired entries to prevent memory leak
+if (typeof setInterval !== 'undefined') {
+  setInterval(() => {
+    const now = Date.now();
+    for (const [key, val] of localMemoryMap) {
+      if (now > val.resetAt) localMemoryMap.delete(key);
+    }
+  }, 60_000);
+}
+
 export async function checkLocalRateLimit(key: string, limit: number, windowMs: number): Promise<{ success: boolean }> {
   const now = Date.now();
   const cached = localMemoryMap.get(key);

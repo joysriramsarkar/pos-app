@@ -6,20 +6,21 @@ export const revalidate = 30;
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import type { Product } from '@/types/pos';
 import { ProductInputSchema } from '@/schemas';
-import { requirePermission } from '@/lib/api-middleware';
+import { withAuthMiddleware, type RouteContext } from '@/lib/api-middleware';
 import { logAudit } from '@/lib/audit';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 
 const MAX_PRODUCT_LIMIT = 10000;
 
-// GET /api/products - Fetch all products
-export async function GET(request: NextRequest) {
-  const authError = await requirePermission(request, 'products.view');
-  if (authError) return authError;
+const getIp = (req: NextRequest) =>
+  req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+  req.headers.get('x-real-ip') ||
+  undefined;
 
+// GET /api/products - Fetch all products
+export const GET = withAuthMiddleware(handleGet, { permissionCode: 'products.view' });
+
+async function handleGet(request: NextRequest, _ctx: RouteContext) {
   try {
     const { searchParams } = new URL(request.url);
     const barcode = searchParams.get('barcode');
@@ -30,27 +31,21 @@ export async function GET(request: NextRequest) {
     const limitParam = searchParams.get('limit');
 
     const parsedLimit = limitParam ? parseInt(limitParam, 10) : undefined;
-    const limit = typeof parsedLimit === 'number' && Number.isFinite(parsedLimit)
-      ? Math.min(Math.max(parsedLimit, 1), MAX_PRODUCT_LIMIT)
-      : undefined;
+    const limit =
+      typeof parsedLimit === 'number' && Number.isFinite(parsedLimit)
+        ? Math.min(Math.max(parsedLimit, 1), MAX_PRODUCT_LIMIT)
+        : undefined;
 
-    // Build where clause
     const where: Record<string, unknown> = {};
-    
-    if (!includeInactive) {
-      where.isActive = true;
-    }
-    
-    if (barcode) {
-      where.barcode = barcode;
-    }
-    
-    if (category) {
-      where.category = category;
-    }
-    
+
+    if (!includeInactive) where.isActive = true;
+    if (barcode) where.barcode = barcode;
+    if (category) where.category = category;
+
     if (search) {
-      const engSearch = search.replace(/[০-৯]/g, (d) => String.fromCharCode(d.charCodeAt(0) - 2534 + 48));
+      const engSearch = search.replace(/[০-৯]/g, (d) =>
+        String.fromCharCode(d.charCodeAt(0) - 2534 + 48),
+      );
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
         { nameBn: { contains: search, mode: 'insensitive' } },
@@ -64,14 +59,10 @@ export async function GET(request: NextRequest) {
       orderBy: [{ category: 'asc' }, { name: 'asc' }, { id: 'asc' }],
     };
 
-    if (limit) {
-      findManyArgs.take = limit + 1; // Fetch one extra to check if there are more
-    }
+    if (limit) findManyArgs.take = limit + 1;
 
     if (cursor) {
       findManyArgs.cursor = { id: cursor };
-      // Note: when using cursor pagination, typically you skip the cursor itself,
-      // but if the client sends the last ID they saw, we should skip it.
       findManyArgs.skip = 1;
     }
 
@@ -83,50 +74,49 @@ export async function GET(request: NextRequest) {
       nextCursor = products[products.length - 1]?.id;
     }
 
-    return NextResponse.json({
-      success: true,
-      data: products,
-      nextCursor,
-    });
+    return NextResponse.json({ success: true, data: products, nextCursor });
   } catch (error: unknown) {
     console.error('Error fetching products:', error);
     return NextResponse.json(
       { success: false, error: 'Failed to fetch products' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
 
 // POST /api/products - Create new product
-export async function POST(request: NextRequest) {
-  const authError = await requirePermission(request, 'products.create');
-  if (authError) return authError;
+export const POST = withAuthMiddleware(handlePost, { permissionCode: 'products.create' });
 
+async function handlePost(request: NextRequest, ctx: RouteContext) {
   try {
-    const body = await request.json();
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ success: false, error: 'Invalid request body' }, { status: 400 });
+    }
 
-    // Validate with Zod
     const result = ProductInputSchema.safeParse(body);
     if (!result.success) {
-      const errors = Object.values(result.error.flatten().fieldErrors)
-        .flat()
-        .join(', ');
+      const errors = Object.values(result.error.flatten().fieldErrors).flat().join(', ');
       return NextResponse.json(
         { success: false, error: errors || 'Validation failed' },
-        { status: 400 }
+        { status: 400 },
       );
     }
-    
-    const validatedData = result.data;
 
+    const validatedData = result.data;
     const categoryName = String(validatedData.category).trim();
+
     const product = await db.product.create({
       data: {
         barcode: validatedData.barcode ? String(validatedData.barcode).trim() : null,
         name: String(validatedData.name).trim(),
         nameBn: validatedData.nameBn ? String(validatedData.nameBn).trim() : null,
         category: categoryName,
-        subCategory: validatedData.subCategory ? String(validatedData.subCategory).trim() : null,
+        subCategory: validatedData.subCategory
+          ? String(validatedData.subCategory).trim()
+          : null,
         buyingPrice: validatedData.buyingPrice,
         sellingPrice: validatedData.sellingPrice,
         unit: validatedData.unit,
@@ -136,17 +126,16 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    const { ensureCategoryExists } = await import("@/lib/ensure-category");
+    const { ensureCategoryExists } = await import('@/lib/ensure-category');
     await ensureCategoryExists(categoryName);
 
-    const session = await getServerSession(authOptions);
     await logAudit({
-      userId: session?.user?.id,
+      userId: ctx.auth?.user?.id,
       action: 'CREATE_PRODUCT',
       entityType: 'Product',
       entityId: product.id,
       details: { name: product.name, category: product.category, barcode: product.barcode },
-      ipAddress: request.headers.get('x-forwarded-for') || undefined,
+      ipAddress: getIp(request),
       userAgent: request.headers.get('user-agent') || undefined,
     });
 
@@ -157,67 +146,76 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: unknown) {
     console.error('Error creating product:', error);
-    
-    // Handle specific Prisma errors
-    if (error instanceof Error) {
-      if (error.message.includes('Unique constraint failed')) {
-        return NextResponse.json(
-          { success: false, error: 'Barcode already exists for another product' },
-          { status: 400 }
-        );
-      }
+    if (error instanceof Error && error.message.includes('Unique constraint failed')) {
       return NextResponse.json(
-        { success: false, error: 'Failed to create product' },
-        { status: 500 }
+        { success: false, error: 'Barcode already exists for another product' },
+        { status: 400 },
       );
     }
-    
     return NextResponse.json(
       { success: false, error: 'Failed to create product' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
 
 // PUT /api/products - Update product
-export async function PUT(request: NextRequest) {
-  const authError = await requirePermission(request, 'products.edit');
-  if (authError) return authError;
+export const PUT = withAuthMiddleware(handlePut, { permissionCode: 'products.edit' });
 
+async function handlePut(request: NextRequest, ctx: RouteContext) {
   try {
-    const body = await request.json();
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ success: false, error: 'Invalid request body' }, { status: 400 });
+    }
 
-    if (!body.id) {
+    if (!(body as any)?.id) {
       return NextResponse.json(
         { success: false, error: 'Product ID is required' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     const result = ProductInputSchema.safeParse(body);
     if (!result.success) {
-      const errors = Object.values(result.error.flatten().fieldErrors)
-        .flat()
-        .join(', ');
+      const errors = Object.values(result.error.flatten().fieldErrors).flat().join(', ');
       return NextResponse.json(
         { success: false, error: errors || 'Validation failed' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    const { id, ...validatedData } = result.data;
-
+    const { id: _id, ...validatedData } = result.data;
+    const productId = (body as any).id as string;
     const categoryName =
       validatedData.category !== undefined ? String(validatedData.category).trim() : undefined;
 
     const product = await db.product.update({
-      where: { id: body.id },
+      where: { id: productId },
       data: {
-        barcode: validatedData.barcode !== undefined ? (validatedData.barcode ? String(validatedData.barcode).trim() : null) : undefined,
-        name: validatedData.name !== undefined ? String(validatedData.name).trim() : undefined,
-        nameBn: validatedData.nameBn !== undefined ? (validatedData.nameBn ? String(validatedData.nameBn).trim() : null) : undefined,
+        barcode:
+          validatedData.barcode !== undefined
+            ? validatedData.barcode
+              ? String(validatedData.barcode).trim()
+              : null
+            : undefined,
+        name:
+          validatedData.name !== undefined ? String(validatedData.name).trim() : undefined,
+        nameBn:
+          validatedData.nameBn !== undefined
+            ? validatedData.nameBn
+              ? String(validatedData.nameBn).trim()
+              : null
+            : undefined,
         category: categoryName,
-        subCategory: validatedData.subCategory !== undefined ? (validatedData.subCategory ? String(validatedData.subCategory).trim() : null) : undefined,
+        subCategory:
+          validatedData.subCategory !== undefined
+            ? validatedData.subCategory
+              ? String(validatedData.subCategory).trim()
+              : null
+            : undefined,
         buyingPrice: validatedData.buyingPrice,
         sellingPrice: validatedData.sellingPrice,
         unit: validatedData.unit,
@@ -229,18 +227,17 @@ export async function PUT(request: NextRequest) {
     });
 
     if (categoryName) {
-      const { ensureCategoryExists } = await import("@/lib/ensure-category");
+      const { ensureCategoryExists } = await import('@/lib/ensure-category');
       await ensureCategoryExists(categoryName);
     }
 
-    const session = await getServerSession(authOptions);
     await logAudit({
-      userId: session?.user?.id,
+      userId: ctx.auth?.user?.id,
       action: 'UPDATE_PRODUCT',
       entityType: 'Product',
       entityId: product.id,
       details: { name: product.name, changes: validatedData },
-      ipAddress: request.headers.get('x-forwarded-for') || undefined,
+      ipAddress: getIp(request),
       userAgent: request.headers.get('user-agent') || undefined,
     });
 
@@ -253,16 +250,15 @@ export async function PUT(request: NextRequest) {
     console.error('Error updating product:', error);
     return NextResponse.json(
       { success: false, error: 'Failed to update product' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
 
 // DELETE /api/products - Soft delete product
-export async function DELETE(request: NextRequest) {
-  const authError = await requirePermission(request, 'products.delete');
-  if (authError) return authError;
+export const DELETE = withAuthMiddleware(handleDelete, { permissionCode: 'products.delete' });
 
+async function handleDelete(request: NextRequest, ctx: RouteContext) {
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
@@ -270,35 +266,30 @@ export async function DELETE(request: NextRequest) {
     if (!id) {
       return NextResponse.json(
         { success: false, error: 'Product ID is required' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    // Soft delete by setting isActive to false
-    const product = await db.product.update({
+    await db.product.update({
       where: { id },
       data: { isActive: false, updatedAt: new Date() },
     });
 
-    const session = await getServerSession(authOptions);
     await logAudit({
-      userId: session?.user?.id,
+      userId: ctx.auth?.user?.id,
       action: 'DELETE_PRODUCT',
       entityType: 'Product',
       entityId: id,
-      ipAddress: request.headers.get('x-forwarded-for') || undefined,
+      ipAddress: getIp(request),
       userAgent: request.headers.get('user-agent') || undefined,
     });
 
-    return NextResponse.json({
-      success: true,
-      message: 'Product deleted successfully',
-    });
+    return NextResponse.json({ success: true, message: 'Product deleted successfully' });
   } catch (error: unknown) {
     console.error('Error deleting product:', error);
     return NextResponse.json(
       { success: false, error: 'Failed to delete product' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

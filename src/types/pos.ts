@@ -177,6 +177,7 @@ export interface CartItem {
   totalPrice: number;
   unit: string;
   availableStock: number;
+  discount?: number;
 }
 
 export interface Cart {

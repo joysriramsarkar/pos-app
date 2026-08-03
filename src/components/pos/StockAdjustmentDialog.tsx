@@ -97,7 +97,7 @@ export function StockAdjustmentDialog({ product, open, onOpenChange }: StockAdju
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-md w-[95vw] max-h-[90dvh] overflow-y-auto">
+      <DialogContent onInteractOutside={(e) => e.preventDefault()} className="sm:max-w-md w-[95vw] max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <MinusCircle className="w-5 h-5 text-amber-500" />

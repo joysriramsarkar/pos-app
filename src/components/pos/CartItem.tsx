@@ -26,6 +26,7 @@ interface CartItemProps {
 export function CartItem({ item, isHighlighted = false }: CartItemProps) {
   const updateQuantity = useCartStore((state) => state.updateQuantity);
   const removeItem = useCartStore((state) => state.removeItem);
+  const setItemDiscount = useCartStore((state) => state.setItemDiscount);
   const itemRef = useRef<HTMLDivElement>(null);
   const { formatPrice, formatStringNumbers } = useNumberFormat();
   const currencySymbol = useSettingsStore((s) => s.settings.currency_symbol);
@@ -80,6 +81,7 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
   }, [item.id, removeItem]);
 
   const [inputValue, setInputValue] = useState<string>(() => formatQtyForInput(item.quantity));
+  const [discountInput, setDiscountInput] = useState<string>(item.discount ? String(item.discount) : '');
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -217,8 +219,39 @@ export function CartItem({ item, isHighlighted = false }: CartItemProps) {
             </div>
           </div>
           {/* Total Price */}
-          <div className="text-right shrink-0">
-            <p className="font-semibold text-xs sm:text-sm tabular-nums leading-tight">{formatPrice(item.totalPrice)}</p>
+          <div className="text-right shrink-0 flex flex-col items-end gap-1">
+            <div className="flex items-center gap-1">
+              {(item.discount || 0) > 0 && (
+                <span className="text-[10px] text-muted-foreground line-through">
+                  {formatPrice(item.totalPrice)}
+                </span>
+              )}
+              <p className="font-semibold text-xs sm:text-sm tabular-nums leading-tight">
+                {formatPrice(item.totalPrice - (item.discount || 0))}
+              </p>
+            </div>
+            <div className="flex items-center gap-1 mt-0.5">
+              <span className="text-[9px] text-muted-foreground">Disc:</span>
+              <Input
+                type="number"
+                inputMode="decimal"
+                value={discountInput}
+                onChange={(e) => setDiscountInput(e.target.value)}
+                onBlur={(e) => {
+                  const val = parseFloat(convertBengaliToEnglishNumerals(e.target.value)) || 0;
+                  const finalVal = Math.max(0, Math.min(val, item.totalPrice)); // don't allow discount > price
+                  setDiscountInput(finalVal > 0 ? String(finalVal) : '');
+                  setItemDiscount(item.id, finalVal);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') e.currentTarget.blur();
+                }}
+                className="w-10 sm:w-12 h-5 text-[10px] px-1 py-0 text-right bg-background"
+                placeholder="0"
+                min="0"
+                max={item.totalPrice}
+              />
+            </div>
           </div>
         </div>
 

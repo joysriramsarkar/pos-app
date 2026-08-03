@@ -16,9 +16,6 @@ interface CartTotalsProps {
   discount: number;
   tax: number;
   total: number;
-  showDiscountInput: boolean;
-  setShowDiscountInput: (v: boolean) => void;
-  handleDiscountChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   isCartEmpty: boolean;
   onCheckout: () => void;
   formatPrice: (n: number) => string;
@@ -33,9 +30,6 @@ export function CartTotals({
   discount,
   tax,
   total,
-  showDiscountInput,
-  setShowDiscountInput,
-  handleDiscountChange,
   isCartEmpty,
   onCheckout,
   formatPrice,
@@ -87,33 +81,12 @@ export function CartTotals({
           <span className="font-semibold tabular-nums">{formatPrice(subtotal)}</span>
         </div>
 
-        <div className="flex justify-between items-center text-[11px] md:text-xs mt-0.5">
-          <span className="text-muted-foreground font-medium">{t('discount')}</span>
-          <div className="flex items-center gap-1">
-            {showDiscountInput ? (
-              <Input
-                type="number"
-                value={discount || ''}
-                onChange={handleDiscountChange}
-                className="w-14 h-6 text-right text-xs px-1.5 rounded-md border-emerald-500/30 focus-visible:ring-emerald-500/50"
-                placeholder="0"
-                min={0}
-                max={subtotal}
-                autoFocus
-                onBlur={() => discount === 0 && setShowDiscountInput(false)}
-              />
-            ) : (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 px-1.5 text-[11px] md:text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 rounded-md"
-                onClick={() => setShowDiscountInput(true)}
-              >
-                {discount > 0 ? formatPrice(discount) : t('add_discount')}
-              </Button>
-            )}
+        {discount > 0 && (
+          <div className="flex justify-between items-center text-[11px] md:text-xs mt-0.5">
+            <span className="text-muted-foreground font-medium">{t('discount')}</span>
+            <span className="font-semibold text-destructive tabular-nums">-{formatPrice(discount)}</span>
           </div>
-        </div>
+        )}
 
         {tax > 0 && (
           <div className="flex justify-between text-[11px] md:text-xs mt-0.5">

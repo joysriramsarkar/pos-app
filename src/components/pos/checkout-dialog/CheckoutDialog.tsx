@@ -60,7 +60,8 @@ export function CheckoutDialog({
     if (showSuccess && onCheckoutSuccess && lastSale) {
       onCheckoutSuccess(lastSale);
     }
-  }, [showSuccess, lastSale, onCheckoutSuccess]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showSuccess]);
 
   const activeTab = useCartStore((state) => state.tabs.find((tab) => tab.id === state.activeTabId) || state.tabs[0]);
   const items = activeTab.items;

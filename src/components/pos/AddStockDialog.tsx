@@ -45,12 +45,8 @@ export interface StockEntryData {
   notes?: string;
 }
 
-// Mock suppliers for demo
-const mockSuppliers: Supplier[] = [
-  { id: '1', name: 'ABC Distributors', phone: '9876543210', isActive: true, createdAt: new Date(), updatedAt: new Date() },
-  { id: '2', name: 'XYZ Wholesalers', phone: '9876543211', isActive: true, createdAt: new Date(), updatedAt: new Date() },
-  { id: '3', name: 'Direct Supply Co', phone: '9876543212', isActive: true, createdAt: new Date(), updatedAt: new Date() },
-];
+// Default empty fallback suppliers if none loaded
+const mockSuppliers: Supplier[] = [];
 
 export function AddStockDialog({
   open,
