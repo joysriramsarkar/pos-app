@@ -31,9 +31,10 @@ model Product {
   updatedAt     DateTime @updatedAt @map("updated_at")
 
   // Relations
-  saleItems     SaleItem[]
-  purchaseItems PurchaseItem[]
-  stockHistory  StockHistory[]
+  saleItems         SaleItem[]
+  purchaseItems     PurchaseItem[]
+  stockHistory      StockHistory[]
+  productPopularity ProductPopularity[]
 
   @@index([isActive])
   @@index([category, isActive])
@@ -75,6 +76,26 @@ model StockHistory {
   @@index([productId])
   @@index([createdAt])
   @@map("stock_history")
+}
+
+model ProductPopularity {
+  id                String   @id @default(uuid())
+  productId         String   @map("product_id")
+  product           Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  
+  monthlySalesCount Int      @default(0) @map("monthly_sales_count")
+  weeklySalesCount  Int      @default(0) @map("weekly_sales_count")
+  totalRevenue      Decimal  @default(0) @db.Decimal(10, 2) @map("total_revenue")
+  
+  periodStart       DateTime @map("period_start")
+  periodEnd         DateTime @map("period_end")
+  
+  updatedAt         DateTime @updatedAt @map("updated_at")
+  
+  @@unique([productId, periodStart])
+  @@index([monthlySalesCount])
+  @@index([weeklySalesCount])
+  @@map("product_popularity")
 }
 
 // ============================================================================

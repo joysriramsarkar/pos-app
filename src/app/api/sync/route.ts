@@ -531,6 +531,42 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
         }
       }
 
+      // Update product popularity for synced sale
+      try {
+        const now = new Date();
+        const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+        
+        await Promise.all(saleData.items.map(async (item) => {
+          const qty = Number(item.quantity);
+          const revenue = Number(item.totalPrice);
+          
+          await tx.productPopularity.upsert({
+            where: {
+              productId_periodStart: {
+                productId: item.productId,
+                periodStart: periodStart
+              }
+            },
+            update: {
+              monthlySalesCount: { increment: qty },
+              totalRevenue: { increment: revenue },
+              periodEnd: periodEnd,
+              updatedAt: new Date()
+            },
+            create: {
+              productId: item.productId,
+              monthlySalesCount: qty,
+              totalRevenue: revenue,
+              periodStart: periodStart,
+              periodEnd: periodEnd
+            }
+          });
+        }));
+      } catch (popError) {
+        console.error("Failed to update product popularity in sync:", popError);
+      }
+
       return sale;
     }
 

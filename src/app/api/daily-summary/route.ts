@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
           { saleId: { in: todaySaleIds } },
         ],
       },
-      select: { saleId: true, refundAmount: true, createdAt: true },
+      select: { saleId: true, refundAmount: true, createdAt: true, refundMethod: true },
     });
 
     // Net refund amount per original sale (SaleReturn records)
@@ -116,13 +116,35 @@ export async function GET(request: NextRequest) {
     }
 
     // ---- PURCHASES ----
+    // Include both formal purchases (all statuses) and informal manual stock entries
     const todayPurchases = await db.purchase.findMany({
       where: {
         createdAt: { gte: startOfDay, lt: endOfDay },
-        paymentStatus: 'Paid',
       },
     });
-    const totalPurchasesAmount = todayPurchases.reduce((sum, p) => sum + Number(p.totalAmount), 0);
+    const totalPurchasesAmountFromSupplier = todayPurchases.reduce((sum, p) => sum + Number(p.totalAmount), 0);
+
+    const informalStockEntries = await db.stockHistory.findMany({
+      where: {
+        createdAt: { gte: startOfDay, lt: endOfDay },
+        changeType: 'purchase',
+        purchaseId: null,
+      },
+      include: { product: true }
+    });
+
+    const informalPurchasesAmount = informalStockEntries.reduce((sum, entry) => {
+      let unitPrice = Number(entry.product.buyingPrice);
+      if (entry.reason) {
+        const match = entry.reason.match(/@\s*[^0-9]*([0-9.]+)/);
+        if (match && match[1]) {
+          unitPrice = parseFloat(match[1]);
+        }
+      }
+      return sum + (Number(entry.quantity) * unitPrice);
+    }, 0);
+
+    const totalPurchasesAmount = totalPurchasesAmountFromSupplier + informalPurchasesAmount;
 
     // ---- EXPENSES ----
     const todayExpenses = await db.expense.findMany({
@@ -321,26 +343,74 @@ export async function GET(request: NextRequest) {
     const totalCustomerDues = customersWithDue.reduce((sum, c) => sum + Number(c.totalDue), 0);
 
     // ---- OPENING / CLOSING BALANCE ----
-    // Yesterday cash and upi totals
-    const yesterdaySales = await db.sale.findMany({
+    
+    // To calculate the true opening balance of today, we sum all cash flow up to startOfDay
+    // 1. All past sales cash & UPI
+    const pastSales = await db.sale.aggregate({
       where: {
-        createdAt: { gte: yesterdayStart, lt: yesterdayEnd },
+        createdAt: { lt: startOfDay },
         status: { in: ['Completed', 'PartialReturn'] },
       },
+      _sum: {
+        cashAmount: true,
+        upiAmount: true,
+      }
     });
-    const yesterdayCashTotal = yesterdaySales.reduce((sum, s) => sum + Number(s.cashAmount || 0), 0);
-    const yesterdayUpiTotal = yesterdaySales.reduce((sum, s) => sum + Number(s.upiAmount || 0), 0);
-
-    const yesterdayExpenses = await db.expense.findMany({
-      where: { date: { gte: yesterdayStart, lt: yesterdayEnd }, isActive: true },
+    
+    // 2. All past expenses
+    const pastExpenses = await db.expense.aggregate({
+      where: {
+        date: { lt: startOfDay },
+        isActive: true,
+      },
+      _sum: {
+        amount: true,
+      }
     });
-    const yesterdayExpensesTotal = yesterdayExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
 
-    // Opening balance
-    const openingBalance = yesterdayCashTotal + yesterdayUpiTotal - yesterdayExpensesTotal;
+    // 3. All past due collections (ledger debit entries, excluding non-cash adjustments)
+    const pastDueCollections = await db.ledgerEntry.aggregate({
+      where: {
+        entryType: 'debit',
+        createdAt: { lt: startOfDay },
+        NOT: {
+          OR: [
+            { description: { contains: 'prepaid', mode: 'insensitive' } },
+            { description: { contains: 'Prepayment', mode: 'insensitive' } },
+            { description: { contains: 'return refund', mode: 'insensitive' } },
+            { description: { contains: 'reverse due', mode: 'insensitive' } },
+          ],
+        },
+      },
+      _sum: {
+        amount: true,
+      }
+    });
 
-    // Today's cash and UPI
-    const todayCashTotal = todaySales.reduce((sum, s) => sum + Number(s.cashAmount || 0), 0);
+    // 4. All past cash refunds
+    const pastRefunds = await db.saleReturn.aggregate({
+      where: {
+        createdAt: { lt: startOfDay },
+        refundMethod: 'Cash'
+      },
+      _sum: {
+        refundAmount: true,
+      }
+    });
+
+    const openingBalance = 
+      Number(pastSales._sum.cashAmount || 0) + 
+      Number(pastSales._sum.upiAmount || 0) + 
+      Number(pastDueCollections._sum.amount || 0) - 
+      Number(pastExpenses._sum.amount || 0) - 
+      Number(pastRefunds._sum.refundAmount || 0);
+
+    // Today's cash and UPI (adjusted for dues collected and refunds today)
+    const todayCashRefunds = returnsToday
+      .filter(r => r.refundMethod === 'Cash' || !r.refundMethod)
+      .reduce((sum, r) => sum + Number(r.refundAmount), 0);
+
+    const todayCashTotal = todaySales.reduce((sum, s) => sum + Number(s.cashAmount || 0), 0) + duesCollected - todayCashRefunds;
     const todayUpiTotal = todaySales.reduce((sum, s) => sum + Number(s.upiAmount || 0), 0);
 
     // Closing balance

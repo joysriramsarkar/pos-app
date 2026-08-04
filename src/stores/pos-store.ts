@@ -734,6 +734,7 @@ interface ProductUsageState {
   usage: Record<string, number>;
   monthlyTopSales: Record<string, number>;
   lastFetched: number | null;
+  isFetching: boolean;
 }
 
 interface ProductUsageActions {
@@ -749,42 +750,60 @@ export const useProductUsageStore = create<ProductUsageState & ProductUsageActio
       usage: {},
       monthlyTopSales: {},
       lastFetched: null,
+      isFetching: false,
+      
       recordUsage: (productId) => set((state) => ({
         usage: { ...state.usage, [productId]: (state.usage[productId] || 0) + 1 }
       })),
+      
       getUsage: (productId) => get().usage[productId] || 0,
+      
       fetchMonthlyTopSales: async () => {
-        const { lastFetched } = get();
+        const { lastFetched, isFetching } = get();
         const now = Date.now();
-        // Fetch at most once per hour (3600000 ms)
-        if (lastFetched && now - lastFetched < 3600000) return;
+        
+        // Fetch at most once every 15 minutes (900000 ms)
+        if (lastFetched && now - lastFetched < 900000) return;
+        if (isFetching) return;
 
+        set({ isFetching: true });
         try {
-          const res = await fetch('/api/reports/products?days=30');
+          const res = await fetch('/api/pos/popular');
           if (res.ok) {
             const data = await res.json();
             const monthlyTopSales: Record<string, number> = {};
-            data.topProducts?.forEach((p: any, index: number) => {
-              // Higher score for higher rank. e.g. top 1 gets max score.
-              monthlyTopSales[p.id] = p.quantity * 1000 + p.revenue; 
+            
+            data.topProducts?.forEach((p: any) => {
+              monthlyTopSales[p.id] = p.score;
             });
+            
             set({ monthlyTopSales, lastFetched: now });
           }
         } catch (error) {
-          console.error("Failed to fetch monthly top products", error);
+          console.error("Failed to fetch popular products", error);
+        } finally {
+          set({ isFetching: false });
         }
       },
+      
       getSortWeight: (productId) => {
         const state = get();
-        // Favor monthly top sales, fallback to local usage
-        const monthlyScore = state.monthlyTopSales[productId] || 0;
+        // Server score is dominant (max scale 100,000+), local usage acts as fallback/tiebreaker
+        const serverScore = state.monthlyTopSales[productId] || 0;
         const localUsage = state.usage[productId] || 0;
-        return monthlyScore > 0 ? monthlyScore : localUsage;
+        
+        return serverScore + (localUsage * 0.1);
       }
     }),
     {
       name: 'lakhan-bhandar-product-usage',
       storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({
+        // We persist usage and lastFetched. The topSales is also persisted for offline support.
+        usage: state.usage,
+        monthlyTopSales: state.monthlyTopSales,
+        lastFetched: state.lastFetched,
+      })
     }
   )
 );
