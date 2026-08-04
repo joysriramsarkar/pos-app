@@ -30,7 +30,7 @@ export function CustomersTab({
   onSelectCustomer: (c: TopCustomer) => void;
 }) {
   const t = useTranslations('Reports');
-  const { formatPrice, formatStringNumbers } = useNumberFormat();
+  const { formatPrice, formatStringNumbers, formatNumber } = useNumberFormat();
 
   const customerChartData = useMemo(
     () =>
@@ -115,7 +115,7 @@ export function CustomersTab({
                   <TableRow><TableCell colSpan={7} className="text-center py-6 text-destructive">{error}</TableCell></TableRow>
                 ) : topCustomers.length > 0 ? topCustomers.map((c, i: number) => (
                   <TableRow key={c.id} className="cursor-pointer hover:bg-muted/50" onClick={() => onSelectCustomer(c)}>
-                    <TableCell className="text-muted-foreground text-sm">{i + 1}</TableCell>
+                    <TableCell className="text-muted-foreground text-sm">{formatNumber(i + 1)}</TableCell>
                     <TableCell className="font-medium">
                       <p className="text-sm">{c.name}</p>
                       <p className="text-xs text-muted-foreground">{c.phone || 'N/A'}</p>

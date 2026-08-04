@@ -35,14 +35,27 @@ export async function GET(request: NextRequest) {
   if (authError) return authError;
 
   try {
-    const today = new Date();
-    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
-    const yesterdayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
-    const yesterdayEnd = startOfDay;
+    // ---- TIMEZONE-AWARE DATE WINDOW ----
+    // tzOffset = new Date().getTimezoneOffset() from the client.
+    // For IST (UTC+5:30), getTimezoneOffset() returns -330.
+    // We convert UTC 'now' to local time, extract the local date,
+    // then build UTC boundaries that correspond to local midnight–midnight.
+    const tzOffset = parseInt(request.nextUrl.searchParams.get('tzOffset') || '-330');
+    // offsetMs is the milliseconds to ADD to UTC to get local time.
+    // getTimezoneOffset() returns -(UTC offset in minutes), so negate it.
+    const offsetMs = -tzOffset * 60 * 1000;
 
-    // Bengali formatted date
-    const bengaliDate = formatBengaliDate(today);
+    // Local "now" expressed as a UTC Date (i.e. wall-clock local time)
+    const localNow = new Date(Date.now() + offsetMs);
+
+    // Local midnight in UTC → this is when the local day starts in UTC terms
+    const startOfDay = new Date(
+      Date.UTC(localNow.getUTCFullYear(), localNow.getUTCMonth(), localNow.getUTCDate()) - offsetMs,
+    );
+    const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
+
+    // Bengali date uses local time
+    const bengaliDate = formatBengaliDate(localNow);
 
     // ---- SALES SUMMARY ----
     // Include Completed + PartialReturn; exclude Cancelled and fully refunded originals.
@@ -145,6 +158,7 @@ export async function GET(request: NextRequest) {
     }, 0);
 
     const totalPurchasesAmount = totalPurchasesAmountFromSupplier + informalPurchasesAmount;
+    const totalPurchasesCount = todayPurchases.length + informalStockEntries.length;
 
     // ---- EXPENSES ----
     const todayExpenses = await db.expense.findMany({
@@ -343,9 +357,10 @@ export async function GET(request: NextRequest) {
     const totalCustomerDues = customersWithDue.reduce((sum, c) => sum + Number(c.totalDue), 0);
 
     // ---- OPENING / CLOSING BALANCE ----
-    
-    // To calculate the true opening balance of today, we sum all cash flow up to startOfDay
-    // 1. All past sales cash & UPI
+    // The opening balance is computed as all accumulated cash inflows minus outflows
+    // up to (but not including) today's local midnight.
+
+    // 1. All past sales cash & UPI (direct cash that came in)
     const pastSales = await db.sale.aggregate({
       where: {
         createdAt: { lt: startOfDay },
@@ -356,8 +371,8 @@ export async function GET(request: NextRequest) {
         upiAmount: true,
       }
     });
-    
-    // 2. All past expenses
+
+    // 2. All past expenses (cash that went out — ALL categories including supplier payments)
     const pastExpenses = await db.expense.aggregate({
       where: {
         date: { lt: startOfDay },
@@ -368,7 +383,7 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // 3. All past due collections (ledger debit entries, excluding non-cash adjustments)
+    // 3. All past due collections (cash that came in via debit ledger entries)
     const pastDueCollections = await db.ledgerEntry.aggregate({
       where: {
         entryType: 'debit',
@@ -387,7 +402,7 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // 4. All past cash refunds
+    // 4. All past cash refunds (cash that went out)
     const pastRefunds = await db.saleReturn.aggregate({
       where: {
         createdAt: { lt: startOfDay },
@@ -398,11 +413,28 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    const openingBalance = 
-      Number(pastSales._sum.cashAmount || 0) + 
-      Number(pastSales._sum.upiAmount || 0) + 
-      Number(pastDueCollections._sum.amount || 0) - 
-      Number(pastExpenses._sum.amount || 0) - 
+    // 5. Past prepaid top-up cash inflows (customer pays cash → store credit)
+    //    These are credit ledger entries with prepaid/topup descriptions.
+    const pastPrepaidTopups = await db.ledgerEntry.aggregate({
+      where: {
+        entryType: 'credit',
+        createdAt: { lt: startOfDay },
+        OR: [
+          { description: { contains: 'prepaid topup', mode: 'insensitive' } },
+          { description: { contains: 'prepayment topup', mode: 'insensitive' } },
+          { description: { contains: 'wallet topup', mode: 'insensitive' } },
+          { description: { contains: 'add balance', mode: 'insensitive' } },
+        ],
+      },
+      _sum: { amount: true },
+    });
+
+    const openingBalance =
+      Number(pastSales._sum.cashAmount || 0) +
+      Number(pastSales._sum.upiAmount || 0) +
+      Number(pastDueCollections._sum.amount || 0) +
+      Number(pastPrepaidTopups._sum.amount || 0) -
+      Number(pastExpenses._sum.amount || 0) -
       Number(pastRefunds._sum.refundAmount || 0);
 
     // Today's cash and UPI (adjusted for dues collected and refunds today)
@@ -412,6 +444,11 @@ export async function GET(request: NextRequest) {
 
     const todayCashTotal = todaySales.reduce((sum, s) => sum + Number(s.cashAmount || 0), 0) + duesCollected - todayCashRefunds;
     const todayUpiTotal = todaySales.reduce((sum, s) => sum + Number(s.upiAmount || 0), 0);
+
+    // Supplier payment expenses today (cash going out for stock — separate visibility)
+    const todaySupplierPayments = todayExpenses
+      .filter((e) => e.category === 'Supplier Payment')
+      .reduce((sum, e) => sum + Number(e.amount), 0);
 
     // Closing balance
     const closingBalance = openingBalance + todayCashTotal + todayUpiTotal - totalExpenses;
@@ -426,6 +463,9 @@ export async function GET(request: NextRequest) {
         paymentBreakdown,
         totalExpenses,
         totalPurchasesAmount,
+        totalPurchasesCount,
+        supplierPurchasesAmount: totalPurchasesAmountFromSupplier,
+        informalPurchasesAmount,
         expenseByCategory,
         costOfGoodsSold,
         grossProfit,
@@ -448,6 +488,7 @@ export async function GET(request: NextRequest) {
         closingBalance,
         todayCashTotal,
         todayUpiTotal,
+        todaySupplierPayments,
       },
     });
   } catch (error) {

@@ -52,7 +52,7 @@ export function DailySummary({ open, onOpenChange }: DailySummaryProps) {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/daily-summary');
+      const res = await fetch(`/api/daily-summary?tzOffset=${new Date().getTimezoneOffset()}`);
       const result = await res.json();
       if (result.success) {
         setData(result.data);
@@ -144,9 +144,37 @@ export function DailySummary({ open, onOpenChange }: DailySummaryProps) {
                   gradient="from-orange-50/50 to-transparent dark:from-orange-950/20 dark:to-transparent"
                   delay={1}
                 >
-                  <div className="grid grid-cols-1">
-                    <MetricItem label={t('total_purchases')} value={formatTaka(data.totalPurchasesAmount || 0)} color="text-orange-600 dark:text-orange-400" />
-                  </div>
+                  {data.totalPurchasesCount === 0 ? (
+                    // Empty state — no purchases today
+                    <div className="flex flex-col items-center gap-2 py-3 text-center">
+                      <div className="h-10 w-10 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center">
+                        <Package className="h-5 w-5 text-orange-400" />
+                      </div>
+                      <p className="text-sm text-muted-foreground">{t('no_purchases_today')}</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {/* Total */}
+                      <div className="flex items-center justify-between p-2.5 rounded-lg bg-orange-50 dark:bg-orange-950/30 border border-orange-200/50 dark:border-orange-800/30">
+                        <span className="text-sm font-semibold">{t('total_purchases')}</span>
+                        <span className="text-lg font-bold text-orange-600 dark:text-orange-400">{formatTaka(data.totalPurchasesAmount)}</span>
+                      </div>
+                      {/* Supplier breakdown */}
+                      {data.supplierPurchasesAmount > 0 && (
+                        <div className="flex items-center justify-between text-sm p-2 rounded-md bg-muted/30">
+                          <span className="text-muted-foreground">{t('supplier_purchases')}</span>
+                          <span className="font-medium">{formatTaka(data.supplierPurchasesAmount)}</span>
+                        </div>
+                      )}
+                      {/* Informal/manual stock entries breakdown */}
+                      {data.informalPurchasesAmount > 0 && (
+                        <div className="flex items-center justify-between text-sm p-2 rounded-md bg-muted/30">
+                          <span className="text-muted-foreground">{t('informal_purchases')}</span>
+                          <span className="font-medium">{formatTaka(data.informalPurchasesAmount)}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </SectionCard>
 
                 {/* Payment Details Section */}
@@ -366,26 +394,41 @@ export function DailySummary({ open, onOpenChange }: DailySummaryProps) {
                   <div className="space-y-2">
                     <div className="flex items-center justify-between text-sm p-2 rounded-md bg-muted/30">
                       <span className="text-muted-foreground">{t('opening_balance')}</span>
-                      <span className="font-medium">{formatTaka(data.openingBalance)}</span>
+                      <span className={`font-medium ${data.openingBalance < 0 ? 'text-red-600 dark:text-red-400' : 'text-foreground'}`}>
+                        {formatTaka(data.openingBalance)}
+                      </span>
                     </div>
-                    <div className="flex items-center justify-between text-sm p-2 rounded-md bg-green-50/50 dark:bg-green-950/20">
+                    <div className="flex items-center justify-between text-sm p-2 rounded-md bg-muted/30">
                       <span className="text-muted-foreground">+ {t('today_cash')}</span>
                       <span className="font-medium text-green-600 dark:text-green-400">{formatTaka(data.todayCashTotal)}</span>
                     </div>
-                    <div className="flex items-center justify-between text-sm p-2 rounded-md bg-blue-50/50 dark:bg-blue-950/20">
+                    <div className="flex items-center justify-between text-sm p-2 rounded-md bg-muted/30">
                       <span className="text-muted-foreground">+ {t('today_upi')}</span>
                       <span className="font-medium text-blue-600 dark:text-blue-400">{formatTaka(data.todayUpiTotal)}</span>
                     </div>
-                    <div className="flex items-center justify-between text-sm p-2 rounded-md bg-red-50/50 dark:bg-red-950/20">
+                    <div className="flex items-center justify-between text-sm p-2 rounded-md bg-muted/30">
                       <span className="text-muted-foreground">− {t('expense_details')}</span>
                       <span className="font-medium text-red-600 dark:text-red-400">{formatTaka(data.totalExpenses)}</span>
                     </div>
+                    {data.todaySupplierPayments > 0 && (
+                      <div className="flex items-center justify-between text-xs p-1.5 rounded-md bg-muted/20 ml-2">
+                        <span className="text-muted-foreground/80">↳ {t('supplier_payments')}</span>
+                        <span className="text-muted-foreground">{formatTaka(data.todaySupplierPayments)}</span>
+                      </div>
+                    )}
                     <Separator />
-                    <div className="flex items-center justify-between p-2.5 rounded-lg bg-gradient-to-r from-primary/10 to-primary/5 dark:from-primary/20 dark:to-primary/10 border border-primary/20">
+                    <div className={`flex items-center justify-between p-2.5 rounded-lg border ${
+                      data.closingBalance < 0
+                        ? 'bg-gradient-to-r from-red-50 to-red-50/50 dark:from-red-950/40 dark:to-red-950/20 border-red-200/50 dark:border-red-800/30'
+                        : 'bg-gradient-to-r from-primary/10 to-primary/5 dark:from-primary/20 dark:to-primary/10 border-primary/20'
+                    }`}>
                       <span className="font-bold">{t('closing_balance')}</span>
-                      <span className="text-xl font-bold text-primary">{formatTaka(data.closingBalance)}</span>
+                      <span className={`text-xl font-bold ${data.closingBalance < 0 ? 'text-red-600 dark:text-red-400' : 'text-primary'}`}>
+                        {formatTaka(data.closingBalance)}
+                      </span>
                     </div>
                   </div>
+
                 </SectionCard>
               </>
             ) : (

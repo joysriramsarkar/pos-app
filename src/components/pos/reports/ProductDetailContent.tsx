@@ -35,7 +35,7 @@ export function ProductDetailContent({
   }, [product?.id, dateParams, setIsLoading, setDetail]);
 
   const t = useTranslations('Reports');
-  const { formatPrice, formatCompact, formatStringNumbers } = useNumberFormat();
+  const { formatPrice, formatCompact, formatStringNumbers, formatNumber } = useNumberFormat();
   if (isLoading) return <div className="py-16 text-center text-muted-foreground">{t('loading')}</div>;
   if (!detail || !detail.summary || !detail.product) return null;
 
@@ -169,13 +169,13 @@ export function ProductDetailContent({
             <TableBody>
               {topCustomers.map((c, i: number) => (
                 <TableRow key={c.id}>
-                  <TableCell className="text-muted-foreground text-sm">{i + 1}</TableCell>
+                  <TableCell className="text-muted-foreground text-sm">{formatNumber(i + 1)}</TableCell>
                   <TableCell>
                     <p className="text-sm font-medium">{c.name}</p>
                     {c.phone && <p className="text-xs text-muted-foreground">{c.phone}</p>}
                   </TableCell>
                   <TableCell className="text-right">
-                    {c.qty} <span className="text-xs text-muted-foreground">{p.unit}</span>
+                   {formatNumber(c.qty)} <span className="text-xs text-muted-foreground">{p.unit}</span>
                   </TableCell>
                   <TableCell className="text-right font-medium">{formatPrice(c.revenue)}</TableCell>
                 </TableRow>

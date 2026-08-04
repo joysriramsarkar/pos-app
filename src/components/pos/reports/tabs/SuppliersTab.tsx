@@ -27,7 +27,7 @@ export function SuppliersTab({
   onNavigate?: (page: string) => void;
 }) {
   const t = useTranslations('Reports');
-  const { formatPrice } = useNumberFormat();
+  const { formatPrice, formatNumber } = useNumberFormat();
 
   const supplierChartData = useMemo(
     () =>
@@ -102,7 +102,7 @@ export function SuppliersTab({
                   <TableRow><TableCell colSpan={4} className="text-center py-6 text-destructive">{error}</TableCell></TableRow>
                 ) : (purchasesData?.topSuppliers || []).length > 0 ? (purchasesData.topSuppliers.map((s: any, i: number) => (
                   <TableRow key={s.id || i}>
-                    <TableCell className="text-muted-foreground text-sm">{i + 1}</TableCell>
+                    <TableCell className="text-muted-foreground text-sm">{formatNumber(i + 1)}</TableCell>
                     <TableCell className="font-medium">{s.name}</TableCell>
                     <TableCell className="text-right"><Badge variant="outline">{s.orderCount}</Badge></TableCell>
                     <TableCell className="text-right font-medium">{formatPrice(s.totalAmount)}</TableCell>

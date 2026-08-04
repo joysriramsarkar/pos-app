@@ -623,7 +623,7 @@ export function Expenses({ onReport }: ExpensesProps) {
             <AlertDialogTitle>সাপ্লায়ার পেমেন্ট</AlertDialogTitle>
             <AlertDialogDescription>
               <strong>{pendingSupplierName}</strong>-এর কাছে বর্তমানে{' '}
-              <strong className="text-red-600">{currency}{pendingSupplierDue.toFixed(2)}</strong> বকেয়া আছে।
+              <strong className="text-red-600">{formatPrice(pendingSupplierDue)}</strong> বকেয়া আছে।
               <br /><br />
               এই পেমেন্টটি কি পূর্বের বাকির পরিশোধ, নাকি নতুন পেমেন্ট?
             </AlertDialogDescription>

@@ -235,7 +235,7 @@ export function ProfitTab({
                 ) : profitRows.length > 0 ? (
                   profitRows.map((r, i) => (
                     <TableRow key={String(r.id ?? r.invoiceNumber ?? r.name) + i}>
-                      <TableCell className="text-muted-foreground text-sm">{i + 1}</TableCell>
+                      <TableCell className="text-muted-foreground text-sm">{formatNumber(i + 1)}</TableCell>
                       <TableCell className="font-medium">
                         <p className="text-sm">
                           {r.invoiceNumber || r.name || r.customerName || '—'}

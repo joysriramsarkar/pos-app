@@ -52,4 +52,8 @@ export interface DailySummaryData {
   todayCashTotal: number;
   todayUpiTotal: number;
   totalPurchasesAmount: number;
+  totalPurchasesCount: number;
+  supplierPurchasesAmount: number;
+  informalPurchasesAmount: number;
+  todaySupplierPayments: number;
 }

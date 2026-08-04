@@ -103,7 +103,7 @@ export function ProfitTable({
             ) : (
               filteredRows.map((r, i) => (
                 <TableRow key={r.id ?? r.invoiceNumber ?? `${r.name}-${i}`}>
-                  <TableCell className="text-xs text-muted-foreground">{i + 1}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{formatNumber(i + 1)}</TableCell>
                   {groupBy === 'orders' && (
                     <>
                       <TableCell className="text-xs font-medium">

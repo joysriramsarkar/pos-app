@@ -40,6 +40,7 @@ import {
 import type { StatsData, ComparisonResult } from './types';
 import type { Transaction } from '@/components/pos/transaction-history/types';
 import { getGreetingPeriod } from './utils';
+import { useNumberFormat } from '@/hooks/use-number-format';
 
 interface GreetingHeaderProps {
   greeting: string;
@@ -123,6 +124,7 @@ export function StatsGrid({
   numberPopping,
   labels,
 }: StatsGridProps) {
+  const { formatNumber } = useNumberFormat();
   const profitValue = stats?.todayProfit ?? 0;
   const isProfitPositive = profitValue >= 0;
 
@@ -164,7 +166,7 @@ export function StatsGrid({
       />
       <StatCard
         title={labels.lowStock}
-        value={`${stats?.lowStockCount ?? 0}`}
+        value={formatNumber(stats?.lowStockCount ?? 0)}
         icon={<AlertTriangle className="h-5 w-5 text-white" />}
         iconBg="bg-gradient-to-br from-red-500 to-rose-600 shadow-[0_4px_12px_rgba(0,0,0,0.15)]"
         cardGradient="from-red-50/50 to-transparent dark:from-red-950/30 dark:to-transparent"
@@ -174,7 +176,7 @@ export function StatsGrid({
       />
       <StatCard
         title={labels.todayOrders}
-        value={`${stats?.todayOrders ?? 0}`}
+        value={formatNumber(stats?.todayOrders ?? 0)}
         icon={<ShoppingCart className="h-5 w-5 text-white" />}
         iconBg="bg-gradient-to-br from-teal-500 to-cyan-600 shadow-[0_4px_12px_rgba(0,0,0,0.15)]"
         cardGradient="from-teal-50/50 to-transparent dark:from-teal-950/30 dark:to-transparent"
@@ -457,6 +459,7 @@ export function LowStockAndTransactions({
   labels,
   isBn = false,
 }: LowStockAndTransactionsProps) {
+  const { formatNumber } = useNumberFormat();
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-stagger-in" style={{ animationDelay: '0.45s' }}>
       <Card className="shadow-md">
@@ -464,7 +467,7 @@ export function LowStockAndTransactions({
           <div className="flex items-center justify-between">
             <CardTitle>{labels.lowStockItems}</CardTitle>
             <Badge variant="destructive" className="text-xs">
-              {stats?.lowStockCount ?? 0} {labels.itemsNeedRestock}
+              {formatNumber(stats?.lowStockCount ?? 0)} {labels.itemsNeedRestock}
             </Badge>
           </div>
         </CardHeader>
@@ -495,11 +498,11 @@ export function LowStockAndTransactions({
                           ? 'text-red-600 dark:text-red-400 font-medium'
                           : 'text-amber-600 dark:text-amber-400'
                       }`}>
-                        {product.currentStock === 0
+                         {product.currentStock === 0
                           ? labels.outOfStock
-                          : `${product.currentStock} ${labels.left}`}
+                          : `${formatNumber(product.currentStock)} ${labels.left}`}
                         {typeof product.soldLast7 === 'number' && product.soldLast7 > 0
-                          ? ` · 7d: ${product.soldLast7}`
+                          ? ` · 7d: ${formatNumber(product.soldLast7)}`
                           : ''}
                       </p>
                     </div>
@@ -509,7 +512,7 @@ export function LowStockAndTransactions({
                       variant={product.currentStock === 0 ? 'destructive' : 'secondary'}
                       className="text-xs"
                     >
-                      {labels.min}: {product.minStockLevel}
+                      {labels.min}: {formatNumber(product.minStockLevel)}
                     </Badge>
                   </div>
                 </div>

@@ -127,12 +127,12 @@ export function ProductsTab({
                   const margin = p.revenue > 0 ? ((p.profit / p.revenue) * 100) : 0;
                   return (
                     <TableRow key={p.id} className="cursor-pointer hover:bg-muted/50" onClick={() => onSelectProduct(p)}>
-                      <TableCell className="text-muted-foreground text-sm">{i + 1}</TableCell>
+                      <TableCell className="text-muted-foreground text-sm">{formatNumber(i + 1)}</TableCell>
                       <TableCell className="font-medium">
                         <p className="text-sm">{p.name}</p>
                         {p.nameBn && <p className="text-xs text-muted-foreground">{p.nameBn}</p>}
                       </TableCell>
-                      <TableCell className="text-right">{p.quantity} <span className="text-muted-foreground text-xs">{p.unit}</span></TableCell>
+                      <TableCell className="text-right">{formatNumber(p.quantity)} <span className="text-muted-foreground text-xs">{p.unit}</span></TableCell>
                       <TableCell className="text-right font-medium">{formatPrice(p.revenue)}</TableCell>
                       <TableCell className={`text-right font-medium ${p.profit >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
                         {formatPrice(p.profit)}
