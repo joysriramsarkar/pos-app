@@ -30,6 +30,7 @@ vi.mock('@/lib/api-middleware', () => ({
   requirePermission: vi.fn(() => Promise.resolve(null)),
   requireRole: vi.fn(() => Promise.resolve(null)),
   getAuthenticatedUser: vi.fn(() => Promise.resolve({ id: '1', role: 'ADMIN' })),
+  withAuthMiddleware: vi.fn((handler: any) => handler),
 }));
 
 vi.mock('next-auth', () => ({

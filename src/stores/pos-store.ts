@@ -773,10 +773,10 @@ export const useProductUsageStore = create<ProductUsageState & ProductUsageActio
             const data = await res.json();
             const monthlyTopSales: Record<string, { rank: number; sales: number }> = {};
 
-            data.topProducts?.forEach((p: { id: string; quantity: number }, index: number) => {
+            data.topProducts?.forEach((p: { id: string; quantity?: number; monthlySales?: number }, index: number) => {
               monthlyTopSales[p.id] = {
                 rank: index + 1,
-                sales: p.quantity || p.monthlySales || 0
+                sales: p.quantity ?? p.monthlySales ?? 0
               };
             });
 
