@@ -22,23 +22,21 @@ export async function GET(request: NextRequest) {
       },
       select: {
         productId: true,
-        quantity: true,
       },
     });
 
-    // প্রতিটি প্রোডাক্টের মোট বিক্রি হিসাব করুন
-    const productSales = new Map<string, number>();
+    // প্রতিটি প্রোডাক্ট কতবার কার্টে যুক্ত হয়েছে (frequency) তা হিসাব করুন
+    const productFrequency = new Map<string, number>();
     for (const item of saleItems) {
-      const qty = Number(item.quantity);
-      productSales.set(
+      productFrequency.set(
         item.productId,
-        (productSales.get(item.productId) || 0) + qty
+        (productFrequency.get(item.productId) || 0) + 1
       );
     }
 
-    // বিক্রির পরিমাণ অনুযায়ী সর্ট করুন (সর্বাধিক বিক্রিত উপরে)
-    const topProducts = Array.from(productSales.entries())
-      .map(([id, quantity]) => ({ id, quantity }))
+    // কার্টে যুক্ত হওয়ার পরিমাণ অনুযায়ী সর্ট করুন (সর্বাধিক বার যুক্ত হওয়া উপরে)
+    const topProducts = Array.from(productFrequency.entries())
+      .map(([id, frequency]) => ({ id, quantity: frequency }))
       .sort((a, b) => b.quantity - a.quantity)
       .slice(0, 50); // শুধুমাত্র টপ ৫০
 
