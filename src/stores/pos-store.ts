@@ -732,7 +732,7 @@ export const useQuantityUsageStore = create<QuantityUsageState & QuantityUsageAc
 
 interface ProductUsageState {
   usage: Record<string, number>;
-  monthlyTopSales: Record<string, number>;
+  monthlyTopSales: Record<string, { rank: number; sales: number }>;
   lastFetched: number | null;
   isFetching: boolean;
 }
@@ -761,9 +761,9 @@ export const useProductUsageStore = create<ProductUsageState & ProductUsageActio
       fetchMonthlyTopSales: async () => {
         const { lastFetched, isFetching } = get();
         const now = Date.now();
-        
-        // Fetch at most once every 15 minutes (900000 ms)
-        if (lastFetched && now - lastFetched < 900000) return;
+
+        // Fetch at most once every 5 minutes (300000 ms)
+        if (lastFetched && now - lastFetched < 300000) return;
         if (isFetching) return;
 
         set({ isFetching: true });
@@ -771,12 +771,15 @@ export const useProductUsageStore = create<ProductUsageState & ProductUsageActio
           const res = await fetch('/api/pos/popular');
           if (res.ok) {
             const data = await res.json();
-            const monthlyTopSales: Record<string, number> = {};
-            
-            data.topProducts?.forEach((p: any) => {
-              monthlyTopSales[p.id] = p.score;
+            const monthlyTopSales: Record<string, { rank: number; sales: number }> = {};
+
+            data.topProducts?.forEach((p: { id: string; quantity: number }, index: number) => {
+              monthlyTopSales[p.id] = {
+                rank: index + 1,
+                sales: p.quantity || p.monthlySales || 0
+              };
             });
-            
+
             set({ monthlyTopSales, lastFetched: now });
           }
         } catch (error) {
@@ -785,14 +788,9 @@ export const useProductUsageStore = create<ProductUsageState & ProductUsageActio
           set({ isFetching: false });
         }
       },
-      
+
       getSortWeight: (productId) => {
-        const state = get();
-        // Server score is dominant (max scale 100,000+), local usage acts as fallback/tiebreaker
-        const serverScore = state.monthlyTopSales[productId] || 0;
-        const localUsage = state.usage[productId] || 0;
-        
-        return serverScore + (localUsage * 0.1);
+        return 0;
       }
     }),
     {

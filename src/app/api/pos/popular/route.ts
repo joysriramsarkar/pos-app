@@ -3,44 +3,49 @@ import { db } from '@/lib/db';
 import { requirePermission } from '@/lib/api-middleware';
 
 export async function GET(request: NextRequest) {
-  // Allow fetching without strict permissions if needed, but standard is pos.view or sales.view
-  // For safety, let's use a try-catch for permission
-  
-  const now = new Date();
-  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  // pos.view পারমিশন চেক করুন (যা সব ক্যাশিয়ারের আছে)
+  const authResponse = await requirePermission(request, "pos.view");
+  if (authResponse) return authResponse;
 
   try {
-    // Pre-aggregated data from the popularity table
-    const popularProducts = await db.productPopularity.findMany({
+    // গত ৩০ দিনের সেল ডেটা ফেচ করুন
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const saleItems = await db.saleItem.findMany({
       where: {
-        periodStart: { gte: thirtyDaysAgo }
+        createdAt: { gte: thirtyDaysAgo },
+        sale: {
+          status: { in: ["Completed", "PartialReturn"] }
+        },
+        quantity: { gt: 0 },
       },
       select: {
         productId: true,
-        monthlySalesCount: true,
-        weeklySalesCount: true,
-        totalRevenue: true
       },
-      orderBy: {
-        monthlySalesCount: 'desc'
-      },
-      take: 100 // Top 100 products
     });
 
-    // Rank-based scoring: Higher rank = Higher score
-    const scoredProducts = popularProducts.map((p, index) => ({
-      id: p.productId,
-      rank: index + 1,
-      score: (100 - index) * 1000 + p.monthlySalesCount * 10,
-      monthlySales: p.monthlySalesCount
-    }));
+    // প্রতিটি প্রোডাক্ট কতবার কার্টে যুক্ত হয়েছে (frequency) তা হিসাব করুন
+    const productFrequency = new Map<string, number>();
+    for (const item of saleItems) {
+      productFrequency.set(
+        item.productId,
+        (productFrequency.get(item.productId) || 0) + 1
+      );
+    }
 
-    return NextResponse.json({ 
-      topProducts: scoredProducts,
-      updatedAt: now.toISOString()
-    });
+    // কার্টে যুক্ত হওয়ার পরিমাণ অনুযায়ী সর্ট করুন (সর্বাধিক বার যুক্ত হওয়া উপরে)
+    const topProducts = Array.from(productFrequency.entries())
+      .map(([id, frequency]) => ({ id, quantity: frequency }))
+      .sort((a, b) => b.quantity - a.quantity)
+      .slice(0, 50); // শুধুমাত্র টপ ৫০
+
+    return NextResponse.json({ topProducts });
   } catch (error) {
     console.error('Popular products error:', error);
-    return NextResponse.json({ error: 'Failed to fetch' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Failed to fetch popular products' },
+      { status: 500 }
+    );
   }
 }

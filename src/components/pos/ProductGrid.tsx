@@ -106,8 +106,7 @@ export function ProductGrid({
     return map;
   }, [products]);
 
-  const productUsage = useProductUsageStore((state) => state.usage);
-  const getSortWeight = useProductUsageStore((state) => state.getSortWeight);
+  const monthlyTopSales = useProductUsageStore((state) => state.monthlyTopSales);
   const fetchMonthlyTopSales = useProductUsageStore((state) => state.fetchMonthlyTopSales);
 
   useEffect(() => {
@@ -120,6 +119,7 @@ export function ProductGrid({
       if (!product.isActive) return false;
       if (selectedCategoryId && product.category !== selectedCategoryId) return false;
       if (selectedSubCategoryId && product.subCategory !== selectedSubCategoryId) return false;
+
       if (searchQuery) {
         const cleaned = cleanSearchQuery(searchQuery);
         const normalizedQuery = normalizeSearchText(cleaned);
@@ -135,17 +135,33 @@ export function ProductGrid({
       return true;
     });
 
+    // New sorting logic: alphabetically first, then top sellers on top
     if (searchQuery) {
-      filtered.sort((a, b) => {
-        const usageA = getSortWeight(a.id);
-        const usageB = getSortWeight(b.id);
-        if (usageB !== usageA) return usageB - usageA;
-        return a.name.localeCompare(b.name);
-      });
+      // Step 1: Sort all products alphabetically
+      filtered.sort((a, b) => a.name.localeCompare(b.name));
+
+      // Step 2: Separate Top Sellers (from API data)
+      const topSellerIds = Object.keys(monthlyTopSales);
+
+      if (topSellerIds.length > 0) {
+        // Step 3: Divide into two groups
+        const topSellers = filtered.filter(p => topSellerIds.includes(p.id));
+        const others = filtered.filter(p => !topSellerIds.includes(p.id));
+
+        // Step 4: Sort Top sellers by their rank
+        topSellers.sort((a, b) => {
+          const rankA = monthlyTopSales[a.id]?.rank || 999;
+          const rankB = monthlyTopSales[b.id]?.rank || 999;
+          return rankA - rankB;
+        });
+
+        // Step 5: Merge groups (Top sellers on top, others alphabetically below)
+        return [...topSellers, ...others];
+      }
     }
 
     return filtered;
-  }, [products, searchQuery, selectedCategoryId, selectedSubCategoryId, getSortWeight]);
+  }, [products, searchQuery, selectedCategoryId, selectedSubCategoryId, monthlyTopSales]);
 
   const [renderLimit, setRenderLimit] = useState(100);
 
