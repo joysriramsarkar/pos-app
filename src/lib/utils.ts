@@ -65,4 +65,17 @@ export function normalizeSearchText(input: string): string {
     .replace(/[''"`-]/g, '')
     .trim();
 }
+export function sortByPopularity<T extends { id: string; name: string }>(
+  items: T[],
+  rankOf: (id: string) => number | undefined,
+): T[] {
+  const ranked = items
+    .filter((item) => (rankOf(item.id) ?? 0) > 0)
+    .sort((a, b) => (rankOf(a.id) ?? 0) - (rankOf(b.id) ?? 0));
 
+  const unranked = items
+    .filter((item) => !((rankOf(item.id) ?? 0) > 0))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  return [...ranked, ...unranked];
+}

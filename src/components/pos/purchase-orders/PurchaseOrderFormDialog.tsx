@@ -97,7 +97,7 @@ interface PurchaseOrderFormDialogProps {
   currencySymbol: string;
   onAddFormItem: () => void;
   onRemoveFormItem: (productId: string) => void;
-  onUpdateFormItem: (productId: string, field: 'quantity' | 'unitPrice' | 'gstPercentage', value: number | string) => void;
+  onUpdateFormItem: (productId: string, field: 'quantity' | 'unitPrice' | 'gstPercentage' | 'discount', value: number | string) => void;
   onCreateOrder: (directReceive?: boolean) => void;
 }
 
@@ -168,7 +168,10 @@ export function PurchaseOrderFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[95vw] sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent
+        className="w-[95vw] sm:max-w-4xl max-h-[90vh] overflow-y-auto"
+        onInteractOutside={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>{t('new_order')}</DialogTitle>
           <DialogDescription>{t('subtitle')}</DialogDescription>
@@ -329,11 +332,12 @@ export function PurchaseOrderFormDialog({
                       <TableHeader className="sticky top-0 bg-background z-10">
                         <TableRow>
                           <TableHead>{tc('name')}</TableHead>
-                          <TableHead className="w-24">{t('quantity')}</TableHead>
-                          <TableHead className="w-28">{t('unit_price')}</TableHead>
-                          <TableHead className="w-24">জিএসটি (%)</TableHead>
-                          <TableHead className="w-28">{t('total_price')}</TableHead>
-                          <TableHead className="w-12"></TableHead>
+                          <TableHead className="w-20">{t('quantity')}</TableHead>
+                          <TableHead className="w-24">{t('unit_price')}</TableHead>
+                          <TableHead className="w-20">{t('discount')}</TableHead>
+                          <TableHead className="w-20">{t('gst')}</TableHead>
+                          <TableHead className="w-24">{t('total_price')}</TableHead>
+                          <TableHead className="w-10"></TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -342,7 +346,9 @@ export function PurchaseOrderFormDialog({
                           const isWeighted = WEIGHTED_UNITS.has(product?.unit || '');
                           const qty = parseFloat(item.quantity as string) || 0;
                           const unitPrice = parseFloat(item.unitPrice as string) || 0;
-                          const itemSubtotal = qty * unitPrice;
+                          const itemGross = qty * unitPrice;
+                          const itemDiscountVal = item.discount !== undefined && item.discount !== '' ? parseFloat(item.discount as string) || 0 : 0;
+                          const itemSubtotal = Math.max(0, itemGross - itemDiscountVal);
                           const hasCustomGst = item.gstPercentage !== undefined && item.gstPercentage !== '' && !isNaN(parseFloat(item.gstPercentage as string));
                           const itemGstRate = hasCustomGst ? parseFloat(item.gstPercentage as string) : (parseFloat(formGstPercentage) || 0);
                           const itemGstAmount = itemSubtotal * (itemGstRate / 100);
@@ -376,7 +382,7 @@ export function PurchaseOrderFormDialog({
                                       onUpdateFormItem(item.productId, 'quantity', parsed);
                                     }
                                   }}
-                                  className="h-8 w-20"
+                                  className="h-8 w-16"
                                 />
                               </TableCell>
                               <TableCell>
@@ -398,7 +404,30 @@ export function PurchaseOrderFormDialog({
                                       onUpdateFormItem(item.productId, 'unitPrice', parsedPrice);
                                     }
                                   }}
-                                  className="h-8 w-24"
+                                  className="h-8 w-20"
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <Input
+                                  type="text"
+                                  value={item.discount === undefined ? '' : item.discount}
+                                  onChange={(e) => {
+                                    const val = convertBengaliToEnglishNumerals(e.target.value);
+                                    const cleaned = val.replace(/[^0-9.]/g, '');
+                                    const dotCount = (cleaned.match(/\./g) || []).length;
+                                    if (dotCount > 1) return;
+                                    onUpdateFormItem(item.productId, 'discount', cleaned);
+                                  }}
+                                  onBlur={() => {
+                                    const parsedDiscount = parseFloat(item.discount as string);
+                                    if (isNaN(parsedDiscount) || parsedDiscount < 0) {
+                                      onUpdateFormItem(item.productId, 'discount', '');
+                                    } else {
+                                      onUpdateFormItem(item.productId, 'discount', parsedDiscount);
+                                    }
+                                  }}
+                                  placeholder="0"
+                                  className="h-8 w-16"
                                 />
                               </TableCell>
                               <TableCell>
@@ -423,10 +452,10 @@ export function PurchaseOrderFormDialog({
                                     }
                                   }}
                                   placeholder={formGstPercentage || "0"}
-                                  className="h-8 w-20"
+                                  className="h-8 w-16"
                                 />
                               </TableCell>
-                              <TableCell className="font-medium">{formatPrice(itemTotalIncludingGst)}</TableCell>
+                              <TableCell className="font-medium text-sm tabular-nums">{formatPrice(Math.round(itemTotalIncludingGst))}</TableCell>
                               <TableCell>
                                 <Button variant="ghost" size="sm" onClick={() => onRemoveFormItem(item.productId)}>
                                   <Trash2 className="h-3.5 w-3.5 text-red-500" />
@@ -448,7 +477,9 @@ export function PurchaseOrderFormDialog({
                   const isWeighted = WEIGHTED_UNITS.has(product?.unit || '');
                   const qty = parseFloat(item.quantity as string) || 0;
                   const unitPrice = parseFloat(item.unitPrice as string) || 0;
-                  const itemSubtotal = qty * unitPrice;
+                  const itemGross = qty * unitPrice;
+                  const itemDiscountVal = item.discount !== undefined && item.discount !== '' ? parseFloat(item.discount as string) || 0 : 0;
+                  const itemSubtotal = Math.max(0, itemGross - itemDiscountVal);
                   const hasCustomGst = item.gstPercentage !== undefined && item.gstPercentage !== '' && !isNaN(parseFloat(item.gstPercentage as string));
                   const itemGstRate = hasCustomGst ? parseFloat(item.gstPercentage as string) : (parseFloat(formGstPercentage) || 0);
                   const itemGstAmount = itemSubtotal * (itemGstRate / 100);
@@ -456,13 +487,8 @@ export function PurchaseOrderFormDialog({
 
                   return (
                     <Card key={`mobile-${item.productId}`} className="p-3">
-                      <div className="flex justify-between items-start mb-3 gap-2">
-                        <span className="text-sm font-semibold">{product?.nameBn || product?.name}</span>
-                        <Button variant="ghost" size="sm" onClick={() => onRemoveFormItem(item.productId)} className="h-6 w-6 p-0 shrink-0">
-                          <Trash2 className="h-4 w-4 text-red-500" />
-                        </Button>
-                      </div>
-                      <div className="grid grid-cols-3 gap-2">
+                      <p className="text-sm font-semibold mb-2">{product?.nameBn || product?.name}</p>
+                      <div className="grid grid-cols-2 gap-2">
                         <div className="space-y-1">
                           <Label className="text-xs text-muted-foreground">{t('quantity')}</Label>
                           <Input
@@ -516,6 +542,30 @@ export function PurchaseOrderFormDialog({
                           />
                         </div>
                         <div className="space-y-1">
+                          <Label className="text-xs text-muted-foreground">ডিসকাউন্ট</Label>
+                          <Input
+                            type="text"
+                            value={item.discount === undefined ? '' : item.discount}
+                            onChange={(e) => {
+                              const val = convertBengaliToEnglishNumerals(e.target.value);
+                              const cleaned = val.replace(/[^0-9.]/g, '');
+                              const dotCount = (cleaned.match(/\./g) || []).length;
+                              if (dotCount > 1) return;
+                              onUpdateFormItem(item.productId, 'discount', cleaned);
+                            }}
+                            onBlur={() => {
+                              const parsedDiscount = parseFloat(item.discount as string);
+                              if (isNaN(parsedDiscount) || parsedDiscount < 0) {
+                                onUpdateFormItem(item.productId, 'discount', '');
+                              } else {
+                                onUpdateFormItem(item.productId, 'discount', parsedDiscount);
+                              }
+                            }}
+                            placeholder="0"
+                            className="h-8 w-full"
+                          />
+                        </div>
+                        <div className="space-y-1">
                           <Label className="text-xs text-muted-foreground">জিএসটি (%)</Label>
                           <Input
                             type="text"
@@ -545,6 +595,12 @@ export function PurchaseOrderFormDialog({
                       <div className="flex justify-between items-center mt-3 pt-2 border-t text-sm">
                         <span className="text-muted-foreground">{t('total_price')}:</span>
                         <span className="font-bold">{formatPrice(itemTotalIncludingGst)}</span>
+                      </div>
+                      <div className="mt-2 flex justify-end">
+                        <Button variant="ghost" size="sm" onClick={() => onRemoveFormItem(item.productId)} className="h-7 px-2 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/20">
+                          <Trash2 className="h-3.5 w-3.5 mr-1" />
+                          <span className="text-xs">{tc('delete') || 'মুছুন'}</span>
+                        </Button>
                       </div>
                     </Card>
                   );
@@ -581,8 +637,8 @@ export function PurchaseOrderFormDialog({
               </div>
 
               <div className="flex justify-between items-center text-sm">
-                <div className="flex items-center gap-2">
-                  <span className="text-muted-foreground">ডিসকাউন্ট (Discount):</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground">{t('discount') || 'ডিসকাউন্ট'} ({t('optional') || 'ঐচ্ছিক'}):</span>
                   <div className="flex items-center gap-1">
                     <Input
                       type="number"
@@ -613,20 +669,20 @@ export function PurchaseOrderFormDialog({
               <Separator className="my-1" />
 
               <div className="flex justify-between items-center">
-                <span className="font-bold text-base">মোট:</span>
-                <span className="font-bold text-xl text-primary">{formatPrice(formTotal)}</span>
+                <span className="font-bold text-base">{t('total') || 'মোট'}:</span>
+                <span className="font-bold text-xl text-primary">{formatPrice(Math.round(formTotal))}</span>
               </div>
 
               {formPaidVal > 0 && (
                 <div className="flex justify-between items-center text-sm border-t pt-1 border-dashed border-border/50">
-                  <span className="text-muted-foreground">পরিশোধিত টাকা:</span>
+                  <span className="text-muted-foreground">{t('amount_paid') || 'পরিশোধিত টাকা'}:</span>
                   <span className="font-medium text-green-600 dark:text-green-400">{formatPrice(formPaidVal)}</span>
                 </div>
               )}
               {formDueAmount > 0 && (
                 <div className="flex justify-between items-center text-sm">
-                  <span className="text-red-500 font-medium">বকেয়া (Due):</span>
-                  <span className="font-bold text-red-600 dark:text-red-400">{formatPrice(formDueAmount)}</span>
+                  <span className="text-red-500 font-medium">{t('due') || 'বকেয়া'}:</span>
+                  <span className="font-bold text-red-600 dark:text-red-400">{formatPrice(Math.round(formDueAmount))}</span>
                 </div>
               )}
             </div>
@@ -653,23 +709,23 @@ export function PurchaseOrderFormDialog({
               htmlFor="update-stock"
               className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
             >
-              স্টক আপডেট করুন (Update Stock)
+              {t('update_stock') || 'স্টক আপডেট করুন'}
             </label>
           </div>
 
           {/* Notes */}
           <div>
-            <Label>{t('notes')}</Label>
+            <Label>{t('notes') || 'নোট'}</Label>
             <Textarea
               value={formNotes}
               onChange={(e) => setFormNotes(e.target.value)}
-              placeholder="অতিরিক্ত নোট..."
+              placeholder={t('additional_notes') || "অতিরিক্ত নোট..."}
             />
           </div>
 
           {/* Amount Paid */}
           <div className="space-y-1.5">
-            <Label htmlFor="form-amount-paid" className="text-sm font-medium">পরিশোধিত টাকা (ঐচ্ছিক)</Label>
+            <Label htmlFor="form-amount-paid" className="text-sm font-medium">{t('amount_paid') || 'পরিশোধিত টাকা'} ({t('optional') || 'ঐচ্ছিক'})</Label>
             <div className="relative">
               <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium">{currencySymbol}</span>
               <Input
@@ -691,15 +747,15 @@ export function PurchaseOrderFormDialog({
 
           {/* Payment Method */}
           <div className="space-y-1.5">
-            <Label htmlFor="form-payment-method" className="text-sm font-medium">পেমেন্ট পদ্ধতি</Label>
+            <Label htmlFor="form-payment-method" className="text-sm font-medium">{t('payment_method') || 'পেমেন্ট পদ্ধতি'}</Label>
             <Select value={formPaymentMethod} onValueChange={setFormPaymentMethod}>
               <SelectTrigger id="form-payment-method" className="h-9">
-                <SelectValue placeholder="পেমেন্ট পদ্ধতি নির্বাচন করুন" />
+                <SelectValue placeholder={t('select_payment_method') || "পেমেন্ট পদ্ধতি নির্বাচন করুন"} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="Cash">Cash (নগদ)</SelectItem>
-                <SelectItem value="UPI">UPI (ইউপিআই)</SelectItem>
-                <SelectItem value="Mixed">Mixed (মিশ্র)</SelectItem>
+                <SelectItem value="Cash">{t('cash') || 'নগদ'}</SelectItem>
+                <SelectItem value="UPI">{t('upi') || 'ইউপিআই'}</SelectItem>
+                <SelectItem value="Mixed">{t('mixed') || 'মিশ্র'}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -707,7 +763,7 @@ export function PurchaseOrderFormDialog({
           {formPaymentMethod === 'Mixed' && (
             <div className="grid grid-cols-2 gap-2 mt-1">
               <div className="space-y-1">
-                <Label htmlFor="form-cash-amount" className="text-xs">নগদ পরিমাণ</Label>
+                <Label htmlFor="form-cash-amount" className="text-xs">{t('cash_amount') || 'নগদ পরিমাণ'}</Label>
                 <Input
                   id="form-cash-amount"
                   type="number"
@@ -715,12 +771,12 @@ export function PurchaseOrderFormDialog({
                   step="0.01"
                   value={formCashAmount}
                   onChange={(e) => setFormCashAmount(e.target.value)}
-                  placeholder="নগদ"
+                  placeholder={t('cash') || "নগদ"}
                   className="h-8 text-xs"
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="form-upi-amount" className="text-xs">ইউপিআই পরিমাণ</Label>
+                <Label htmlFor="form-upi-amount" className="text-xs">{t('upi_amount') || 'ইউপিআই পরিমাণ'}</Label>
                 <Input
                   id="form-upi-amount"
                   type="number"
@@ -728,7 +784,7 @@ export function PurchaseOrderFormDialog({
                   step="0.01"
                   value={formUpiAmount}
                   onChange={(e) => setFormUpiAmount(e.target.value)}
-                  placeholder="ইউপিআই"
+                  placeholder={t('upi') || "ইউপিআই"}
                   className="h-8 text-xs"
                 />
               </div>
@@ -736,10 +792,10 @@ export function PurchaseOrderFormDialog({
           )}
         </div>
         <DialogFooter className="gap-2 flex-wrap sm:justify-end">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>{tc('cancel')}</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>{t('cancel') || 'বাতিল'}</Button>
           <Button onClick={() => onCreateOrder(true)} disabled={saving || formItems.length === 0} className="bg-green-600 text-white hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600">
             {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-            সরাসরি ক্রয় ও স্টক আপডেট
+            {t('direct_receive') || 'সরাসরি ক্রয় ও স্টক আপডেট'}
           </Button>
         </DialogFooter>
       </DialogContent>

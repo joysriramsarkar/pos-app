@@ -98,15 +98,14 @@ import {
   Truck,
   Loader2,
 } from 'lucide-react';
-import { useCartStore, useProductsStore, useSyncStore, useUIStore, useCustomersStore, useSalesStore, useQuantityUsageStore } from '@/stores/pos-store';
+import { useCartStore, useProductsStore, useSyncStore, useUIStore, useCustomersStore, useSalesStore, useQuantityUsageStore, useProductUsageStore } from '@/stores/pos-store';
 import { useSettingsStore } from '@/stores/settings-store';
 import { useSimpleBarcodeScanner } from '@/hooks/use-barcode-scanner';
 import { ProductsDB, SalesDB, SyncQueueDB, CustomersDB, saveSaleWithSyncQueue, updateProductsAndCustomerDue } from '@/lib/offline/indexeddb';
 import { STORE_CONFIG } from '@/types/pos';
 import type { Product, Sale, SyncQueueItem } from '@/types/pos';
-import { cn } from '@/lib/utils';
+import { cn, convertBengaliToEnglishNumerals, convertEnglishToBengaliNumerals, sortByPopularity } from '@/lib/utils';
 import { refreshProductsFromServer } from '@/lib/products-sync';
-import { convertBengaliToEnglishNumerals, convertEnglishToBengaliNumerals } from '@/lib/utils';
 import { useNumberFormat } from '@/hooks/use-number-format';
 import { toMoneyNumber } from '@/lib/money';
 import Decimal from 'decimal.js';
@@ -259,6 +258,10 @@ export function POSDashboard() {
   const updateProductStock = useProductsStore((state) => state.updateProductStock);
   const updateProduct = useProductsStore((state) => state.updateProduct);
   const addProduct = useProductsStore((state) => state.addProduct);
+  const searchProducts = useProductsStore((state) => state.searchProducts);
+
+  const monthlyTopSales = useProductUsageStore((state) => state.monthlyTopSales);
+  const fetchMonthlyTopSales = useProductUsageStore((state) => state.fetchMonthlyTopSales);
 
   const customers = useCustomersStore((state) => state.customers);
   const updateCustomerDue = useCustomersStore((state) => state.updateCustomerDue);
@@ -341,21 +344,9 @@ export function POSDashboard() {
 
   const mobileSearchResults = useMemo(() => {
     if (!mobileSearchQuery.trim()) return [];
-    
-    const cleaned = mobileSearchQuery.replace(/rs\.?|₹|৳|'/gi, '').trim();
-    const lowerQuery = cleaned.toLowerCase();
-    const normalizedQuery = convertBengaliToEnglishNumerals(cleaned).replace(/\s+/g, '');
-    
-    return products.filter(p => {
-      if (!p.isActive) return false;
-      return (
-        p.name.toLowerCase().replace(/'/g, '').includes(lowerQuery) ||
-        (p.nameBn && p.nameBn.replace(/'/g, '').includes(cleaned)) ||
-        (p.barcode && p.barcode.includes(normalizedQuery)) ||
-        convertBengaliToEnglishNumerals(p.barcode || '').includes(normalizedQuery)
-      );
-    });
-  }, [mobileSearchQuery, products]);
+
+    return sortByPopularity(searchProducts(mobileSearchQuery), (id) => monthlyTopSales[id]?.rank);
+  }, [mobileSearchQuery, searchProducts, monthlyTopSales]);
 
   const handleMobileSearchChange = useCallback((query: string) => {
     setMobileSearchQuery(query);
@@ -365,6 +356,10 @@ export function POSDashboard() {
   useEffect(() => {
     setIsHydrated(true);
   }, []);
+
+  useEffect(() => {
+    fetchMonthlyTopSales();
+  }, [fetchMonthlyTopSales]);
 
   // Mobile virtual keyboard detection via visualViewport API
   useEffect(() => {
@@ -507,6 +502,26 @@ export function POSDashboard() {
     if (toMoneyNumber(paymentData.amountPaid) === 0) paymentStatus = 'Due';
     else if (toMoneyNumber(paymentData.amountPaid) > 0 && toMoneyNumber(paymentData.amountPaid) < toMoneyNumber(paymentData.total)) paymentStatus = 'Partial';
 
+    // Look up full customer data before cart is cleared
+    const saleCustomer = paymentData.customerId
+      ? (() => {
+          const found = useCustomersStore.getState().customers.find(c => c.id === paymentData.customerId);
+          if (found) return {
+            id: found.id,
+            name: found.name,
+            phone: found.phone || '',
+            address: found.address || '',
+            totalDue: Number(found.totalDue) || 0,
+            totalPaid: Number(found.totalPaid) || 0,
+            prepaidBalance: Number(found.prepaidBalance) || 0,
+            isActive: found.isActive ?? true,
+            createdAt: found.createdAt || new Date(),
+            updatedAt: found.updatedAt || new Date(),
+          };
+          return undefined;
+        })()
+      : undefined;
+
     const sale: Sale = {
       id: uuidv4(),
       invoiceNumber: generateInvoiceNumber(),
@@ -517,6 +532,7 @@ export function POSDashboard() {
         name: activeUser.name || (activeUser as any).username || '',
         username: (activeUser as any).username || '',
       } : undefined,
+      customer: saleCustomer,
       subtotal: cartItems.reduce((s, it) => s + it.totalPrice, 0),
       discount: paymentData.discount,
       tax: paymentData.tax,

@@ -436,18 +436,15 @@ export function usePartiesManagement(refreshKey?: number) {
 
     setIsSubmitting(true);
     try {
-      const response = await fetch('/api/expenses', {
+      const response = await fetch('/api/supplier-payment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          id: uuidv4(),
-          amount,
-          category: 'Supplier Payment',
-          notes: finalNotes,
-          paymentMethod: supplierPaymentMethod,
           supplierId: selectedSupplier.id,
-          supplierName: selectedSupplier.name,
-          date: new Date().toISOString().split('T')[0],
+          amount,
+          paymentMethod: supplierPaymentMethod,
+          cashAmount: parseFloat(supplierCashAmount) || 0,
+          upiAmount: parseFloat(supplierUpiAmount) || 0,
         }),
       });
 
@@ -463,10 +460,10 @@ export function usePartiesManagement(refreshKey?: number) {
       }
 
       setShowSupplierPaymentDialog(false);
-      toast({ title: 'Payment Recorded', description: `Recorded payment to ${selectedSupplier.name}.` });
+      toast({ title: t('payment_recorded') || 'পেমেন্ট সম্পন্ন', description: `${selectedSupplier.name}-কে পেমেন্ট রেকর্ড হয়েছে।` });
     } catch (error) {
       console.error("Failed to record supplier payment:", error);
-      toast({ title: 'Payment Failed', description: error instanceof Error ? error.message : 'An unexpected error occurred.', variant: 'destructive' });
+      toast({ title: t('payment_failed') || 'পেমেন্ট ব্যর্থ', description: error instanceof Error ? error.message : 'অপ্রত্যাশিত সমস্যা হয়েছে।', variant: 'destructive' });
     } finally {
       setIsSubmitting(false);
     }

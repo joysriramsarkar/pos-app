@@ -137,10 +137,15 @@ export async function POST(request: NextRequest) {
     let totalAmount = 0;
     let totalGstAmount = 0;
 
-    const processedItems = items.map((item: { productId: string; quantity: number; unitPrice: number; gstPercentage?: number }) => {
+    const processedItems = items.map((item: { productId: string; quantity: number; unitPrice: number; gstPercentage?: number; discount?: number }) => {
       const qty = item.quantity;
       const price = item.unitPrice;
-      const itemSubtotal = qty * price;
+      const itemGross = qty * price;
+      // Per-item discount (fixed amount)
+      const itemDiscount = item.discount !== undefined && item.discount !== null && !isNaN(Number(item.discount))
+        ? Number(item.discount)
+        : 0;
+      const itemSubtotal = Math.max(0, itemGross - itemDiscount);
       const itemGstRate = item.gstPercentage !== undefined && item.gstPercentage !== null && !isNaN(Number(item.gstPercentage))
         ? Number(item.gstPercentage)
         : generalGstRate;

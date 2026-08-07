@@ -121,15 +121,11 @@ export async function GET(request: NextRequest) {
       UPI: payAgg.upi,
       Due: payAgg.dueCreated,
     };
-    // Also surface Mixed/Prepaid method totals for pie (by method label of totalAmount paid portion)
-    let mixedTotal = 0;
     let prepaidTotal = 0;
     for (const s of sales) {
       const b = breakdownSalePayment(s);
-      if (s.paymentMethod === "Mixed") mixedTotal += b.collected;
       if (s.paymentMethod === "Prepaid") prepaidTotal += b.paid;
     }
-    if (mixedTotal > 0) paymentBreakdown.Mixed = mixedTotal;
     if (prepaidTotal > 0) paymentBreakdown.Prepaid = prepaidTotal;
 
     // Previous period revenue (line items)

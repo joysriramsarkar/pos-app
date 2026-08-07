@@ -234,7 +234,7 @@ export default function PurchaseOrderManagement() {
       toast.error('পণ্য ইতোমধ্যে যোগ করা হয়েছে');
       return;
     }
-    setFormItems([...formItems, { productId: formProductId, quantity: 1, unitPrice: Number(product.buyingPrice), gstPercentage: '' }]);
+    setFormItems([...formItems, { productId: formProductId, quantity: 1, unitPrice: Number(product.buyingPrice), gstPercentage: '', discount: '' }]);
     setLastAddedProductId(formProductId);
     setFormProductId('');
     setFormProductName('');
@@ -246,7 +246,7 @@ export default function PurchaseOrderManagement() {
     setFormItems(formItems.filter((i) => i.productId !== productId));
   };
 
-  const updateFormItem = (productId: string, field: 'quantity' | 'unitPrice' | 'gstPercentage', value: number | string) => {
+  const updateFormItem = (productId: string, field: 'quantity' | 'unitPrice' | 'gstPercentage' | 'discount', value: number | string) => {
     setFormItems(formItems.map((i) => (i.productId === productId ? { ...i, [field]: value } : i)));
   };
 
@@ -305,12 +305,13 @@ export default function PurchaseOrderManagement() {
             productId: i.productId,
             quantity: parseFloat(i.quantity as string) || 0,
             unitPrice: parseFloat(i.unitPrice as string) || 0,
-            gstPercentage: i.gstPercentage !== undefined && i.gstPercentage !== '' && !isNaN(parseFloat(i.gstPercentage as string)) ? parseFloat(i.gstPercentage as string) : undefined
+            gstPercentage: i.gstPercentage !== undefined && i.gstPercentage !== '' && !isNaN(parseFloat(i.gstPercentage as string)) ? parseFloat(i.gstPercentage as string) : undefined,
+            discount: i.discount !== undefined && i.discount !== '' && !isNaN(parseFloat(i.discount as string)) ? parseFloat(i.discount as string) : undefined,
           })),
           expectedDate: formExpectedDate || null,
           notes: formNotes || null,
           directReceive,
-          updateStock: formUpdateStock,
+          updateStock: directReceive ? true : formUpdateStock,
           amountPaid: (directReceive && formAmountPaid) ? parseFloat(formAmountPaid) : undefined,
           paymentMethod: directReceive ? formPaymentMethod : undefined,
           cashAmount: (directReceive && formPaymentMethod === 'Mixed') ? (parseFloat(formCashAmount) || 0) : undefined,

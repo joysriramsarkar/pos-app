@@ -183,9 +183,9 @@ export function ReceiveStockDialog({
                           <SelectValue placeholder="পেমেন্ট পদ্ধতি নির্বাচন করুন" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="Cash">Cash (নগদ)</SelectItem>
-                          <SelectItem value="UPI">UPI (ইউপিআই)</SelectItem>
-                          <SelectItem value="Mixed">Mixed (মিশ্র)</SelectItem>
+                          <SelectItem value="Cash">{tc('cash') || 'নগদ'}</SelectItem>
+                          <SelectItem value="UPI">{tc('upi') || 'ইউপিআই'}</SelectItem>
+                          <SelectItem value="Mixed">{tc('mixed') || 'মিশ্র'}</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>

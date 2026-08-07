@@ -21,6 +21,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
+import { Loader2 } from 'lucide-react';
 
 export function TransactionHistory() {
   const t = useTranslations('TransactionHistory');
@@ -348,6 +349,7 @@ export function TransactionHistory() {
               onClick={handleConfirmCancel}
               disabled={isLoading}
             >
+              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               হ্যাঁ, বাতিল করুন
             </Button>
           </DialogFooter>

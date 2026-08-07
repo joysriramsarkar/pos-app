@@ -106,25 +106,38 @@ export async function GET(request: NextRequest) {
     const totalSalesCount = todaySales.length;
     const avgOrderValue = totalSalesCount > 0 ? totalSalesAmount / totalSalesCount : 0;
 
-    // ---- PAYMENT METHOD BREAKDOWN ----
     const paymentBreakdown = {
       নগদ: { amount: 0, count: 0 },
       ইউপিআই: { amount: 0, count: 0 },
-      মিশ্র: { amount: 0, count: 0 },
       বাকি: { amount: 0, count: 0 },
     };
 
     for (const sale of todaySales) {
       const method = sale.paymentMethod;
-      let bnMethod: 'নগদ' | 'ইউপিআই' | 'মিশ্র' | 'বাকি' = 'নগদ';
-      if (method === 'Cash') bnMethod = 'নগদ';
-      else if (method === 'UPI') bnMethod = 'ইউপিআই';
-      else if (method === 'Mixed') bnMethod = 'মিশ্র';
-      else if (method === 'Due' || method === 'Prepaid') bnMethod = 'বাকি';
+      const totalAmt = Number(Number(sale.totalAmount));
+      
+      if (method === 'Mixed' || (sale.cashAmount != null && sale.upiAmount != null)) {
+        const cashAmt = Number(sale.cashAmount || 0);
+        const upiAmt = Number(sale.upiAmount || 0);
+        
+        if (cashAmt > 0) {
+          paymentBreakdown['নগদ'].amount += cashAmt;
+          paymentBreakdown['নগদ'].count += 1; // Counted once for cash
+        }
+        if (upiAmt > 0) {
+          paymentBreakdown['ইউপিআই'].amount += upiAmt;
+          paymentBreakdown['ইউপিআই'].count += 1; // Counted once for UPI
+        }
+      } else {
+        let bnMethod: 'নগদ' | 'ইউপিআই' | 'বাকি' = 'নগদ';
+        if (method === 'Cash') bnMethod = 'নগদ';
+        else if (method === 'UPI') bnMethod = 'ইউপিআই';
+        else if (method === 'Due' || method === 'Prepaid') bnMethod = 'বাকি';
 
-      if (paymentBreakdown[bnMethod]) {
-        paymentBreakdown[bnMethod].amount += Number(Number(sale.totalAmount));
-        paymentBreakdown[bnMethod].count += 1;
+        if (paymentBreakdown[bnMethod]) {
+          paymentBreakdown[bnMethod].amount += totalAmt;
+          paymentBreakdown[bnMethod].count += 1;
+        }
       }
     }
 

@@ -51,7 +51,7 @@ export function PaymentTable({
               <SelectItem value="All">{t('all_methods')}</SelectItem>
               <SelectItem value="Cash">Cash</SelectItem>
               <SelectItem value="UPI">UPI</SelectItem>
-              <SelectItem value="Mixed">{t('mixed_payment') || t('split_payment') || 'Mixed'}</SelectItem>
+
               <SelectItem value="Due">Due</SelectItem>
               <SelectItem value="Prepaid">Prepaid</SelectItem>
             </SelectContent>
@@ -99,7 +99,7 @@ export function PaymentTable({
                       <TableCell className="text-xs">
                         {s.paymentMethod === 'Mixed' || (Number(s.cashAmount) > 0 && Number(s.upiAmount) > 0) ? (
                           <Badge variant="outline" className="text-[10px]">
-                            Mixed (C: {Number(s.cashAmount || 0)} / U: {Number(s.upiAmount || 0)})
+                            নগদ: {Number(s.cashAmount || 0)} / ইউপিআই: {Number(s.upiAmount || 0)}
                           </Badge>
                         ) : (
                           <Badge variant="secondary" className="text-[10px]">{s.paymentMethod || 'Cash'}</Badge>

@@ -29,6 +29,7 @@ export interface FormItem {
   quantity: number | string;
   unitPrice: number | string;
   gstPercentage?: number | string;
+  discount?: number | string;
 }
 
 export interface ReceiveItem {

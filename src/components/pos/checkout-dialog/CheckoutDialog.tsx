@@ -335,17 +335,17 @@ export function CheckoutDialog({
 
   const saleForPrint = lastSale ? {
     ...lastSale,
-    customer: (lastSale.customer || customer) ? {
-      id: customerId || lastSale.customerId || '',
-      name: customer?.name || activeTab.customerName || lastSale.customer?.name || '',
-      phone: customer?.phone || lastSale.customer?.phone || '',
-      address: customer?.address || lastSale.customer?.address || '',
-      totalDue: customer?.totalDue || 0,
-      totalPaid: customer?.totalPaid || 0,
-      prepaidBalance: customer?.prepaidBalance || 0,
-      isActive: customer?.isActive ?? true,
-      createdAt: customer?.createdAt || new Date(),
-      updatedAt: customer?.updatedAt || new Date()
+    customer: (lastSale.customer || customer || activeTab.customerName || customerId) ? {
+      id: lastSale.customer?.id || customerId || customer?.id || '',
+      name: lastSale.customer?.name || activeTab.customerName || customer?.name || '',
+      phone: lastSale.customer?.phone || customer?.phone || '',
+      address: lastSale.customer?.address || customer?.address || '',
+      totalDue: lastSale.customer?.totalDue || customer?.totalDue || 0,
+      totalPaid: lastSale.customer?.totalPaid || customer?.totalPaid || 0,
+      prepaidBalance: lastSale.customer?.prepaidBalance || customer?.prepaidBalance || 0,
+      isActive: lastSale.customer?.isActive ?? customer?.isActive ?? true,
+      createdAt: lastSale.customer?.createdAt || customer?.createdAt || new Date(),
+      updatedAt: lastSale.customer?.updatedAt || customer?.updatedAt || new Date()
     } : undefined
   } : null;
 

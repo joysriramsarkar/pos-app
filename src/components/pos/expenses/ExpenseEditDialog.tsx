@@ -236,9 +236,9 @@ export function ExpenseEditDialog({
             }}>
               <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="Cash">Cash (নগদ)</SelectItem>
-                <SelectItem value="UPI">UPI (ইউপিআই)</SelectItem>
-                <SelectItem value="Mixed">Mixed (মিশ্র)</SelectItem>
+                <SelectItem value="Cash">নগদ</SelectItem>
+                <SelectItem value="UPI">ইউপিআই</SelectItem>
+                <SelectItem value="Mixed">মিশ্র</SelectItem>
               </SelectContent>
             </Select>
           </div>

@@ -185,16 +185,16 @@ export function CustomerPaymentDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-sm w-[95vw] max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Record Payment</DialogTitle>
+          <DialogTitle>{t('record_payment') || 'পেমেন্ট রেকর্ড করুন'}</DialogTitle>
           <DialogDescription>
-            Record payment from {customer?.name}
+            {customer?.name} থেকে পেমেন্ট রেকর্ড করুন
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
           <div className="p-3 bg-muted rounded-lg">
             <div className="flex justify-between items-center">
-              <span className="text-sm text-muted-foreground">Current Due</span>
+              <span className="text-sm text-muted-foreground">{t('current_due') || 'বর্তমান বকেয়া'}</span>
               <span className="font-bold text-red-600">
                 {formatPrice(customer?.totalDue || 0)}
               </span>
@@ -202,7 +202,7 @@ export function CustomerPaymentDialog({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="payment-dialog-amount">Payment Amount</Label>
+            <Label htmlFor="payment-dialog-amount">{t('payment_amount') || 'পেমেন্টের পরিমাণ'}</Label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">{currencySymbol}</span>
               <Input
@@ -242,9 +242,9 @@ export function CustomerPaymentDialog({
             }}>
               <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="Cash">Cash (নগদ)</SelectItem>
-                <SelectItem value="UPI">UPI (ইউপিআই)</SelectItem>
-                <SelectItem value="Mixed">Mixed (মিশ্র)</SelectItem>
+                <SelectItem value="Cash">{t('cash') || 'নগদ'}</SelectItem>
+                <SelectItem value="UPI">{t('upi') || 'ইউপিআই'}</SelectItem>
+                <SelectItem value="Mixed">{t('mixed') || 'মিশ্র'}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -303,14 +303,14 @@ export function CustomerPaymentDialog({
               size="sm"
               onClick={() => setPaymentAmount((customer?.totalDue || 0).toString())}
             >
-              Full Amount
+              {t('full_amount') || 'সম্পূর্ণ পরিমাণ'}
             </Button>
           </div>
         </div>
 
         <DialogFooter className="gap-2 sm:gap-0">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
-            Cancel
+            {t('cancel') || 'বাতিল'}
           </Button>
           <Button
             onClick={onSubmit}
@@ -320,10 +320,10 @@ export function CustomerPaymentDialog({
             {isSubmitting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Recording...
+                {t('recording') || 'রেকর্ড করা হচ্ছে...'}
               </>
             ) : (
-              'Record Payment'
+              t('record_payment_btn') || 'পেমেন্ট রেকর্ড করুন'
             )}
           </Button>
         </DialogFooter>
@@ -355,26 +355,28 @@ export function CustomerPrepaymentDialog({
   formatPrice,
   onSubmit,
 }: CustomerPrepaymentDialogProps) {
+  const t = useTranslations('Parties');
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-sm w-[95vw] max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Add Prepayment</DialogTitle>
+          <DialogTitle>{t('add_prepayment') || 'আগাম জমা দিন'}</DialogTitle>
           <DialogDescription>
-            Add prepaid balance for {customer?.name}
+            {customer?.name} এর জন্য আগাম জমা যোগ করুন
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
           <div className="p-3 bg-muted rounded-lg">
             <div className="flex justify-between items-center">
-              <span className="text-sm text-muted-foreground">Current Prepaid Balance</span>
+              <span className="text-sm text-muted-foreground">{t('current_prepaid_balance') || 'বর্তমান আগাম জমা'}</span>
               <span className="font-bold text-green-600">
                 {formatPrice(customer?.prepaidBalance || 0)}
               </span>
             </div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="prepayment-dialog-amount">Amount to Add</Label>
+            <Label htmlFor="prepayment-dialog-amount">{t('amount_to_add') || 'জমার পরিমাণ'}</Label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">{currencySymbol}</span>
               <Input
@@ -408,7 +410,7 @@ export function CustomerPrepaymentDialog({
         </div>
         <DialogFooter className="gap-2 sm:gap-0">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
-            Cancel
+            {t('cancel') || 'বাতিল'}
           </Button>
           <Button
             onClick={onSubmit}
@@ -418,10 +420,10 @@ export function CustomerPrepaymentDialog({
             {isSubmitting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Adding...
+                {t('adding') || 'যোগ করা হচ্ছে...'}
               </>
             ) : (
-              'Add Prepayment'
+              t('add_prepayment_btn') || 'আগাম জমা দিন'
             )}
           </Button>
         </DialogFooter>
@@ -453,26 +455,28 @@ export function CustomerWithdrawDialog({
   formatPrice,
   onSubmit,
 }: CustomerWithdrawDialogProps) {
+  const t = useTranslations('Parties');
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-sm w-[95vw] max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Withdraw Prepaid Balance</DialogTitle>
+          <DialogTitle>{t('withdraw_prepaid_balance') || 'আগাম জমা উত্তোলন করুন'}</DialogTitle>
           <DialogDescription>
-            Withdraw cash from {customer?.name}&apos;s prepaid balance
+            {customer?.name} এর আগাম জমা থেকে নগদ উত্তোলন করুন
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
           <div className="p-3 bg-muted rounded-lg">
             <div className="flex justify-between items-center">
-              <span className="text-sm text-muted-foreground">Available Balance</span>
+              <span className="text-sm text-muted-foreground">{t('available_balance') || 'উপলব্ধ ব্যালেন্স'}</span>
               <span className="font-bold text-green-600">
                 {formatPrice(customer?.prepaidBalance || 0)}
               </span>
             </div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="withdraw-amount">Amount to Withdraw</Label>
+            <Label htmlFor="withdraw-amount">{t('amount_to_withdraw') || 'উত্তোলনের পরিমাণ'}</Label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">{currencySymbol}</span>
               <Input
@@ -495,11 +499,11 @@ export function CustomerWithdrawDialog({
             {[100, 200, 500, 1000].map((amount) => (
               <Button key={amount} variant="outline" size="sm" onClick={() => setWithdrawAmount(amount.toString())}>{formatPrice(amount)}</Button>
             ))}
-            <Button variant="outline" size="sm" onClick={() => setWithdrawAmount((customer?.prepaidBalance || 0).toString())}>Full Balance</Button>
+            <Button variant="outline" size="sm" onClick={() => setWithdrawAmount((customer?.prepaidBalance || 0).toString())}>{t('full_balance') || 'সম্পূর্ণ ব্যালেন্স'}</Button>
           </div>
         </div>
         <DialogFooter className="gap-2 sm:gap-0">
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>Cancel</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>{t('cancel') || 'বাতিল'}</Button>
           <Button
             onClick={onSubmit}
             disabled={!withdrawAmount || parseFloat(withdrawAmount) <= 0 || parseFloat(withdrawAmount) > (customer?.prepaidBalance || 0) || isSubmitting}
@@ -508,10 +512,10 @@ export function CustomerWithdrawDialog({
             {isSubmitting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Withdrawing...
+                {t('withdrawing') || 'উত্তোলন করা হচ্ছে...'}
               </>
             ) : (
-              'Withdraw'
+              t('withdraw_btn') || 'উত্তোলন করুন'
             )}
           </Button>
         </DialogFooter>

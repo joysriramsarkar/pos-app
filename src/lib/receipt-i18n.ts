@@ -159,6 +159,41 @@ export function receiptUsesBengaliDigits(lang: ReceiptLanguage = getReceiptLangu
   return lang === 'bn' || lang === 'both';
 }
 
+/** Unit label map: English unit key → {en, bn} */
+const UNIT_LABELS: Record<string, { en: string; bn: string }> = {
+  piece:   { en: 'pcs',   bn: 'পিস'   },
+  pieces:  { en: 'pcs',   bn: 'পিস'   },
+  pcs:     { en: 'pcs',   bn: 'পিস'   },
+  kg:      { en: 'kg',    bn: 'কেজি'  },
+  kilogram:{ en: 'kg',    bn: 'কেজি'  },
+  gram:    { en: 'g',     bn: 'গ্রাম' },
+  g:       { en: 'g',     bn: 'গ্রাম' },
+  liter:   { en: 'L',     bn: 'লিটার' },
+  litre:   { en: 'L',     bn: 'লিটার' },
+  l:       { en: 'L',     bn: 'লিটার' },
+  ml:      { en: 'ml',    bn: 'মি.লি.' },
+  milliliter: { en: 'ml', bn: 'মি.লি.' },
+  dozen:   { en: 'doz',   bn: 'ডজন'   },
+  box:     { en: 'box',   bn: 'বাক্স' },
+  packet:  { en: 'pkt',   bn: 'প্যাকেট' },
+  packet_bn: { en: 'pkt', bn: 'প্যাকেট' },
+  bundle:  { en: 'bndl',  bn: 'বান্ডিল'},
+  meter:   { en: 'm',     bn: 'মিটার' },
+  feet:    { en: 'ft',    bn: 'ফুট'   },
+  inch:    { en: 'in',    bn: 'ইঞ্চি' },
+};
+
+/** Translate a unit string according to receipt language */
+export function translateUnit(unit: string | undefined | null, lang: ReceiptLanguage = getReceiptLanguage()): string {
+  if (!unit) return '';
+  const key = unit.trim().toLowerCase();
+  const entry = UNIT_LABELS[key];
+  if (!entry) return unit; // Return as-is if unknown
+  if (lang === 'en') return entry.en;
+  if (lang === 'both') return `${entry.bn}`;
+  return entry.bn; // default bn
+}
+
 export function formatReceiptNumber(
   value: number | string | null | undefined,
   options?: Intl.NumberFormatOptions,

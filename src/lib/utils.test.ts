@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { convertBengaliToEnglishNumerals, isValidEanUpcBarcode, cn, convertEnglishToBengaliNumerals } from './utils';
+import { convertBengaliToEnglishNumerals, isValidEanUpcBarcode, cn, convertEnglishToBengaliNumerals, normalizeSearchText, sortByPopularity } from './utils';
 
 describe('utils', () => {
   describe('cn', () => {
@@ -49,6 +49,36 @@ describe('utils', () => {
     it('should handle strings with whitespace correctly', () => {
       expect(convertBengaliToEnglishNumerals(' ১ ২ ৩ ')).toBe(' 1 2 3 ');
       expect(convertBengaliToEnglishNumerals('\n৪\t৫\r৬')).toBe('\n4\t5\r6');
+    });
+  });
+
+  describe('sortByPopularity', () => {
+    it('puts ranked items first in ascending rank order and sorts unranked items alphabetically', () => {
+      const items = [
+        { id: 'a', name: 'Banana' },
+        { id: 'b', name: 'Apple' },
+        { id: 'c', name: 'Carrot' },
+        { id: 'd', name: 'Date' },
+      ];
+
+      const result = sortByPopularity(items, (id) => {
+        if (id === 'a') return 2;
+        if (id === 'c') return 1;
+        return undefined;
+      });
+
+      expect(result.map((item) => item.id)).toEqual(['c', 'a', 'b', 'd']);
+    });
+
+    it('sorts all unranked items alphabetically when no rank is available', () => {
+      const items = [
+        { id: 'x', name: 'Zebra' },
+        { id: 'y', name: 'Ant' },
+      ];
+
+      const result = sortByPopularity(items, () => undefined);
+
+      expect(result.map((item) => item.id)).toEqual(['y', 'x']);
     });
   });
 

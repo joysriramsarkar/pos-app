@@ -15,6 +15,7 @@ import {
   formatReceiptTime,
   formatReceiptPaymentMethod,
   formatReceiptPaymentStatus,
+  translateUnit,
 } from '@/lib/receipt-i18n';
 import { formatCurrency, formatDate, formatTime } from './types-and-utils';
 
@@ -138,14 +139,29 @@ export function ThermalInvoice({
             </tr>
           </thead>
           <tbody>
-            {sale.items.map((item) => (
-              <tr key={item.id} style={{ borderBottom: '1px dotted #ccc' }}>
-                <td className="w-[52%] pr-1 align-top py-0.5 whitespace-normal break-words">{item.productName}</td>
-                <td className="w-[16%] text-right align-top py-0.5 whitespace-normal break-words">{formatReceiptNumber(item.quantity)}{(item as any).unit || (item as any).product?.unit ? ` ${(item as any).unit || (item as any).product?.unit}` : ''}</td>
-                <td className="w-[16%] text-right align-top py-0.5">{formatReceiptNumber(Number(item.unitPrice ?? 0), { maximumFractionDigits: 0 })}</td>
-                <td className="w-[16%] text-right align-top py-0.5 font-medium">{formatReceiptNumber(Number(item.totalPrice ?? 0), { maximumFractionDigits: 0 })}</td>
-              </tr>
-            ))}
+            {sale.items.map((item) => {
+              const rawUnit = (item as any).unit || (item as any).product?.unit || '';
+              const translatedUnit = translateUnit(rawUnit, lang);
+              const qty = Number(item.quantity ?? 0);
+              const unitPrice = Number(item.unitPrice ?? 0);
+              const totalPrice = Number(item.totalPrice ?? 0);
+              const itemDiscount = Math.max(0, Math.round((unitPrice * qty - totalPrice) * 100) / 100);
+              return (
+                <tr key={item.id} style={{ borderBottom: '1px dotted #ccc' }}>
+                  <td className="w-[52%] pr-1 align-top py-0.5 whitespace-normal break-words">
+                    {item.productName}
+                    {itemDiscount > 0 && (
+                      <div style={{ fontSize: '0.75em', color: '#16a34a' }}>
+                        -{formatReceiptNumber(itemDiscount, { maximumFractionDigits: 2 })} {L.discount}
+                      </div>
+                    )}
+                  </td>
+                  <td className="w-[16%] text-right align-top py-0.5 whitespace-normal break-words">{formatReceiptNumber(qty)}{translatedUnit ? ` ${translatedUnit}` : ''}</td>
+                  <td className="w-[16%] text-right align-top py-0.5">{formatReceiptNumber(unitPrice, { maximumFractionDigits: 0 })}</td>
+                  <td className="w-[16%] text-right align-top py-0.5 font-medium">{formatReceiptNumber(totalPrice, { maximumFractionDigits: 0 })}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
 

@@ -11,7 +11,7 @@ import { CameraScannerDialog } from './CameraScannerDialog';
 import { Capacitor } from '@capacitor/core';
 import type { Product } from '@/types/pos';
 import { useProductsStore, useUIStore, useCartStore, useProductUsageStore } from '@/stores/pos-store';
-import { cn, convertBengaliToEnglishNumerals, normalizeSearchText } from '@/lib/utils';
+import { cn, convertBengaliToEnglishNumerals, normalizeSearchText, sortByPopularity } from '@/lib/utils';
 import { useTranslations, useLocale } from 'next-intl';
 
 const cleanSearchQuery = (q: string) => q.replace(/rs\.?|₹|৳|'/gi, '').trim();
@@ -135,29 +135,8 @@ export function ProductGrid({
       return true;
     });
 
-    // New sorting logic: alphabetically first, then top sellers on top
     if (searchQuery) {
-      // Step 1: Sort all products alphabetically
-      filtered.sort((a, b) => a.name.localeCompare(b.name));
-
-      // Step 2: Separate Top Sellers (from API data)
-      const topSellerIds = Object.keys(monthlyTopSales);
-
-      if (topSellerIds.length > 0) {
-        // Step 3: Divide into two groups
-        const topSellers = filtered.filter(p => topSellerIds.includes(p.id));
-        const others = filtered.filter(p => !topSellerIds.includes(p.id));
-
-        // Step 4: Sort Top sellers by their rank
-        topSellers.sort((a, b) => {
-          const rankA = monthlyTopSales[a.id]?.rank || 999;
-          const rankB = monthlyTopSales[b.id]?.rank || 999;
-          return rankA - rankB;
-        });
-
-        // Step 5: Merge groups (Top sellers on top, others alphabetically below)
-        return [...topSellers, ...others];
-      }
+      return sortByPopularity(filtered, (id) => monthlyTopSales[id]?.rank);
     }
 
     return filtered;

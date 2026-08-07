@@ -117,7 +117,7 @@ export function TransactionFilters({
                     <SelectItem value="UPI">{t('upi')}</SelectItem>
                     <SelectItem value="Due">{t('due')}</SelectItem>
                     <SelectItem value="Prepaid">{t('prepaid')}</SelectItem>
-                    <SelectItem value="Mixed">{t('mixed')}</SelectItem>
+
                   </SelectContent>
                 </Select>
               </div>

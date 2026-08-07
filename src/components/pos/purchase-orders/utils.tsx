@@ -63,7 +63,7 @@ export function filterOrdersByDate(
 }
 
 export function computeFormTotals(
-  formItems: { quantity: number | string; unitPrice: number | string; gstPercentage?: number | string }[],
+  formItems: { quantity: number | string; unitPrice: number | string; gstPercentage?: number | string; discount?: number | string }[],
   formGstPercentage: string,
   formDiscountType: 'percent' | 'fixed' = 'percent',
   formDiscountValue: string | number = 0,
@@ -74,7 +74,13 @@ export function computeFormTotals(
   formItems.forEach((item) => {
     const qty = parseFloat(item.quantity as string) || 0;
     const unitPrice = parseFloat(item.unitPrice as string) || 0;
-    const itemSubtotal = qty * unitPrice;
+    const itemGross = qty * unitPrice;
+
+    // Per-item discount: fixed amount off the gross
+    const itemDiscountVal = item.discount !== undefined && item.discount !== ''
+      ? parseFloat(item.discount as string) || 0
+      : 0;
+    const itemSubtotal = Math.max(0, itemGross - itemDiscountVal);
     formSubtotal += itemSubtotal;
 
     const hasCustomGst =

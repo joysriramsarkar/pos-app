@@ -15,6 +15,7 @@ import {
   formatReceiptTime,
   formatReceiptPaymentMethod,
   formatReceiptPaymentStatus,
+  translateUnit,
 } from '@/lib/receipt-i18n';
 import { formatCurrency, formatDate, formatTime } from './types-and-utils';
 
@@ -60,32 +61,32 @@ export function StandardInvoice({
       className={`standard-invoice ${paperWidth} ${paperHeight} ${padding} bg-white text-black mx-auto`}
       style={{ fontFamily: 'Arial, sans-serif' }}
     >
-      {/* Header band */}
-      <div style={{ background: '#111', color: '#fff', padding: '16px 24px', marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      {/* Header band — light background for clean printing */}
+      <div style={{ background: '#f5f7fa', color: '#111', padding: '16px 24px', marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #dde3ec', borderRadius: 4 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
           {showLogo && (
             config.logo ? (
               <img src={config.logo} alt="logo" style={{ width: 44, height: 44, objectFit: 'contain', borderRadius: 6, background: '#fff', flexShrink: 0 }} />
             ) : (
-              <div style={{ width: 44, height: 44, background: '#fff', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <span style={{ color: '#111', fontWeight: 900, fontSize: 18 }}>LB</span>
+              <div style={{ width: 44, height: 44, background: '#e2e8f0', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <span style={{ color: '#334155', fontWeight: 900, fontSize: 18 }}>LB</span>
               </div>
             )
           )}
           <div>
-            <div style={{ fontWeight: 800, fontSize: isA4 ? 20 : 16, letterSpacing: 1 }}>{storeTitle.primary}</div>
+            <div style={{ fontWeight: 800, fontSize: isA4 ? 20 : 16, letterSpacing: 1, color: '#1e293b' }}>{storeTitle.primary}</div>
             {storeTitle.secondary && (
-              <div style={{ fontSize: isA4 ? 13 : 11, opacity: 0.8 }}>{storeTitle.secondary}</div>
+              <div style={{ fontSize: isA4 ? 13 : 11, color: '#475569' }}>{storeTitle.secondary}</div>
             )}
-            {config.address && <div style={{ fontSize: 11, opacity: 0.7, marginTop: 2 }}>{config.address}</div>}
-            {config.phone && <div style={{ fontSize: 11, opacity: 0.7 }}>☎ {config.phone}</div>}
-            {showGst && config.gstNumber && <div style={{ fontSize: 11, opacity: 0.7 }}>GST: {config.gstNumber}</div>}
+            {config.address && <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{config.address}</div>}
+            {config.phone && <div style={{ fontSize: 11, color: '#64748b' }}>☎ {config.phone}</div>}
+            {showGst && config.gstNumber && <div style={{ fontSize: 11, color: '#64748b' }}>GST: {config.gstNumber}</div>}
           </div>
         </div>
         <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: isA4 ? 22 : 17, fontWeight: 900, letterSpacing: 2, opacity: 0.9 }}>{L.taxInvoice}</div>
-          <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>#{sale.invoiceNumber}</div>
-          <div style={{ fontSize: 11, opacity: 0.7 }}>{formatDate(sale.createdAt)} {formatTime(sale.createdAt)}</div>
+          <div style={{ fontSize: isA4 ? 22 : 17, fontWeight: 900, letterSpacing: 2, color: '#1e293b' }}>{L.taxInvoice}</div>
+          <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>#{sale.invoiceNumber}</div>
+          <div style={{ fontSize: 11, color: '#64748b' }}>{formatDate(sale.createdAt)} {formatTime(sale.createdAt)}</div>
         </div>
       </div>
 
@@ -100,28 +101,54 @@ export function StandardInvoice({
       )}
 
       {/* Items Table */}
-      <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 20, fontSize: isA4 ? 13 : 11 }}>
-        <thead>
-          <tr style={{ background: '#111', color: '#fff' }}>
-            <th style={{ padding: '8px 10px', textAlign: 'left', width: '5%' }}>#</th>
-            <th style={{ padding: '8px 10px', textAlign: 'left' }}>{L.item}</th>
-            <th style={{ padding: '8px 10px', textAlign: 'center', width: '10%' }}>{L.qty}</th>
-            <th style={{ padding: '8px 10px', textAlign: 'right', width: '15%' }}>{L.rate}</th>
-            <th style={{ padding: '8px 10px', textAlign: 'right', width: '15%' }}>{L.amount}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sale.items.map((item, index) => (
-            <tr key={item.id} style={{ borderBottom: '1px solid #e5e5e5', background: index % 2 === 0 ? '#fff' : '#fafafa' }}>
-              <td style={{ padding: '7px 10px', color: '#888' }}>{formatReceiptNumber(index + 1)}</td>
-              <td style={{ padding: '7px 10px', fontWeight: 500 }}>{item.productName}</td>
-              <td style={{ padding: '7px 10px', textAlign: 'center' }}>{formatReceiptNumber(item.quantity)}{(item as any).unit || (item as any).product?.unit ? ` ${(item as any).unit || (item as any).product?.unit}` : ''}</td>
-              <td style={{ padding: '7px 10px', textAlign: 'right' }}>{formatCurrency(item.unitPrice)}</td>
-              <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 600 }}>{formatCurrency(item.totalPrice)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {(() => {
+        const hasItemDiscount = sale.items.some(item => {
+          const qty = Number(item.quantity ?? 0);
+          const unitPrice = Number(item.unitPrice ?? 0);
+          const totalPrice = Number(item.totalPrice ?? 0);
+          return Math.round((unitPrice * qty - totalPrice) * 100) / 100 > 0;
+        });
+        return (
+          <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 20, fontSize: isA4 ? 13 : 11 }}>
+            <thead>
+              <tr style={{ background: '#e8edf5', color: '#1e293b', borderBottom: '2px solid #cbd5e1' }}>
+                <th style={{ padding: '8px 10px', textAlign: 'left', width: '5%' }}>#</th>
+                <th style={{ padding: '8px 10px', textAlign: 'left' }}>{L.item}</th>
+                <th style={{ padding: '8px 10px', textAlign: 'center', width: '10%' }}>{L.qty}</th>
+                <th style={{ padding: '8px 10px', textAlign: 'right', width: hasItemDiscount ? '13%' : '15%' }}>{L.rate}</th>
+                {hasItemDiscount && (
+                  <th style={{ padding: '8px 10px', textAlign: 'right', width: '13%', color: '#16a34a' }}>{L.discount}</th>
+                )}
+                <th style={{ padding: '8px 10px', textAlign: 'right', width: hasItemDiscount ? '13%' : '15%' }}>{L.amount}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sale.items.map((item, index) => {
+                const rawUnit = (item as any).unit || (item as any).product?.unit || '';
+                const translatedUnit = translateUnit(rawUnit, lang);
+                const qty = Number(item.quantity ?? 0);
+                const unitPrice = Number(item.unitPrice ?? 0);
+                const totalPrice = Number(item.totalPrice ?? 0);
+                const itemDiscount = Math.max(0, Math.round((unitPrice * qty - totalPrice) * 100) / 100);
+                return (
+                  <tr key={item.id} style={{ borderBottom: '1px solid #e5e5e5', background: index % 2 === 0 ? '#fff' : '#fafafa' }}>
+                    <td style={{ padding: '7px 10px', color: '#888' }}>{formatReceiptNumber(index + 1)}</td>
+                    <td style={{ padding: '7px 10px', fontWeight: 500 }}>{item.productName}</td>
+                    <td style={{ padding: '7px 10px', textAlign: 'center' }}>{formatReceiptNumber(qty)}{translatedUnit ? ` ${translatedUnit}` : ''}</td>
+                    <td style={{ padding: '7px 10px', textAlign: 'right' }}>{formatCurrency(unitPrice)}</td>
+                    {hasItemDiscount && (
+                      <td style={{ padding: '7px 10px', textAlign: 'right', color: '#16a34a' }}>
+                        {itemDiscount > 0 ? `-${formatCurrency(itemDiscount)}` : '-'}
+                      </td>
+                    )}
+                    <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 600 }}>{formatCurrency(totalPrice)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        );
+      })()}
 
       {/* Totals */}
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 20 }}>
@@ -142,7 +169,7 @@ export function StandardInvoice({
               <span>+{formatCurrency(sale.tax)}</span>
             </div>
           )}
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 10px', background: '#111', color: '#fff', fontWeight: 800, fontSize: isA4 ? 15 : 13, marginTop: 4, borderRadius: 2 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 10px', background: '#1e293b', color: '#fff', fontWeight: 800, fontSize: isA4 ? 15 : 13, marginTop: 4, borderRadius: 2 }}>
             <span>{L.grandTotal}</span>
             <span>{formatCurrency(sale.totalAmount)}</span>
           </div>

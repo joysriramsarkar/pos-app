@@ -436,7 +436,7 @@ export function ProductDialog({
                     variant="ghost"
                     size="icon"
                     className="absolute top-2 right-2 z-10 bg-black/50 text-white hover:bg-black/70 h-8 w-8"
-                    onClick={() => startShutdown()}
+                    onClick={() => { startShutdown(); setIsWebScannerOpen(false); }}
                   >
                     <X className="w-4 h-4" />
                   </Button>

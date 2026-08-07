@@ -249,9 +249,9 @@ export function SupplierPaymentDialog({
             }}>
               <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="Cash">Cash</SelectItem>
-                <SelectItem value="UPI">UPI</SelectItem>
-                <SelectItem value="Mixed">Mixed</SelectItem>
+                <SelectItem value="Cash">{t('cash') || 'নগদ'}</SelectItem>
+                <SelectItem value="UPI">{t('upi') || 'ইউপিআই'}</SelectItem>
+                <SelectItem value="Mixed">{t('mixed') || 'মিশ্র'}</SelectItem>
               </SelectContent>
             </Select>
           </div>
