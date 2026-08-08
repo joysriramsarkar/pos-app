@@ -105,7 +105,11 @@ export function SupplierLedgerDialog({
                     .replace(/^স্টক ক্রয়:/, isBn ? 'স্টক ক্রয়:' : 'Stock Purchase:')
                     .replace(/^Purchase:/, isBn ? 'স্টক ক্রয়:' : 'Stock Purchase:')
                     .replace(/^Paid supplier:/, isBn ? 'সাপ্লায়ারকে পরিশোধ:' : 'Paid supplier:')
-                    .replace(/^Paid for direct purchase:/, isBn ? 'সরাসরি ক্রয়ের জন্য পরিশোধ:' : 'Paid for direct purchase:');
+                    .replace(/^Paid for direct purchase:/, isBn ? 'সরাসরি ক্রয়ের জন্য পরিশোধ:' : 'Paid for direct purchase:')
+                    .replace(/Manual supplier due entry \(ম্যানুয়াল সাপ্লায়ার বাকি এন্ট্রি\)/g, isBn ? 'ম্যানুয়াল সাপ্লায়ার বাকি এন্ট্রি' : 'Manual supplier due entry')
+                    .replace(/টাকা পরিশোধ \(পেমেন্ট\)/g, isBn ? 'টাকা পরিশোধ (পেমেন্ট)' : 'Payment')
+                    .replace(/খরচ ক্রয়:/g, isBn ? 'খরচ ক্রয়:' : 'Expense:')
+                    .replace(/Supplier Payment/g, isBn ? 'সাপ্লায়ার পেমেন্ট' : 'Supplier Payment');
                   return (
                     <div
                       key={entry.id}
