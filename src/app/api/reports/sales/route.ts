@@ -117,16 +117,17 @@ export async function GET(request: NextRequest) {
     // Payment: drawer cash/UPI + due created (consistent with dashboard stats)
     const payAgg = aggregateSalePayments(sales);
     const paymentBreakdown: Record<string, number> = {
-      Cash: payAgg.cash,
-      UPI: payAgg.upi,
-      Due: payAgg.dueCreated,
+      Cash: 0,
+      UPI: 0,
+      Mixed: 0,
+      Due: 0,
+      Prepaid: 0,
     };
-    let prepaidTotal = 0;
+    
     for (const s of sales) {
-      const b = breakdownSalePayment(s);
-      if (s.paymentMethod === "Prepaid") prepaidTotal += b.paid;
+      const method = s.paymentMethod || "Cash";
+      paymentBreakdown[method] = (paymentBreakdown[method] || 0) + Number(s.totalAmount);
     }
-    if (prepaidTotal > 0) paymentBreakdown.Prepaid = prepaidTotal;
 
     // Previous period revenue (line items)
     const periodMs = endDate.getTime() - startDate.getTime();

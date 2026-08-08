@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -13,6 +14,9 @@ import { Separator } from '@/components/ui/separator';
 import { Truck, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 import type { PurchaseOrder } from './types';
 import { getStatusBadge, getProductName } from './utils';
+import { toast } from 'sonner';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface PurchaseOrderDetailDialogProps {
   open: boolean;
@@ -24,6 +28,7 @@ interface PurchaseOrderDetailDialogProps {
   onPlaceOrder: (order: PurchaseOrder) => void;
   onReceiveOrder: (order: PurchaseOrder) => void;
   onCancelOrder: (order: PurchaseOrder) => void;
+  onPaymentSuccess?: () => void;
 }
 
 export function PurchaseOrderDetailDialog({
@@ -36,9 +41,55 @@ export function PurchaseOrderDetailDialog({
   onPlaceOrder,
   onReceiveOrder,
   onCancelOrder,
+  onPaymentSuccess,
 }: PurchaseOrderDetailDialogProps) {
   const t = useTranslations('PurchaseOrders');
   const tc = useTranslations('Common');
+
+  const [showPaymentForm, setShowPaymentForm] = useState(false);
+  const [amountToPay, setAmountToPay] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('Cash');
+  const [cashAmount, setCashAmount] = useState('');
+  const [upiAmount, setUpiAmount] = useState('');
+  const [recordingPayment, setRecordingPayment] = useState(false);
+
+  const handleSavePayment = async () => {
+    if (!selectedOrder) return;
+    const amount = parseFloat(amountToPay);
+    if (isNaN(amount) || amount <= 0) {
+      toast.error('সঠিক পরিমাণ লিখুন');
+      return;
+    }
+
+    setRecordingPayment(true);
+    try {
+      const res = await fetch(`/api/purchase-orders/${selectedOrder.id}/payment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amountPaid: amount,
+          paymentMethod,
+          cashAmount: paymentMethod === 'Mixed' ? (parseFloat(cashAmount) || 0) : undefined,
+          upiAmount: paymentMethod === 'Mixed' ? (parseFloat(upiAmount) || 0) : undefined,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success('পেমেন্ট সফলভাবে রেকর্ড হয়েছে');
+        setShowPaymentForm(false);
+        setAmountToPay('');
+        setCashAmount('');
+        setUpiAmount('');
+        if (onPaymentSuccess) onPaymentSuccess();
+      } else {
+        toast.error(data.error || 'পেমেন্ট রেকর্ড করতে ব্যর্থ');
+      }
+    } catch (err) {
+      toast.error('নেটওয়ার্ক ত্রুটি হয়েছে');
+    } finally {
+      setRecordingPayment(false);
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -68,6 +119,43 @@ export function PurchaseOrderDetailDialog({
                 <p className="font-bold">{formatPrice(selectedOrder.totalAmount)}</p>
               </div>
             </div>
+
+            {/* Payment Details */}
+            {selectedOrder.status === 'প্রাপ্ত' && (
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2.5">
+                <h4 className="font-bold text-sm text-slate-800 flex items-center gap-1.5">
+                  পেমেন্ট সংক্রান্ত তথ্য
+                </h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                  <div>
+                    <span className="text-muted-foreground block">মোট বিল:</span>
+                    <span className="font-bold text-sm">{formatPrice(selectedOrder.totalAmount)}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground block">পরিশোধিত:</span>
+                    <span className="font-bold text-sm text-green-600">{formatPrice(selectedOrder.paidAmount)}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground block">বকেয়া:</span>
+                    <span className="font-bold text-sm text-amber-600">
+                      {formatPrice(Math.max(0, selectedOrder.totalAmount - selectedOrder.paidAmount))}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground block">পেমেন্ট পদ্ধতি:</span>
+                    <span className="font-semibold text-sm">
+                      {selectedOrder.paymentMethod === 'Cash' ? 'নগদ' : selectedOrder.paymentMethod === 'UPI' ? 'ইউপিআই' : selectedOrder.paymentMethod === 'Mixed' ? 'মিশ্র' : selectedOrder.paymentMethod || '—'}
+                    </span>
+                  </div>
+                </div>
+                <div className="pt-1.5 flex items-center justify-between text-xs border-t border-slate-200">
+                  <span className="text-muted-foreground">পেমেন্ট অবস্থা:</span>
+                  <span className={`font-bold uppercase ${selectedOrder.paymentStatus === 'Paid' ? 'text-green-600' : selectedOrder.paymentStatus === 'Partial' ? 'text-amber-500' : 'text-red-500'}`}>
+                    {selectedOrder.paymentStatus === 'Paid' ? 'Paid (পরিশোধিত)' : selectedOrder.paymentStatus === 'Partial' ? 'Partial (আংশিক)' : 'Pending (বকেয়া)'}
+                  </span>
+                </div>
+              </div>
+            )}
 
             {selectedOrder.expectedDate && (
               <div className="bg-muted p-3 rounded-lg">
@@ -127,6 +215,87 @@ export function PurchaseOrderDetailDialog({
               <span className="text-xl font-bold">{formatPrice(selectedOrder.totalAmount)}</span>
             </div>
 
+            {/* Collapsible Payment Form */}
+            {showPaymentForm && (
+              <div className="border border-indigo-100 bg-indigo-50/20 p-4 rounded-xl space-y-3">
+                <h4 className="font-bold text-sm text-indigo-900">পেমেন্ট রেকর্ড করুন</h4>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-muted-foreground font-medium">পরিশোধের পরিমাণ</label>
+                    <Input
+                      type="number"
+                      placeholder="পরিমাণ"
+                      value={amountToPay}
+                      onChange={(e) => setAmountToPay(e.target.value)}
+                      className="h-9 mt-1 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground font-medium">পেমেন্ট পদ্ধতি</label>
+                    <Select value={paymentMethod} onValueChange={(val) => {
+                      setPaymentMethod(val);
+                      if (val === 'Mixed') {
+                        setCashAmount('');
+                        setUpiAmount('');
+                      }
+                    }}>
+                      <SelectTrigger className="h-9 mt-1 bg-white">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Cash">নগদ (Cash)</SelectItem>
+                        <SelectItem value="UPI">ইউপিআই (UPI)</SelectItem>
+                        <SelectItem value="Mixed">মিশ্র (Mixed)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                {paymentMethod === 'Mixed' && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs text-muted-foreground font-medium">নগদ পরিমাণ</label>
+                      <Input
+                        type="number"
+                        placeholder="নগদ"
+                        value={cashAmount}
+                        onChange={(e) => {
+                          setCashAmount(e.target.value);
+                          const total = parseFloat(amountToPay) || 0;
+                          const cash = parseFloat(e.target.value) || 0;
+                          setUpiAmount(String(Math.max(0, total - cash)));
+                        }}
+                        className="h-9 mt-1 bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground font-medium">ইউপিআই পরিমাণ</label>
+                      <Input
+                        type="number"
+                        placeholder="ইউপিআই"
+                        value={upiAmount}
+                        onChange={(e) => {
+                          setUpiAmount(e.target.value);
+                          const total = parseFloat(amountToPay) || 0;
+                          const upi = parseFloat(e.target.value) || 0;
+                          setCashAmount(String(Math.max(0, total - upi)));
+                        }}
+                        className="h-9 mt-1 bg-white"
+                      />
+                    </div>
+                  </div>
+                )}
+                <div className="flex gap-2 justify-end">
+                  <Button size="sm" variant="ghost" onClick={() => setShowPaymentForm(false)} disabled={recordingPayment}>
+                    বাতিল
+                  </Button>
+                  <Button size="sm" onClick={handleSavePayment} disabled={recordingPayment} className="gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white">
+                    {recordingPayment && <Loader2 className="h-3 w-3 animate-spin" />}
+                    সংরক্ষণ করুন
+                  </Button>
+                </div>
+              </div>
+            )}
+
             {/* Action Buttons */}
             <div className="flex gap-2 flex-wrap">
               {selectedOrder.status === 'পেন্ডিং' && (
@@ -137,16 +306,24 @@ export function PurchaseOrderDetailDialog({
                 </Button>
               )}
               {(selectedOrder.status === 'পেন্ডিং' || selectedOrder.status === 'অর্ডার করা') && (
-                <>
-                  <Button onClick={() => onReceiveOrder(selectedOrder)} variant="outline" className="gap-2">
-                    <CheckCircle className="h-4 w-4 text-green-600" />
-                    {t('receive_order')}
-                  </Button>
-                  <Button onClick={() => onCancelOrder(selectedOrder)} variant="destructive" className="gap-2" disabled={saving}>
-                    <XCircle className="h-4 w-4" />
-                    {t('cancel_order')}
-                  </Button>
-                </>
+                <Button onClick={() => onReceiveOrder(selectedOrder)} variant="outline" className="gap-2">
+                  <CheckCircle className="h-4 w-4 text-green-600" />
+                  {t('receive_order')}
+                </Button>
+              )}
+              {(selectedOrder.status === 'পেন্ডিং' || selectedOrder.status === 'অর্ডার করা' || selectedOrder.status === 'প্রাপ্ত') && (
+                <Button onClick={() => onCancelOrder(selectedOrder)} variant="destructive" className="gap-2" disabled={saving}>
+                  <XCircle className="h-4 w-4" />
+                  {t('cancel_order') || 'অর্ডার বাতিল'}
+                </Button>
+              )}
+              {selectedOrder.status === 'প্রাপ্ত' && selectedOrder.paymentStatus !== 'Paid' && !showPaymentForm && (
+                <Button onClick={() => {
+                  setShowPaymentForm(true);
+                  setAmountToPay(String(Math.max(0, selectedOrder.totalAmount - selectedOrder.paidAmount)));
+                }} variant="outline" className="gap-2 border-indigo-200 text-indigo-600 hover:bg-indigo-50">
+                  পেমেন্ট রেকর্ড করুন
+                </Button>
               )}
             </div>
           </div>

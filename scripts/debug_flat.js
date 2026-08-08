@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 const fs=require('fs');
 const en=JSON.parse(fs.readFileSync('messages/en.json','utf8'));
 function flat(o,p){p=p||'';var r={};Object.entries(o).forEach(([k,v])=>{var key=p? (p+'.'+k):k; if(v&&typeof v==='object'&&!Array.isArray(v)) Object.assign(r,flat(v,key)); else r[key]=v;});return r;}

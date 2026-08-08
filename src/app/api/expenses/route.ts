@@ -200,13 +200,82 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: false, error: "ID is required" }, { status: 400 });
     }
 
-    await prisma.expense.update({ where: { id }, data: { isActive: false } });
+    const expense = await prisma.expense.findUnique({
+      where: { id },
+    });
+
+    if (!expense) {
+      return NextResponse.json({ success: false, error: "Expense not found" }, { status: 404 });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.expense.update({ where: { id }, data: { isActive: false } });
+
+      if (expense.category === 'Supplier Payment' && expense.supplierId) {
+        const amount = Number(expense.amount);
+        const notes = expense.notes || '';
+        const match = notes.match(/(PO-\d{8}-\d{4})/);
+        const invoiceNumber = match ? match[1] : null;
+
+        if (invoiceNumber) {
+          const po = await tx.purchase.findUnique({
+            where: { invoiceNumber },
+          });
+          if (po) {
+            const newPaid = Math.max(0, Number(po.paidAmount) - amount);
+            let paymentStatus = 'Paid';
+            if (newPaid === 0) paymentStatus = 'Pending';
+            else if (newPaid < Number(po.totalAmount)) paymentStatus = 'Partial';
+
+            await tx.purchase.update({
+              where: { id: po.id },
+              data: {
+                paidAmount: newPaid,
+                paymentStatus,
+              },
+            });
+          }
+        } else {
+          // General supplier payment (FIFO) - revert using LIFO
+          const purchases = await tx.purchase.findMany({
+            where: {
+              supplierId: expense.supplierId,
+              paidAmount: { gt: 0 },
+              deliveryStatus: { in: ['Received', 'PartiallyReceived'] },
+            },
+            orderBy: { createdAt: 'desc' }, // LIFO
+          });
+
+          let remaining = amount;
+          for (const po of purchases) {
+            if (remaining <= 0) break;
+            const paid = Number(po.paidAmount);
+            const toDeduct = Math.min(remaining, paid);
+
+            const newPaid = paid - toDeduct;
+            let paymentStatus = 'Paid';
+            if (newPaid === 0) paymentStatus = 'Pending';
+            else if (newPaid < Number(po.totalAmount)) paymentStatus = 'Partial';
+
+            await tx.purchase.update({
+              where: { id: po.id },
+              data: {
+                paidAmount: newPaid,
+                paymentStatus,
+              },
+            });
+            remaining -= toDeduct;
+          }
+        }
+      }
+    });
 
     const user = await getAuthenticatedUser(request);
     await logAudit({ userId: user?.id, action: 'DELETE_EXPENSE', entityType: 'Expense', entityId: id, ipAddress: getIp(request) });
 
     return NextResponse.json({ success: true, message: "Expense deleted" });
   } catch (error: unknown) {
+    console.error("Error deleting expense:", error);
     return NextResponse.json({ success: false, error: "Failed to delete expense" }, { status: 500 });
   }
 }

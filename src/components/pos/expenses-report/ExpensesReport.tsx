@@ -64,34 +64,34 @@ export function ExpensesReport({ onBack }: ExpensesReportProps) {
     const map: Record<string, { amount: number; ts: number }> = {};
     filtered.forEach((e) => {
       const d = parseDateSafe(e.date);
-      const k = format(d, 'dd MMM');
+      const k = formatDate(d, { day: '2-digit', month: 'short' });
       if (!map[k]) map[k] = { amount: 0, ts: d.getTime() };
       map[k].amount += Number(e.amount ?? 0);
     });
     return Object.entries(map).sort((a, b) => a[1].ts - b[1].ts).map(([date, { amount }]) => ({ date, amount }));
-  }, [filtered]);
+  }, [filtered, formatDate]);
 
   const weeklyData = useMemo(() => {
     const map: Record<string, { amount: number; ts: number }> = {};
     filtered.forEach((e) => {
       const d = parseDateSafe(e.date);
-      const k = `W${getWeek(d)} '${String(getYear(d)).slice(2)}`;
+      const k = formatStringNumbers(`W${getWeek(d)} '${String(getYear(d)).slice(2)}`);
       if (!map[k]) map[k] = { amount: 0, ts: startOfWeek(d).getTime() };
       map[k].amount += Number(e.amount ?? 0);
     });
     return Object.entries(map).sort((a, b) => a[1].ts - b[1].ts).map(([week, { amount }]) => ({ week, amount }));
-  }, [filtered]);
+  }, [filtered, formatStringNumbers]);
 
   const monthlyData = useMemo(() => {
     const map: Record<string, { amount: number; ts: number }> = {};
     filtered.forEach((e) => {
       const d = parseDateSafe(e.date);
-      const k = format(d, 'MMM yyyy');
+      const k = formatDate(d, { month: 'short', year: 'numeric' });
       if (!map[k]) map[k] = { amount: 0, ts: startOfMonth(d).getTime() };
       map[k].amount += Number(e.amount ?? 0);
     });
     return Object.entries(map).sort((a, b) => a[1].ts - b[1].ts).map(([month, { amount }]) => ({ month, amount }));
-  }, [filtered]);
+  }, [filtered, formatDate]);
 
   const categoryTotals = useMemo(() => {
     const map: Record<string, number> = {};
@@ -115,7 +115,7 @@ export function ExpensesReport({ onBack }: ExpensesReportProps) {
   const tableColor = viewMode === 'daily' ? 'text-red-600' : viewMode === 'weekly' ? 'text-amber-600' : 'text-purple-600';
 
   const chartData = viewMode === 'daily'
-    ? filtered.map((e) => ({ time: format(parseDateSafe(e.date), 'HH:mm'), amount: e.amount ?? 0, label: e.notes || e.category, origDate: e.date }))
+    ? filtered.map((e) => ({ time: formatStringNumbers(format(parseDateSafe(e.date), 'HH:mm')), amount: e.amount ?? 0, label: e.notes || e.category, origDate: e.date }))
     : viewMode === 'weekly' ? weeklyData : monthlyData;
   const chartKey = viewMode === 'daily' ? 'time' : viewMode === 'weekly' ? 'week' : 'month';
 

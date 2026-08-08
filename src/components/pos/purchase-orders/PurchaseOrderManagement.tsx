@@ -588,6 +588,23 @@ export default function PurchaseOrderManagement() {
         onPlaceOrder={handlePlaceOrder}
         onReceiveOrder={openReceiveDialog}
         onCancelOrder={handleCancelOrder}
+        onPaymentSuccess={async () => {
+          await fetchOrders();
+          if (selectedOrder) {
+            try {
+              const res = await fetch('/api/purchase-orders');
+              if (res.ok) {
+                const result = await res.json();
+                if (result.success && result.data) {
+                  const updated = result.data.find((o: any) => o.id === selectedOrder.id);
+                  if (updated) setSelectedOrder(updated);
+                }
+              }
+            } catch (err) {
+              console.error(err);
+            }
+          }
+        }}
       />
 
       <ReceiveStockDialog

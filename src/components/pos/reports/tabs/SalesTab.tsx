@@ -85,7 +85,9 @@ export function SalesTab({
 
   const handleExportCSV = useCallback(() => {
     if (!salesData.length) return;
-    const header = isToday ? ['Hour', 'Revenue', 'Profit', 'Orders'] : ['Date', 'Revenue', 'Profit', 'Orders'];
+    const header = isToday
+      ? [t('csv_hour'), t('csv_revenue'), t('csv_profit'), t('csv_orders')]
+      : [t('csv_date'), t('csv_revenue'), t('csv_profit'), t('csv_orders')];
     const rows = [
       header,
       ...salesData.map((d) => [d.date, d.revenue.toFixed(2), d.profit.toFixed(2), d.count]),
@@ -98,7 +100,7 @@ export function SalesTab({
     a.download = `sales-report-${format(new Date(), 'yyyy-MM-dd')}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [salesData, isToday]);
+  }, [salesData, isToday, t]);
 
   return (
     <>

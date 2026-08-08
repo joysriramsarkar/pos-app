@@ -91,14 +91,14 @@ export function ProfitTab({
               onClick={() =>
                 downloadCSV(
                   [
-                    ['#', 'Name', 'Revenue', 'Cost', 'Profit', 'Margin %'],
+                    ['#', t('csv_name'), t('csv_revenue'), t('csv_cost'), t('csv_profit'), t('csv_margin')],
                     ...profitRows.map((r, i) => [
                       i + 1,
                       r.invoiceNumber || r.name || r.customerName || '',
                       Number(r.revenue).toFixed(2),
                       Number(r.cost).toFixed(2),
                       Number(r.profit).toFixed(2),
-                      Number(r.margin).toFixed(1),
+                      Number(r.margin ?? 0).toFixed(1),
                     ]),
                   ],
                   `profit-${profitGroup}`,
@@ -165,7 +165,7 @@ export function ProfitTab({
                 <p className="font-semibold truncate">{profitInsights.lowestMargin?.name || '—'}</p>
                 {profitInsights.lowestMargin && (
                   <p className="text-amber-600">
-                    {formatStringNumbers(String(profitInsights.lowestMargin.margin))}%
+                    {formatStringNumbers(String(profitInsights.lowestMargin.margin ?? 0))}%
                   </p>
                 )}
               </div>
@@ -261,7 +261,7 @@ export function ProfitTab({
                         {formatPrice(Number(r.profit))}
                       </TableCell>
                       <TableCell className="text-right text-muted-foreground tabular-nums">
-                        {formatStringNumbers(String(r.margin))}%
+                        {formatStringNumbers(String(r.margin ?? 0))}%
                       </TableCell>
                     </TableRow>
                   ))

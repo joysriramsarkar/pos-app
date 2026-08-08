@@ -75,12 +75,12 @@ export function PaymentReport({ onBack }: PaymentReportProps) {
 
   const pieData = useMemo(() => {
     const list = [
-      { name: 'Cash', value: summary.cash },
-      { name: 'UPI', value: summary.upi },
-      { name: 'Prepaid', value: summary.prepaid },
+      { name: t('cash'), value: summary.cash },
+      { name: t('upi'), value: summary.upi },
+      { name: t('prepaid'), value: summary.prepaid },
     ];
     return list.filter((item) => item.value > 0);
-  }, [summary]);
+  }, [summary, t]);
 
   const trendData = useMemo(() => {
     const map: Record<string, { label: string; cash: number; upi: number; prepaid: number; ts: number }> = {};
@@ -93,12 +93,12 @@ export function PaymentReport({ onBack }: PaymentReportProps) {
       let ts = d.getTime();
 
       if (viewMode === 'daily') {
-        k = format(d, 'dd MMM');
+        k = formatDate(d, { day: '2-digit', month: 'short' });
       } else if (viewMode === 'weekly') {
-        k = `W${getWeek(d)} '${String(getYear(d)).slice(2)}`;
+        k = formatStringNumbers(`W${getWeek(d)} '${String(getYear(d)).slice(2)}`);
         ts = startOfWeek(d).getTime();
       } else {
-        k = format(d, 'MMM yyyy');
+        k = formatDate(d, { month: 'short', year: 'numeric' });
         ts = startOfMonth(d).getTime();
       }
 
@@ -130,7 +130,7 @@ export function PaymentReport({ onBack }: PaymentReportProps) {
     });
 
     return Object.values(map).sort((a, b) => a.ts - b.ts);
-  }, [sales, viewMode]);
+  }, [sales, viewMode, formatDate, formatStringNumbers]);
 
   return (
     <div className="flex-1 flex flex-col gap-4 p-4 md:p-6 bg-slate-50/50 overflow-y-auto min-h-0 pb-24 animate-page-enter">

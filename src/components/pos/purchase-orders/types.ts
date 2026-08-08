@@ -20,6 +20,8 @@ export interface PurchaseOrder {
   expectedDate: string | null;
   createdAt: string;
   updatedAt: string;
+  paymentMethod?: string;
+  paymentStatus?: string;
   supplier?: { id: string; name: string; phone: string | null } | null;
   items: PurchaseOrderItem[];
 }

@@ -5,7 +5,7 @@ import {
 } from '@/lib/report-filters';
 
 /** Build pie config + colors from actual payment keys (Cash/UPI/Mixed/Due/Prepaid) */
-export function buildPaymentChartConfig(keys: string[], isBn: boolean) {
+export function buildPaymentChartConfig(keys: string[], isBn: boolean, t?: any) {
   const config: Record<string, { label: string; color: string }> = {};
   for (const key of keys) {
     config[key] = {
@@ -15,7 +15,7 @@ export function buildPaymentChartConfig(keys: string[], isBn: boolean) {
   }
   if (!config.Others) {
     config.Others = {
-      label: isBn ? 'অন্যান্য' : 'Others',
+      label: t ? t('others') : (isBn ? 'অন্যান্য' : 'Others'),
       color: PAYMENT_METHOD_COLORS.Others,
     };
   }

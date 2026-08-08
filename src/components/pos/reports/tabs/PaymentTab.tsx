@@ -46,8 +46,8 @@ export function PaymentTab({
   }, [summaryData]);
 
   const paymentChartConfig = useMemo(
-    () => buildPaymentChartConfig(paymentBreakdown.map((p) => p.name), isBn),
-    [paymentBreakdown, isBn],
+    () => buildPaymentChartConfig(paymentBreakdown.map((p) => p.name), isBn, t),
+    [paymentBreakdown, isBn, t],
   );
 
   return (

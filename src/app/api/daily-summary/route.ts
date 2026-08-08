@@ -106,9 +106,10 @@ export async function GET(request: NextRequest) {
     const totalSalesCount = todaySales.length;
     const avgOrderValue = totalSalesCount > 0 ? totalSalesAmount / totalSalesCount : 0;
 
-    const paymentBreakdown = {
+    const paymentBreakdown: Record<string, { amount: number; count: number }> = {
       নগদ: { amount: 0, count: 0 },
       ইউপিআই: { amount: 0, count: 0 },
+      মিশ্র: { amount: 0, count: 0 },
       বাকি: { amount: 0, count: 0 },
     };
 
@@ -117,17 +118,8 @@ export async function GET(request: NextRequest) {
       const totalAmt = Number(Number(sale.totalAmount));
       
       if (method === 'Mixed' || (sale.cashAmount != null && sale.upiAmount != null)) {
-        const cashAmt = Number(sale.cashAmount || 0);
-        const upiAmt = Number(sale.upiAmount || 0);
-        
-        if (cashAmt > 0) {
-          paymentBreakdown['নগদ'].amount += cashAmt;
-          paymentBreakdown['নগদ'].count += 1; // Counted once for cash
-        }
-        if (upiAmt > 0) {
-          paymentBreakdown['ইউপিআই'].amount += upiAmt;
-          paymentBreakdown['ইউপিআই'].count += 1; // Counted once for UPI
-        }
+        paymentBreakdown['মিশ্র'].amount += totalAmt;
+        paymentBreakdown['মিশ্র'].count += 1;
       } else {
         let bnMethod: 'নগদ' | 'ইউপিআই' | 'বাকি' = 'নগদ';
         if (method === 'Cash') bnMethod = 'নগদ';

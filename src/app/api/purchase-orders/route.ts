@@ -481,30 +481,114 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    let nextDeliveryStatus = 'Pending';
+    let updated: any;
+
     if (status === 'অর্ডার করা' && order.deliveryStatus === 'Pending') {
-      nextDeliveryStatus = 'Ordered';
-    } else if (status === 'বাতিল' && (order.deliveryStatus === 'Pending' || order.deliveryStatus === 'Ordered')) {
-      nextDeliveryStatus = 'Cancelled';
+      updated = await db.purchase.update({
+        where: { id },
+        data: { deliveryStatus: 'Ordered' },
+        include: {
+          supplier: true,
+          items: {
+            include: {
+              product: { select: { id: true, name: true, nameBn: true, unit: true } },
+            },
+          },
+        },
+      });
+    } else if (status === 'বাতিল') {
+      if (order.deliveryStatus === 'Pending' || order.deliveryStatus === 'Ordered') {
+        updated = await db.purchase.update({
+          where: { id },
+          data: {
+            deliveryStatus: 'Cancelled',
+            paymentStatus: 'Cancelled',
+          },
+          include: {
+            supplier: true,
+            items: {
+              include: {
+                product: { select: { id: true, name: true, nameBn: true, unit: true } },
+              },
+            },
+          },
+        });
+      } else if (order.deliveryStatus === 'Received' || order.deliveryStatus === 'PartiallyReceived') {
+        updated = await db.$transaction(async (tx) => {
+          // Revert product stocks based on StockHistory entries
+          const stockEntries = await tx.stockHistory.findMany({
+            where: { purchaseId: order.id, changeType: 'purchase' },
+          });
+
+          for (const entry of stockEntries) {
+            const qty = Number(entry.quantity);
+            if (qty > 0) {
+              await tx.product.update({
+                where: { id: entry.productId },
+                data: {
+                  currentStock: { decrement: qty },
+                  updatedAt: new Date(),
+                },
+              });
+
+              // Create negative stock history entry for trail
+              await tx.stockHistory.create({
+                data: {
+                  productId: entry.productId,
+                  changeType: 'adjustment',
+                  quantity: -qty,
+                  reason: `Purchase Order Cancelled: ${order.invoiceNumber}`,
+                  referenceId: order.id,
+                  purchaseId: order.id,
+                  createdAt: new Date(),
+                },
+              });
+            }
+          }
+
+          // Search and find active Expense records related to this PO and mark them as inactive
+          if (order.invoiceNumber) {
+            await tx.expense.updateMany({
+              where: {
+                supplierId: order.supplierId,
+                category: 'Supplier Payment',
+                notes: { contains: order.invoiceNumber },
+                isActive: true,
+              },
+              data: { isActive: false },
+            });
+          }
+
+          // Revert purchase order status and set paidAmount to 0
+          return await tx.purchase.update({
+            where: { id },
+            data: {
+              deliveryStatus: 'Cancelled',
+              paymentStatus: 'Cancelled',
+              paidAmount: 0,
+            },
+            include: {
+              supplier: true,
+              items: {
+                include: {
+                  product: { select: { id: true, name: true, nameBn: true, unit: true } },
+                },
+              },
+            },
+          });
+        });
+      } else {
+        return NextResponse.json(
+          { success: false, error: 'অর্ডারটি ইতিমধ্যে বাতিল করা হয়েছে' },
+          { status: 400 }
+        );
+      }
     } else {
       return NextResponse.json(
         { success: false, error: 'এই অবস্থা পরিবর্তন অনুমোদিত নয়' },
         { status: 400 }
       );
     }
-
-    const updated = await db.purchase.update({
-      where: { id },
-      data: { deliveryStatus: nextDeliveryStatus },
-      include: {
-        supplier: true,
-        items: {
-          include: {
-            product: { select: { id: true, name: true, nameBn: true, unit: true } },
-          },
-        },
-      },
-    });
 
     const user = await getAuthenticatedUser(request);
     await logAudit({
@@ -542,7 +626,7 @@ export async function PUT(request: NextRequest) {
         name: updated.supplier.name,
         phone: updated.supplier.phone,
       } : null,
-      items: updated.items.map((item) => ({
+      items: updated.items.map((item: any) => ({
         id: item.id,
         purchaseOrderId: updated.id,
         productId: item.productId,

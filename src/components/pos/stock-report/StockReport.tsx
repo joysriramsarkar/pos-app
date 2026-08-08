@@ -15,6 +15,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
 import { useTranslations } from 'next-intl';
 import { useNumberFormat } from '@/hooks/use-number-format';
+import { translateUnit } from '@/lib/receipt-i18n';
 
 type StockFilterStatus = 'All' | 'Low' | 'Out' | 'In';
 
@@ -25,7 +26,7 @@ interface StockReportProps {
 export function StockReport({ onBack }: StockReportProps) {
   const t = useTranslations('Reports');
   const tStock = useTranslations('Stock');
-  const { formatPrice, formatNumber, formatStringNumbers, formatCompactUnit } = useNumberFormat();
+  const { formatPrice, formatNumber, formatStringNumbers, formatCompactUnit, isBn } = useNumberFormat();
 
   const stockChartConfig: ChartConfig = {
     stock: { label: t('current_stock'), color: 'var(--chart-5)' },
@@ -180,7 +181,18 @@ export function StockReport({ onBack }: StockReportProps) {
 
   const handleDownloadCSV = () => {
     if (!filteredProducts.length) return;
-    const header = ['Product Name', 'Barcode', 'Category', 'Stock Qty', 'Unit', 'Min Level', 'Buying Price', 'Selling Price', 'Cost Valuation', 'Retail Valuation'];
+    const header = [
+      tStock('csv_product_name'),
+      tStock('csv_barcode'),
+      tStock('csv_category'),
+      tStock('csv_stock_qty'),
+      tStock('csv_unit'),
+      tStock('csv_min_level'),
+      tStock('csv_buying_price'),
+      tStock('csv_selling_price'),
+      tStock('csv_cost_valuation'),
+      tStock('csv_retail_valuation'),
+    ];
     const rows = [
       header,
       ...filteredProducts.map((p) => {
@@ -192,7 +204,7 @@ export function StockReport({ onBack }: StockReportProps) {
           p.barcode || '',
           p.category || '',
           stock,
-          p.unit || 'pcs',
+          translateUnit(p.unit, isBn ? 'bn' : 'en') || (isBn ? 'টি' : 'pcs'),
           p.minStockLevel || 0,
           buy.toFixed(2),
           sell.toFixed(2),
@@ -225,9 +237,9 @@ export function StockReport({ onBack }: StockReportProps) {
           <div>
             <h1 className="text-xl font-bold flex items-center gap-2">
               <Package className="w-5 h-5 text-indigo-500" />
-              {tStock('title') || 'Stock Valuation Report'}
+              {tStock('title')}
             </h1>
-            <p className="text-muted-foreground text-xs">{tStock('detailed_desc') || 'Advanced stock level metrics & inventory cost valuations'}</p>
+            <p className="text-muted-foreground text-xs">{tStock('detailed_desc')}</p>
           </div>
         </div>
         <Button size="sm" variant="outline" className="gap-1.5 text-xs h-9" onClick={handleDownloadCSV} disabled={!filteredProducts.length}>
@@ -239,28 +251,28 @@ export function StockReport({ onBack }: StockReportProps) {
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <Card className="rounded-2xl shadow-sm bg-indigo-50/50 dark:bg-indigo-950/10 border-indigo-100 dark:border-indigo-900/30">
           <CardContent className="p-3.5 flex flex-col justify-between h-full">
-            <p className="text-[10px] uppercase font-bold text-indigo-600 tracking-wider">{tStock('total_stock_value') || 'Valuation (Cost)'}</p>
+            <p className="text-[10px] uppercase font-bold text-indigo-600 tracking-wider">{tStock('total_stock_value')}</p>
             <p className="text-lg md:text-xl font-extrabold text-indigo-700 mt-1">{formatPrice(stats.totalStockValueAtCost)}</p>
           </CardContent>
         </Card>
 
         <Card className="rounded-2xl shadow-sm bg-emerald-50/50 dark:bg-emerald-950/10 border-emerald-100 dark:border-emerald-900/30">
           <CardContent className="p-3.5 flex flex-col justify-between h-full">
-            <p className="text-[10px] uppercase font-bold text-emerald-600 tracking-wider">{tStock('total_retail_value') || 'Valuation (Retail)'}</p>
+            <p className="text-[10px] uppercase font-bold text-emerald-600 tracking-wider">{tStock('total_retail_value')}</p>
             <p className="text-lg md:text-xl font-extrabold text-emerald-700 mt-1">{formatPrice(stats.totalStockValueAtRetail)}</p>
           </CardContent>
         </Card>
 
         <Card className="rounded-2xl shadow-sm bg-amber-50/50 dark:bg-amber-950/10 border-amber-100 dark:border-amber-900/30">
           <CardContent className="p-3.5 flex flex-col justify-between h-full">
-            <p className="text-[10px] uppercase font-bold text-amber-600 tracking-wider">{tStock('potential_profit') || 'Potential Profit'}</p>
+            <p className="text-[10px] uppercase font-bold text-amber-600 tracking-wider">{tStock('potential_profit')}</p>
             <p className="text-lg md:text-xl font-extrabold text-amber-700 mt-1">{formatPrice(stats.potentialProfit)}</p>
           </CardContent>
         </Card>
 
         <Card className="rounded-2xl shadow-sm bg-red-50/50 dark:bg-red-950/10 border-red-100 dark:border-red-900/30 animate-pulse">
           <CardContent className="p-3.5 flex flex-col justify-between h-full">
-            <p className="text-[10px] uppercase font-bold text-red-600 tracking-wider">{tStock('low_stock') || 'Low / Out of Stock'}</p>
+            <p className="text-[10px] uppercase font-bold text-red-600 tracking-wider">{tStock('low_stock')}</p>
             <p className="text-lg md:text-xl font-extrabold text-red-700 mt-1">
               {formatStringNumbers(stats.lowStockCount)} / {formatStringNumbers(stats.outOfStockCount)}
             </p>
@@ -269,8 +281,8 @@ export function StockReport({ onBack }: StockReportProps) {
 
         <Card className="rounded-2xl shadow-sm">
           <CardContent className="p-3.5 flex flex-col justify-between h-full">
-            <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">{tStock('items') || 'Total Active Products'}</p>
-            <p className="text-lg md:text-xl font-extrabold mt-1">{formatNumber(stats.activeProductsCount)} items</p>
+            <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">{tStock('total_active_products')}</p>
+            <p className="text-lg md:text-xl font-extrabold mt-1">{tStock('items_count', { count: formatNumber(stats.activeProductsCount) })}</p>
           </CardContent>
         </Card>
       </div>
@@ -309,7 +321,7 @@ export function StockReport({ onBack }: StockReportProps) {
               <TableHeader>
                 <TableRow>
                   <TableHead className="text-xs">{t('tab_categories')}</TableHead>
-                  <TableHead className="text-right text-xs">{tStock('items') || 'Items'}</TableHead>
+                  <TableHead className="text-right text-xs">{tStock('items')}</TableHead>
                   <TableHead className="text-right text-xs">{t('cost_val')}</TableHead>
                 </TableRow>
               </TableHeader>
@@ -335,7 +347,7 @@ export function StockReport({ onBack }: StockReportProps) {
         {/* Stock List table search and filters */}
         <Card className="rounded-2xl shadow-sm col-span-1 lg:col-span-2">
           <CardHeader className="pb-2 flex flex-row items-center justify-between flex-wrap gap-2">
-            <CardTitle className="text-sm font-semibold">{tStock('all_items') || 'Product Stock Ledger'}</CardTitle>
+            <CardTitle className="text-sm font-semibold">{tStock('all_items')}</CardTitle>
             <div className="flex items-center gap-1.5 flex-wrap">
               <div className="relative h-8 w-36">
                 <Search className="absolute left-2 top-2 h-3.5 w-3.5 text-muted-foreground" />
@@ -349,7 +361,7 @@ export function StockReport({ onBack }: StockReportProps) {
               <Select value={filterCategory} onValueChange={setFilterCategory}>
                 <SelectTrigger className="h-8 text-[11px] w-24"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="All">All Category</SelectItem>
+                  <SelectItem value="All">{tStock('all_categories')}</SelectItem>
                   {categories.map((c) => (
                     <SelectItem key={c} value={c}>{c}</SelectItem>
                   ))}
@@ -358,10 +370,10 @@ export function StockReport({ onBack }: StockReportProps) {
               <Select value={filterStatus} onValueChange={(v) => setFilterStatus(v as StockFilterStatus)}>
                 <SelectTrigger className="h-8 text-[11px] w-24"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="All">All Status</SelectItem>
-                  <SelectItem value="In">In Stock</SelectItem>
-                  <SelectItem value="Low">Low Stock</SelectItem>
-                  <SelectItem value="Out">Out of Stock</SelectItem>
+                  <SelectItem value="All">{tStock('all_status')}</SelectItem>
+                  <SelectItem value="In">{tStock('in_stock')}</SelectItem>
+                  <SelectItem value="Low">{tStock('low_stock_badge')}</SelectItem>
+                  <SelectItem value="Out">{tStock('out_of_stock')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -371,11 +383,11 @@ export function StockReport({ onBack }: StockReportProps) {
               <Table>
                 <TableHeader className="sticky top-0 bg-background z-10 shadow-sm">
                   <TableRow>
-                    <TableHead className="text-xs">Product</TableHead>
-                    <TableHead className="text-right text-xs">Stock</TableHead>
-                    <TableHead className="text-right text-xs">Cost Price</TableHead>
-                    <TableHead className="text-right text-xs">Retail Price</TableHead>
-                    <TableHead className="text-right text-xs">Status</TableHead>
+                    <TableHead className="text-xs">{t('product')}</TableHead>
+                    <TableHead className="text-right text-xs">{t('stock')}</TableHead>
+                    <TableHead className="text-right text-xs">{tStock('table_cost_price')}</TableHead>
+                    <TableHead className="text-right text-xs">{tStock('table_retail_price')}</TableHead>
+                    <TableHead className="text-right text-xs">{t('status')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -394,11 +406,11 @@ export function StockReport({ onBack }: StockReportProps) {
                       const buy = Number(p.buyingPrice || 0);
                       const sell = Number(p.sellingPrice || 0);
                       
-                      let statusBadge = <Badge className="bg-emerald-500 hover:bg-emerald-600 text-[10px]">In Stock</Badge>;
+                      let statusBadge = <Badge className="bg-emerald-500 hover:bg-emerald-600 text-[10px]">{tStock('in_stock')}</Badge>;
                       if (stock === 0) {
-                        statusBadge = <Badge variant="destructive" className="text-[10px]">Out of Stock</Badge>;
+                        statusBadge = <Badge variant="destructive" className="text-[10px]">{tStock('out_of_stock')}</Badge>;
                       } else if (stock <= minLevel) {
-                        statusBadge = <Badge className="bg-amber-500 hover:bg-amber-600 text-[10px]">Low Stock</Badge>;
+                        statusBadge = <Badge className="bg-amber-500 hover:bg-amber-600 text-[10px]">{tStock('low_stock_badge')}</Badge>;
                       }
                       
                       return (
@@ -408,7 +420,7 @@ export function StockReport({ onBack }: StockReportProps) {
                             {p.nameBn && <p className="text-[10px] text-muted-foreground">{p.nameBn}</p>}
                           </TableCell>
                           <TableCell className={`text-right text-xs font-semibold ${stock === 0 ? 'text-red-500' : stock <= minLevel ? 'text-amber-500' : ''}`}>
-                            {formatNumber(stock)} <span className="text-[10px] text-muted-foreground font-normal">{p.unit || 'pcs'}</span>
+                            {formatNumber(stock)} <span className="text-[10px] text-muted-foreground font-normal">{translateUnit(p.unit, isBn ? 'bn' : 'en') || (isBn ? 'টি' : 'pcs')}</span>
                           </TableCell>
                           <TableCell className="text-right text-xs">{formatPrice(buy)}</TableCell>
                           <TableCell className="text-right text-xs">{formatPrice(sell)}</TableCell>
