@@ -5,6 +5,7 @@ import type { Sale, PrintFormat } from "@/types/pos";
 import type { PrintInvoiceProps } from './types-and-utils';
 import { ThermalInvoice } from './ThermalInvoice';
 import { StandardInvoice } from './StandardInvoice';
+import { useTranslations } from 'next-intl';
 
 export type { PrintInvoiceProps } from './types-and-utils';
 
@@ -13,11 +14,13 @@ export function PrintInvoice({
   format,
   showLogo = true,
   showGst = false,
-  footerMessage = "This is a computer generated invoice.",
+  footerMessage,
   className = "",
   storeConfig,
 }: PrintInvoiceProps) {
   const invoiceRef = React.useRef<HTMLDivElement>(null);
+  const tc = useTranslations('Common');
+  const effectiveFooter = footerMessage ?? tc('invoice_footer_default');
 
   const renderInvoice = () => {
     switch (format) {
@@ -27,7 +30,7 @@ export function PrintInvoice({
             sale={sale}
             width="58mm"
             showLogo={showLogo}
-            footerMessage={footerMessage}
+            footerMessage={effectiveFooter}
             storeConfig={storeConfig}
           />
         );
@@ -37,7 +40,7 @@ export function PrintInvoice({
             sale={sale}
             width="80mm"
             showLogo={showLogo}
-            footerMessage={footerMessage}
+            footerMessage={effectiveFooter}
             storeConfig={storeConfig}
           />
         );
@@ -48,7 +51,7 @@ export function PrintInvoice({
             size="A4"
             showLogo={showLogo}
             showGst={showGst}
-            footerMessage={footerMessage}
+            footerMessage={effectiveFooter}
             storeConfig={storeConfig}
           />
         );

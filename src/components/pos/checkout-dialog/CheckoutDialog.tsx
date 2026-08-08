@@ -223,12 +223,12 @@ export function CheckoutDialog({
     const pAmt = Number(prepaymentAmount) || 0;
     const dAmt = Number(debtRepaymentAmount) || 0;
     if (pAmt + dAmt > Math.max(0, change)) {
-      setInputError(t('allocation_exceeds_change') || 'Allocation exceeds change amount');
+      setInputError(t('allocation_exceeds_change'));
       return;
     }
 
     if (customer && dAmt > toMoneyNumber(customer.totalDue)) {
-      setInputError(t('repayment_exceeds_due', { max: formatPrice(toMoneyNumber(customer.totalDue)) }) || `Debt repayment cannot exceed customer's outstanding due balance of ${formatPrice(toMoneyNumber(customer.totalDue))}`);
+      setInputError(t('repayment_exceeds_due', { max: formatPrice(toMoneyNumber(customer.totalDue)) }));
       return;
     }
 

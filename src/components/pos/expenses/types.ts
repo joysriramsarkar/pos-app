@@ -29,6 +29,7 @@ export interface Expense {
   date: string | Date;
   supplierId?: string | null;
   supplierName?: string | null;
+  supplierNameEn?: string | null;
   isActive?: boolean;
   createdAt?: string | Date;
 }

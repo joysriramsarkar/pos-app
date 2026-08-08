@@ -189,19 +189,19 @@ export function PartiesManagement({ refreshKey }: PartiesManagementProps = {}) {
         <div className="flex overflow-x-auto snap-x gap-2 mb-3 md:mb-4 scrollbar-none md:grid md:grid-cols-3 md:overflow-visible">
           <Card className="bg-muted/50 min-w-[7.5rem] snap-start shrink-0 md:min-w-0 md:shrink">
             <CardContent className="p-2.5 md:p-3">
-              <p className="text-[10px] md:text-xs text-muted-foreground line-clamp-2 leading-tight">{activeTab === 'customer' ? t('total_due') : t('total_due_supplier') || 'মোট বকেয়া (সাপ্লায়ার)'}</p>
+              <p className="text-[10px] md:text-xs text-muted-foreground line-clamp-2 leading-tight">{activeTab === 'customer' ? t('total_due') : t('total_due_supplier')}</p>
               <p className="text-base md:text-lg font-bold text-red-600 tabular-nums">{formatPrice(activeTab === 'customer' ? totalDue : totalSupplierDue)}</p>
             </CardContent>
           </Card>
           <Card className="bg-muted/50 min-w-[7.5rem] snap-start shrink-0 md:min-w-0 md:shrink">
             <CardContent className="p-2.5 md:p-3">
-              <p className="text-[10px] md:text-xs text-muted-foreground line-clamp-2 leading-tight">{activeTab === 'customer' ? t('customers_with_due') : t('suppliers_with_due') || 'বকেয়া আছে এমন সাপ্লায়ার'}</p>
+              <p className="text-[10px] md:text-xs text-muted-foreground line-clamp-2 leading-tight">{activeTab === 'customer' ? t('customers_with_due') : t('suppliers_with_due')}</p>
               <p className="text-base md:text-lg font-bold tabular-nums">{formatNumber(activeTab === 'customer' ? customersWithDue : suppliersWithDue)}</p>
             </CardContent>
           </Card>
           <Card className="bg-muted/50 min-w-[7.5rem] snap-start shrink-0 md:min-w-0 md:shrink">
             <CardContent className="p-2.5 md:p-3">
-              <p className="text-[10px] md:text-xs text-muted-foreground line-clamp-2 leading-tight">{activeTab === 'customer' ? t('total_customers') : t('total_suppliers') || 'মোট সাপ্লায়ার'}</p>
+              <p className="text-[10px] md:text-xs text-muted-foreground line-clamp-2 leading-tight">{activeTab === 'customer' ? t('total_customers') : t('total_suppliers')}</p>
               <p className="text-base md:text-lg font-bold tabular-nums">{formatNumber(activeTab === 'customer' ? customers.filter(c => c.isActive).length : suppliers.filter(s => s.isActive).length)}</p>
             </CardContent>
           </Card>
@@ -213,10 +213,10 @@ export function PartiesManagement({ refreshKey }: PartiesManagementProps = {}) {
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as PartyType)}>
           <TabsList className="w-full rounded-none bg-transparent h-12">
             <TabsTrigger value="customer" className="flex-1 data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none font-bold">
-              {t('customers_tab') || 'Customers'} ({formatNumber(filteredCustomers.length)})
+              {t('customers_tab')} ({formatNumber(filteredCustomers.length)})
             </TabsTrigger>
             <TabsTrigger value="supplier" className="flex-1 data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none font-bold">
-              {t('suppliers_tab') || 'Suppliers'} ({formatNumber(filteredSuppliers.length)})
+              {t('suppliers_tab')} ({formatNumber(filteredSuppliers.length)})
             </TabsTrigger>
           </TabsList>
         </Tabs>

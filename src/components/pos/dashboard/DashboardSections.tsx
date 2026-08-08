@@ -41,6 +41,7 @@ import type { StatsData, ComparisonResult } from './types';
 import type { Transaction } from '@/components/pos/transaction-history/types';
 import { getGreetingPeriod } from './utils';
 import { useNumberFormat } from '@/hooks/use-number-format';
+import { useTranslations } from 'next-intl';
 
 interface GreetingHeaderProps {
   greeting: string;
@@ -460,6 +461,7 @@ export function LowStockAndTransactions({
   isBn = false,
 }: LowStockAndTransactionsProps) {
   const { formatNumber } = useNumberFormat();
+  const tc = useTranslations('Common');
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-stagger-in" style={{ animationDelay: '0.45s' }}>
       <Card className="shadow-md">
@@ -502,7 +504,7 @@ export function LowStockAndTransactions({
                           ? labels.outOfStock
                           : `${formatNumber(product.currentStock)} ${labels.left}`}
                         {typeof product.soldLast7 === 'number' && product.soldLast7 > 0
-                          ? ` · 7d: ${formatNumber(product.soldLast7)}`
+                          ? ` · ${tc('last_7_days_short')} ${formatNumber(product.soldLast7)}`
                           : ''}
                       </p>
                     </div>

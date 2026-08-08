@@ -171,7 +171,7 @@ export function DueCollection() {
           customerId: selectedCustomer.id,
           amount,
           paymentMethod: paymentMethod, // English codes for API/ledger
-          notes: finalNotes || `Due collection (${methodLabel})`,
+          notes: finalNotes || t('due_collection_note', { method: methodLabel }),
         }),
       });
       const data = await res.json();

@@ -22,6 +22,7 @@ export interface Transaction {
   customer?: {
     id: string;
     name: string;
+    nameEn?: string | null;
     phone?: string;
   };
   user?: {

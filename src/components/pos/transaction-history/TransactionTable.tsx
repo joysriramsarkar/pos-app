@@ -13,6 +13,7 @@ import { Download, Clock, User } from 'lucide-react';
 import { format } from 'date-fns';
 import { useNumberFormat } from '@/hooks/use-number-format';
 import { useTranslations } from 'next-intl';
+import { useLocale } from 'next-intl';
 import { getStatusColor, getPaymentStatusColor } from './utils';
 import { Transaction } from './types';
 
@@ -30,6 +31,9 @@ export function TransactionTable({
   const { formatPrice: formatPriceBengali } = useNumberFormat();
   const t = useTranslations('TransactionHistory');
   const tc = useTranslations('Common');
+  const locale = useLocale();
+  const getCustomerName = (customer: Transaction['customer']) =>
+    locale === 'en' && customer?.nameEn ? customer.nameEn : customer?.name;
 
   // Create a Bengali-aware price formatter
   const displayPrice = (price: number | null | undefined) => {
@@ -103,7 +107,7 @@ export function TransactionTable({
                   {transaction.invoiceNumber}
                 </span>
                 <span className="text-sm font-medium truncate mt-0.5">
-                  {transaction.customer?.name || t('walk_in_customer')}
+                  {getCustomerName(transaction.customer) || t('walk_in_customer')}
                 </span>
               </div>
               <div className="flex flex-col items-end shrink-0">
@@ -175,7 +179,7 @@ export function TransactionTable({
                 <TableCell className="py-2 min-w-0">
                   {transaction.customer ? (
                     <div className="flex flex-col">
-                      <span className="font-medium text-sm truncate">{transaction.customer.name}</span>
+                      <span className="font-medium text-sm truncate">{getCustomerName(transaction.customer)}</span>
                       {transaction.customer.phone && (
                         <span className="text-xs text-muted-foreground truncate">{transaction.customer.phone}</span>
                       )}

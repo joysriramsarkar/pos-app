@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
       prisma.expense.findMany({
         where,
         orderBy: { date: "desc" },
-        include: { supplier: { select: { id: true, name: true } } },
+        include: { supplier: { select: { id: true, name: true, nameEn: true } } },
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
@@ -79,6 +79,7 @@ export async function GET(request: NextRequest) {
     const data = expenses.map(e => ({
       ...e,
       supplierName: e.supplier?.name ?? e.supplierName ?? null,
+      supplierNameEn: e.supplier?.nameEn ?? null,
     }));
 
     return NextResponse.json({ success: true, data, total, page, pageSize });

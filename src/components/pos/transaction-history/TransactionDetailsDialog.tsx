@@ -26,6 +26,7 @@ import { useSettingsStore } from "@/stores/settings-store";
 import { useIsAdmin } from "@/hooks/use-permissions";
 import { useToast } from '@/hooks/use-toast';
 import { useTranslations } from 'next-intl';
+import { useLocale } from 'next-intl';
 import { useNumberFormat } from "@/hooks/use-number-format";
 import { PrintDialog } from "../PrintDialog";
 
@@ -52,12 +53,17 @@ export function TransactionDetailsDialog({
   const t = useTranslations('TransactionDetails');
   const tc = useTranslations('Common');
   const th = useTranslations('TransactionHistory');
+  const locale = useLocale();
 
   useEffect(() => {
     if (isOpen) preloadPdfLibs();
   }, [isOpen]);
 
   if (!transaction) return null;
+
+  const customerName = locale === 'en' && transaction.customer?.nameEn
+    ? transaction.customer.nameEn
+    : transaction.customer?.name;
 
   const storeConfig = {
     name: settings.store_name || "Lakhan Bhandar",
@@ -216,7 +222,7 @@ export function TransactionDetailsDialog({
                     {t('customer')}
                   </div>
                   <div className="font-semibold text-base md:text-lg mt-1">
-                    {transaction.customer?.name || t('walk_in')}
+                    {customerName || t('walk_in')}
                   </div>
                 </CardContent>
               </Card>

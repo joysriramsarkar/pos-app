@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import {
-  Plus, Truck, UserPlus, Check, ChevronsUpDown,
+  Plus, Truck, UserPlus, Check, ChevronsUpDown, Loader2,
 } from 'lucide-react';
 import { convertBengaliToEnglishNumerals, cn } from '@/lib/utils';
 import { useTranslations } from 'next-intl';
@@ -268,7 +268,7 @@ export function ExpenseForm({
           );
         })()}
         <Button className="w-full h-9 bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600" onClick={onAddExpense} disabled={isLoading || !amount}>
-          <Plus className="w-4 h-4 mr-2" /> {t('add')}
+          {isLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Plus className="w-4 h-4 mr-2" />} {t('add')}
         </Button>
       </CardContent>
     </Card>

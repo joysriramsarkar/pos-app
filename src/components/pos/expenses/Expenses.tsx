@@ -256,10 +256,10 @@ export function Expenses({ onReport }: ExpensesProps) {
         setSupplierId('');
         fetchExpenses();
       } else {
-        toast({ title: 'Error', description: 'Failed to add expense.', variant: 'destructive' });
+        toast({ title: tc('error'), description: t('failed_add'), variant: 'destructive' });
       }
     } catch {
-      toast({ title: 'Error', description: 'Failed to add expense.', variant: 'destructive' });
+      toast({ title: tc('error'), description: t('failed_add'), variant: 'destructive' });
     } finally {
       setIsLoading(false);
     }
@@ -285,10 +285,10 @@ export function Expenses({ onReport }: ExpensesProps) {
         setSupplierId('');
         fetchExpenses();
       } else {
-        toast({ title: 'Error', description: 'Failed to add expense.', variant: 'destructive' });
+        toast({ title: tc('error'), description: t('failed_add'), variant: 'destructive' });
       }
     } catch {
-      toast({ title: 'Error', description: 'Failed to add expense.', variant: 'destructive' });
+      toast({ title: tc('error'), description: t('failed_add'), variant: 'destructive' });
     } finally {
       setIsLoading(false);
       setShowSupplierDuePrompt(false);
@@ -311,7 +311,7 @@ export function Expenses({ onReport }: ExpensesProps) {
         setSupplierId(data.id);
         setNewSupplierName('');
         setShowAddSupplier(false);
-        toast({ title: t('supplier_added'), description: `"${data.name}" যোগ করা হয়েছে।` });
+        toast({ title: t('supplier_added'), description: t('supplier_added_desc', { name: data.name }) });
       } else {
         toast({ title: 'Error', variant: 'destructive' });
       }
@@ -378,10 +378,10 @@ export function Expenses({ onReport }: ExpensesProps) {
         setEditCashAmount('');
         setEditUpiAmount('');
       } else {
-        toast({ title: 'Error', description: 'Failed to update expense.', variant: 'destructive' });
+        toast({ title: tc('error'), description: t('failed_update'), variant: 'destructive' });
       }
     } catch {
-      toast({ title: 'Error', description: 'Failed to update expense.', variant: 'destructive' });
+      toast({ title: tc('error'), description: t('failed_update'), variant: 'destructive' });
     } finally {
       setIsSavingEdit(false);
     }
@@ -406,11 +406,11 @@ export function Expenses({ onReport }: ExpensesProps) {
   const handleExportCSV = () => {
     try {
       const headers = [
-        { key: 'category', label: 'ক্যাটাগরি' },
-        { key: 'amount', label: 'পরিমাণ' },
-        { key: 'supplier', label: 'সাপ্লায়ার' },
-        { key: 'notes', label: 'নোট' },
-        { key: 'date', label: 'তারিখ' },
+        { key: 'category', label: tc('category') },
+        { key: 'amount', label: tc('amount') },
+        { key: 'supplier', label: tc('supplier') },
+        { key: 'notes', label: tc('notes') },
+        { key: 'date', label: tc('date') },
       ];
       const exportData = filteredExpenses.map((e) => ({
         category: getCategoryBn(e.category),
@@ -460,7 +460,7 @@ export function Expenses({ onReport }: ExpensesProps) {
           totalEntries: `${tc('total')} ${t('entries')}`,
           highestCategory: t('highest_category'),
           avgEntry: t('avg_entry'),
-          categoryBreakdown: 'ক্যাটাগরি বিভাজন',
+          categoryBreakdown: t('category_breakdown'),
         }}
       />
 
@@ -619,33 +619,34 @@ export function Expenses({ onReport }: ExpensesProps) {
       {/* ৯১খ: সাপ্লায়ার due prompt */}
       <AlertDialog open={showSupplierDuePrompt} onOpenChange={(open) => { if (!open) { setShowSupplierDuePrompt(false); setPendingExpensePayload(null); } }}>
         <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>সাপ্লায়ার পেমেন্ট</AlertDialogTitle>
-            <AlertDialogDescription>
-              <strong>{pendingSupplierName}</strong>-এর কাছে বর্তমানে{' '}
-              <strong className="text-red-600">{formatPrice(pendingSupplierDue)}</strong> বকেয়া আছে।
-              <br /><br />
-              এই পেমেন্টটি কি পূর্বের বাকির পরিশোধ, নাকি নতুন পেমেন্ট?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="flex-col sm:flex-row gap-2">
-            <AlertDialogCancel onClick={() => { setShowSupplierDuePrompt(false); setPendingExpensePayload(null); }}>
-              বাতিল
-            </AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-orange-600 hover:bg-orange-700 text-white"
-              onClick={() => doAddExpenseFromPayload(false)}
-            >
-              নতুন পেমেন্ট
-            </AlertDialogAction>
-            <AlertDialogAction
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
-              onClick={() => doAddExpenseFromPayload(true)}
-            >
-              পূর্বের বাকির পরিশোধ
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{t('supplier_payment_title')}</AlertDialogTitle>
+              <AlertDialogDescription>
+                <strong>{pendingSupplierName}</strong>-এর কাছে বর্তমানে{' '}
+                <strong className="text-red-600">{formatPrice(pendingSupplierDue)}</strong>{' '}
+                {t('supplier_due_exists')}
+                <br /><br />
+                {t('supplier_due_question')}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+              <AlertDialogCancel onClick={() => { setShowSupplierDuePrompt(false); setPendingExpensePayload(null); }}>
+                {tc('cancel')}
+              </AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-orange-600 hover:bg-orange-700 text-white"
+                onClick={() => doAddExpenseFromPayload(false)}
+              >
+                {t('new_payment')}
+              </AlertDialogAction>
+              <AlertDialogAction
+                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                onClick={() => doAddExpenseFromPayload(true)}
+              >
+                {t('previous_due_repayment')}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
       </AlertDialog>
     </div>
   );

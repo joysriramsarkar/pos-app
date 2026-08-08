@@ -160,7 +160,7 @@ async function handleGet(request: NextRequest, _ctx: RouteContext) {
               product: { select: { unit: true } },
             },
           },
-          customer: { select: { id: true, name: true, phone: true } },
+          customer: { select: { id: true, name: true, nameEn: true, phone: true } },
           user: { select: { id: true, name: true, username: true } },
         },
         orderBy: { createdAt: "desc" },

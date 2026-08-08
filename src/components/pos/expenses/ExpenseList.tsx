@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Pencil, Trash2, Receipt, Truck } from 'lucide-react';
 import { useTranslations } from 'next-intl';
+import { useLocale } from 'next-intl';
 import { CATEGORY_CONFIG, type Expense } from './types';
 
 export interface ExpenseListProps {
@@ -28,6 +29,9 @@ export function ExpenseList({
   formatPrice,
 }: ExpenseListProps) {
   const t = useTranslations('Expenses');
+  const locale = useLocale();
+  const getSupplierName = (exp: Expense) =>
+    locale === 'en' && exp.supplierNameEn ? exp.supplierNameEn : exp.supplierName;
 
   return (
     <Card className="col-span-1 lg:col-span-2 rounded-2xl shadow-sm border border-border/50 flex flex-col h-fit lg:h-full lg:min-h-[350px]">
@@ -53,7 +57,7 @@ export function ExpenseList({
                       <p className="font-semibold text-sm truncate">{getCategoryBn(exp.category)}</p>
                       {exp.supplierName && (
                         <p className="text-xs text-emerald-700 dark:text-emerald-400 flex items-center gap-1 mt-0.5 truncate">
-                          <Truck className="w-3 h-3 shrink-0" />{exp.supplierName}
+                          <Truck className="w-3 h-3 shrink-0" />{getSupplierName(exp)}
                         </p>
                       )}
                       {exp.notes && (
@@ -119,7 +123,7 @@ export function ExpenseList({
                     <TableCell className="text-xs text-muted-foreground">
                       {exp.supplierName && (
                         <span className="flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-medium mb-0.5">
-                          <Truck className="w-3.5 h-3.5" />{exp.supplierName}
+                          <Truck className="w-3.5 h-3.5" />{getSupplierName(exp)}
                         </span>
                       )}
                       {exp.notes || '—'}
