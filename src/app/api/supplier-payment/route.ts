@@ -19,25 +19,16 @@ const supplierPaymentSchema = z.object({
 const getIp = (req: NextRequest) => req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || undefined;
 
 function calculateSupplierBalances(supplier: {
-  purchases: { totalAmount: any; paidAmount?: any; paymentStatus?: string }[];
+  purchases: { totalAmount: any }[];
   expenses: { amount: any; notes?: string | null }[];
 }) {
-  let poDue = 0;
   let basePurchases = 0;
-
   for (const p of supplier.purchases) {
-    const total = Number(p.totalAmount);
-    const paid = Number(p.paidAmount || 0);
-    basePurchases += total;
-
-    if (!p.paymentStatus || p.paymentStatus === 'Pending' || p.paymentStatus === 'Partial') {
-      poDue += total - paid;
-    }
+    basePurchases += Number(p.totalAmount);
   }
 
   let extraPurchases = 0;
   let totalPaid = 0;
-  let manualPayments = 0;
 
   for (const e of supplier.expenses) {
     const amount = Number(e.amount);
@@ -45,18 +36,19 @@ function calculateSupplierBalances(supplier: {
 
     const notes = e.notes || '';
     if (notes.startsWith('Paid supplier:')) {
-      manualPayments += amount;
+      // manual payment
     } else if (notes.startsWith('Paid for purchase order:') || notes.startsWith('Paid for direct purchase:')) {
-      // payment for a specific PO, already accounted in paidAmount
+      // PO payment
     } else {
       extraPurchases += amount;
     }
   }
 
-  const totalPurchases = basePurchases + extraPurchases;
-  const totalDue = Math.max(0, poDue - manualPayments);
+  const totalPurchases = Math.round(basePurchases + extraPurchases);
+  const totalPaidRounded = Math.round(totalPaid);
+  const totalDue = totalPurchases - totalPaidRounded;
 
-  return { totalPurchases, totalPaid, totalDue };
+  return { totalPurchases, totalPaid: totalPaidRounded, totalDue };
 }
 
 /**
@@ -81,6 +73,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { supplierId, amount, paymentMethod, cashAmount, upiAmount, notes } = validation.data;
+    const roundedAmount = Math.round(amount);
 
     const result = await db.$transaction(async (tx) => {
       // Load supplier with all unpaid/partial POs
@@ -104,7 +97,7 @@ export async function POST(request: NextRequest) {
         return sum + (Number(p.totalAmount) - Number(p.paidAmount || 0));
       }, 0);
 
-      if (totalPoDue <= 0 && amount > 0) {
+      if (totalPoDue <= 0 && roundedAmount > 0) {
         // No POs to apply against, but still record the payment as expense
         // (manual payment against non-PO debt)
       }
@@ -121,7 +114,7 @@ export async function POST(request: NextRequest) {
       // 1. Create Expense record (for ledger visibility)
       await tx.expense.create({
         data: {
-          amount,
+          amount: roundedAmount,
           category: 'Supplier Payment',
           notes: paymentNotes,
           paymentMethod,
@@ -132,7 +125,7 @@ export async function POST(request: NextRequest) {
       });
 
       // 2. Apply payment against oldest POs (FIFO)
-      let remaining = amount;
+      let remaining = roundedAmount;
       for (const po of supplier.purchases) {
         if (remaining <= 0) break;
 

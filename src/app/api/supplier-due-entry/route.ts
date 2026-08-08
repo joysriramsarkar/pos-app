@@ -17,25 +17,16 @@ const getIp = (req: NextRequest) => req.headers.get('x-forwarded-for') || req.he
 
 // Helper to calculate supplier balances
 function calculateSupplierBalances(supplier: {
-  purchases: { totalAmount: any; paidAmount?: any; paymentStatus?: string }[];
+  purchases: { totalAmount: any }[];
   expenses: { amount: any; notes?: string | null }[];
 }) {
-  let poDue = 0;
   let basePurchases = 0;
-
   for (const p of supplier.purchases) {
-    const total = Number(p.totalAmount);
-    const paid = Number(p.paidAmount || 0);
-    basePurchases += total;
-
-    if (!p.paymentStatus || p.paymentStatus === 'Pending' || p.paymentStatus === 'Partial') {
-      poDue += total - paid;
-    }
+    basePurchases += Number(p.totalAmount);
   }
 
   let extraPurchases = 0;
   let totalPaid = 0;
-  let manualPayments = 0;
 
   for (const e of supplier.expenses) {
     const amount = Number(e.amount);
@@ -43,18 +34,19 @@ function calculateSupplierBalances(supplier: {
 
     const notes = e.notes || '';
     if (notes.startsWith('Paid supplier:')) {
-      manualPayments += amount;
+      // manual payment
     } else if (notes.startsWith('Paid for purchase order:') || notes.startsWith('Paid for direct purchase:')) {
-      // payment for a specific PO
+      // PO payment
     } else {
       extraPurchases += amount;
     }
   }
 
-  const totalPurchases = basePurchases + extraPurchases;
-  const totalDue = poDue - manualPayments;
+  const totalPurchases = Math.round(basePurchases + extraPurchases);
+  const totalPaidRounded = Math.round(totalPaid);
+  const totalDue = totalPurchases - totalPaidRounded;
 
-  return { totalPurchases, totalPaid, totalDue };
+  return { totalPurchases, totalPaid: totalPaidRounded, totalDue };
 }
 
 // POST /api/supplier-due-entry - Manually record a due to a supplier (increase supplier outstanding due/total due)
@@ -87,7 +79,7 @@ export async function POST(request: NextRequest) {
       await tx.purchase.create({
         data: {
           supplierId,
-          totalAmount: amount,
+          totalAmount: Math.round(amount),
           paidAmount: 0,
           paymentStatus: 'Pending',
           deliveryStatus: 'Received',

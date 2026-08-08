@@ -259,7 +259,8 @@ export const useCartStore = create<CartState & CartActions>()(
       getTotal: () => {
         const subtotal = get().getSubtotal();
         const { discount, tax } = get().getActiveTab();
-        return toMoneyNumber(new Decimal(subtotal).minus(new Decimal(discount)).plus(new Decimal(tax)));
+        const rawTotal = new Decimal(subtotal).minus(new Decimal(discount)).plus(new Decimal(tax)).toNumber();
+        return Math.round(rawTotal);
       },
 
       getItemCount: () => {

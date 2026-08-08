@@ -42,8 +42,11 @@ export function usePosProducts(activeUser: any) {
     const loadProducts = async () => {
       const { setProducts, setLoading } = useProductsStore.getState();
       const setOnline = useSyncStore.getState().setOnline;
-
-      setLoading(true);
+      
+      // Only show loader if we don't have products already loaded from cache
+      if (useProductsStore.getState().products.length === 0) {
+        setLoading(true);
+      }
       try {
         const { fetchAllProductsFromApi, isAbortError } = await import('@/lib/fetch-all-products');
         const { products, ok, error, aborted } = await fetchAllProductsFromApi({
@@ -112,7 +115,11 @@ export function usePosProducts(activeUser: any) {
       }
     };
 
-    loadProducts();
+    // Start loading from cache immediately for fast offline-first display
+    loadFromCache().then(() => {
+      // After initiating cache load, fetch from API in the background
+      loadProducts();
+    });
 
     return () => {
       cancelled = true;

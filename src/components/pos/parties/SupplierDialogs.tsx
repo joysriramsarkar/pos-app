@@ -312,7 +312,7 @@ export function SupplierPaymentDialog({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setPaymentAmount((s?.totalDue || 0).toString())}
+              onClick={() => setPaymentAmount(Math.round(s?.totalDue || 0).toString())}
             >
               {t('full_amount') || 'সম্পূর্ণ বকেয়া'}
             </Button>

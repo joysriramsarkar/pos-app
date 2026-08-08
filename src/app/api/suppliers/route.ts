@@ -6,25 +6,16 @@ import { logAudit } from '@/lib/audit';
 import { SupplierInputSchema } from '@/schemas';
 
 function calculateSupplierBalances(supplier: {
-  purchases: { totalAmount: any; paidAmount?: any; paymentStatus?: string }[];
+  purchases: { totalAmount: any }[];
   expenses: { amount: any; notes?: string | null }[];
 }) {
-  let poDue = 0;
   let basePurchases = 0;
-
   for (const p of supplier.purchases) {
-    const total = Number(p.totalAmount);
-    const paid = Number(p.paidAmount || 0);
-    basePurchases += total;
-
-    if (!p.paymentStatus || p.paymentStatus === 'Pending' || p.paymentStatus === 'Partial') {
-      poDue += total - paid;
-    }
+    basePurchases += Number(p.totalAmount);
   }
 
   let extraPurchases = 0;
   let totalPaid = 0;
-  let manualPayments = 0;
 
   for (const e of supplier.expenses) {
     const amount = Number(e.amount);
@@ -32,18 +23,19 @@ function calculateSupplierBalances(supplier: {
 
     const notes = e.notes || '';
     if (notes.startsWith('Paid supplier:')) {
-      manualPayments += amount;
+      // manual payment
     } else if (notes.startsWith('Paid for purchase order:') || notes.startsWith('Paid for direct purchase:')) {
-      // payment for a specific PO, already handled in poDue
+      // PO payment
     } else {
       extraPurchases += amount;
     }
   }
 
-  const totalPurchases = basePurchases + extraPurchases;
-  const totalDue = poDue - manualPayments;
+  const totalPurchases = Math.round(basePurchases + extraPurchases);
+  const totalPaidRounded = Math.round(totalPaid);
+  const totalDue = totalPurchases - totalPaidRounded;
 
-  return { totalPurchases, totalPaid, totalDue };
+  return { totalPurchases, totalPaid: totalPaidRounded, totalDue };
 }
 
 const getIp = (req: NextRequest) => req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || undefined;

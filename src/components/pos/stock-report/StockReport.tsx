@@ -237,7 +237,7 @@ export function StockReport({ onBack }: StockReportProps) {
           <div>
             <h1 className="text-xl font-bold flex items-center gap-2">
               <Package className="w-5 h-5 text-indigo-500" />
-              {tStock('title')}
+              {tStock('title_valuation')}
             </h1>
             <p className="text-muted-foreground text-xs">{tStock('detailed_desc')}</p>
           </div>
@@ -251,14 +251,14 @@ export function StockReport({ onBack }: StockReportProps) {
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <Card className="rounded-2xl shadow-sm bg-indigo-50/50 dark:bg-indigo-950/10 border-indigo-100 dark:border-indigo-900/30">
           <CardContent className="p-3.5 flex flex-col justify-between h-full">
-            <p className="text-[10px] uppercase font-bold text-indigo-600 tracking-wider">{tStock('total_stock_value')}</p>
+            <p className="text-[10px] uppercase font-bold text-indigo-600 tracking-wider">{tStock('total_stock_value_report')}</p>
             <p className="text-lg md:text-xl font-extrabold text-indigo-700 mt-1">{formatPrice(stats.totalStockValueAtCost)}</p>
           </CardContent>
         </Card>
 
         <Card className="rounded-2xl shadow-sm bg-emerald-50/50 dark:bg-emerald-950/10 border-emerald-100 dark:border-emerald-900/30">
           <CardContent className="p-3.5 flex flex-col justify-between h-full">
-            <p className="text-[10px] uppercase font-bold text-emerald-600 tracking-wider">{tStock('total_retail_value')}</p>
+            <p className="text-[10px] uppercase font-bold text-emerald-600 tracking-wider">{tStock('total_retail_value_report')}</p>
             <p className="text-lg md:text-xl font-extrabold text-emerald-700 mt-1">{formatPrice(stats.totalStockValueAtRetail)}</p>
           </CardContent>
         </Card>
@@ -272,7 +272,7 @@ export function StockReport({ onBack }: StockReportProps) {
 
         <Card className="rounded-2xl shadow-sm bg-red-50/50 dark:bg-red-950/10 border-red-100 dark:border-red-900/30 animate-pulse">
           <CardContent className="p-3.5 flex flex-col justify-between h-full">
-            <p className="text-[10px] uppercase font-bold text-red-600 tracking-wider">{tStock('low_stock')}</p>
+            <p className="text-[10px] uppercase font-bold text-red-600 tracking-wider">{tStock('low_stock_report')}</p>
             <p className="text-lg md:text-xl font-extrabold text-red-700 mt-1">
               {formatStringNumbers(stats.lowStockCount)} / {formatStringNumbers(stats.outOfStockCount)}
             </p>
@@ -347,7 +347,7 @@ export function StockReport({ onBack }: StockReportProps) {
         {/* Stock List table search and filters */}
         <Card className="rounded-2xl shadow-sm col-span-1 lg:col-span-2">
           <CardHeader className="pb-2 flex flex-row items-center justify-between flex-wrap gap-2">
-            <CardTitle className="text-sm font-semibold">{tStock('all_items')}</CardTitle>
+            <CardTitle className="text-sm font-semibold">{tStock('all_items_report')}</CardTitle>
             <div className="flex items-center gap-1.5 flex-wrap">
               <div className="relative h-8 w-36">
                 <Search className="absolute left-2 top-2 h-3.5 w-3.5 text-muted-foreground" />

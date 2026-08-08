@@ -301,7 +301,7 @@ export function CustomerPaymentDialog({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setPaymentAmount((customer?.totalDue || 0).toString())}
+              onClick={() => setPaymentAmount(Math.round(customer?.totalDue || 0).toString())}
             >
               {t('full_amount') || 'সম্পূর্ণ পরিমাণ'}
             </Button>

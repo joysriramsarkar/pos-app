@@ -106,17 +106,17 @@ const SupplierCard = React.memo(function SupplierCard({
           <div className="grid grid-cols-3 gap-1.5 md:gap-2 bg-slate-50 dark:bg-slate-900/40 p-2 md:p-2.5 rounded-lg md:rounded-xl border border-slate-100 dark:border-slate-800/60 text-center text-xs">
             <div>
               <p className="text-[9px] md:text-[10px] text-muted-foreground uppercase tracking-wider font-bold mb-0.5">{t('total_spent') || 'মোট ক্রয়'}</p>
-              <span className="font-semibold text-[11px] md:text-xs text-slate-700 dark:text-slate-355">{formatPrice(s.totalPurchases || 0)}</span>
+              <span className="font-semibold text-[11px] md:text-xs text-slate-700 dark:text-slate-355">{formatPrice(Math.round(s.totalPurchases || 0))}</span>
             </div>
             <div>
               <p className="text-[9px] md:text-[10px] text-muted-foreground uppercase tracking-wider font-bold mb-0.5">{t('payment') || 'পরিশোধ'}</p>
-              <span className="font-semibold text-[11px] md:text-xs text-emerald-600 dark:text-emerald-400">{formatPrice(s.totalPaid || 0)}</span>
+              <span className="font-semibold text-[11px] md:text-xs text-emerald-600 dark:text-emerald-400">{formatPrice(Math.round(s.totalPaid || 0))}</span>
             </div>
             <div>
               <p className="text-[9px] md:text-[10px] text-muted-foreground uppercase tracking-wider font-bold mb-0.5">{t('due_col') || 'বকেয়া'}</p>
               {isDue ? (
                 <Badge variant="destructive" className="font-bold text-[10px] md:text-xs px-1 md:px-1.5 py-0 h-5 md:h-6">
-                  {formatPrice(s.totalDue || 0)}
+                  {formatPrice(Math.round(s.totalDue || 0))}
                 </Badge>
               ) : (
                 <span className="text-[11px] md:text-xs text-muted-foreground font-medium">-</span>

@@ -118,6 +118,7 @@ import { resolveBackNavigation } from '@/lib/back-navigation';
 
 export function POSDashboard() {
   const t = useTranslations('Navigation');
+  const tc = useTranslations('Common');
   const router = useRouter();
   const locale = useLocale();
   const { formatPrice } = useNumberFormat();
@@ -1106,9 +1107,9 @@ export function POSDashboard() {
         return (
           <div className="p-4 overflow-y-auto h-full">
             <div className="mb-4 flex items-center justify-between">
-              <h1 className="text-2xl font-bold">Menu</h1>
+              <h1 className="text-2xl font-bold">{t('menu')}</h1>
               <Button size="sm" variant="outline" onClick={() => setCurrentPage('dashboard')}>
-                Back
+                {tc('back')}
               </Button>
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -1174,7 +1175,7 @@ export function POSDashboard() {
                 <h1 className="font-bold text-xs bg-linear-to-r from-primary to-primary/70 bg-clip-text text-transparent truncate">{storeName}</h1>
                 {currentPage !== 'billing' && (
                   <p className="text-[9px] text-muted-foreground truncate leading-none mt-0.5">
-                    {currentPage === 'menu' ? 'Menu' : (navItems.find(n => n.id === currentPage)?.label ?? currentPage)}
+                    {currentPage === 'menu' ? t('menu') : t(currentPage as any)}
                   </p>
                 )}
               </div>

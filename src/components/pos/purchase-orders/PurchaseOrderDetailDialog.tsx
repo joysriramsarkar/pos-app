@@ -17,6 +17,7 @@ import { getStatusBadge, getProductName } from './utils';
 import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { convertBengaliToEnglishNumerals } from '@/lib/utils';
 
 interface PurchaseOrderDetailDialogProps {
   open: boolean;
@@ -223,10 +224,16 @@ export function PurchaseOrderDetailDialog({
                   <div>
                     <label className="text-xs text-muted-foreground font-medium">পরিশোধের পরিমাণ</label>
                     <Input
-                      type="number"
+                      type="text"
                       placeholder="পরিমাণ"
                       value={amountToPay}
-                      onChange={(e) => setAmountToPay(e.target.value)}
+                      onChange={(e) => {
+                        const val = convertBengaliToEnglishNumerals(e.target.value);
+                        const cleaned = val.replace(/[^0-9.]/g, '');
+                        const dotCount = (cleaned.match(/\./g) || []).length;
+                        if (dotCount > 1) return;
+                        setAmountToPay(cleaned);
+                      }}
                       className="h-9 mt-1 bg-white"
                     />
                   </div>
@@ -255,14 +262,18 @@ export function PurchaseOrderDetailDialog({
                     <div>
                       <label className="text-xs text-muted-foreground font-medium">নগদ পরিমাণ</label>
                       <Input
-                        type="number"
+                        type="text"
                         placeholder="নগদ"
                         value={cashAmount}
                         onChange={(e) => {
-                          setCashAmount(e.target.value);
+                          const val = convertBengaliToEnglishNumerals(e.target.value);
+                          const cleaned = val.replace(/[^0-9.]/g, '');
+                          const dotCount = (cleaned.match(/\./g) || []).length;
+                          if (dotCount > 1) return;
+                          setCashAmount(cleaned);
                           const total = parseFloat(amountToPay) || 0;
-                          const cash = parseFloat(e.target.value) || 0;
-                          setUpiAmount(String(Math.max(0, total - cash)));
+                          const cash = parseFloat(cleaned) || 0;
+                          setUpiAmount(Number(Math.max(0, total - cash).toFixed(2)).toString());
                         }}
                         className="h-9 mt-1 bg-white"
                       />
@@ -270,14 +281,18 @@ export function PurchaseOrderDetailDialog({
                     <div>
                       <label className="text-xs text-muted-foreground font-medium">ইউপিআই পরিমাণ</label>
                       <Input
-                        type="number"
+                        type="text"
                         placeholder="ইউপিআই"
                         value={upiAmount}
                         onChange={(e) => {
-                          setUpiAmount(e.target.value);
+                          const val = convertBengaliToEnglishNumerals(e.target.value);
+                          const cleaned = val.replace(/[^0-9.]/g, '');
+                          const dotCount = (cleaned.match(/\./g) || []).length;
+                          if (dotCount > 1) return;
+                          setUpiAmount(cleaned);
                           const total = parseFloat(amountToPay) || 0;
-                          const upi = parseFloat(e.target.value) || 0;
-                          setCashAmount(String(Math.max(0, total - upi)));
+                          const upi = parseFloat(cleaned) || 0;
+                          setCashAmount(Number(Math.max(0, total - upi).toFixed(2)).toString());
                         }}
                         className="h-9 mt-1 bg-white"
                       />

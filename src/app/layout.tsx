@@ -77,6 +77,7 @@ export default function RootLayout({
             }}
           />
           <style dangerouslySetInnerHTML={{ __html: '@keyframes splash-spin { to { transform: rotate(360deg); } }' }} />
+          <script dangerouslySetInnerHTML={{ __html: `setTimeout(function(){ var s = document.getElementById('splash-screen'); if(s) { s.style.opacity = '0'; setTimeout(function(){ s.remove(); }, 300); } }, 3500);` }} />
         </div>
 
         <SplashScreenRemover />

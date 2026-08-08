@@ -25,7 +25,9 @@ export async function POST(
       upiAmount?: number;
     };
 
-    if (amountPaid === undefined || amountPaid <= 0) {
+    const roundedAmountPaid = Math.round(amountPaid);
+
+    if (roundedAmountPaid <= 0) {
       return NextResponse.json(
         { success: false, error: 'পরিশোধিত পরিমাণ সঠিক নয়' },
         { status: 400 }
@@ -46,7 +48,7 @@ export async function POST(
 
     const result = await db.$transaction(async (tx) => {
       const currentPaid = Number(order.paidAmount || 0);
-      const newPaid = toMoneyNumber(currentPaid + amountPaid);
+      const newPaid = toMoneyNumber(currentPaid + roundedAmountPaid);
       const totalAmount = Number(order.totalAmount);
 
       let paymentStatus = 'Paid';
@@ -57,7 +59,7 @@ export async function POST(
       }
 
       const updatedOrder = await tx.purchase.update({
-        where: { id },
+        where: { id: order.id },
         data: {
           paidAmount: newPaid,
           paymentStatus,
@@ -72,7 +74,7 @@ export async function POST(
 
       await tx.expense.create({
         data: {
-          amount: amountPaid,
+          amount: roundedAmountPaid,
           category: 'Supplier Payment',
           notes: expenseNotes,
           date: new Date(),

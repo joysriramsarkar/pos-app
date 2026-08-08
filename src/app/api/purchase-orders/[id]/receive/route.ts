@@ -162,11 +162,12 @@ export async function POST(
           receivedTotalAmount += receivedItem.receivedQty * Number(orderItem.buyingPrice);
         }
       }
-      const actualAmountPaid = amountPaid !== undefined ? amountPaid : receivedTotalAmount;
+      const roundedTotal = Math.round(receivedTotalAmount);
+      const actualAmountPaid = amountPaid !== undefined ? Math.round(amountPaid) : roundedTotal;
       let paymentStatus = 'Paid';
       if (actualAmountPaid === 0) {
         paymentStatus = 'Pending';
-      } else if (actualAmountPaid < receivedTotalAmount) {
+      } else if (actualAmountPaid < roundedTotal) {
         paymentStatus = 'Partial';
       }
 
@@ -176,7 +177,7 @@ export async function POST(
         data: {
           paymentStatus,
           deliveryStatus: nextDeliveryStatus,
-          totalAmount: receivedTotalAmount,
+          totalAmount: roundedTotal,
           paidAmount: actualAmountPaid,
           paymentMethod: paymentMethod || 'Cash'
         },

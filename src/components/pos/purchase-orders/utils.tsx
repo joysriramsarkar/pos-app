@@ -101,7 +101,7 @@ export function computeFormTotals(
     : Math.min(discountVal, formSubtotal);
   discountAmount = Math.round((discountAmount + Number.EPSILON) * 100) / 100;
 
-  const formTotal = Math.max(0, Math.round((formSubtotal - discountAmount + gstAmount + Number.EPSILON) * 100) / 100);
+  const formTotal = Math.max(0, Math.round(formSubtotal - discountAmount + gstAmount));
   const totalItemCount = formItems.reduce(
     (sum, i) => sum + (parseFloat(i.quantity as string) || 0),
     0,

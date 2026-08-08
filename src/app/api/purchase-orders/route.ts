@@ -216,11 +216,12 @@ export async function POST(request: NextRequest) {
           const orderNumber = `PO-${dateStr}-${seq}`;
 
           if (directReceive) {
+            const roundedTotal = Math.round(totalAmount);
             let paymentStatus = 'Paid';
-            const actualAmountPaid = amountPaid !== undefined ? amountPaid : Math.round(totalAmount);
+            const actualAmountPaid = amountPaid !== undefined ? Math.round(amountPaid) : roundedTotal;
             if (actualAmountPaid === 0) {
               paymentStatus = 'Pending';
-            } else if (actualAmountPaid < totalAmount) {
+            } else if (actualAmountPaid < roundedTotal) {
               paymentStatus = 'Partial';
             }
 
@@ -229,7 +230,7 @@ export async function POST(request: NextRequest) {
               data: {
                 invoiceNumber: orderNumber,
                 supplierId: (supplierId && supplierId !== 'none') ? supplierId : null,
-                totalAmount,
+                totalAmount: roundedTotal,
                 paidAmount: actualAmountPaid,
                 paymentStatus,
                 paymentMethod: paymentMethod || 'Cash',
@@ -335,7 +336,7 @@ export async function POST(request: NextRequest) {
               data: {
                 invoiceNumber: orderNumber,
                 supplierId: (supplierId && supplierId !== 'none') ? supplierId : null,
-                totalAmount,
+                totalAmount: Math.round(totalAmount),
                 paidAmount: 0,
                 paymentStatus: 'Pending',
                 paymentMethod: paymentMethod || 'Cash',

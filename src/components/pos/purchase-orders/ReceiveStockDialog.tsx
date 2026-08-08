@@ -197,26 +197,40 @@ export function ReceiveStockDialog({
                         <Label htmlFor="receive-cash-amount" className="text-xs">নগদ পরিমাণ</Label>
                         <Input
                           id="receive-cash-amount"
-                          type="number"
-                          min="0"
-                          step="0.01"
+                          type="text"
                           value={receiveCashAmount}
-                          onChange={(e) => setReceiveCashAmount(e.target.value)}
+                          onChange={(e) => {
+                            const val = convertBengaliToEnglishNumerals(e.target.value);
+                            const cleaned = val.replace(/[^0-9.]/g, '');
+                            const dotCount = (cleaned.match(/\./g) || []).length;
+                            if (dotCount > 1) return;
+                            setReceiveCashAmount(cleaned);
+                            const total = receiveTotal || 0;
+                            const cash = parseFloat(cleaned) || 0;
+                            setReceiveUpiAmount(Number(Math.max(0, total - cash).toFixed(2)).toString());
+                          }}
                           placeholder="নগদ"
-                          className="h-8 text-xs"
+                          className="h-8 text-xs bg-background"
                         />
                       </div>
                       <div className="space-y-1">
                         <Label htmlFor="receive-upi-amount" className="text-xs">ইউপিআই পরিমাণ</Label>
                         <Input
                           id="receive-upi-amount"
-                          type="number"
-                          min="0"
-                          step="0.01"
+                          type="text"
                           value={receiveUpiAmount}
-                          onChange={(e) => setReceiveUpiAmount(e.target.value)}
+                          onChange={(e) => {
+                            const val = convertBengaliToEnglishNumerals(e.target.value);
+                            const cleaned = val.replace(/[^0-9.]/g, '');
+                            const dotCount = (cleaned.match(/\./g) || []).length;
+                            if (dotCount > 1) return;
+                            setReceiveUpiAmount(cleaned);
+                            const total = receiveTotal || 0;
+                            const upi = parseFloat(cleaned) || 0;
+                            setReceiveCashAmount(Number(Math.max(0, total - upi).toFixed(2)).toString());
+                          }}
                           placeholder="ইউপিআই"
-                          className="h-8 text-xs"
+                          className="h-8 text-xs bg-background"
                         />
                       </div>
                     </div>
