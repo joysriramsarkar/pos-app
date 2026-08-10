@@ -109,27 +109,61 @@ export async function GET(request: NextRequest) {
     const paymentBreakdown: Record<string, { amount: number; count: number }> = {
       নগদ: { amount: 0, count: 0 },
       ইউপিআই: { amount: 0, count: 0 },
-      মিশ্র: { amount: 0, count: 0 },
       বাকি: { amount: 0, count: 0 },
     };
 
     for (const sale of todaySales) {
       const method = sale.paymentMethod;
-      const totalAmt = Number(Number(sale.totalAmount));
+      const totalAmt = Number(sale.totalAmount);
+      const paidAmt = Number(sale.amountPaid);
+      const refunded = refundBySaleId[sale.id] || 0;
       
-      if (method === 'Mixed' || (sale.cashAmount != null && sale.upiAmount != null)) {
-        paymentBreakdown['মিশ্র'].amount += totalAmt;
-        paymentBreakdown['মিশ্র'].count += 1;
-      } else {
-        let bnMethod: 'নগদ' | 'ইউপিআই' | 'বাকি' = 'নগদ';
-        if (method === 'Cash') bnMethod = 'নগদ';
-        else if (method === 'UPI') bnMethod = 'ইউপিআই';
-        else if (method === 'Due' || method === 'Prepaid') bnMethod = 'বাকি';
+      const netTotalAmt = Math.max(0, totalAmt - refunded);
+      if (netTotalAmt === 0) continue;
 
-        if (paymentBreakdown[bnMethod]) {
-          paymentBreakdown[bnMethod].amount += totalAmt;
-          paymentBreakdown[bnMethod].count += 1;
+      const dueAmt = Math.max(0, totalAmt - paidAmt);
+      const actualPaid = Math.max(0, totalAmt - dueAmt);
+      
+      const paidRatio = totalAmt > 0 ? actualPaid / totalAmt : 1;
+      const dueRatio = totalAmt > 0 ? dueAmt / totalAmt : 0;
+
+      const allocatedPaid = netTotalAmt * paidRatio;
+      const allocatedDue = netTotalAmt * dueRatio;
+
+      if (allocatedDue > 0) {
+        paymentBreakdown['বাকি'].amount += allocatedDue;
+        paymentBreakdown['বাকি'].count += 1;
+      }
+
+      if (allocatedPaid > 0) {
+        if (method === 'Mixed' || (sale.cashAmount != null && sale.upiAmount != null)) {
+          const cAmt = Number(sale.cashAmount || 0);
+          const uAmt = Number(sale.upiAmount || 0);
+          const totalMix = cAmt + uAmt;
+          if (totalMix > 0) {
+            const cRatio = cAmt / totalMix;
+            const uRatio = uAmt / totalMix;
+            paymentBreakdown['নগদ'].amount += allocatedPaid * cRatio;
+            paymentBreakdown['ইউপিআই'].amount += allocatedPaid * uRatio;
+            
+            if (cAmt > 0) paymentBreakdown['নগদ'].count += 1;
+            if (uAmt > 0) paymentBreakdown['ইউপিআই'].count += 1;
+          } else {
+            paymentBreakdown['নগদ'].amount += allocatedPaid;
+            paymentBreakdown['নগদ'].count += 1;
+          }
+        } else if (method === 'UPI') {
+          paymentBreakdown['ইউপিআই'].amount += allocatedPaid;
+          paymentBreakdown['ইউপিআই'].count += 1;
+        } else if (method === 'Prepaid') {
+          paymentBreakdown['বাকি'].amount += allocatedPaid;
+          paymentBreakdown['বাকি'].count += 1;
+        } else {
+          paymentBreakdown['নগদ'].amount += allocatedPaid;
+          paymentBreakdown['নগদ'].count += 1;
         }
+      } else if (totalAmt === 0) {
+         paymentBreakdown['নগদ'].count += 1;
       }
     }
 

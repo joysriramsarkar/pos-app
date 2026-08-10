@@ -72,7 +72,7 @@ export function SalesTab({
       salesData.map((d) => ({
         ...d,
         aov: d.count > 0 ? d.revenue / d.count : 0,
-        margin: d.revenue > 0 ? (d.profit / d.revenue) * 100 : 0,
+        margin: d.revenue > 0 ? ((Number(d.profit) || 0) / d.revenue) * 100 : 0,
       })),
     [salesData],
   );
@@ -150,7 +150,7 @@ export function SalesTab({
                 {chartType === 'bar' ? (
                   <BarChart data={salesData} margin={{ top: 20, right: 10, left: 0, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border) / 0.5)" />
-                    <XAxis dataKey="date" tickFormatter={salesXTick} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+                    <XAxis dataKey="date" tickFormatter={salesXTick} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} minTickGap={20} />
                     <YAxis tickFormatter={formatCompact} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={60} />
                     <ChartTooltip
                       cursor={false}
@@ -174,7 +174,7 @@ export function SalesTab({
                 ) : chartType === 'line' ? (
                   <LineChart data={salesData} margin={{ top: 20, right: 10, left: 0, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border) / 0.5)" />
-                    <XAxis dataKey="date" tickFormatter={salesXTick} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+                    <XAxis dataKey="date" tickFormatter={salesXTick} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} minTickGap={20} />
                     <YAxis tickFormatter={formatCompact} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={60} />
                     <ChartTooltip
                       cursor={false}
@@ -208,7 +208,7 @@ export function SalesTab({
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border) / 0.5)" />
-                    <XAxis dataKey="date" tickFormatter={salesXTick} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+                    <XAxis dataKey="date" tickFormatter={salesXTick} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} minTickGap={20} />
                     <YAxis tickFormatter={formatCompact} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={60} />
                     <ChartTooltip
                       cursor={false}

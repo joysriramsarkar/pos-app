@@ -133,7 +133,7 @@ export function DueCollection() {
   };
 
   const handleSetHalfAmount = () => {
-    if (selectedCustomer) setAmount(selectedCustomer.dueAmount / 2);
+    if (selectedCustomer) setAmount(Math.round(selectedCustomer.dueAmount / 2));
   };
 
   const parsedAmount = toMoneyNumber(

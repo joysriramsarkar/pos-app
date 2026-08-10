@@ -352,10 +352,16 @@ export function usePartiesManagement(refreshKey?: number) {
     });
   }, [suppliers, supplierSearchQuery, supplierSort]);
 
-  const totalDue = customers.reduce((sum, c) => sum + toMoneyNumber(c.totalDue), 0);
+  const totalDue = customers.reduce((sum, c) => {
+    const due = toMoneyNumber(c.totalDue);
+    return due > 0 ? sum + due : sum;
+  }, 0);
   const customersWithDue = customers.filter(c => toMoneyNumber(c.totalDue) > 0).length;
 
-  const totalSupplierDue = suppliers.reduce((sum, s) => sum + toMoneyNumber((s as SupplierWithBalances).totalDue || 0), 0);
+  const totalSupplierDue = suppliers.reduce((sum, s) => {
+    const due = toMoneyNumber((s as SupplierWithBalances).totalDue || 0);
+    return due > 0 ? sum + due : sum;
+  }, 0);
   const suppliersWithDue = suppliers.filter(s => toMoneyNumber((s as SupplierWithBalances).totalDue || 0) > 0).length;
 
   const handleViewLedger = async (customer: Customer) => {

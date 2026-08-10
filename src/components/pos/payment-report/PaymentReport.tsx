@@ -83,10 +83,10 @@ export function PaymentReport({ onBack }: PaymentReportProps) {
   }, [summary, t]);
 
   const trendData = useMemo(() => {
-    const map: Record<string, { label: string; cash: number; upi: number; prepaid: number; ts: number }> = {};
+    const map: Record<string, { label: string; cash: number; upi: number; prepaid: number; due: number; ts: number }> = {};
 
     sales.forEach((s) => {
-      if (s.status !== 'Completed' && s.status !== 'PartialReturn') return;
+      if (s.status !== 'Completed' && s.status !== 'PartialReturn' && s.status !== 'Partial') return;
       const d = new Date(s.createdAt);
 
       let k = '';
@@ -103,7 +103,7 @@ export function PaymentReport({ onBack }: PaymentReportProps) {
       }
 
       if (!map[k]) {
-        map[k] = { label: k, cash: 0, upi: 0, prepaid: 0, ts };
+        map[k] = { label: k, cash: 0, upi: 0, prepaid: 0, due: 0, ts };
       }
 
       const amtPaid = Number(s.amountPaid || 0);
@@ -125,7 +125,7 @@ export function PaymentReport({ onBack }: PaymentReportProps) {
       } else if (method === 'Prepaid') {
         map[k].prepaid += amtPaid;
       } else if (method === 'Due') {
-        map[k].cash += amtPaid;
+        map[k].due += amtPaid;
       }
     });
 

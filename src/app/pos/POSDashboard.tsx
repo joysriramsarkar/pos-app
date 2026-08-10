@@ -339,7 +339,7 @@ export function POSDashboard() {
 
   const filteredMoreMenuItems = useMemo(() => {
     // Exclude pages that are direct bottom-nav items — they should not appear in 'More'
-    const directNavIds = new Set(['dashboard', 'billing', 'stock', 'transactions']);
+    const directNavIds = new Set(['dashboard', 'billing', 'stock', 'parties']);
     return filteredNavItems.filter(item => !directNavIds.has(item.id));
   }, [filteredNavItems]);
 

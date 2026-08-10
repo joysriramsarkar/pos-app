@@ -407,7 +407,9 @@ export function StockReport({ onBack }: StockReportProps) {
                       const sell = Number(p.sellingPrice || 0);
                       
                       let statusBadge = <Badge className="bg-emerald-500 hover:bg-emerald-600 text-[10px]">{tStock('in_stock')}</Badge>;
-                      if (stock === 0) {
+                      if (stock < 0) {
+                        statusBadge = <Badge variant="destructive" className="text-[10px]">Negative</Badge>;
+                      } else if (stock === 0) {
                         statusBadge = <Badge variant="destructive" className="text-[10px]">{tStock('out_of_stock')}</Badge>;
                       } else if (stock <= minLevel) {
                         statusBadge = <Badge className="bg-amber-500 hover:bg-amber-600 text-[10px]">{tStock('low_stock_badge')}</Badge>;

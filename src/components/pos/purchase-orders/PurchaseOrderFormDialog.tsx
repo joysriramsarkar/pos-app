@@ -455,7 +455,7 @@ export function PurchaseOrderFormDialog({
                                   className="h-8 w-16"
                                 />
                               </TableCell>
-                              <TableCell className="font-medium text-sm tabular-nums">{formatPrice(Math.round(itemTotalIncludingGst))}</TableCell>
+                              <TableCell className="font-medium text-sm tabular-nums">{formatPrice(Math.round((itemTotalIncludingGst + Number.EPSILON) * 100) / 100)}</TableCell>
                               <TableCell>
                                 <Button variant="ghost" size="sm" onClick={() => onRemoveFormItem(item.productId)}>
                                   <Trash2 className="h-3.5 w-3.5 text-red-500" />
@@ -594,7 +594,7 @@ export function PurchaseOrderFormDialog({
                       </div>
                       <div className="flex justify-between items-center mt-3 pt-2 border-t text-sm">
                         <span className="text-muted-foreground">{t('total_price')}:</span>
-                        <span className="font-bold">{formatPrice(itemTotalIncludingGst)}</span>
+                        <span className="font-bold">{formatPrice(Math.round((itemTotalIncludingGst + Number.EPSILON) * 100) / 100)}</span>
                       </div>
                       <div className="mt-2 flex justify-end">
                         <Button variant="ghost" size="sm" onClick={() => onRemoveFormItem(item.productId)} className="h-7 px-2 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/20">

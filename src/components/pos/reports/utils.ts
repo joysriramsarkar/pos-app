@@ -40,7 +40,13 @@ export function mergeSmallSlices(data: { name: string; value: number }[], thresh
 }
 
 export function downloadCSV(rows: (string | number)[][], filename: string) {
-  const csv = rows.map((r) => r.map((v) => `"${v}"`).join(',')).join('\n');
+  const csv = rows.map((r) => r.map((v) => {
+    const str = String(v);
+    const escaped = str.replace(/"/g, '""');
+    // Prevent CSV injection by prefixing formulas with a single quote
+    const safeStr = /^[=\-+@\t\r]/.test(escaped) ? `\'${escaped}` : escaped;
+    return `"${safeStr}"`;
+  }).join(',')).join('\n');
   const blob = new Blob([csv], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

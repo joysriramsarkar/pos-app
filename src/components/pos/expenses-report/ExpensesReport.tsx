@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, BarChart3 } from 'lucide-react';
-import { format, startOfMonth, startOfWeek, subDays, getWeek, getYear } from 'date-fns';
+import { format, startOfMonth, startOfWeek, subDays, getISOWeek, getISOWeekYear } from 'date-fns';
 import { useTranslations } from 'next-intl';
 import { useNumberFormat } from '@/hooks/use-number-format';
 import type { ExpensesReportProps, ViewMode } from './types';
@@ -75,7 +75,7 @@ export function ExpensesReport({ onBack }: ExpensesReportProps) {
     const map: Record<string, { amount: number; ts: number }> = {};
     filtered.forEach((e) => {
       const d = parseDateSafe(e.date);
-      const k = formatStringNumbers(`W${getWeek(d)} '${String(getYear(d)).slice(2)}`);
+      const k = formatStringNumbers(`W${getISOWeek(d)} '${String(getISOWeekYear(d)).slice(2)}`);
       if (!map[k]) map[k] = { amount: 0, ts: startOfWeek(d).getTime() };
       map[k].amount += Number(e.amount ?? 0);
     });
@@ -115,7 +115,7 @@ export function ExpensesReport({ onBack }: ExpensesReportProps) {
   const tableColor = viewMode === 'daily' ? 'text-red-600' : viewMode === 'weekly' ? 'text-amber-600' : 'text-purple-600';
 
   const chartData = viewMode === 'daily'
-    ? filtered.map((e) => ({ time: formatStringNumbers(format(parseDateSafe(e.date), 'HH:mm')), amount: e.amount ?? 0, label: e.notes || e.category, origDate: e.date }))
+    ? filtered.map((e) => ({ time: formatStringNumbers(format(parseDateSafe(e.date), 'hh:mm a')), amount: e.amount ?? 0, label: e.notes || (e.notes ? '' : e.category), origDate: e.date }))
     : viewMode === 'weekly' ? weeklyData : monthlyData;
   const chartKey = viewMode === 'daily' ? 'time' : viewMode === 'weekly' ? 'week' : 'month';
 

@@ -83,31 +83,14 @@ export function StockManagement({
   // Use search results when actively searching, otherwise use store products
   const products: Product[] = searchResults !== null ? searchResults : storeProducts;
 
-  // Reset category filter and fetch inactive products when viewing inactive products
+  // Reset category filter and update search results when viewing inactive products
   useEffect(() => {
     if (stockFilter === 'inactive') {
       setCategoryFilter('all');
-      setIsSearching(true);
-      fetch('/api/products?includeInactive=true&limit=10000')
-        .then((res) => res.json())
-        .then((json) => {
-          if (json.data) {
-            const parsedData = json.data.map((p: any) => ({
-              ...p,
-              currentStock: Number(p.currentStock) || 0,
-              minStockLevel: Number(p.minStockLevel) || 0,
-              buyingPrice: Number(p.buyingPrice) || 0,
-              sellingPrice: Number(p.sellingPrice) || 0,
-            }));
-            setSearchResults(parsedData.filter((p: any) => !p.isActive));
-          }
-        })
-        .catch(console.error)
-        .finally(() => setIsSearching(false));
-    } else if (!searchQuery) {
-      setSearchResults(null);
     }
-  }, [stockFilter, searchQuery]);
+    handleSearchChange(searchQuery);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stockFilter]);
 
   const prevStoreCountRef = useRef(storeProducts.length);
   useEffect(() => {

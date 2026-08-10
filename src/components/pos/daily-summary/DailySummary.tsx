@@ -77,7 +77,6 @@ export function DailySummary({ open, onOpenChange }: DailySummaryProps) {
   const paymentMethods = [
     { key: 'নগদ' as const, icon: Banknote, color: 'text-green-600 dark:text-green-400', bg: 'bg-green-100 dark:bg-green-900/30', label: t('cash') },
     { key: 'ইউপিআই' as const, icon: Smartphone, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-100 dark:bg-blue-900/30', label: t('upi') },
-    { key: 'মিশ্র' as const, icon: CreditCard, color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-100 dark:bg-purple-900/30', label: t('mixed') },
     { key: 'বাকি' as const, icon: Wallet, color: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-100 dark:bg-orange-900/30', label: t('due') },
   ];
 
@@ -112,7 +111,7 @@ export function DailySummary({ open, onOpenChange }: DailySummaryProps) {
                 {/* Report Header */}
                 <div className="text-center space-y-1 bg-gradient-to-r from-primary/10 via-primary/5 to-primary/10 dark:from-primary/20 dark:via-primary/10 dark:to-primary/20 rounded-xl p-4">
                   <h2 className="text-xl font-bold text-primary">
-                    {settings.store_name_bn || 'লক্ষ্মণ ভাণ্ডার'}
+                    {settings.store_name_bn || settings.store_name || 'লক্ষ্মণ ভাণ্ডার'}
                   </h2>
                   <p className="text-lg font-semibold text-foreground">{t('daily_summary_of')}</p>
                   <p className="text-sm text-muted-foreground font-medium">{data.date}</p>
@@ -190,7 +189,8 @@ export function DailySummary({ open, onOpenChange }: DailySummaryProps) {
                       const bd = data.paymentBreakdown[method.key];
                       const amount = bd?.amount ?? 0;
                       const count = bd?.count ?? 0;
-                      const percentage = data.totalSalesAmount > 0 ? ((amount / data.totalSalesAmount) * 100).toFixed(1) : '0';
+                      const percentageNum = data.totalSalesAmount > 0 ? (amount / data.totalSalesAmount) * 100 : 0;
+                      const percentageDisplay = Math.round(percentageNum * 10) / 10;
                       const Icon = method.icon;
                       return (
                         <div key={method.key} className="flex items-center gap-3 p-2.5 rounded-lg bg-background/60 border border-border/30">
@@ -204,16 +204,15 @@ export function DailySummary({ open, onOpenChange }: DailySummaryProps) {
                             </div>
                             <div className="flex items-center justify-between mt-0.5">
                               <span className="text-xs text-muted-foreground">{formatNumber(count)} {t('count')}</span>
-                              <span className="text-xs text-muted-foreground">{formatNumber(parseFloat(percentage))}%</span>
+                              <span className="text-xs text-muted-foreground">{formatNumber(percentageDisplay)}%</span>
                             </div>
                             <div className="h-1.5 rounded-full bg-muted dark:bg-muted/60 overflow-hidden mt-1">
                               <div
                                 className={`h-full rounded-full transition-all duration-500 ${
                                   method.key === 'নগদ' ? 'bg-green-500' :
-                                  method.key === 'ইউপিআই' ? 'bg-blue-500' :
-                                  method.key === 'মিশ্র' ? 'bg-purple-500' : 'bg-orange-500'
+                                  method.key === 'ইউপিআই' ? 'bg-blue-500' : 'bg-orange-500'
                                 }`}
-                                style={{ width: `${Math.min(parseFloat(percentage), 100)}%` }}
+                                style={{ width: `${Math.min(percentageDisplay, 100)}%` }}
                                 
                               />
                             </div>

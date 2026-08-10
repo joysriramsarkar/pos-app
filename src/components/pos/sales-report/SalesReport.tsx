@@ -66,6 +66,13 @@ export function SalesReport({ onBack }: SalesReportProps) {
 
     const map: Record<string, { label: string; revenue: number; profit: number; count: number; ts: number }> = {};
 
+    if (viewMode === 'weekly') {
+      const daysMap = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+      daysMap.forEach((k, idx) => {
+        map[k] = { label: k, revenue: 0, profit: 0, count: 0, ts: idx === 0 ? 7 : idx };
+      });
+    }
+
     data.forEach((e) => {
       const d = parseDateSafe(e.date);
       let k = '';

@@ -133,7 +133,7 @@ export function CheckoutDialog({
   }, [amountReceived, cashReceived, upiReceived, paymentMethod]);
 
   const change = useMemo(() => {
-    return parsedAmount - remainingTotal;
+    return Math.max(0, parsedAmount - remainingTotal);
   }, [parsedAmount, remainingTotal]);
 
   const isValidPayment = useMemo(() => {

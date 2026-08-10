@@ -94,11 +94,16 @@ export function HorizontalRankChart({
       : {}),
   } satisfies ChartConfig;
 
+  const isTruncated = data.length > 10;
+  const actualDescription = isTruncated
+    ? (description ? `${description} (Top 10)` : '(Top 10)')
+    : description;
+
   return (
     <Card className="rounded-xl">
       <CardHeader className="pb-2">
         <CardTitle className="text-sm font-semibold">{title}</CardTitle>
-        {description && <CardDescription className="text-xs">{description}</CardDescription>}
+        {actualDescription && <CardDescription className="text-xs">{actualDescription}</CardDescription>}
       </CardHeader>
       <CardContent>
         {chartData.length === 0 ? (
@@ -489,7 +494,8 @@ export function MarginGauge({
   const { formatStringNumbers } = useNumberFormat();
   const empty = emptyLabel ?? t('no_data');
   const marginWord = t('margin_label');
-  const clamped = Math.max(0, Math.min(100, Number.isFinite(marginPct) ? marginPct : 0));
+  const actualMargin = Number.isFinite(marginPct) ? marginPct : 0;
+  const clamped = Math.max(0, Math.min(100, actualMargin));
   const color =
     clamped >= 25 ? 'var(--chart-2)' : clamped >= 12 ? 'var(--chart-3)' : 'var(--chart-4)';
   const data = [{ name: marginWord, value: clamped, fill: color }];
@@ -523,7 +529,7 @@ export function MarginGauge({
             </SafeResponsiveContainer>
             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
               <p className="text-2xl font-extrabold tabular-nums" style={{ color }}>
-                {formatStringNumbers(clamped.toFixed(1))}%
+                {formatStringNumbers(actualMargin.toFixed(1))}%
               </p>
               <p className="text-[10px] text-muted-foreground tracking-wide">{marginWord}</p>
             </div>
@@ -573,11 +579,16 @@ export function VerticalBarChart({
   );
   const config = { [yKey]: { label: seriesLabel, color } } satisfies ChartConfig;
 
+  const isTruncated = data.length > 12;
+  const actualDescription = isTruncated
+    ? (description ? `${description} (Top 12)` : '(Top 12)')
+    : description;
+
   return (
     <Card className="rounded-xl">
       <CardHeader className="pb-2">
         <CardTitle className="text-sm font-semibold">{title}</CardTitle>
-        {description && <CardDescription className="text-xs">{description}</CardDescription>}
+        {actualDescription && <CardDescription className="text-xs">{actualDescription}</CardDescription>}
       </CardHeader>
       <CardContent>
         {chartData.length === 0 ? (

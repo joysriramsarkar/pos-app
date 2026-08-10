@@ -29,7 +29,7 @@ export function convertBengaliToEnglishNumerals(input: string): string {
 
 export function isValidEanUpcBarcode(input: string): boolean {
   const normalized = convertBengaliToEnglishNumerals(input.trim());
-  return /^(?:\d{12}|\d{13})$/.test(normalized);
+  return /^\d{6,14}$/.test(normalized);
 }
 
 /**

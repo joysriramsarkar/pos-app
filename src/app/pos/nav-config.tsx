@@ -74,7 +74,7 @@ export const mobileBottomNavItems: { id: PageType | 'more'; label: string; icon:
   { id: 'dashboard', label: 'Home', icon: <LayoutDashboard className="w-6 h-6 md:w-5 md:h-5" /> },
   { id: 'billing', label: 'Bill', icon: <ShoppingCart className="w-6 h-6 md:w-5 md:h-5" /> },
   { id: 'stock', label: 'Stock', icon: <Package className="w-6 h-6 md:w-5 md:h-5" /> },
-  { id: 'transactions', label: 'Transactions', icon: <History className="w-6 h-6 md:w-5 md:h-5" /> },
+  { id: 'parties', label: 'Parties', icon: <Users className="w-6 h-6 md:w-5 md:h-5" /> },
   { id: 'more', label: 'More', icon: <Menu className="w-6 h-6 md:w-5 md:h-5" /> },
 ];
 

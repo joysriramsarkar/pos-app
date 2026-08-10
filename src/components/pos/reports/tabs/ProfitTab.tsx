@@ -98,7 +98,7 @@ export function ProfitTab({
                       Number(r.revenue).toFixed(2),
                       Number(r.cost).toFixed(2),
                       Number(r.profit).toFixed(2),
-                      Number(r.margin ?? 0).toFixed(1),
+                      (Number.isFinite(r.margin) ? Number(r.margin) : 0).toFixed(1),
                     ]),
                   ],
                   `profit-${profitGroup}`,
@@ -261,7 +261,7 @@ export function ProfitTab({
                         {formatPrice(Number(r.profit))}
                       </TableCell>
                       <TableCell className="text-right text-muted-foreground tabular-nums">
-                        {formatStringNumbers(String(r.margin ?? 0))}%
+                        {formatStringNumbers(String(Number.isFinite(r.margin) ? r.margin : 0))}%
                       </TableCell>
                     </TableRow>
                   ))

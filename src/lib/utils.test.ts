@@ -108,14 +108,16 @@ describe('utils', () => {
       expect(isValidEanUpcBarcode('\n১২৩৪৫৬৭৮৯০১২৩\t')).toBe(true);
     });
 
-    it('should return false for barcodes that are too short', () => {
-      expect(isValidEanUpcBarcode('12345678901')).toBe(false);
-      expect(isValidEanUpcBarcode('১২৩৪৫৬৭৮৯০১')).toBe(false);
+    it('returns false for invalid lengths (under 6 or over 14 digits)', () => {
+      expect(isValidEanUpcBarcode('12345')).toBe(false);
+      expect(isValidEanUpcBarcode('১২৩৪৫')).toBe(false);
+      expect(isValidEanUpcBarcode('123456789012345')).toBe(false);
+      expect(isValidEanUpcBarcode('১২৩৪৫৬৭৮৯০১২৩৪৫')).toBe(false);
     });
 
-    it('should return false for barcodes that are too long', () => {
-      expect(isValidEanUpcBarcode('12345678901234')).toBe(false);
-      expect(isValidEanUpcBarcode('১২৩৪৫৬৭৮৯০১২৩৪')).toBe(false);
+    it('returns true for 8-digit EAN-8 barcodes', () => {
+      expect(isValidEanUpcBarcode('80824107')).toBe(true);
+      expect(isValidEanUpcBarcode('৮০৮২৪১০৭')).toBe(true);
     });
 
     it('should return false for strings with non-numeric characters', () => {
