@@ -3,8 +3,8 @@ import { db } from '@/lib/db';
 import { requirePermission } from '@/lib/api-middleware';
 
 export async function GET(request: NextRequest) {
-  // pos.view পারমিশন চেক করুন (যা সব ক্যাশিয়ারের আছে)
-  const authResponse = await requirePermission(request, "pos.view");
+  // sales.view পারমিশন চেক করুন (যা সব ক্যাশিয়ারের আছে)
+  const authResponse = await requirePermission(request, "sales.view");
   if (authResponse) return authResponse;
 
   try {
