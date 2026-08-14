@@ -178,6 +178,8 @@ export function Expenses({ onReport }: ExpensesProps) {
   const handleAddExpense = async () => {
     if (!amount || !category) return;
 
+    setIsLoading(true);
+
     // ৯১খ: সাপ্লায়ার পেমেন্টে due থাকলে জিজ্ঞেস করা
     if (category === 'Supplier Payment' && supplierId && supplierId !== 'none') {
       const selectedSupplier = suppliers.find(s => s.id === supplierId);
@@ -209,6 +211,7 @@ export function Expenses({ onReport }: ExpensesProps) {
               setPendingSupplierName(selectedSupplier.name);
               setPendingSupplierId(supplierId);
               setShowSupplierDuePrompt(true);
+              setIsLoading(false);
               return;
             }
           }
@@ -270,10 +273,14 @@ export function Expenses({ onReport }: ExpensesProps) {
     if (!pendingExpensePayload) return;
     setIsLoading(true);
     try {
+      const payload: any = { ...pendingExpensePayload };
+      if (isPreviousDuePayment) {
+        payload.notes = payload.notes ? `Paid supplier: ${payload.notes}` : 'Paid supplier: পূর্বের বকেয়া পরিশোধ';
+      }
       const res = await fetch('/api/expenses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(pendingExpensePayload),
+        body: JSON.stringify(payload),
       });
       if (res.ok) {
         toast({ title: t('expense_added') });

@@ -205,69 +205,62 @@ export function ExpenseForm({
             </SelectContent>
           </Select>
         </div>
-        {paymentMethod === 'Mixed' && (() => {
-          const totalAmt = parseFloat(convertBengaliToEnglishNumerals(amount)) || 0;
-          const cashVal = parseFloat(cashAmount) || 0;
-          const upiVal = parseFloat(upiAmount) || 0;
-          const mixedSum = cashVal + upiVal;
-          const isMixedOk = Math.abs(mixedSum - totalAmt) < 0.01;
-          return (
-            <div className="space-y-2">
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium flex items-center gap-1">
-                    💵 নগদ ({currency})
-                  </label>
-                  <Input
-                    type="text"
-                    value={cashAmount}
-                    onChange={(e) => {
-                      const val = convertBengaliToEnglishNumerals(e.target.value).replace(/[^0-9.]/g, '');
-                      setCashAmount(val);
-                      const cashV = parseFloat(val) || 0;
-                      if (cashV <= totalAmt) {
-                        setUpiAmount((totalAmt - cashV).toFixed(2).replace(/\.00$/, ''));
-                      } else {
-                        setUpiAmount('0');
-                      }
-                    }}
-                    placeholder="0.00"
-                    className="h-9"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium flex items-center gap-1">
-                    📱 ইউপিআই ({currency})
-                  </label>
-                  <Input
-                    type="text"
-                    value={upiAmount}
-                    onChange={(e) => {
-                      const val = convertBengaliToEnglishNumerals(e.target.value).replace(/[^0-9.]/g, '');
-                      setUpiAmount(val);
-                      const upiV = parseFloat(val) || 0;
-                      if (upiV <= totalAmt) {
-                        setCashAmount((totalAmt - upiV).toFixed(2).replace(/\.00$/, ''));
-                      } else {
-                        setCashAmount('0');
-                      }
-                    }}
-                    placeholder="0.00"
-                    className="h-9"
-                  />
-                </div>
+        {paymentMethod === 'Mixed' && (
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium flex items-center gap-1">
+                  💵 নগদ ({currency})
+                </label>
+                <Input
+                  type="text"
+                  value={cashAmount}
+                  onChange={(e) => {
+                    const val = convertBengaliToEnglishNumerals(e.target.value).replace(/[^0-9.]/g, '');
+                    setCashAmount(val);
+                    const cashV = parseFloat(val) || 0;
+                    if (cashV <= (parseFloat(convertBengaliToEnglishNumerals(amount)) || 0)) {
+                      setUpiAmount(((parseFloat(convertBengaliToEnglishNumerals(amount)) || 0) - cashV).toFixed(2).replace(/\.00$/, ''));
+                    } else {
+                      setUpiAmount('0');
+                    }
+                  }}
+                  placeholder="0.00"
+                  className="h-9"
+                />
               </div>
-              <div className={`text-xs px-2 py-1.5 rounded-lg flex items-center justify-between ${isMixedOk
-                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400'
-                : 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400'
-                }`}>
-                <span>নগদ {currency}{formatStringNumbers(cashVal)} + ইউপিআই {currency}{formatStringNumbers(upiVal)}</span>
-                <span className="font-semibold">{isMixedOk ? '✓ মিলেছে' : `বাকি: ${formatPrice(Math.abs(totalAmt - mixedSum))}`}</span>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium flex items-center gap-1">
+                  📱 ইউপিআই ({currency})
+                </label>
+                <Input
+                  type="text"
+                  value={upiAmount}
+                  onChange={(e) => {
+                    const val = convertBengaliToEnglishNumerals(e.target.value).replace(/[^0-9.]/g, '');
+                    setUpiAmount(val);
+                    const upiV = parseFloat(val) || 0;
+                    if (upiV <= (parseFloat(convertBengaliToEnglishNumerals(amount)) || 0)) {
+                      setCashAmount(((parseFloat(convertBengaliToEnglishNumerals(amount)) || 0) - upiV).toFixed(2).replace(/\.00$/, ''));
+                    } else {
+                      setCashAmount('0');
+                    }
+                  }}
+                  placeholder="0.00"
+                  className="h-9"
+                />
               </div>
             </div>
-          );
-        })()}
-        <Button className="w-full h-9 bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600" onClick={onAddExpense} disabled={isLoading || !amount}>
+            <div className={`text-xs px-2 py-1.5 rounded-lg flex items-center justify-between ${Math.abs((parseFloat(cashAmount) || 0) + (parseFloat(upiAmount) || 0) - (parseFloat(convertBengaliToEnglishNumerals(amount)) || 0)) < 0.01
+              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400'
+              : 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400'
+              }`}>
+              <span>নগদ {currency}{formatStringNumbers((parseFloat(cashAmount) || 0))} + ইউপিআই {currency}{formatStringNumbers((parseFloat(upiAmount) || 0))}</span>
+              <span className="font-semibold">{Math.abs((parseFloat(cashAmount) || 0) + (parseFloat(upiAmount) || 0) - (parseFloat(convertBengaliToEnglishNumerals(amount)) || 0)) < 0.01 ? '✓ মিলেছে' : `বাকি: ${formatPrice(Math.abs((parseFloat(convertBengaliToEnglishNumerals(amount)) || 0) - ((parseFloat(cashAmount) || 0) + (parseFloat(upiAmount) || 0))))}`}</span>
+            </div>
+          </div>
+        )}
+        <Button className="w-full h-9 bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600" onClick={onAddExpense} disabled={isLoading || !amount || (paymentMethod === 'Mixed' && Math.abs((parseFloat(cashAmount) || 0) + (parseFloat(upiAmount) || 0) - (parseFloat(convertBengaliToEnglishNumerals(amount)) || 0)) >= 0.01)}>
           {isLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Plus className="w-4 h-4 mr-2" />} {t('add')}
         </Button>
       </CardContent>

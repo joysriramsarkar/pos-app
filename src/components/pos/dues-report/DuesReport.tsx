@@ -121,7 +121,7 @@ export function DuesReport({ onBack, onNavigate }: DuesReportProps) {
 
 
   return (
-    <div className="flex-1 flex flex-col gap-4 p-4 md:p-6 bg-slate-50/50 overflow-y-auto min-h-0 pb-24 animate-page-enter">
+    <div className="flex-1 flex flex-col gap-4 p-4 md:p-6 bg-slate-50/50 dark:bg-background overflow-y-auto min-h-0 pb-24 animate-page-enter">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-3">
@@ -138,7 +138,7 @@ export function DuesReport({ onBack, onNavigate }: DuesReportProps) {
         </div>
         <div className="flex items-center gap-2">
           {onNavigate && (
-            <Button size="sm" variant="outline" className="gap-1.5 text-xs h-9 border-amber-200 text-amber-700 hover:bg-amber-50" onClick={() => onNavigate('due-collection')}>
+            <Button size="sm" variant="outline" className="gap-1.5 text-xs h-9 border-amber-200 text-amber-700 hover:bg-amber-50 dark:border-amber-800/50 dark:text-amber-400 dark:hover:bg-amber-950/20" onClick={() => onNavigate('due-collection')}>
               <IndianRupee className="w-3.5 h-3.5" /> {t('collection_center')} <ArrowRight className="w-3 h-3 ml-0.5" />
             </Button>
           )}

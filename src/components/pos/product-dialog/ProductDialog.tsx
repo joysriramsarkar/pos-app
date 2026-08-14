@@ -126,6 +126,7 @@ export function ProductDialog({
         setMinStockLevel(product.minStockLevel.toString());
         setIsActive(product.isActive);
         setIsNameBnTouched(true);
+        setIsNameTouched(true);
       } else {
         // Reset for new product
         setName('');
@@ -381,7 +382,7 @@ export function ProductDialog({
 
             {/* Product Name */}
             <div className="space-y-2">
-              <Label htmlFor="product-form-name">{t('product_name')} <span className="text-muted-foreground text-xs font-normal">{t('optional')}</span></Label>
+              <Label htmlFor="product-form-name">ইংরেজি নাম <span className="text-muted-foreground text-xs font-normal">{t('optional')}</span></Label>
               <Input
                 id="product-form-name"
                 value={name}

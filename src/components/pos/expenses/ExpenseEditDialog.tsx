@@ -242,74 +242,67 @@ export function ExpenseEditDialog({
               </SelectContent>
             </Select>
           </div>
-          {editPaymentMethod === 'Mixed' && (() => {
-            const totalAmt = parseFloat(convertBengaliToEnglishNumerals(editAmount)) || 0;
-            const cashVal = parseFloat(editCashAmount) || 0;
-            const upiVal = parseFloat(editUpiAmount) || 0;
-            const mixedSum = cashVal + upiVal;
-            const isMixedOk = Math.abs(mixedSum - totalAmt) < 0.01;
-            return (
-              <div className="space-y-2">
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium flex items-center gap-1">
-                      💵 নগদ ({currency})
-                    </label>
-                    <Input
-                      type="text"
-                      value={editCashAmount}
-                      onChange={(e) => {
-                        const val = convertBengaliToEnglishNumerals(e.target.value).replace(/[^0-9.]/g, '');
-                        setEditCashAmount(val);
-                        const cashV = parseFloat(val) || 0;
-                        if (cashV <= totalAmt) {
-                          setEditUpiAmount((totalAmt - cashV).toFixed(2).replace(/\.00$/, ''));
-                        } else {
-                          setEditUpiAmount('0');
-                        }
-                      }}
-                      placeholder="0.00"
-                      className="h-9"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium flex items-center gap-1">
-                      📱 ইউপিআই ({currency})
-                    </label>
-                    <Input
-                      type="text"
-                      value={editUpiAmount}
-                      onChange={(e) => {
-                        const val = convertBengaliToEnglishNumerals(e.target.value).replace(/[^0-9.]/g, '');
-                        setEditUpiAmount(val);
-                        const upiV = parseFloat(val) || 0;
-                        if (upiV <= totalAmt) {
-                          setEditCashAmount((totalAmt - upiV).toFixed(2).replace(/\.00$/, ''));
-                        } else {
-                          setEditCashAmount('0');
-                        }
-                      }}
-                      placeholder="0.00"
-                      className="h-9"
-                    />
-                  </div>
+          {editPaymentMethod === 'Mixed' && (
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium flex items-center gap-1">
+                    💵 নগদ ({currency})
+                  </label>
+                  <Input
+                    type="text"
+                    value={editCashAmount}
+                    onChange={(e) => {
+                      const val = convertBengaliToEnglishNumerals(e.target.value).replace(/[^0-9.]/g, '');
+                      setEditCashAmount(val);
+                      const cashV = parseFloat(val) || 0;
+                      if (cashV <= (parseFloat(convertBengaliToEnglishNumerals(editAmount)) || 0)) {
+                        setEditUpiAmount(((parseFloat(convertBengaliToEnglishNumerals(editAmount)) || 0) - cashV).toFixed(2).replace(/\.00$/, ''));
+                      } else {
+                        setEditUpiAmount('0');
+                      }
+                    }}
+                    placeholder="0.00"
+                    className="h-9"
+                  />
                 </div>
-                <div className={`text-xs px-2 py-1.5 rounded-lg flex items-center justify-between ${isMixedOk
-                  ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400'
-                  : 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400'
-                  }`}>
-                  <span>নগদ {currency}{formatStringNumbers(String(cashVal))} + ইউপিআই {currency}{formatStringNumbers(String(upiVal))}</span>
-                  <span className="font-semibold">{isMixedOk ? '✓ মিলেছে' : `বাকি: ${formatPrice(Math.abs(totalAmt - mixedSum))}`}</span>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium flex items-center gap-1">
+                    📱 ইউপিআই ({currency})
+                  </label>
+                  <Input
+                    type="text"
+                    value={editUpiAmount}
+                    onChange={(e) => {
+                      const val = convertBengaliToEnglishNumerals(e.target.value).replace(/[^0-9.]/g, '');
+                      setEditUpiAmount(val);
+                      const upiV = parseFloat(val) || 0;
+                      if (upiV <= (parseFloat(convertBengaliToEnglishNumerals(editAmount)) || 0)) {
+                        setEditCashAmount(((parseFloat(convertBengaliToEnglishNumerals(editAmount)) || 0) - upiV).toFixed(2).replace(/\.00$/, ''));
+                      } else {
+                        setEditCashAmount('0');
+                      }
+                    }}
+                    placeholder="0.00"
+                    className="h-9"
+                  />
                 </div>
               </div>
-            );
-          })()}
+              <div className={`text-xs px-2 py-1.5 rounded-lg flex items-center justify-between ${Math.abs((parseFloat(editCashAmount) || 0) + (parseFloat(editUpiAmount) || 0) - (parseFloat(convertBengaliToEnglishNumerals(editAmount)) || 0)) < 0.01
+                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400'
+                : 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400'
+                }`}>
+                <span>নগদ {currency}{formatStringNumbers(String(parseFloat(editCashAmount) || 0))} + ইউপিআই {currency}{formatStringNumbers(String(parseFloat(editUpiAmount) || 0))}</span>
+                <span className="font-semibold">{Math.abs((parseFloat(editCashAmount) || 0) + (parseFloat(editUpiAmount) || 0) - (parseFloat(convertBengaliToEnglishNumerals(editAmount)) || 0)) < 0.01 ? '✓ মিলেছে' : `বাকি: ${formatPrice(Math.abs((parseFloat(convertBengaliToEnglishNumerals(editAmount)) || 0) - ((parseFloat(editCashAmount) || 0) + (parseFloat(editUpiAmount) || 0))))}`}</span>
+              </div>
+            </div>
+          )}
         </div>
         <DialogFooter className="gap-2 shrink-0">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             {labels.cancel}
           </Button>
-          <Button onClick={onSave} disabled={isSavingEdit || !editAmount || !editCategory || !editDate} className="bg-emerald-600 hover:bg-emerald-700 text-white dark:bg-emerald-500 dark:hover:bg-emerald-600">
+          <Button onClick={onSave} disabled={isSavingEdit || !editAmount || !editCategory || !editDate || (editPaymentMethod === 'Mixed' && Math.abs((parseFloat(editCashAmount) || 0) + (parseFloat(editUpiAmount) || 0) - (parseFloat(convertBengaliToEnglishNumerals(editAmount)) || 0)) >= 0.01)} className="bg-emerald-600 hover:bg-emerald-700 text-white dark:bg-emerald-500 dark:hover:bg-emerald-600">
             {isSavingEdit && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}
             {labels.save}
           </Button>

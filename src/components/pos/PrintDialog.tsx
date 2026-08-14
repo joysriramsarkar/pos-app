@@ -328,7 +328,7 @@ export function PrintDialog({
                   <Label
                     key={fmt.value}
                     htmlFor={fmt.value}
-                    className={`flex flex-col items-center gap-2 p-3 rounded-lg border-2 cursor-pointer transition-all hover:bg-gray-50 ${selectedFormat === fmt.value ? "border-primary bg-primary/5" : "border-gray-200"}`}
+                    className={`flex flex-col items-center gap-2 p-3 rounded-lg border-2 cursor-pointer transition-all hover:bg-gray-50 dark:hover:bg-gray-900/50 ${selectedFormat === fmt.value ? "border-primary bg-primary/5" : "border-gray-200 dark:border-gray-800"}`}
                   >
                     <RadioGroupItem
                       value={fmt.value}
@@ -386,7 +386,7 @@ export function PrintDialog({
                 id="footer-message"
                 value={footerMessage}
                 onChange={(e) => setFooterMessage(e.target.value)}
-                className="w-full p-2 text-sm border rounded-md resize-none h-16"
+                className="w-full p-2 text-sm border rounded-md resize-none h-16 bg-background"
                 placeholder="Custom footer message..."
               />
             </div>
@@ -424,7 +424,7 @@ export function PrintDialog({
             variant="outline"
             onClick={handleShare}
             disabled={isSharing || isPrinting}
-            className="gap-2 border-green-500 text-green-600 hover:bg-green-50"
+            className="gap-2 border-green-500 text-green-600 hover:bg-green-50 dark:hover:bg-green-950/20"
           >
             <Share2 className="w-4 h-4" />
             {isSharing ? t('sharing') : t('share_whatsapp')}

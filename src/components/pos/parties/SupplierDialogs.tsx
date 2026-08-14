@@ -63,6 +63,8 @@ export function SupplierLedgerDialog({
   const t = useTranslations('Parties');
   const { isBn } = useNumberFormat();
 
+  const supplierName = !isBn && supplier?.nameEn ? supplier.nameEn : (supplier?.name || '');
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="md:max-w-2xl w-[95vw] max-h-[90dvh] flex flex-col overflow-hidden p-0">
@@ -70,7 +72,7 @@ export function SupplierLedgerDialog({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 min-w-0">
               <FileText className="w-5 h-5 shrink-0" />
-              <span className="truncate">{t('ledger_title') || 'লেজার খাতা'} - {supplier?.name}</span>
+              <span className="truncate">{t('ledger_title') || 'লেজার খাতা'} - {supplierName}</span>
             </DialogTitle>
             <DialogDescription>
               {t('transaction_history') || 'সাপ্লায়ারের লেনদেনের ইতিহাস ও বকেয়া খতিয়ান'}
@@ -101,7 +103,7 @@ export function SupplierLedgerDialog({
               ) : (
                 ledgerEntries.map((entry) => {
                   const desc = entry.description || '';
-                  const formattedDesc = desc
+                  let formattedDesc = desc
                     .replace(/^স্টক ক্রয়:/, isBn ? 'স্টক ক্রয়:' : 'Stock Purchase:')
                     .replace(/^Purchase:/, isBn ? 'স্টক ক্রয়:' : 'Stock Purchase:')
                     .replace(/^Paid supplier:/, isBn ? 'সাপ্লায়ারকে পরিশোধ:' : 'Paid supplier:')
@@ -109,7 +111,12 @@ export function SupplierLedgerDialog({
                     .replace(/Manual supplier due entry \(ম্যানুয়াল সাপ্লায়ার বাকি এন্ট্রি\)/g, isBn ? 'ম্যানুয়াল সাপ্লায়ার বাকি এন্ট্রি' : 'Manual supplier due entry')
                     .replace(/টাকা পরিশোধ \(পেমেন্ট\)/g, isBn ? 'টাকা পরিশোধ (পেমেন্ট)' : 'Payment')
                     .replace(/খরচ ক্রয়:/g, isBn ? 'খরচ ক্রয়:' : 'Expense:')
+                    .replace(/পূর্বের বকেয়া পরিশোধ/g, isBn ? 'পূর্বের বকেয়া পরিশোধ' : 'Previous Due Repayment')
                     .replace(/Supplier Payment/g, isBn ? 'সাপ্লায়ার পেমেন্ট' : 'Supplier Payment');
+
+                  if (!isBn && supplier?.nameEn && supplier?.name) {
+                    formattedDesc = formattedDesc.replace(supplier.name, supplier.nameEn);
+                  }
                   return (
                     <div
                       key={entry.id}
@@ -196,6 +203,8 @@ export function SupplierPaymentDialog({
 }: SupplierPaymentDialogProps) {
   const s = supplier as SupplierWithBalances | null;
   const t = useTranslations('Parties');
+  const { isBn } = useNumberFormat();
+  const supplierName = !isBn && supplier?.nameEn ? supplier.nameEn : (supplier?.name || '');
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -203,7 +212,7 @@ export function SupplierPaymentDialog({
         <DialogHeader>
           <DialogTitle>{t('record_payment') || 'টাকা পরিশোধ করুন'}</DialogTitle>
           <DialogDescription>
-            {t('record_payment_from') || 'পেমেন্ট রেকর্ড করুন'} ({supplier?.name})
+            {t('record_payment_from') || 'পেমেন্ট রেকর্ড করুন'} ({supplierName})
           </DialogDescription>
         </DialogHeader>
 
@@ -369,6 +378,8 @@ export function SupplierDueEntryDialog({
   onSubmit,
 }: SupplierDueEntryDialogProps) {
   const t = useTranslations('Parties');
+  const { isBn } = useNumberFormat();
+  const supplierName = !isBn && supplier?.nameEn ? supplier.nameEn : (supplier?.name || '');
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -376,7 +387,7 @@ export function SupplierDueEntryDialog({
         <DialogHeader>
           <DialogTitle>{t('due_entry_title') || 'সাপ্লায়ার ম্যানুয়াল বাকি এন্ট্রি'}</DialogTitle>
           <DialogDescription>
-            {t('due_entry') || 'বাকি এন্ট্রি'} ({supplier?.name || ''})
+            {t('due_entry') || 'বাকি এন্ট্রি'} ({supplierName})
           </DialogDescription>
         </DialogHeader>
 

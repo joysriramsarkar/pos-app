@@ -354,7 +354,7 @@ export function TransactionDetailsDialog({
                 <Button
                   variant="outline"
                   onClick={() => setIsPrintOpen(true)}
-                  className="h-10 gap-2 border-blue-500 text-blue-600 hover:bg-blue-50"
+                  className="h-10 gap-2 border-blue-500 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/20"
                 >
                   <Printer className="w-4 h-4" />
                   {tc('print') || 'Print'}
@@ -363,7 +363,7 @@ export function TransactionDetailsDialog({
                   variant="outline"
                   onClick={handleShare}
                   disabled={isSharing}
-                  className="h-10 gap-2 border-green-500 text-green-600 hover:bg-green-50"
+                  className="h-10 gap-2 border-green-500 text-green-600 hover:bg-green-50 dark:hover:bg-green-950/20"
                 >
                   <Share2 className="w-4 h-4" />
                   {isSharing ? t('sharing') : t('share_whatsapp')}

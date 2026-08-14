@@ -35,14 +35,15 @@ export function CartTotals({
   formatPrice,
   t,
 }: CartTotalsProps) {
+  const visibleMethods = paymentMethods.filter(({ method }) => method !== 'Due' || customerName);
+
   return (
     <div className="flex-none mt-auto bg-background border-t p-1.5 md:p-0 shadow-[0_-8px_20px_-10px_rgba(0,0,0,0.12)] md:shadow-none z-10 shrink-0 pb-[72px] lg:pb-0">
 
       <div className="p-1.5 md:p-3">
         <Label className="text-[9px] md:text-[10px] font-semibold text-muted-foreground mb-1 block uppercase tracking-wider">{t('payment_method')}</Label>
-        <div className="grid grid-cols-4 gap-1">
-          {paymentMethods
-            .filter(({ method }) => method !== 'Due' || customerName)
+        <div className={cn("grid gap-1", visibleMethods.length === 3 ? "grid-cols-3" : "grid-cols-4")}>
+          {visibleMethods
             .map(({ method, icon, labelKey, color }) => (
               <button
                 key={method}
@@ -60,15 +61,12 @@ export function CartTotals({
                     <Check className="w-2 h-2 text-white" />
                   </div>
                 )}
-                <div className={cn(
-                  'mb-0.5 transition-transform duration-200 inline-flex items-center justify-center text-muted-foreground scale-90 sm:scale-100',
-                  paymentMethod === method ? 'text-emerald-600 dark:text-emerald-400' : ''
-                )}>
+                <div className={cn('text-muted-foreground group-hover:text-foreground transition-colors shrink-0 flex items-center justify-center h-4 w-4 sm:h-4 sm:w-4', color)}>
                   {icon}
                 </div>
                 <span className={cn(
-                  'text-[9px] sm:text-[10px] font-bold tracking-tight leading-none',
-                  paymentMethod === method ? 'text-emerald-600 dark:text-emerald-400' : 'text-foreground'
+                  'mt-0.5 text-[8px] sm:text-[9px] md:text-[10px] font-bold tracking-tight truncate w-full text-center',
+                  paymentMethod === method ? 'text-emerald-700 dark:text-emerald-400' : 'text-foreground/80'
                 )}>
                   {t(labelKey as any)}
                 </span>

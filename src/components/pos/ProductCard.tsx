@@ -19,7 +19,7 @@ export function ProductCard({ product }: ProductCardProps) {
   const addItem = useCartStore((state) => state.addItem);
   const t = useTranslations('Billing');
   const locale = useLocale();
-  const { formatPrice } = useNumberFormat();
+  const { formatPrice, formatNumber } = useNumberFormat();
   
   const isLowStock = product.currentStock <= product.minStockLevel;
   const isOutOfStock = product.currentStock <= 0;
@@ -111,7 +111,7 @@ export function ProductCard({ product }: ProductCardProps) {
                     "font-medium truncate",
                     isOutOfStock ? "text-red-500 font-bold" : isLowStock ? "text-amber-600 dark:text-amber-500" : ""
                   )}>
-                    {t('stock')}: {product.currentStock}{isOutOfStock ? ` (${t('out_of_stock')})` : ''}
+                    {t('stock')}: {formatNumber(product.currentStock)}{isOutOfStock ? ` (${t('out_of_stock')})` : ''}
                   </span>
                 </div>
               </div>

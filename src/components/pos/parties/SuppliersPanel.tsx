@@ -27,6 +27,7 @@ import type { Supplier } from '@/types/pos';
 import { cn } from '@/lib/utils';
 import { toMoneyNumber } from '@/lib/money';
 import { useTranslations } from 'next-intl';
+import { useNumberFormat } from '@/hooks/use-number-format';
 import { getInitialsBg } from './parties-utils';
 import type { SupplierWithBalances } from './types';
 import { Virtuoso } from 'react-virtuoso';
@@ -66,9 +67,12 @@ const SupplierCard = React.memo(function SupplierCard({
   onRecordDueEntry,
   onRecordPayment,
 }: SupplierCardProps) {
+  const { isBn } = useNumberFormat();
   const s = supplier as SupplierWithBalances;
-  const initials = supplier.name.charAt(0).toUpperCase();
-  const avatarColor = getInitialsBg(supplier.name);
+  const primaryName = !isBn && supplier.nameEn ? supplier.nameEn : supplier.name;
+  const secondaryName = !isBn && supplier.nameEn ? supplier.name : supplier.nameEn;
+  const initials = primaryName.charAt(0).toUpperCase();
+  const avatarColor = getInitialsBg(primaryName);
   const isDue = toMoneyNumber(s.totalDue || 0) > 0;
 
   return (
@@ -81,9 +85,9 @@ const SupplierCard = React.memo(function SupplierCard({
               {initials}
             </div>
             <div className="min-w-0 flex-1">
-              <h3 className="font-bold text-sm md:text-base text-slate-800 dark:text-slate-200 truncate" title={supplier.name}>{supplier.name}</h3>
-              {supplier.nameEn && supplier.nameEn !== supplier.name && (
-                <p className="text-[10px] md:text-xs text-muted-foreground/80 font-medium truncate" title={supplier.nameEn}>{supplier.nameEn}</p>
+              <h3 className="font-bold text-sm md:text-base text-slate-800 dark:text-slate-200 truncate" title={primaryName}>{primaryName}</h3>
+              {secondaryName && secondaryName !== primaryName && (
+                <p className="text-[10px] md:text-xs text-muted-foreground/80 font-medium truncate" title={secondaryName}>{secondaryName}</p>
               )}
               {supplier.phone ? (
                 <p className="text-[11px] md:text-xs text-muted-foreground flex items-center gap-1 mt-0.5">

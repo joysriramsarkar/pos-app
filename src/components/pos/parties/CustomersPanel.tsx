@@ -29,6 +29,7 @@ import type { Customer } from '@/types/pos';
 import { cn } from '@/lib/utils';
 import { toMoneyNumber } from '@/lib/money';
 import { useTranslations } from 'next-intl';
+import { useNumberFormat } from '@/hooks/use-number-format';
 import { getInitialsBg } from './parties-utils';
 import { Virtuoso } from 'react-virtuoso';
 
@@ -76,8 +77,11 @@ const CustomerCard = React.memo(function CustomerCard({
   onWithdraw,
   onRecordPayment,
 }: CustomerCardProps) {
-  const initials = customer.name.charAt(0).toUpperCase();
-  const avatarColor = getInitialsBg(customer.name);
+  const { isBn } = useNumberFormat();
+  const primaryName = !isBn && customer.nameEn ? customer.nameEn : customer.name;
+  const secondaryName = !isBn && customer.nameEn ? customer.name : customer.nameEn;
+  const initials = primaryName.charAt(0).toUpperCase();
+  const avatarColor = getInitialsBg(primaryName);
   const isDue = toMoneyNumber(customer.totalDue) > 0;
   const isPrepaid = toMoneyNumber(customer.prepaidBalance) > 0;
 
@@ -91,9 +95,9 @@ const CustomerCard = React.memo(function CustomerCard({
               {initials}
             </div>
             <div className="min-w-0 flex-1">
-              <h3 className="font-bold text-sm md:text-base text-slate-800 dark:text-slate-200 truncate" title={customer.name}>{customer.name}</h3>
-              {customer.nameEn && customer.nameEn !== customer.name && (
-                <p className="text-[10px] md:text-xs text-muted-foreground/80 font-medium truncate" title={customer.nameEn}>{customer.nameEn}</p>
+              <h3 className="font-bold text-sm md:text-base text-slate-800 dark:text-slate-200 truncate" title={primaryName}>{primaryName}</h3>
+              {secondaryName && secondaryName !== primaryName && (
+                <p className="text-[10px] md:text-xs text-muted-foreground/80 font-medium truncate" title={secondaryName}>{secondaryName}</p>
               )}
               {customer.phone ? (
                 <p className="text-[11px] md:text-xs text-muted-foreground flex items-center gap-1 mt-0.5">

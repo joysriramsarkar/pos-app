@@ -173,7 +173,7 @@ export function ProductsReport({ onBack }: ProductsReportProps) {
   // formatCompact used for Y-axis; formatCompactUnit for quantity axis (no currency)
 
   return (
-    <div className="flex-1 flex flex-col gap-4 p-4 md:p-6 bg-slate-50/50 overflow-y-auto min-h-0 pb-24 animate-page-enter">
+    <div className="flex-1 flex flex-col gap-4 p-4 md:p-6 bg-slate-50/50 dark:bg-background overflow-y-auto min-h-0 pb-24 animate-page-enter">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-3">

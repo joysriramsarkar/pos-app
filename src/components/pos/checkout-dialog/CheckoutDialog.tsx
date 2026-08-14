@@ -318,9 +318,9 @@ export function CheckoutDialog({
   const paymentMethodIcon = useMemo(() => {
     const finalPaymentMethod = remainingTotal === 0 ? 'Prepaid' : paymentMethod;
     switch (finalPaymentMethod) {
-      case 'Cash': return <Banknote className="w-2 h-2" />;
-      case 'UPI': return <Smartphone className="w-2 h-2" />;
-      case 'Mixed': return (<div className="flex items-center gap-1"><Banknote className="w-2 h-2" /><Smartphone className="w-2 h-2" /></div>);
+      case 'Cash': return <Banknote className="w-4 h-4" />;
+      case 'UPI': return <Smartphone className="w-4 h-4" />;
+      case 'Mixed': return (<div className="flex items-center gap-1"><Banknote className="w-4 h-4" /><Smartphone className="w-4 h-4" /></div>);
       case 'Due': return <Clock className="w-4 h-4" />;
       case 'Prepaid': return <Wallet className="w-4 h-4 text-green-600" />;
       default: return null;

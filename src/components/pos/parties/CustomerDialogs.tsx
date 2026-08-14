@@ -39,6 +39,7 @@ import {
 import type { Customer, LedgerEntry } from '@/types/pos';
 import { cn, convertBengaliToEnglishNumerals } from '@/lib/utils';
 import { useTranslations } from 'next-intl';
+import { useNumberFormat } from '@/hooks/use-number-format';
 import type { CustomerPurchaseDetail } from './types';
 
 interface CustomerLedgerDialogProps {
@@ -59,6 +60,8 @@ export function CustomerLedgerDialog({
   formatDate,
 }: CustomerLedgerDialogProps) {
   const t = useTranslations('Parties');
+  const { isBn } = useNumberFormat();
+  const customerName = !isBn && customer?.nameEn ? customer.nameEn : (customer?.name || '');
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -66,7 +69,7 @@ export function CustomerLedgerDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileText className="w-5 h-5" />
-            {t('ledger_title') || 'Ledger'} - {customer?.name}
+            {t('ledger_title') || 'Ledger'} - {customerName}
           </DialogTitle>
           <DialogDescription>
             {t('transaction_history') || 'Transaction history and due balance'}
@@ -93,45 +96,58 @@ export function CustomerLedgerDialog({
 
           <ScrollArea className="h-75">
             <div className="space-y-2 pr-2">
-              {ledgerEntries.map((entry) => (
-                <div
-                  key={entry.id}
-                  className={cn(
-                    "flex items-center justify-between p-3 rounded-lg border",
-                    entry.entryType === 'credit' ? 'bg-red-50 border-red-100' : 'bg-green-50 border-green-100'
-                  )}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={cn(
-                      "w-8 h-8 rounded-full flex items-center justify-center",
-                      entry.entryType === 'credit' ? 'bg-red-100' : 'bg-green-100'
-                    )}>
-                      {entry.entryType === 'credit' ? (
-                        <ArrowUpRight className="w-4 h-4 text-red-600" />
-                      ) : (
-                        <ArrowDownRight className="w-4 h-4 text-green-600" />
-                      )}
+              {ledgerEntries.map((entry) => {
+                const desc = entry.description || '';
+                let formattedDesc = desc
+                  .replace(/পূর্বের বকেয়া পরিশোধ/g, isBn ? 'পূর্বের বকেয়া পরিশোধ' : 'Previous Due Repayment')
+                  .replace(/বকেয়া আদায়/g, isBn ? 'বকেয়া আদায়' : 'Due Collection')
+                  .replace(/পেমেন্ট রেকর্ড:/g, isBn ? 'পেমেন্ট রেকর্ড:' : 'Payment:')
+                  .replace(/টাকা পরিশোধ \(পেমেন্ট\)/g, isBn ? 'টাকা পরিশোধ (পেমেন্ট)' : 'Payment');
+
+                if (!isBn && customer?.nameEn && customer?.name) {
+                  formattedDesc = formattedDesc.replace(customer.name, customer.nameEn);
+                }
+
+                return (
+                  <div
+                    key={entry.id}
+                    className={cn(
+                      "flex items-center justify-between p-3 rounded-lg border",
+                      entry.entryType === 'credit' ? 'bg-red-50 border-red-100' : 'bg-green-50 border-green-100'
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={cn(
+                        "w-8 h-8 rounded-full flex items-center justify-center",
+                        entry.entryType === 'credit' ? 'bg-red-100' : 'bg-green-100'
+                      )}>
+                        {entry.entryType === 'credit' ? (
+                          <ArrowUpRight className="w-4 h-4 text-red-600" />
+                        ) : (
+                          <ArrowDownRight className="w-4 h-4 text-green-600" />
+                        )}
+                      </div>
+                      <div>
+                        <p className="font-medium text-sm">{formattedDesc}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {formatDate(entry.createdAt)} • {entry.referenceId}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-medium text-sm">{entry.description}</p>
+                    <div className="text-right">
+                      <p className={cn(
+                        "font-semibold",
+                        entry.entryType === 'credit' ? 'text-red-600' : 'text-green-600'
+                      )}>
+                        {entry.entryType === 'credit' ? '+' : '-'}{formatPrice(entry.amount)}
+                      </p>
                       <p className="text-xs text-muted-foreground">
-                        {formatDate(entry.createdAt)} • {entry.referenceId}
+                        Bal: {formatPrice(entry.balanceAfter)}
                       </p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className={cn(
-                      "font-semibold",
-                      entry.entryType === 'credit' ? 'text-red-600' : 'text-green-600'
-                    )}>
-                      {entry.entryType === 'credit' ? '+' : '-'}{formatPrice(entry.amount)}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Bal: {formatPrice(entry.balanceAfter)}
-                    </p>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </ScrollArea>
         </div>
@@ -180,6 +196,8 @@ export function CustomerPaymentDialog({
   onSubmit,
 }: CustomerPaymentDialogProps) {
   const t = useTranslations('Parties');
+  const { isBn } = useNumberFormat();
+  const customerName = !isBn && customer?.nameEn ? customer.nameEn : (customer?.name || '');
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -187,7 +205,7 @@ export function CustomerPaymentDialog({
         <DialogHeader>
           <DialogTitle>{t('record_payment') || 'পেমেন্ট রেকর্ড করুন'}</DialogTitle>
           <DialogDescription>
-            {customer?.name} থেকে পেমেন্ট রেকর্ড করুন
+            {t('record_payment_from') || 'পেমেন্ট রেকর্ড করুন'} ({customerName})
           </DialogDescription>
         </DialogHeader>
 
@@ -228,7 +246,7 @@ export function CustomerPaymentDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label>পেমেন্ট পদ্ধতি</Label>
+            <Label>{t('payment_method') || 'পেমেন্ট পদ্ধতি'}</Label>
             <Select value={paymentMethod} onValueChange={(v) => {
               setPaymentMethod(v);
               if (v === 'Mixed' && paymentAmount) {
@@ -240,7 +258,9 @@ export function CustomerPaymentDialog({
                 setUpiAmount('');
               }
             }}>
-              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="Cash">{t('cash') || 'নগদ'}</SelectItem>
                 <SelectItem value="UPI">{t('upi') || 'ইউপিআই'}</SelectItem>
@@ -249,73 +269,80 @@ export function CustomerPaymentDialog({
             </Select>
           </div>
 
-          {paymentMethod === 'Mixed' && (() => {
-            const totalAmt = parseFloat(convertBengaliToEnglishNumerals(paymentAmount)) || 0;
-            const cashVal = parseFloat(cashAmount) || 0;
-            const upiVal = parseFloat(upiAmount) || 0;
-            const mixedSum = cashVal + upiVal;
-            const mixedOk = Math.abs(mixedSum - totalAmt) < 0.01;
-            return (
-              <div className="space-y-2">
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">নগদ</Label>
-                    <Input type="text" value={cashAmount} onChange={(e) => {
-                      const val = convertBengaliToEnglishNumerals(e.target.value).replace(/[^0-9.]/g, '');
-                      setCashAmount(val);
-                      const cVal = parseFloat(val) || 0;
-                      if (cVal <= totalAmt) setUpiAmount((totalAmt - cVal).toFixed(2).replace(/\.00$/, ''));
-                      else setUpiAmount('0');
-                    }} className="h-9" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">ইউপিআই</Label>
-                    <Input type="text" value={upiAmount} onChange={(e) => {
-                      const val = convertBengaliToEnglishNumerals(e.target.value).replace(/[^0-9.]/g, '');
-                      setUpiAmount(val);
-                      const uVal = parseFloat(val) || 0;
-                      if (uVal <= totalAmt) setCashAmount((totalAmt - uVal).toFixed(2).replace(/\.00$/, ''));
-                      else setCashAmount('0');
-                    }} className="h-9" />
-                  </div>
-                </div>
-                <div className={`text-xs px-2 py-1.5 rounded-lg flex items-center justify-between ${mixedOk ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400' : 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400'}`}>
-                  <span>নগদ {cashVal} + ইউপিআই {upiVal}</span>
-                  <span className="font-semibold">{mixedOk ? '✓ মিলেছে' : `বাকি: ${formatPrice(Math.abs(totalAmt - mixedSum))}`}</span>
+          {paymentMethod === 'Mixed' && (
+            <div className="space-y-3 p-3 bg-muted/40 rounded-lg border border-border/50">
+              <div className="space-y-1">
+                <Label htmlFor="mixed-cash-amount" className="text-xs text-muted-foreground">{t('cash') || 'নগদ'}</Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs font-semibold">{currencySymbol}</span>
+                  <Input
+                    id="mixed-cash-amount"
+                    type="text"
+                    value={cashAmount}
+                    onChange={(e) => {
+                      const val = convertBengaliToEnglishNumerals(e.target.value);
+                      const cleaned = val.replace(/[^0-9.]/g, '');
+                      const dotCount = (cleaned.match(/\./g) || []).length;
+                      if (dotCount > 1) return;
+                      setCashAmount(cleaned);
+                      const enteredCash = parseFloat(cleaned) || 0;
+                      const totalAmt = parseFloat(convertBengaliToEnglishNumerals(paymentAmount)) || 0;
+                      if (totalAmt > 0 && enteredCash <= totalAmt) {
+                        setUpiAmount((totalAmt - enteredCash).toString());
+                      }
+                    }}
+                    placeholder="0"
+                    className="pl-8 h-8 text-sm"
+                  />
                 </div>
               </div>
-            );
-          })()}
+              <div className="space-y-1">
+                <Label htmlFor="mixed-upi-amount" className="text-xs text-muted-foreground">{t('upi') || 'ইউপিআই'}</Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs font-semibold">{currencySymbol}</span>
+                  <Input
+                    id="mixed-upi-amount"
+                    type="text"
+                    value={upiAmount}
+                    onChange={(e) => {
+                      const val = convertBengaliToEnglishNumerals(e.target.value);
+                      const cleaned = val.replace(/[^0-9.]/g, '');
+                      const dotCount = (cleaned.match(/\./g) || []).length;
+                      if (dotCount > 1) return;
+                      setUpiAmount(cleaned);
+                      const enteredUpi = parseFloat(cleaned) || 0;
+                      const totalAmt = parseFloat(convertBengaliToEnglishNumerals(paymentAmount)) || 0;
+                      if (totalAmt > 0 && enteredUpi <= totalAmt) {
+                        setCashAmount((totalAmt - enteredUpi).toString());
+                      }
+                    }}
+                    placeholder="0"
+                    className="pl-8 h-8 text-sm"
+                  />
+                </div>
+              </div>
+              <p className={cn(
+                "text-xs text-right font-medium",
+                isMixedOk ? "text-green-600" : "text-amber-600"
+              )}>
+                {formatPrice((parseFloat(convertBengaliToEnglishNumerals(cashAmount)) || 0) + (parseFloat(convertBengaliToEnglishNumerals(upiAmount)) || 0))} / {formatPrice(parsedPaymentAmount)}
+              </p>
+            </div>
+          )}
 
           <div className="flex flex-wrap gap-2">
             {[100, 200, 500, 1000].map((amount) => (
-              <Button
-                key={amount}
-                variant="outline"
-                size="sm"
-                onClick={() => setPaymentAmount(amount.toString())}
-              >
-                {formatPrice(amount)}
-              </Button>
+              <Button key={amount} variant="outline" size="sm" onClick={() => setPaymentAmount(amount.toString())}>{formatPrice(amount)}</Button>
             ))}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setPaymentAmount(Math.round(customer?.totalDue || 0).toString())}
-            >
-              {t('full_amount') || 'সম্পূর্ণ পরিমাণ'}
-            </Button>
+            <Button variant="outline" size="sm" onClick={() => setPaymentAmount((customer?.totalDue || 0).toString())}>{t('full_amount') || 'সম্পূর্ণ পরিমাণ'}</Button>
           </div>
         </div>
 
         <DialogFooter className="gap-2 sm:gap-0">
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
-            {t('cancel') || 'বাতিল'}
-          </Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>{t('cancel') || 'বাতিল'}</Button>
           <Button
             onClick={onSubmit}
-            disabled={!paymentAmount || parsedPaymentAmount <= 0 || (customer ? parsedPaymentAmount > customer.totalDue : false) || !isMixedOk || isSubmitting}
-            className="bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
+            disabled={!paymentAmount || parsedPaymentAmount <= 0 || isSubmitting || (paymentMethod === 'Mixed' && !isMixedOk)}
           >
             {isSubmitting ? (
               <>
@@ -356,6 +383,8 @@ export function CustomerPrepaymentDialog({
   onSubmit,
 }: CustomerPrepaymentDialogProps) {
   const t = useTranslations('Parties');
+  const { isBn } = useNumberFormat();
+  const customerName = !isBn && customer?.nameEn ? customer.nameEn : (customer?.name || '');
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -363,7 +392,7 @@ export function CustomerPrepaymentDialog({
         <DialogHeader>
           <DialogTitle>{t('add_prepayment') || 'আগাম জমা দিন'}</DialogTitle>
           <DialogDescription>
-            {customer?.name} এর জন্য আগাম জমা যোগ করুন
+            {customerName} এর জন্য আগাম জমা যোগ করুন
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
@@ -456,6 +485,8 @@ export function CustomerWithdrawDialog({
   onSubmit,
 }: CustomerWithdrawDialogProps) {
   const t = useTranslations('Parties');
+  const { isBn } = useNumberFormat();
+  const customerName = !isBn && customer?.nameEn ? customer.nameEn : (customer?.name || '');
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -463,7 +494,7 @@ export function CustomerWithdrawDialog({
         <DialogHeader>
           <DialogTitle>{t('withdraw_prepaid_balance') || 'আগাম জমা উত্তোলন করুন'}</DialogTitle>
           <DialogDescription>
-            {customer?.name} এর আগাম জমা থেকে নগদ উত্তোলন করুন
+            {customerName} এর আগাম জমা থেকে নগদ উত্তোলন করুন
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
@@ -550,6 +581,8 @@ export function CustomerDueEntryDialog({
   onSubmit,
 }: CustomerDueEntryDialogProps) {
   const t = useTranslations('Parties');
+  const { isBn } = useNumberFormat();
+  const customerName = !isBn && customer?.nameEn ? customer.nameEn : (customer?.name || '');
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

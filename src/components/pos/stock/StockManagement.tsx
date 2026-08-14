@@ -83,14 +83,6 @@ export function StockManagement({
   // Use search results when actively searching, otherwise use store products
   const products: Product[] = searchResults !== null ? searchResults : storeProducts;
 
-  // Reset category filter and update search results when viewing inactive products
-  useEffect(() => {
-    if (stockFilter === 'inactive') {
-      setCategoryFilter('all');
-    }
-    handleSearchChange(searchQuery);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stockFilter]);
 
   const prevStoreCountRef = useRef(storeProducts.length);
   useEffect(() => {
@@ -193,6 +185,14 @@ export function StockManagement({
     },
     [stockFilter, storeProducts]
   );
+
+  // Reset category filter and update search results when viewing inactive products
+  useEffect(() => {
+    if (stockFilter === 'inactive') {
+      setCategoryFilter('all');
+    }
+    handleSearchChange(searchQuery);
+  }, [stockFilter, searchQuery, handleSearchChange]);
 
   // Infinite scroll: load more when sentinel is visible
   const loadMore = useCallback(async () => {
