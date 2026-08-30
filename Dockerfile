@@ -9,7 +9,7 @@ RUN corepack enable && corepack prepare pnpm@11.24.0 --activate
 # ── deps ──────────────────────────────────────────────────────────────────────
 FROM base AS deps
 RUN apk add --no-cache libc6-compat
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml* ./
 RUN pnpm install --frozen-lockfile
 
 # ── builder ───────────────────────────────────────────────────────────────────
