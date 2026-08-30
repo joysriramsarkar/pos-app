@@ -1,8 +1,5 @@
-import path from 'node:path';
+import 'dotenv/config';
 import { defineConfig } from 'prisma/config';
-import { loadEnvConfig } from '@next/env';
-
-loadEnvConfig(__dirname);
 
 export default defineConfig({
   datasource: {
