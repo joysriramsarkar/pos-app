@@ -55,11 +55,11 @@
 
 ### Installation
 
-**Package manager:** npm only (`package-lock.json`). Do not commit `bun.lock`.
+**Package manager:** pnpm (`pnpm-lock.yaml`). Do not commit `package-lock.json` or `bun.lock`.
 
 **1. Clone & install dependencies**
 ```bash
-npm install
+pnpm install
 ```
 
 **2. Environment variables**
@@ -77,20 +77,20 @@ Edit `.env` with your database and secrets. Required keys are documented in `.en
 | `NEXTAUTH_SECRET` | yes | ≥ 32 chars (`openssl rand -base64 32`) |
 | `NEXTAUTH_URL` | yes | e.g. `http://localhost:3000` |
 | `ALLOWED_ORIGINS` | prod | Comma-separated CORS/CSRF origins |
-| `SEED_ADMIN_PASSWORD` | optional | Stable password for `npm run db:seed` |
+| `SEED_ADMIN_PASSWORD` | optional | Stable password for `pnpm db:seed` |
 
 > `NEXTAUTH_SECRET` should be a strong random string, at least 32 characters long.
 
 **3. Database setup**
 ```bash
-npm run db:push
-npm run db:generate
-npm run db:seed
+pnpm db:push
+pnpm db:generate
+pnpm db:seed
 ```
 
 **4. Start dev server**
 ```bash
-npm run dev
+pnpm dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
@@ -99,7 +99,7 @@ If `SEED_ADMIN_PASSWORD` is set, the admin user will be seeded with:
 - username: `admin`
 - password: the value of `SEED_ADMIN_PASSWORD`
 
-If `SEED_ADMIN_PASSWORD` is not set, the seed script generates a random one-time password and prints it during `npm run db:seed`.
+If `SEED_ADMIN_PASSWORD` is not set, the seed script generates a random one-time password and prints it during `pnpm db:seed`.
 
 ---
 

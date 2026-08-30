@@ -2,9 +2,10 @@
   "name": "pos-app",
   "version": "0.2.0",
   "private": true,
+  "packageManager": "pnpm@11.24.0",
   "scripts": {
     "dev": "next dev -p 3000",
-    "clean": "npx rimraf .next",
+    "clean": "rimraf .next",
     "build": "prisma generate --config prisma.config.ts && next build && shx mkdir -p .next/standalone/.next && shx cp -r public .next/standalone/public && shx cp -r .next/static .next/standalone/.next/static",
     "analyze": "cross-env BUNDLE_ANALYZE=true next build --webpack",
     "start": "node .next/standalone/server.js",
@@ -14,7 +15,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "check": "npm run lint && npm run typecheck"
+    "check": "pnpm lint && pnpm typecheck"
   },
   "dependencies": {
     "@capacitor-mlkit/barcode-scanning": "^8.0.1",
@@ -119,32 +120,24 @@
     "typescript": "^5.9.3",
     "vitest": "^3.2.7"
   },
-  "overrides": {
-    "@hono/node-server": "^1.19.13",
-    "dompurify": "^3.4.1",
-    "jspdf": "^4.2.1",
-    "postcss": "^8.5.10",
-    "uuid": "^14.0.0"
-  },
-  "trustedDependencies": [
-    "@parcel/watcher",
-    "@prisma/client",
-    "@prisma/engines",
-    "@swc/core",
-    "es5-ext",
-    "esbuild",
-    "prisma",
-    "sharp",
-    "unrs-resolver"
-  ],
-  "allowScripts": {
-    "@parcel/watcher@2.5.6": true,
-    "@prisma/engines@7.9.1": true,
-    "core-js@3.49.0": true,
-    "esbuild@0.28.1": true,
-    "@swc/core@1.15.21": true,
-    "prisma@7.9.1": true,
-    "sharp@0.34.5": true,
-    "unrs-resolver@1.11.1": true
+  "pnpm": {
+    "overrides": {
+      "@hono/node-server": "^1.19.13",
+      "dompurify": "^3.4.1",
+      "jspdf": "^4.2.1",
+      "postcss": "^8.5.10",
+      "uuid": "^14.0.0"
+    },
+    "onlyBuiltDependencies": [
+      "@parcel/watcher",
+      "@prisma/client",
+      "@prisma/engines",
+      "@swc/core",
+      "es5-ext",
+      "esbuild",
+      "prisma",
+      "sharp",
+      "unrs-resolver"
+    ]
   }
 }
