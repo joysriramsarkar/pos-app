@@ -3,7 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { db as prisma } from "@/lib/db";
 import { format, eachDayOfInterval, eachMonthOfInterval, parseISO, subDays } from "date-fns";
 import { toZonedTime } from "date-fns-tz";
-import { requirePermission } from "@/lib/api-middleware";
+import { requireAuth } from "@/lib/api-middleware";
+import { requireBusinessContext, checkPermission } from "@/lib/tenant";
 
 function toLocalBounds(date: Date, offsetMinutes: number): { start: Date; end: Date } {
   const offsetMs = -offsetMinutes * 60 * 1000;
@@ -20,8 +21,16 @@ function toLocalBounds(date: Date, offsetMinutes: number): { start: Date; end: D
 }
 
 export async function GET(request: NextRequest) {
-  const authResponse = await requirePermission(request, "reports.view");
-  if (authResponse) return authResponse;
+  const authResult = await requireAuth(request);
+  if (!authResult.authorized) return authResult.response;
+
+  const ctx = await requireBusinessContext();
+  if (ctx instanceof NextResponse) return ctx;
+
+  const denied = checkPermission(ctx, "reports.view");
+  if (denied) return denied;
+
+  const businessId = ctx.business.id;
 
   try {
     const sp = request.nextUrl.searchParams;
@@ -52,6 +61,7 @@ export async function GET(request: NextRequest) {
     // Fetch all purchase orders in this range
     const purchases = await prisma.purchase.findMany({
       where: {
+        businessId,
         createdAt: { gte: startDate, lte: endDate },
       },
       include: {
@@ -67,11 +77,10 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: "desc" },
     });
 
-
-
     // Fetch Supplier Payments in this range (to calculate payments done)
     const paymentExpenses = await prisma.expense.findMany({
       where: {
+        businessId,
         date: { gte: startDate, lte: endDate },
         category: "Supplier Payment",
         isActive: true,

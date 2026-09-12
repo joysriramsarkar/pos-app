@@ -40,11 +40,20 @@ export function usePosConnectivity() {
       }
     };
 
-    // Register Service Worker for offline fallback if supported
+    // Register Service Worker only in production to prevent dev HMR reload loops
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch((swErr) => {
-        console.warn('Service Worker registration skipped/failed:', swErr);
-      });
+      if (process.env.NODE_ENV === 'production') {
+        navigator.serviceWorker.register('/sw.js').catch((swErr) => {
+          console.warn('Service Worker registration skipped/failed:', swErr);
+        });
+      } else {
+        // In development, unregister any active service worker so HMR & Next.js work cleanly
+        navigator.serviceWorker.getRegistrations().then((registrations) => {
+          for (const registration of registrations) {
+            registration.unregister();
+          }
+        });
+      }
     }
 
     // Check on mount

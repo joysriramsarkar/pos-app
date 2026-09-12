@@ -44,6 +44,7 @@ import {
 import { type PageType, navItems, mobileBottomNavItems, MORE_MENU_PAGE_IDS } from '@/app/pos/nav-config';
 import { AddStockDialog, type StockEntryData } from '@/components/pos/AddStockDialog';
 import type { ProductFormData } from '@/components/pos/ProductDialog';
+import { BusinessSwitcher } from '@/components/pos/BusinessSwitcher';
 import dynamic from 'next/dynamic';
 
 const CameraScannerDialog = dynamic(
@@ -222,18 +223,26 @@ export function POSDashboard() {
   }, [currentPage]);
 
   // Settings store
-  const { settings } = useSettingsStore();
-  const storeName = settings?.store_name || STORE_CONFIG.name;
-  const storeNameBn = settings?.store_name_bn || STORE_CONFIG.nameBn;
+  const { settings, fetchSettings } = useSettingsStore();
+
+  const activeUser = useMemo(() => {
+    return (session?.user as any) || readStoredSessionUser();
+  }, [session]);
+
+  const storeName = activeUser?.businessName || settings?.store_name || STORE_CONFIG.name;
+  const storeNameBn = (activeUser?.businessName && activeUser.businessName !== STORE_CONFIG.name ? '' : settings?.store_name_bn) || '';
+
+  useEffect(() => {
+    if (session?.user) {
+      fetchSettings();
+    }
+  }, [session?.user, fetchSettings]);
+
   const [isAddStockOpen, setIsAddStockOpen] = useState(false);
   const [isProductDialogOpen, setIsProductDialogOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [completedCheckoutSale, setCompletedCheckoutSale] = useState<Sale | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
-
-  const activeUser = useMemo(() => {
-    return session?.user || readStoredSessionUser();
-  }, [session]);
 
   // Redirect to login if unauthenticated and online, or offline with no cached session
   useEffect(() => {
@@ -315,7 +324,7 @@ export function POSDashboard() {
       return navItems;
     }
 
-    if (userRole === 'ADMIN') {
+    if (userRole === 'OWNER' || userRole === 'ADMIN') {
       return navItems;
     } else if (userRole === 'MANAGER') {
       return navItems.filter(item => item.id !== 'users' && item.id !== 'settings' && item.id !== 'audit');
@@ -952,15 +961,11 @@ export function POSDashboard() {
     <nav className="flex flex-col h-full bg-slate-50 dark:bg-slate-900/50">
       <div className="p-4 border-b bg-background/50 backdrop-blur-sm">
         <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shadow-sm shrink-0">
-              <Store className="w-6 h-6 text-primary" />
-            </div>
-            <div className="min-w-0">
-              <h1 className="font-bold text-sm bg-linear-to-r from-primary to-primary/70 bg-clip-text text-transparent truncate">{storeName}</h1>
-              <p className="text-xs text-muted-foreground truncate">{storeNameBn}</p>
-            </div>
-          </div>
+          <BusinessSwitcher
+            storeName={storeName}
+            storeNameBn={storeNameBn}
+            currentBusinessId={session?.user?.businessId}
+          />
           <div className="flex items-center gap-2 shrink-0">
             <NotificationBell variant="desktop" />
           </div>

@@ -31,18 +31,17 @@ const ProductSyncPayloadSchema = z.union([
 ]);
 
 import { requireAuth } from "@/lib/api-middleware";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
+import { requireBusinessContext } from "@/lib/tenant";
 
 // GET /api/sync - Get pending sync items or sync status
 export async function GET(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session) {
-    return NextResponse.json(
-      { success: false, error: "Unauthorized" },
-      { status: 401 },
-    );
-  }
+  const authResult = await requireAuth(request);
+  if (!authResult.authorized) return authResult.response;
+
+  const ctx = await requireBusinessContext();
+  if (ctx instanceof NextResponse) return ctx;
+
+  const businessId = ctx.business.id;
 
   try {
     const { searchParams } = new URL(request.url);
@@ -51,9 +50,9 @@ export async function GET(request: NextRequest) {
     if (action === "status") {
       // Return sync status
       const [pendingCount, lastSync] = await Promise.all([
-        db.syncQueue.count({ where: { synced: false } }),
+        db.syncQueue.count({ where: { businessId, synced: false } }),
         db.syncQueue.findFirst({
-          where: { synced: true },
+          where: { businessId, synced: true },
           orderBy: { syncedAt: "desc" },
         }),
       ]);
@@ -69,7 +68,7 @@ export async function GET(request: NextRequest) {
 
     // Return all pending sync items
     const pendingItems = await db.syncQueue.findMany({
-      where: { synced: false },
+      where: { businessId, synced: false },
       orderBy: { createdAt: "asc" },
     });
 
@@ -90,7 +89,11 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (!authResult.authorized) return authResult.response!;
-  const session = authResult.session;
+
+  const ctx = await requireBusinessContext();
+  if (ctx instanceof NextResponse) return ctx;
+
+  const businessId = ctx.business.id;
 
   try {
     const idempotencyKey = request.headers.get("X-Idempotency-Key");
@@ -102,7 +105,15 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { actionType, payload } = body;
+    const { actionType, payload, businessId: payloadBusinessId } = body;
+
+    // Multi-tenant security: forbid cross-tenant sync queues
+    if (payloadBusinessId && payloadBusinessId !== businessId) {
+      return NextResponse.json(
+        { success: false, error: "Cross-tenant sync forbidden" },
+        { status: 403 },
+      );
+    }
 
     if (!actionType || !payload) {
       return NextResponse.json(
@@ -132,7 +143,7 @@ export async function POST(request: NextRequest) {
             throw new Error(
               "Invalid Sale payload: " + saleResult.error.message,
             );
-          operationResult = await syncSale(tx, saleResult.data, "create");
+          operationResult = await syncSale(tx, saleResult.data, "create", businessId);
           break;
         }
         case "customer:create": {
@@ -145,6 +156,7 @@ export async function POST(request: NextRequest) {
             tx,
             customerResult.data,
             "create",
+            businessId,
           );
           break;
         }
@@ -158,6 +170,7 @@ export async function POST(request: NextRequest) {
             tx,
             customerResult.data,
             "update",
+            businessId,
           );
           break;
         }
@@ -167,7 +180,7 @@ export async function POST(request: NextRequest) {
             throw new Error(
               "Invalid Product payload: " + productResult.error.message,
             );
-          operationResult = await syncProduct(tx, productResult.data, "update");
+          operationResult = await syncProduct(tx, productResult.data, "update", businessId);
           break;
         }
         case "product:create": {
@@ -176,7 +189,7 @@ export async function POST(request: NextRequest) {
             throw new Error(
               "Invalid Product payload: " + productResult.error.message,
             );
-          operationResult = await syncProduct(tx, productResult.data, "create");
+          operationResult = await syncProduct(tx, productResult.data, "create", businessId);
           break;
         }
         case "product:update": {
@@ -185,7 +198,7 @@ export async function POST(request: NextRequest) {
             throw new Error(
               "Invalid Product payload: " + productResult.error.message,
             );
-          operationResult = await syncProduct(tx, productResult.data, "update");
+          operationResult = await syncProduct(tx, productResult.data, "update", businessId);
           break;
         }
         case "prepayment:create": {
@@ -199,7 +212,7 @@ export async function POST(request: NextRequest) {
               "Invalid Prepayment payload: " + prepaymentResult.error.message,
             );
 
-          operationResult = await syncPrepayment(tx, prepaymentResult.data);
+          operationResult = await syncPrepayment(tx, prepaymentResult.data, businessId);
           break;
         }
         default:
@@ -230,6 +243,7 @@ export async function POST(request: NextRequest) {
         },
         create: {
           id: uuidv4(),
+          businessId,
           idempotencyKey,
           entityType: actionType,
           entityId, // Set entity_id to track which entity this syncs
@@ -248,6 +262,7 @@ export async function POST(request: NextRequest) {
     // Log audit for successful offline sale sync
     if (actionType === "sale:create" && result.data && !result.cached) {
       await logAudit({
+        businessId,
         userId: (result.data as { userId?: string }).userId || undefined,
         action: 'CREATE_SALE',
         entityType: 'Sale',
@@ -279,15 +294,15 @@ export async function POST(request: NextRequest) {
   }
 }
 // Sync sale from offline
-async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof SaleInputSchema>, action: string) {
+async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof SaleInputSchema>, action: string, businessId: string) {
   if (action === 'create') {
 
     if (!saleData.invoiceNumber) {
       throw new Error("Invoice number is required for sync");
     }
     // Check if sale already exists (prevent duplicates)
-    const existing = await tx.sale.findUnique({
-      where: { invoiceNumber: saleData.invoiceNumber },
+    const existing = await tx.sale.findFirst({
+      where: { businessId, invoiceNumber: saleData.invoiceNumber },
     });
 
     if (existing) {
@@ -307,12 +322,13 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
     const { plansByProductId, autoAdjusted } = await lockAndPlanSaleStock(
       tx,
       saleData.items,
+      businessId,
     );
 
     // 2. Validate customer exists if specified
     if (saleData.customerId) {
-      const customer = await tx.customer.findUnique({
-        where: { id: saleData.customerId },
+      const customer = await tx.customer.findFirst({
+        where: { id: saleData.customerId, businessId },
       });
 
       if (!customer) {
@@ -361,6 +377,7 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
     const sale = await tx.sale.create({
       data: {
         id: saleData.id,
+        businessId,
         invoiceNumber: saleData.invoiceNumber as string,
         userId: saleData.userId || null,
         customerId: saleData.customerId || null,
@@ -391,6 +408,7 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
     await applySaleStockPlans(tx, {
       saleId: sale.id,
       invoiceNumber: sale.invoiceNumber,
+      businessId,
       plans: Array.from(plansByProductId.values()),
       historyReasonPrefix: "Offline sync sale",
     });
@@ -412,7 +430,7 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
       const customerRaw = await tx.$queryRaw<any[]>`
         SELECT id, "total_due" as "totalDue", "prepaid_balance" as "prepaidBalance"
         FROM customers
-        WHERE id = ${saleData.customerId}
+        WHERE id = ${saleData.customerId} AND "business_id" = ${businessId}
         FOR UPDATE
       `;
       const customer = customerRaw[0];
@@ -431,6 +449,7 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
             }
             await tx.ledgerEntry.create({
               data: {
+                businessId,
                 customerId: saleData.customerId,
                 entryType: "prepayment-used",
                 amount: prepaidToUse,
@@ -459,6 +478,7 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
             if (creditAmount.gt(0)) {
               await tx.ledgerEntry.create({
                 data: {
+                  businessId,
                   customerId: saleData.customerId,
                   entryType: "credit",
                   amount: creditAmount,
@@ -471,6 +491,7 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
             if (externalPaidAmount.gt(0)) {
               await tx.ledgerEntry.create({
                 data: {
+                  businessId,
                   customerId: saleData.customerId,
                   entryType: "debit",
                   amount: externalPaidAmount,
@@ -489,6 +510,7 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
             
             await tx.ledgerEntry.create({
               data: {
+                businessId,
                 customerId: saleData.customerId,
                 entryType: "debit",
                 amount: debtRepaymentAmount,
@@ -502,6 +524,7 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
           if (changeAsPrepayment.gt(0)) {
             await tx.ledgerEntry.create({
               data: {
+                businessId,
                 customerId: saleData.customerId,
                 entryType: "prepayment-added",
                 amount: changeAsPrepayment,
@@ -555,6 +578,7 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
               updatedAt: new Date()
             },
             create: {
+              businessId,
               productId: item.productId,
               monthlySalesCount: qty,
               totalRevenue: revenue,
@@ -574,11 +598,11 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
 }
 
 // Sync prepayment from offline
-async function syncPrepayment(tx: Prisma.TransactionClient, prepaymentData: { customerId: string; amount: number }) {
+async function syncPrepayment(tx: Prisma.TransactionClient, prepaymentData: { customerId: string; amount: number }, businessId: string) {
   const customerRaw = await tx.$queryRaw<any[]>`
     SELECT id, "total_due" as "totalDue", "prepaid_balance" as "prepaidBalance"
     FROM customers
-    WHERE id = ${prepaymentData.customerId}
+    WHERE id = ${prepaymentData.customerId} AND "business_id" = ${businessId}
     FOR UPDATE
   `;
   const customer = customerRaw[0];
@@ -594,6 +618,7 @@ async function syncPrepayment(tx: Prisma.TransactionClient, prepaymentData: { cu
 
   await tx.ledgerEntry.create({
     data: {
+      businessId,
       customerId: prepaymentData.customerId,
       entryType: "prepayment-added",
       amount: prepaymentData.amount,
@@ -607,13 +632,13 @@ async function syncPrepayment(tx: Prisma.TransactionClient, prepaymentData: { cu
 }
 
 // Sync customer from offline
-async function syncCustomer(tx: Prisma.TransactionClient, customerData: z.infer<typeof CustomerInputSchema>, action: string) {
+async function syncCustomer(tx: Prisma.TransactionClient, customerData: z.infer<typeof CustomerInputSchema>, action: string, businessId: string) {
   if (action === 'create') {
 
     // Check if customer already exists (Server-wins)
     if (customerData.phone) {
-      const existing = await tx.customer.findUnique({
-        where: { phone: customerData.phone },
+      const existing = await tx.customer.findFirst({
+        where: { businessId, phone: customerData.phone },
       });
 
       if (existing) {
@@ -625,6 +650,7 @@ async function syncCustomer(tx: Prisma.TransactionClient, customerData: z.infer<
     return tx.customer.create({
       data: {
         id: customerData.id,
+        businessId,
         name: customerData.name,
         phone: customerData.phone || null,
         address: customerData.address || null,
@@ -641,8 +667,8 @@ async function syncCustomer(tx: Prisma.TransactionClient, customerData: z.infer<
       throw new Error("Customer ID is required for update");
     }
 
-    return tx.customer.update({
-      where: { id: customerData.id },
+    await tx.customer.updateMany({
+      where: { id: customerData.id, businessId },
       data: {
         name: customerData.name,
         phone: customerData.phone || null,
@@ -651,13 +677,17 @@ async function syncCustomer(tx: Prisma.TransactionClient, customerData: z.infer<
         updatedAt: new Date(),
       },
     });
+
+    return tx.customer.findFirst({
+      where: { id: customerData.id, businessId },
+    });
   }
 
   throw new Error(`Unknown action: ${action}`);
 }
 
 // Sync product updates (primarily stock changes) from offline
-async function syncProduct(tx: Prisma.TransactionClient, productData: z.infer<typeof ProductSyncPayloadSchema> | z.infer<typeof ProductInputSchema>, action: string) {
+async function syncProduct(tx: Prisma.TransactionClient, productData: z.infer<typeof ProductSyncPayloadSchema> | z.infer<typeof ProductInputSchema>, action: string, businessId: string) {
   if (action === 'create') {
     if (
       "name" in productData &&
@@ -681,7 +711,7 @@ async function syncProduct(tx: Prisma.TransactionClient, productData: z.infer<ty
 
       // Check if product already exists (prevent duplicates)
       if (id) {
-        const existing = await tx.product.findUnique({ where: { id } });
+        const existing = await tx.product.findFirst({ where: { id, businessId } });
         if (existing) {
           return existing;
         }
@@ -690,6 +720,7 @@ async function syncProduct(tx: Prisma.TransactionClient, productData: z.infer<ty
       return tx.product.create({
         data: {
           id,
+          businessId,
           barcode: barcode || null,
           name,
           nameBn: nameBn || null,
@@ -711,7 +742,7 @@ async function syncProduct(tx: Prisma.TransactionClient, productData: z.infer<ty
 
       // Lock product row
       const locked = await tx.$queryRaw<Array<{ id: string }>>`
-        SELECT id FROM products WHERE id = ${productId} FOR UPDATE
+        SELECT id FROM products WHERE id = ${productId} AND business_id = ${businessId} FOR UPDATE
       `;
       if (!locked[0]) {
         throw new Error(`Product ${productId} not found during stock sync`);
@@ -720,23 +751,25 @@ async function syncProduct(tx: Prisma.TransactionClient, productData: z.infer<ty
       let updated;
       if (quantityChange < 0) {
         const result = await tx.product.updateMany({
-          where: { id: productId, currentStock: { gte: Math.abs(quantityChange) } },
+          where: { id: productId, businessId, currentStock: { gte: Math.abs(quantityChange) } },
           data: { currentStock: { decrement: Math.abs(quantityChange) }, updatedAt: new Date() },
         });
-        updated = await tx.product.findUniqueOrThrow({ where: { id: productId } });
+        updated = await tx.product.findFirstOrThrow({ where: { id: productId, businessId } });
         // Only write history when stock actually changed — avoids ledger drift
         if (result.count === 0) {
           return updated;
         }
       } else {
-        updated = await tx.product.update({
-          where: { id: productId },
+        await tx.product.updateMany({
+          where: { id: productId, businessId },
           data: { currentStock: { increment: quantityChange }, updatedAt: new Date() },
         });
+        updated = await tx.product.findFirstOrThrow({ where: { id: productId, businessId } });
       }
 
       await tx.stockHistory.create({
         data: {
+          businessId,
           productId,
           changeType: quantityChange > 0 ? "purchase" : "sale",
           quantity: quantityChange,
@@ -772,22 +805,29 @@ async function syncProduct(tx: Prisma.TransactionClient, productData: z.infer<ty
         throw new Error("Product ID is required for update sync");
       }
 
-      return tx.product.upsert({
-        where: { id },
-        create: {
+      const existing = await tx.product.findFirst({ where: { id, businessId } });
+      if (existing) {
+        return tx.product.update({
+          where: { id },
+          data: {
+            barcode: barcode || null,
+            name,
+            nameBn: nameBn || null,
+            category,
+            buyingPrice,
+            sellingPrice,
+            unit,
+            currentStock,
+            minStockLevel,
+            isActive,
+          },
+        });
+      }
+
+      return tx.product.create({
+        data: {
           id,
-          barcode: barcode || null,
-          name,
-          nameBn: nameBn || null,
-          category,
-          buyingPrice,
-          sellingPrice,
-          unit,
-          currentStock,
-          minStockLevel,
-          isActive,
-        },
-        update: {
+          businessId,
           barcode: barcode || null,
           name,
           nameBn: nameBn || null,
@@ -813,14 +853,19 @@ export async function PUT(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (!authResult.authorized) return authResult.response!;
 
+  const ctx = await requireBusinessContext();
+  if (ctx instanceof NextResponse) return ctx;
+
+  const businessId = ctx.business.id;
+
   try {
     const body = await request.json();
     const { id, error } = body;
 
     if (error) {
       // Log sync error
-      await db.syncQueue.update({
-        where: { id },
+      await db.syncQueue.updateMany({
+        where: { id, businessId },
         data: {
           retryCount: { increment: 1 },
           error,
@@ -828,8 +873,8 @@ export async function PUT(request: NextRequest) {
       });
     } else {
       // Mark as synced
-      await db.syncQueue.update({
-        where: { id },
+      await db.syncQueue.updateMany({
+        where: { id, businessId },
         data: {
           synced: true,
           syncedAt: new Date(),
@@ -846,3 +891,4 @@ export async function PUT(request: NextRequest) {
     );
   }
 }
+

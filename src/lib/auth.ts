@@ -15,7 +15,7 @@ export const authOptions: NextAuthOptions = {
     CredentialsProvider({
       name: "Credentials",
       credentials: {
-        username: { label: "Username", type: "text" },
+        username: { label: "Username or Phone", type: "text" },
         password: { label: "Password", type: "password" }
       },
       async authorize(credentials) {
@@ -45,7 +45,7 @@ export const authOptions: NextAuthOptions = {
           }
         }
 
-        // Rate limit by username
+        // Rate limit by username/phone
         if (usernameLoginLimiter) {
           const { success } = await usernameLoginLimiter.limit(credentials.username);
           if (!success) {
@@ -60,10 +60,27 @@ export const authOptions: NextAuthOptions = {
           }
         }
 
-        const user = await db.user.findUnique({
+        // Find user by username OR phone (multi-tenant: one global identity)
+        const cleanInput = credentials.username.trim();
+        const user = await db.user.findFirst({
           where: {
-            username: credentials.username
-          }
+            OR: [
+              { username: cleanInput },
+              { username: cleanInput.toLowerCase() },
+              { phone: cleanInput },
+            ],
+          },
+          include: {
+            memberships: {
+              where: { isActive: true },
+              include: {
+                business: {
+                  select: { id: true, name: true, isActive: true },
+                },
+              },
+              take: 1,
+            },
+          },
         });
 
         if (!user) {
@@ -81,9 +98,10 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Account locked due to too many failed login attempts. Please try again later.");
         }
 
+        // Verify password against passwordHash
         const isPasswordValid = await bcrypt.compare(
           credentials.password,
-          user.password
+          user.passwordHash
         );
 
         if (!isPasswordValid) {
@@ -108,12 +126,20 @@ export const authOptions: NextAuthOptions = {
           });
         }
 
+        // Resolve primary business from membership
+        const primaryMembership = user.memberships[0];
+        const businessId = primaryMembership?.business?.id;
+        const businessName = primaryMembership?.business?.name;
+        const role = primaryMembership?.role;
+
         return {
           id: user.id,
           name: user.name,
           username: user.username,
           email: user.email || undefined,
-          role: user.role as "ADMIN" | "MANAGER" | "CASHIER" | "VIEWER",
+          role: role as "OWNER" | "ADMIN" | "MANAGER" | "CASHIER" | "VIEWER" | undefined,
+          businessId: businessId,
+          businessName: businessName,
           requiresPasswordChange: user.requiresPasswordChange,
         };
       }
@@ -124,15 +150,36 @@ export const authOptions: NextAuthOptions = {
     maxAge: 10 * 365 * 24 * 60 * 60, // 10 years for persistent login
   },
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session: updateSession }) {
+      // Initial sign-in: populate token from user object
       if (user) {
-        token.id = user.id;
-        token.name = user.name;
-        token.username = user.username;
-        token.role = user.role;
-        token.email = user.email;
-        token.requiresPasswordChange = user.requiresPasswordChange;
+        const u = user as {
+          id?: string;
+          name?: string | null;
+          username?: string;
+          role?: "OWNER" | "ADMIN" | "MANAGER" | "CASHIER" | "VIEWER";
+          email?: string | null;
+          businessId?: string;
+          businessName?: string;
+          requiresPasswordChange?: boolean;
+        };
+        token.id = u.id;
+        token.name = u.name;
+        token.username = u.username;
+        token.role = u.role;
+        token.email = u.email ?? undefined;
+        token.businessId = u.businessId;
+        token.businessName = u.businessName;
+        token.requiresPasswordChange = u.requiresPasswordChange;
       }
+
+      // Business switch: client calls useSession().update({ businessId, businessName, role })
+      if (trigger === "update" && updateSession) {
+        if (updateSession.businessId) token.businessId = updateSession.businessId;
+        if (updateSession.businessName) token.businessName = updateSession.businessName;
+        if (updateSession.role) token.role = updateSession.role;
+      }
+
       return token;
     },
     async session({ session, token }) {
@@ -140,8 +187,10 @@ export const authOptions: NextAuthOptions = {
         session.user.id = token.id as string;
         session.user.name = (token.name as string) || session.user.name;
         session.user.username = token.username as string;
-        session.user.role = token.role as "ADMIN" | "MANAGER" | "CASHIER" | "VIEWER";
+        session.user.role = token.role as "OWNER" | "ADMIN" | "MANAGER" | "CASHIER" | "VIEWER";
         session.user.email = (token.email as string) || session.user.email;
+        session.user.businessId = token.businessId as string;
+        session.user.businessName = token.businessName as string;
         session.user.requiresPasswordChange = token.requiresPasswordChange as boolean;
       }
       return session;

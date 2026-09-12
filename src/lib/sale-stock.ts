@@ -76,6 +76,7 @@ export function planSaleStockUsage(input: {
 export async function lockAndPlanSaleStock(
   tx: Prisma.TransactionClient,
   items: Array<{ productId: string; quantity: number; productName?: string }>,
+  businessId?: string,
 ): Promise<{
   deductions: StockDeduction[];
   plansByProductId: Map<string, SaleStockPlan>;
@@ -88,19 +89,33 @@ export async function lockAndPlanSaleStock(
   const autoAdjusted: AutoAdjustedStockItem[] = [];
 
   for (const d of deductions) {
-    const rows = await tx.$queryRaw<
-      Array<{
-        id: string;
-        name: string;
-        current_stock: Prisma.Decimal | number | string;
-        buying_price: Prisma.Decimal | number | string;
-      }>
-    >`
-      SELECT id, name, current_stock, buying_price
-      FROM products
-      WHERE id = ${d.productId}
-      FOR UPDATE
-    `;
+    const rows = businessId
+      ? await tx.$queryRaw<
+          Array<{
+            id: string;
+            name: string;
+            current_stock: Prisma.Decimal | number | string;
+            buying_price: Prisma.Decimal | number | string;
+          }>
+        >`
+          SELECT id, name, current_stock, buying_price
+          FROM products
+          WHERE id = ${d.productId} AND business_id = ${businessId}
+          FOR UPDATE
+        `
+      : await tx.$queryRaw<
+          Array<{
+            id: string;
+            name: string;
+            current_stock: Prisma.Decimal | number | string;
+            buying_price: Prisma.Decimal | number | string;
+          }>
+        >`
+          SELECT id, name, current_stock, buying_price
+          FROM products
+          WHERE id = ${d.productId}
+          FOR UPDATE
+        `;
 
     const row = rows[0];
     if (!row) {
@@ -148,6 +163,7 @@ export async function applySaleStockPlans(
   opts: {
     saleId: string;
     invoiceNumber: string;
+    businessId: string;
     plans: SaleStockPlan[];
     historyReasonPrefix?: string;
   },
@@ -182,6 +198,7 @@ export async function applySaleStockPlans(
 
       await tx.stockHistory.create({
         data: {
+          businessId: opts.businessId,
           productId: plan.productId,
           changeType: "adjustment",
           quantity: gap,
@@ -207,6 +224,7 @@ export async function applySaleStockPlans(
     data: plans
       .filter((p) => p.requiredQty > 0)
       .map((plan) => ({
+        businessId: opts.businessId,
         productId: plan.productId,
         changeType: "sale",
         quantity: -plan.requiredQty,

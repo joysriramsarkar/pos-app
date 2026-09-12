@@ -87,4 +87,5 @@ diff.txt
 
 # Local scratch directory
 /scratch/
+backup_*.json
 

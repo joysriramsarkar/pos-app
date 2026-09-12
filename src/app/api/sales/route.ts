@@ -26,7 +26,7 @@ import {
   lockAndPlanSaleStock,
 } from "@/lib/sale-stock";
 
-import { withAuthMiddleware, type RouteContext } from "@/lib/api-middleware";
+import { withBusinessContext, type RouteContext, type TenantContext } from "@/lib/api-middleware";
 import { logAudit } from "@/lib/audit";
 import { toClientError } from "@/lib/api-errors";
 import { enforceRateLimit, salesCreateLimiter } from "@/lib/rate-limit";
@@ -43,9 +43,10 @@ type CustomerLockRow = {
 };
 
 // GET /api/sales - Fetch sales
-export const GET = withAuthMiddleware(handleGet, { permissionCode: "sales.view" });
+export const GET = withBusinessContext(handleGet, { permissionCode: "sales.view" });
 
-async function handleGet(request: NextRequest, _ctx: RouteContext) {
+async function handleGet(request: NextRequest, ctx: RouteContext & { tenant: TenantContext }) {
+  const businessId = ctx.tenant.business.id;
   try {
     const { searchParams } = new URL(request.url);
     const parsed = SalesListQuerySchema.safeParse({
@@ -70,8 +71,8 @@ async function handleGet(request: NextRequest, _ctx: RouteContext) {
       parsed.data;
 
     if (id) {
-      const sale = await db.sale.findUnique({
-        where: { id },
+      const sale = await db.sale.findFirst({
+        where: { id, businessId },
         include: {
           items: { include: { product: { select: { unit: true } } } },
           customer: true,
@@ -96,7 +97,7 @@ async function handleGet(request: NextRequest, _ctx: RouteContext) {
       return NextResponse.json({ success: true, data: saleWithUnit });
     }
 
-    const where: Prisma.SaleWhereInput = {};
+    const where: Prisma.SaleWhereInput = { businessId };
 
     if (invoiceNumber) {
       const q = invoiceNumber.trim();
@@ -198,11 +199,13 @@ async function handleGet(request: NextRequest, _ctx: RouteContext) {
 }
 
 // POST /api/sales - Create new sale
-export const POST = withAuthMiddleware(handlePost, { permissionCode: "sales.create" });
+export const POST = withBusinessContext(handlePost, { permissionCode: "sales.create" });
 
-async function handlePost(request: NextRequest, ctx: RouteContext) {
+async function handlePost(request: NextRequest, ctx: RouteContext & { tenant: TenantContext }) {
   try {
-    const rateKey = ctx.auth?.user?.id || getIp(request) || "unknown";
+    const businessId = ctx.tenant.business.id;
+    const userId = ctx.tenant.user.id;
+    const rateKey = userId || getIp(request) || "unknown";
     const rate = await enforceRateLimit(`sales:create:${rateKey}`, {
       limit: 60,
       windowMs: 60_000,
@@ -282,18 +285,17 @@ async function handlePost(request: NextRequest, ctx: RouteContext) {
 
     const invoiceNumber = await generateServerInvoiceNumber();
 
-    // Auth from middleware context — no second session fetch
-    const userId = ctx.auth?.user?.id ?? null;
-
     const saleResult = await db.$transaction(
       async (tx) => {
         // Lock products first (sorted FOR UPDATE), plan auto-adjust + blended COGS
         const { plansByProductId, autoAdjusted } = await lockAndPlanSaleStock(
           tx,
           validatedItems,
+          businessId,
         );
 
         const saleCreateData: Prisma.SaleCreateInput = {
+          business: { connect: { id: businessId } },
           invoiceNumber,
           subtotal,
           discount: discountAmount,
@@ -335,6 +337,7 @@ async function handlePost(request: NextRequest, ctx: RouteContext) {
         await applySaleStockPlans(tx, {
           saleId: newSale.id,
           invoiceNumber: newSale.invoiceNumber,
+          businessId,
           plans: Array.from(plansByProductId.values()),
           historyReasonPrefix: "Sale",
         });
@@ -343,7 +346,7 @@ async function handlePost(request: NextRequest, ctx: RouteContext) {
           const customerRaw = await tx.$queryRaw<CustomerLockRow[]>`
             SELECT id, "total_due" as "totalDue", "prepaid_balance" as "prepaidBalance"
             FROM customers
-            WHERE id = ${customerId}
+            WHERE id = ${customerId} AND business_id = ${businessId}
             FOR UPDATE
           `;
           const customer = customerRaw[0];
@@ -372,6 +375,7 @@ async function handlePost(request: NextRequest, ctx: RouteContext) {
             }
             await tx.ledgerEntry.create({
               data: {
+                businessId,
                 customerId,
                 entryType: "prepayment-used",
                 amount: prepaidToUse,
@@ -394,6 +398,7 @@ async function handlePost(request: NextRequest, ctx: RouteContext) {
             if (creditAmount.gt(0)) {
               await tx.ledgerEntry.create({
                 data: {
+                  businessId,
                   customerId,
                   entryType: "credit",
                   amount: creditAmount,
@@ -406,6 +411,7 @@ async function handlePost(request: NextRequest, ctx: RouteContext) {
             if (externalPaidAmount.gt(0)) {
               await tx.ledgerEntry.create({
                 data: {
+                  businessId,
                   customerId,
                   entryType: "debit",
                   amount: externalPaidAmount,
@@ -424,6 +430,7 @@ async function handlePost(request: NextRequest, ctx: RouteContext) {
 
             await tx.ledgerEntry.create({
               data: {
+                businessId,
                 customerId,
                 entryType: "debit",
                 amount: debtRepaymentAmount,
@@ -437,6 +444,7 @@ async function handlePost(request: NextRequest, ctx: RouteContext) {
           if (changeAsPrepayment.gt(0)) {
             await tx.ledgerEntry.create({
               data: {
+                businessId,
                 customerId,
                 entryType: "prepayment-added",
                 amount: changeAsPrepayment,
@@ -511,6 +519,7 @@ async function handlePost(request: NextRequest, ctx: RouteContext) {
             updatedAt: new Date()
           },
           create: {
+            businessId,
             productId: item.productId,
             monthlySalesCount: qty,
             totalRevenue: revenue,
@@ -525,6 +534,7 @@ async function handlePost(request: NextRequest, ctx: RouteContext) {
 
     await logAudit({
       userId: userId ?? undefined,
+      businessId,
       action: "CREATE_SALE",
       entityType: "Sale",
       entityId: sale.id,
@@ -558,10 +568,11 @@ async function handlePost(request: NextRequest, ctx: RouteContext) {
 }
 
 // PUT /api/sales - Update sale (cancel/refund)
-export const PUT = withAuthMiddleware(handlePut, { permissionCode: "sales.edit" });
+export const PUT = withBusinessContext(handlePut, { permissionCode: "sales.edit" });
 
-async function handlePut(request: NextRequest, _ctx: RouteContext) {
+async function handlePut(request: NextRequest, ctx: RouteContext & { tenant: TenantContext }) {
   try {
+    const businessId = ctx.tenant.business.id;
     let body: unknown;
     try {
       body = await request.json();
@@ -583,8 +594,8 @@ async function handlePut(request: NextRequest, _ctx: RouteContext) {
 
     const { id, status, reason } = parsed.data;
 
-    const existingSale = await db.sale.findUnique({
-      where: { id },
+    const existingSale = await db.sale.findFirst({
+      where: { id, businessId },
       include: { items: true, customer: true },
     });
 
@@ -655,6 +666,7 @@ async function handlePut(request: NextRequest, _ctx: RouteContext) {
         await tx.stockHistory.createMany({
           data: productIds
             .map((pid, index) => ({
+              businessId,
               productId: pid,
               changeType: "return",
               quantity: quantities[index],
@@ -716,6 +728,7 @@ async function handlePut(request: NextRequest, _ctx: RouteContext) {
         if (dueAmount.gt(0)) {
           await tx.ledgerEntry.create({
             data: {
+              businessId,
               customerId: existingSale.customerId,
               entryType: "debit",
               amount: dueAmount,
@@ -728,6 +741,7 @@ async function handlePut(request: NextRequest, _ctx: RouteContext) {
         if (prepaidUsedAmount.gt(0)) {
           await tx.ledgerEntry.create({
             data: {
+              businessId,
               customerId: existingSale.customerId,
               entryType: "prepayment-restored",
               amount: prepaidUsedAmount,
@@ -740,6 +754,7 @@ async function handlePut(request: NextRequest, _ctx: RouteContext) {
         if (changePrepaymentAmount.gt(0)) {
           await tx.ledgerEntry.create({
             data: {
+              businessId,
               customerId: existingSale.customerId,
               entryType: "credit",
               amount: changePrepaymentAmount,

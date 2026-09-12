@@ -1,14 +1,16 @@
 export const revalidate = 30;
 
 // ============================================================================
-// Products API Route - Lakhan Bhandar POS
+// Products API Route - Multi-Tenant POS
+// ALL queries scoped to authenticated user's business (requireBusinessContext)
 // ============================================================================
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { ProductInputSchema } from '@/schemas';
-import { withAuthMiddleware, type RouteContext } from '@/lib/api-middleware';
+import { requireBusinessContext, checkPermission } from '@/lib/tenant';
 import { logAudit } from '@/lib/audit';
+import { requireAuth } from '@/lib/api-middleware';
 
 const MAX_PRODUCT_LIMIT = 10000;
 
@@ -17,11 +19,23 @@ const getIp = (req: NextRequest) =>
   req.headers.get('x-real-ip') ||
   undefined;
 
-// GET /api/products - Fetch all products
-export const GET = withAuthMiddleware(handleGet, { permissionCode: 'products.view' });
-
-async function handleGet(request: NextRequest, _ctx: RouteContext) {
+// GET /api/products - Fetch all products (tenant-scoped)
+export async function GET(request: NextRequest) {
   try {
+    // 1. Verify CSRF + session
+    const authResult = await requireAuth(request);
+    if (!authResult.authorized) return authResult.response;
+
+    // 2. Resolve business context (server-side trusted)
+    const ctx = await requireBusinessContext();
+    if (ctx instanceof NextResponse) return ctx;
+
+    // 3. Check permission
+    const denied = checkPermission(ctx, 'products.view');
+    if (denied) return denied;
+
+    const businessId = ctx.business.id;
+
     const { searchParams } = new URL(request.url);
     const barcode = searchParams.get('barcode');
     const category = searchParams.get('category');
@@ -36,7 +50,8 @@ async function handleGet(request: NextRequest, _ctx: RouteContext) {
         ? Math.min(Math.max(parsedLimit, 1), MAX_PRODUCT_LIMIT)
         : undefined;
 
-    const where: Record<string, unknown> = {};
+    // CRITICAL: Always filter by businessId — tenant isolation
+    const where: Record<string, unknown> = { businessId };
 
     if (!includeInactive) where.isActive = true;
     if (barcode) where.barcode = barcode;
@@ -84,11 +99,20 @@ async function handleGet(request: NextRequest, _ctx: RouteContext) {
   }
 }
 
-// POST /api/products - Create new product
-export const POST = withAuthMiddleware(handlePost, { permissionCode: 'products.create' });
-
-async function handlePost(request: NextRequest, ctx: RouteContext) {
+// POST /api/products - Create new product (tenant-scoped)
+export async function POST(request: NextRequest) {
   try {
+    const authResult = await requireAuth(request);
+    if (!authResult.authorized) return authResult.response;
+
+    const ctx = await requireBusinessContext();
+    if (ctx instanceof NextResponse) return ctx;
+
+    const denied = checkPermission(ctx, 'products.create');
+    if (denied) return denied;
+
+    const businessId = ctx.business.id;
+
     let body: unknown;
     try {
       body = await request.json();
@@ -110,6 +134,7 @@ async function handlePost(request: NextRequest, ctx: RouteContext) {
 
     const product = await db.product.create({
       data: {
+        businessId, // CRITICAL: tenant scope
         barcode: validatedData.barcode ? String(validatedData.barcode).trim() : null,
         name: String(validatedData.name).trim(),
         nameBn: validatedData.nameBn ? String(validatedData.nameBn).trim() : null,
@@ -126,15 +151,19 @@ async function handlePost(request: NextRequest, ctx: RouteContext) {
       },
     });
 
-    const { ensureCategoryExists } = await import('@/lib/ensure-category');
-    await ensureCategoryExists(categoryName);
+    // Upsert category in business scope
+    await db.category.upsert({
+      where: { businessId_name: { businessId, name: categoryName } },
+      create: { businessId, name: categoryName },
+      update: {},
+    });
 
     await logAudit({
-      userId: ctx.auth?.user?.id,
+      userId: ctx.user.id,
       action: 'CREATE_PRODUCT',
       entityType: 'Product',
       entityId: product.id,
-      details: { name: product.name, category: product.category, barcode: product.barcode },
+      details: { name: product.name, category: product.category, barcode: product.barcode, businessId },
       ipAddress: getIp(request),
       userAgent: request.headers.get('user-agent') || undefined,
     });
@@ -148,7 +177,7 @@ async function handlePost(request: NextRequest, ctx: RouteContext) {
     console.error('Error creating product:', error);
     if (error instanceof Error && error.message.includes('Unique constraint failed')) {
       return NextResponse.json(
-        { success: false, error: 'Barcode already exists for another product' },
+        { success: false, error: 'Barcode already exists for another product in this business' },
         { status: 400 },
       );
     }
@@ -159,11 +188,20 @@ async function handlePost(request: NextRequest, ctx: RouteContext) {
   }
 }
 
-// PUT /api/products - Update product
-export const PUT = withAuthMiddleware(handlePut, { permissionCode: 'products.edit' });
-
-async function handlePut(request: NextRequest, ctx: RouteContext) {
+// PUT /api/products - Update product (tenant-scoped, IDOR protection)
+export async function PUT(request: NextRequest) {
   try {
+    const authResult = await requireAuth(request);
+    if (!authResult.authorized) return authResult.response;
+
+    const ctx = await requireBusinessContext();
+    if (ctx instanceof NextResponse) return ctx;
+
+    const denied = checkPermission(ctx, 'products.update');
+    if (denied) return denied;
+
+    const businessId = ctx.business.id;
+
     let body: unknown;
     try {
       body = await request.json();
@@ -192,8 +230,9 @@ async function handlePut(request: NextRequest, ctx: RouteContext) {
     const categoryName =
       validatedData.category !== undefined ? String(validatedData.category).trim() : undefined;
 
+    // IDOR protection: update only if product belongs to this business
     const product = await db.product.update({
-      where: { id: productId },
+      where: { id: productId, businessId }, // businessId ensures IDOR protection
       data: {
         barcode:
           validatedData.barcode !== undefined
@@ -227,16 +266,19 @@ async function handlePut(request: NextRequest, ctx: RouteContext) {
     });
 
     if (categoryName) {
-      const { ensureCategoryExists } = await import('@/lib/ensure-category');
-      await ensureCategoryExists(categoryName);
+      await db.category.upsert({
+        where: { businessId_name: { businessId, name: categoryName } },
+        create: { businessId, name: categoryName },
+        update: {},
+      });
     }
 
     await logAudit({
-      userId: ctx.auth?.user?.id,
+      userId: ctx.user.id,
       action: 'UPDATE_PRODUCT',
       entityType: 'Product',
       entityId: product.id,
-      details: { name: product.name, changes: validatedData },
+      details: { name: product.name, changes: validatedData, businessId },
       ipAddress: getIp(request),
       userAgent: request.headers.get('user-agent') || undefined,
     });
@@ -248,6 +290,13 @@ async function handlePut(request: NextRequest, ctx: RouteContext) {
     });
   } catch (error: unknown) {
     console.error('Error updating product:', error);
+    // If product not found in this business, return 404 (not 403) to avoid info leak
+    if (error instanceof Error && error.message.includes('Record to update not found')) {
+      return NextResponse.json(
+        { success: false, error: 'Product not found' },
+        { status: 404 },
+      );
+    }
     return NextResponse.json(
       { success: false, error: 'Failed to update product' },
       { status: 500 },
@@ -255,11 +304,20 @@ async function handlePut(request: NextRequest, ctx: RouteContext) {
   }
 }
 
-// DELETE /api/products - Soft delete product
-export const DELETE = withAuthMiddleware(handleDelete, { permissionCode: 'products.delete' });
-
-async function handleDelete(request: NextRequest, ctx: RouteContext) {
+// DELETE /api/products - Soft delete product (tenant-scoped, IDOR protection)
+export async function DELETE(request: NextRequest) {
   try {
+    const authResult = await requireAuth(request);
+    if (!authResult.authorized) return authResult.response;
+
+    const ctx = await requireBusinessContext();
+    if (ctx instanceof NextResponse) return ctx;
+
+    const denied = checkPermission(ctx, 'products.delete');
+    if (denied) return denied;
+
+    const businessId = ctx.business.id;
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 
@@ -270,16 +328,18 @@ async function handleDelete(request: NextRequest, ctx: RouteContext) {
       );
     }
 
+    // IDOR protection: update only if product belongs to this business
     await db.product.update({
-      where: { id },
+      where: { id, businessId }, // businessId ensures IDOR protection
       data: { isActive: false, updatedAt: new Date() },
     });
 
     await logAudit({
-      userId: ctx.auth?.user?.id,
+      userId: ctx.user.id,
       action: 'DELETE_PRODUCT',
       entityType: 'Product',
       entityId: id,
+      details: { businessId },
       ipAddress: getIp(request),
       userAgent: request.headers.get('user-agent') || undefined,
     });
@@ -287,6 +347,12 @@ async function handleDelete(request: NextRequest, ctx: RouteContext) {
     return NextResponse.json({ success: true, message: 'Product deleted successfully' });
   } catch (error: unknown) {
     console.error('Error deleting product:', error);
+    if (error instanceof Error && error.message.includes('Record to update not found')) {
+      return NextResponse.json(
+        { success: false, error: 'Product not found' },
+        { status: 404 },
+      );
+    }
     return NextResponse.json(
       { success: false, error: 'Failed to delete product' },
       { status: 500 },

@@ -75,7 +75,8 @@ export function useUserRole(): UserRole | null {
  */
 export function useIsAdmin(): boolean {
   const role = useUserRole();
-  return role === "ADMIN";
+  // OWNER has all admin privileges — treat as admin
+  return role === "OWNER" || role === "ADMIN";
 }
 
 /**
@@ -84,7 +85,7 @@ export function useIsAdmin(): boolean {
  */
 export function useIsManagerOrHigher(): boolean {
   const role = useUserRole();
-  return role === "ADMIN" || role === "MANAGER";
+  return role === "OWNER" || role === "ADMIN" || role === "MANAGER";
 }
 
 /**

@@ -1,5 +1,5 @@
-// Lakhan Bhandar POS System - Database Schema
-// Compatible with Supabase/PostgreSQL and SQLite for development
+// Lakhan Bhandar POS System - Multi-Tenant Database Schema
+// Compatible with Supabase/PostgreSQL
 
 generator client {
   provider = "prisma-client-js"
@@ -10,12 +10,98 @@ datasource db {
 }
 
 // ============================================================================
+// MULTI-TENANT FOUNDATION
+// ============================================================================
+
+model Business {
+  id        String  @id @default(cuid())
+  name      String
+  slug      String  @unique
+
+  phone     String?
+  email     String?
+  address   String?
+
+  currency  String  @default("INR")
+  timezone  String  @default("Asia/Kolkata")
+
+  isActive  Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  memberships      Membership[]
+  products         Product[]
+  categories       Category[]
+  customers        Customer[]
+  suppliers        Supplier[]
+  sales            Sale[]
+  purchases        Purchase[]
+  expenses         Expense[]
+  stockHistory     StockHistory[]
+  ledgerEntries    LedgerEntry[]
+  saleReturns      SaleReturn[]
+  auditLogs        AuditLog[]
+  syncQueues       SyncQueue[]
+  settings         BusinessSetting[]
+  dailyRecords     DailyManualRecord[]
+  productPopularity ProductPopularity[]
+
+  @@map("businesses")
+}
+
+enum BusinessRole {
+  OWNER
+  ADMIN
+  MANAGER
+  CASHIER
+  VIEWER
+}
+
+model Membership {
+  id         String       @id @default(cuid())
+
+  userId     String       @map("user_id")
+  businessId String       @map("business_id")
+
+  role       BusinessRole @default(CASHIER)
+
+  isActive   Boolean      @default(true) @map("is_active")
+
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  business   Business     @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, businessId])
+  @@index([userId])
+  @@index([businessId])
+  @@map("memberships")
+}
+
+model BusinessSetting {
+  id         String  @id @default(cuid())
+
+  businessId String  @map("business_id")
+  key        String
+  value      String
+
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, key])
+  @@index([businessId])
+  @@map("business_settings")
+}
+
+// ============================================================================
 // PRODUCTS & INVENTORY
 // ============================================================================
 
 model Product {
   id            String   @id @default(cuid())
-  barcode       String?  @unique // Nullable for non-barcoded items (vegetables, loose items)
+  businessId    String   @map("business_id")
+  barcode       String?  // Nullable for non-barcoded items (vegetables, loose items)
   name          String
   nameBn        String?  @map("name_bn") // Bengali name
   category      String   @default("General")
@@ -31,15 +117,18 @@ model Product {
   updatedAt     DateTime @updatedAt @map("updated_at")
 
   // Relations
+  business          Business              @relation(fields: [businessId], references: [id], onDelete: Cascade)
   saleItems         SaleItem[]
   purchaseItems     PurchaseItem[]
   stockHistory      StockHistory[]
   productPopularity ProductPopularity[]
 
-  @@index([isActive])
-  @@index([category, isActive])
-  @@index([category, isActive, name])
-  @@index([name])
+  @@unique([businessId, barcode]) // tenant-scoped barcode uniqueness
+  @@index([businessId])
+  @@index([businessId, isActive])
+  @@index([businessId, category, isActive])
+  @@index([businessId, category, isActive, name])
+  @@index([businessId, name])
   @@map("products")
 }
 
@@ -47,18 +136,24 @@ model Product {
 // string for POS speed; create/update product routes upsert matching Category rows.
 model Category {
   id          String   @id @default(cuid())
-  name        String   @unique
+  businessId  String   @map("business_id")
+  name        String
   nameBn      String?  @map("name_bn")
   description String?
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, name]) // tenant-scoped category name
+  @@index([businessId])
   @@map("categories")
 }
 
 model StockHistory {
-  id           String      @id @default(cuid())
-  productId    String      @map("product_id")
+  id           String   @id @default(cuid())
+  businessId   String   @map("business_id")
+  productId    String   @map("product_id")
   changeType   String // "purchase", "sale", "adjustment", "return"
   quantity     Decimal // Positive for addition, negative for deduction
   reason       String?
@@ -68,33 +163,38 @@ model StockHistory {
   saleReturnId String?     @map("sale_return_id")
   createdAt    DateTime    @default(now()) @map("created_at")
 
+  business   Business    @relation(fields: [businessId], references: [id], onDelete: Cascade)
   product    Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
   sale       Sale?       @relation(fields: [saleId], references: [id], onDelete: Cascade)
   purchase   Purchase?   @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
   saleReturn SaleReturn? @relation(fields: [saleReturnId], references: [id], onDelete: Cascade)
 
-  @@index([productId])
+  @@index([businessId])
+  @@index([businessId, productId])
   @@index([createdAt])
   @@map("stock_history")
 }
 
 model ProductPopularity {
   id                String   @id @default(uuid())
+  businessId        String   @map("business_id")
   productId         String   @map("product_id")
   product           Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  
+  business          Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
   monthlySalesCount Int      @default(0) @map("monthly_sales_count")
   weeklySalesCount  Int      @default(0) @map("weekly_sales_count")
   totalRevenue      Decimal  @default(0) @db.Decimal(10, 2) @map("total_revenue")
-  
+
   periodStart       DateTime @map("period_start")
   periodEnd         DateTime @map("period_end")
-  
+
   updatedAt         DateTime @updatedAt @map("updated_at")
-  
+
   @@unique([productId, periodStart])
-  @@index([monthlySalesCount])
-  @@index([weeklySalesCount])
+  @@index([businessId])
+  @@index([businessId, monthlySalesCount])
+  @@index([businessId, weeklySalesCount])
   @@map("product_popularity")
 }
 
@@ -104,9 +204,10 @@ model ProductPopularity {
 
 model Customer {
   id             String   @id @default(cuid())
+  businessId     String   @map("business_id")
   name           String
   nameEn         String?  @map("name_en")
-  phone          String?  @unique
+  phone          String?
   address        String?
   totalDue       Decimal  @default(0) @map("total_due") // Running total of outstanding balance (owes store)
   totalPaid      Decimal  @default(0) @map("total_paid") // Total amount paid historically
@@ -117,15 +218,19 @@ model Customer {
   updatedAt      DateTime @updatedAt @map("updated_at")
 
   // Relations
+  business      Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
   ledgerEntries LedgerEntry[]
   sales         Sale[]
 
-  @@index([phone])
+  @@unique([businessId, phone]) // tenant-scoped phone uniqueness
+  @@index([businessId])
+  @@index([businessId, phone])
   @@map("customers")
 }
 
 model LedgerEntry {
   id           String   @id @default(cuid())
+  businessId   String   @map("business_id")
   customerId   String   @map("customer_id")
   entryType    String // "credit" (customer owes more), "debit" (customer paid)
   amount       Decimal
@@ -134,12 +239,14 @@ model LedgerEntry {
   referenceId  String?  @map("reference_id") // Sale ID or Payment ID
   createdAt    DateTime @default(now()) @map("created_at")
 
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
 
-  @@index([customerId])
+  @@index([businessId])
+  @@index([businessId, customerId])
+  @@index([businessId, customerId, createdAt])
+  @@index([businessId, customerId, entryType, createdAt])
   @@index([createdAt])
-  @@index([customerId, createdAt])
-  @@index([customerId, entryType, createdAt])
   @@map("ledger_entries")
 }
 
@@ -149,7 +256,8 @@ model LedgerEntry {
 
 model Sale {
   id            String   @id @default(cuid())
-  invoiceNumber String   @unique @map("invoice_number")
+  businessId    String   @map("business_id")
+  invoiceNumber String   @map("invoice_number")
   customerId    String?  @map("customer_id")
   userId        String?  @map("user_id") // Track which user created this sale
   subtotal      Decimal  @default(0)
@@ -168,18 +276,20 @@ model Sale {
   updatedAt     DateTime @updatedAt @map("updated_at")
 
   // Relations
-  customer Customer?    @relation(fields: [customerId], references: [id])
-  user     User?        @relation(fields: [userId], references: [id])
-  items    SaleItem[]
-  returns  SaleReturn[]
+  business  Business     @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customer  Customer?    @relation(fields: [customerId], references: [id])
+  user      User?        @relation(fields: [userId], references: [id])
+  items     SaleItem[]
+  returns   SaleReturn[]
   stockHistory StockHistory[]
 
-  @@index([customerId])
-  @@index([userId])
-  @@index([createdAt])
-  @@index([status])
-  @@index([createdAt, status])
-  @@index([customerId, createdAt])
+  @@unique([businessId, invoiceNumber]) // tenant-scoped invoice number
+  @@index([businessId])
+  @@index([businessId, customerId])
+  @@index([businessId, userId])
+  @@index([businessId, createdAt])
+  @@index([businessId, status])
+  @@index([businessId, createdAt, status])
   @@map("sales")
 }
 
@@ -209,6 +319,7 @@ model SaleItem {
 
 model SaleReturn {
   id           String   @id @default(cuid())
+  businessId   String   @map("business_id")
   saleId       String   @map("sale_id")
   userId       String?  @map("user_id")
   refundAmount Decimal  @map("refund_amount")
@@ -216,11 +327,13 @@ model SaleReturn {
   reason       String?
   createdAt    DateTime @default(now()) @map("created_at")
 
-  sale  Sale             @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  user  User?            @relation(fields: [userId], references: [id])
-  items SaleReturnItem[]
+  business     Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  sale         Sale             @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  user         User?            @relation(fields: [userId], references: [id])
+  items        SaleReturnItem[]
   stockHistory StockHistory[]
 
+  @@index([businessId])
   @@index([saleId])
   @@index([createdAt])
   @@map("sale_returns")
@@ -251,6 +364,7 @@ model SaleReturnItem {
 
 model Supplier {
   id        String   @id @default(cuid())
+  businessId String  @map("business_id")
   name      String
   nameEn    String?  @map("name_en")
   phone     String?
@@ -262,16 +376,19 @@ model Supplier {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  business  Business   @relation(fields: [businessId], references: [id], onDelete: Cascade)
   purchases Purchase[]
   expenses  Expense[]
 
+  @@index([businessId])
   @@map("suppliers")
 }
 
 model Purchase {
   id             String   @id @default(cuid())
+  businessId     String   @map("business_id")
   supplierId     String?  @map("supplier_id")
-  invoiceNumber  String?  @unique @map("invoice_number")
+  invoiceNumber  String?  @map("invoice_number")
   totalAmount    Decimal  @default(0) @map("total_amount")
   paidAmount     Decimal  @default(0) @map("paid_amount")
   paymentStatus  String   @default("Pending") @map("payment_status") // Paid, Pending, Partial
@@ -281,11 +398,14 @@ model Purchase {
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
-  supplier Supplier?      @relation(fields: [supplierId], references: [id])
-  items    PurchaseItem[]
+  business     Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  supplier     Supplier?      @relation(fields: [supplierId], references: [id])
+  items        PurchaseItem[]
   stockHistory StockHistory[]
 
-  @@index([supplierId])
+  @@unique([businessId, invoiceNumber]) // tenant-scoped purchase invoice
+  @@index([businessId])
+  @@index([businessId, supplierId])
   @@index([createdAt])
   @@map("purchases")
 }
@@ -315,6 +435,8 @@ model PurchaseItem {
 
 model SyncQueue {
   id             String    @id @default(cuid())
+  businessId     String?   @map("business_id") // tenant context for sync verification
+  userId         String?   @map("user_id")
   idempotencyKey String    @unique @map("idempotency_key") // UUID v4 - CRITICAL for preventing duplicates
   entityType     String    @map("entity_type") // sale:create, customer:update, etc.
   entityId       String?   @map("entity_id")
@@ -327,6 +449,9 @@ model SyncQueue {
   error          String?
   createdAt      DateTime  @default(now()) @map("created_at")
 
+  business Business? @relation(fields: [businessId], references: [id])
+
+  @@index([businessId])
   @@index([synced])
   @@index([idempotencyKey])
   @@index([entityType])
@@ -334,7 +459,7 @@ model SyncQueue {
 }
 
 // ============================================================================
-// APP SETTINGS & CONFIGURATION
+// APP SETTINGS (kept for backward compat / system-level settings)
 // ============================================================================
 
 model Setting {
@@ -351,21 +476,13 @@ model Setting {
 // USERS & AUTHENTICATION
 // ============================================================================
 
-enum UserRole {
-  ADMIN
-  MANAGER
-  CASHIER
-  VIEWER
-}
-
 model User {
   id                     String    @id @default(cuid())
   username               String    @unique
   email                  String?   @unique
-  password               String
+  passwordHash           String    @map("password_hash") // bcrypt hash — never plain text
   name                   String
-  phone                  String?
-  role                   UserRole  @default(VIEWER)
+  phone                  String?   @unique
   isActive               Boolean   @default(true) @map("is_active")
   requiresPasswordChange Boolean   @default(false) @map("requires_password_change")
   failedLoginAttempts    Int       @default(0) @map("failed_login_attempts")
@@ -374,6 +491,7 @@ model User {
   updatedAt              DateTime  @updatedAt @map("updated_at")
 
   // Relations
+  memberships Membership[]
   sales       Sale[]
   saleReturns SaleReturn[]
   auditLogs   AuditLog[]
@@ -382,7 +500,7 @@ model User {
 }
 
 // ============================================================================
-// ROLE PERMISSIONS
+// ROLE PERMISSIONS (static role-based, used with BusinessRole)
 // ============================================================================
 
 model Permission {
@@ -399,10 +517,10 @@ model Permission {
 
 // Define default role permissions
 model RolePermission {
-  id           String   @id @default(cuid())
-  role         UserRole
-  permissionId String   @map("permission_id")
-  createdAt    DateTime @default(now()) @map("created_at")
+  id           String       @id @default(cuid())
+  role         BusinessRole
+  permissionId String       @map("permission_id")
+  createdAt    DateTime     @default(now()) @map("created_at")
 
   permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
 
@@ -417,6 +535,7 @@ model RolePermission {
 
 model Expense {
   id            String   @id @default(cuid())
+  businessId    String   @map("business_id")
   amount        Decimal
   category      String
   notes         String?
@@ -427,10 +546,12 @@ model Expense {
   isActive      Boolean  @default(true) @map("is_active")
   createdAt     DateTime @default(now()) @map("created_at")
 
+  business Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
   supplier Supplier? @relation(fields: [supplierId], references: [id])
 
-  @@index([date])
-  @@index([supplierId])
+  @@index([businessId])
+  @@index([businessId, date])
+  @@index([businessId, supplierId])
   @@map("expenses")
 }
 
@@ -440,6 +561,7 @@ model Expense {
 
 model AuditLog {
   id         String   @id @default(cuid())
+  businessId String?  @map("business_id")
   userId     String?  @map("user_id")
   action     String // e.g., "CREATE_PRODUCT", "DELETE_SALE", "UPDATE_CUSTOMER", "LOGIN"
   entityType String // e.g., "Product", "Sale", "Customer", "User"
@@ -449,13 +571,16 @@ model AuditLog {
   userAgent  String?  @map("user_agent")
   createdAt  DateTime @default(now()) @map("created_at")
 
-  user User? @relation(fields: [userId], references: [id])
+  business Business? @relation(fields: [businessId], references: [id])
+  user     User?     @relation(fields: [userId], references: [id])
 
+  @@index([businessId])
+  @@index([businessId, createdAt])
   @@index([userId])
+  @@index([userId, createdAt])
   @@index([entityType])
   @@index([action])
   @@index([createdAt])
-  @@index([createdAt, action])
   @@map("audit_logs")
 }
 
@@ -466,14 +591,19 @@ model AuditLog {
 // Calendar-day key as yyyy-MM-dd string (timezone-stable daily buckets).
 // Validated at API boundary via CalendarDateSchema — not a wall-clock DateTime.
 model DailyManualRecord {
-  id        String   @id @default(cuid())
-  date      String   @unique // "yyyy-MM-dd"
-  sales     Decimal  @default(0)
-  expenses  Decimal  @default(0)
-  profit    Decimal  @default(0)
-  notes     String?
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id         String   @id @default(cuid())
+  businessId String   @map("business_id")
+  date       String   // "yyyy-MM-dd"
+  sales      Decimal  @default(0)
+  expenses   Decimal  @default(0)
+  profit     Decimal  @default(0)
+  notes      String?
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
 
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, date]) // tenant-scoped daily record
+  @@index([businessId])
   @@map("daily_manual_records")
 }

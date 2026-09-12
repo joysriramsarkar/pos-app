@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 
-const mockFindUnique = vi.fn(() => Promise.resolve(null));
+const defaultSupplier = { id: 'sup1', name: 'Supplier One', businessId: 'biz_1', purchases: [], expenses: [] };
+const mockFindUnique = vi.fn(() => Promise.resolve(defaultSupplier as any));
 const mockFindMany = vi.fn(() => Promise.resolve([]));
 const mockCount = vi.fn(() => Promise.resolve(0));
 const mockCreate = vi.fn(() => Promise.resolve({}));
@@ -11,6 +12,7 @@ vi.mock('@/lib/db', () => ({
   db: {
     supplier: {
       findUnique: mockFindUnique,
+      findFirst: mockFindUnique,
       findMany: mockFindMany,
       count: mockCount,
       create: mockCreate,
@@ -25,8 +27,20 @@ vi.mock('@/lib/audit', () => ({
 }));
 
 vi.mock('@/lib/api-middleware', () => ({
+  requireAuth: vi.fn(() => Promise.resolve({ authorized: true, user: { id: '1', role: 'ADMIN' } })),
   requirePermission: vi.fn(() => Promise.resolve(null)),
   getAuthenticatedUser: vi.fn(() => Promise.resolve({ id: '1', role: 'ADMIN' })),
+}));
+
+vi.mock('@/lib/tenant', () => ({
+  requireBusinessContext: vi.fn(() => Promise.resolve({
+    user: { id: '1', username: 'admin', name: 'Admin', isActive: true },
+    business: { id: 'biz_1', name: 'Test Store', slug: 'test-store', currency: 'INR', timezone: 'Asia/Kolkata', isActive: true },
+    membership: { id: 'mem_1', role: 'OWNER', isActive: true },
+    role: 'OWNER',
+    permissions: ['suppliers.view', 'suppliers.create', 'suppliers.update', 'suppliers.delete'],
+  })),
+  checkPermission: vi.fn(() => null),
 }));
 
 const { GET, POST, PUT, DELETE } = await import('./route');
@@ -34,6 +48,7 @@ const { GET, POST, PUT, DELETE } = await import('./route');
 describe('Suppliers API', () => {
   beforeEach(() => {
     mockFindUnique.mockClear();
+    mockFindUnique.mockResolvedValue(defaultSupplier as any);
     mockFindMany.mockClear();
     mockCount.mockClear();
     mockCreate.mockClear();

@@ -3,7 +3,8 @@ export const dynamic = 'force-dynamic';
 import { db } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { requirePermission, getAuthenticatedUser } from '@/lib/api-middleware';
+import { requireAuth } from '@/lib/api-middleware';
+import { requireBusinessContext, checkPermission } from '@/lib/tenant';
 import { toMoneyNumber } from '@/lib/money';
 import { logAudit } from '@/lib/audit';
 
@@ -56,14 +57,22 @@ function calculateSupplierBalances(supplier: {
  *
  * Records a payment TO a supplier (reducing their outstanding due).
  * Strategy:
- *   1. Create an Expense record (category='Supplier Payment') so it appears in the ledger.
+ *   1. Create an Expense record (category='Supplier Payment') with businessId.
  *   2. Apply the payment against oldest unpaid Purchases (FIFO), updating paidAmount.
  *   3. Return updated supplier balances.
  */
 export async function POST(request: NextRequest) {
   try {
-    const authError = await requirePermission(request, 'suppliers.edit');
-    if (authError) return authError;
+    const authResult = await requireAuth(request);
+    if (!authResult.authorized) return authResult.response;
+
+    const ctx = await requireBusinessContext();
+    if (ctx instanceof NextResponse) return ctx;
+
+    const denied = checkPermission(ctx, 'suppliers.edit');
+    if (denied) return denied;
+
+    const businessId = ctx.business.id;
 
     const body = await request.json();
     const validation = supplierPaymentSchema.safeParse(body);
@@ -76,9 +85,9 @@ export async function POST(request: NextRequest) {
     const roundedAmount = Math.round(amount);
 
     const result = await db.$transaction(async (tx) => {
-      // Load supplier with all unpaid/partial POs
-      const supplier = await tx.supplier.findUnique({
-        where: { id: supplierId },
+      // Load supplier with all unpaid/partial POs for this business
+      const supplier = await tx.supplier.findFirst({
+        where: { id: supplierId, businessId },
         include: {
           purchases: {
             where: {
@@ -92,16 +101,6 @@ export async function POST(request: NextRequest) {
 
       if (!supplier) throw new Error('Supplier not found');
 
-      // Validate that due exists
-      const totalPoDue = supplier.purchases.reduce((sum, p) => {
-        return sum + (Number(p.totalAmount) - Number(p.paidAmount || 0));
-      }, 0);
-
-      if (totalPoDue <= 0 && roundedAmount > 0) {
-        // No POs to apply against, but still record the payment as expense
-        // (manual payment against non-PO debt)
-      }
-
       // Build notes string
       let paymentNotes = notes || `Paid supplier: ${supplier.name}`;
       if (!paymentNotes.startsWith('Paid supplier:')) {
@@ -111,9 +110,10 @@ export async function POST(request: NextRequest) {
         paymentNotes += ` [নগদ: ${cashAmount || 0}, ইউপিআই: ${upiAmount || 0}]`;
       }
 
-      // 1. Create Expense record (for ledger visibility)
+      // 1. Create Expense record (for ledger visibility) with businessId
       await tx.expense.create({
         data: {
+          businessId,
           amount: roundedAmount,
           category: 'Supplier Payment',
           notes: paymentNotes,
@@ -149,8 +149,8 @@ export async function POST(request: NextRequest) {
       }
 
       // 3. Re-fetch to compute fresh balances
-      const updatedSupplier = await tx.supplier.findUnique({
-        where: { id: supplierId },
+      const updatedSupplier = await tx.supplier.findFirst({
+        where: { id: supplierId, businessId },
         include: {
           purchases: {
             where: { deliveryStatus: { in: ['Received', 'PartiallyReceived'] } },
@@ -165,9 +165,9 @@ export async function POST(request: NextRequest) {
 
       const { totalPurchases, totalPaid, totalDue } = calculateSupplierBalances(updatedSupplier);
 
-      const authUser = await getAuthenticatedUser(request);
       await logAudit({
-        userId: authUser?.id,
+        userId: ctx.user.id,
+        businessId,
         action: 'SUPPLIER_PAYMENT',
         entityType: 'Supplier',
         entityId: supplierId,

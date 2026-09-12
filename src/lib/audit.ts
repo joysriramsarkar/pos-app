@@ -1,6 +1,7 @@
 import { db } from './db';
 
 type CreateAuditLogParams = {
+  businessId?: string;
   userId?: string;
   action: string;
   entityType: string;
@@ -14,6 +15,7 @@ export async function logAudit(params: CreateAuditLogParams) {
   try {
     await db.auditLog.create({
       data: {
+        businessId: params.businessId,
         userId: params.userId,
         action: params.action,
         entityType: params.entityType,

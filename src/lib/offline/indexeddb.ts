@@ -731,6 +731,27 @@ export function isOnline(): boolean {
   return typeof navigator !== 'undefined' && navigator.onLine;
 }
 
+/**
+ * Clear all offline data across all object stores.
+ * Must be called on user logout or business switch to prevent cross-tenant data leakage.
+ */
+export async function clearAllOfflineData(): Promise<void> {
+  if (typeof window === 'undefined' || typeof indexedDB === 'undefined') return;
+  const db = await initDatabase();
+  const storeNames = Array.from(db.objectStoreNames);
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeNames, 'readwrite');
+    tx.onerror = () => reject(tx.error);
+    tx.oncomplete = () => {
+      console.log('[IndexedDB] All offline data cleared successfully');
+      resolve();
+    };
+    for (const storeName of storeNames) {
+      tx.objectStore(storeName).clear();
+    }
+  });
+}
+
 // Initialize database on module load
 if (typeof window !== 'undefined' && typeof indexedDB !== 'undefined') {
   initDatabase().catch(console.error);

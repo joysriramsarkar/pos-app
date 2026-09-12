@@ -20,6 +20,7 @@ export interface ProcessSaleReturnInput {
   refundMethod: RefundMethod;
   reason?: string | null;
   userId?: string | null;
+  businessId?: string;
 }
 
 export function mapRefundMethod(raw: string | undefined): RefundMethod | null {
@@ -47,6 +48,10 @@ export async function processSaleReturn(
   });
 
   if (!sale) throw Object.assign(new Error("Sale not found"), { status: 404 });
+  const businessId = input.businessId || sale.businessId;
+  if (input.businessId && sale.businessId !== input.businessId) {
+    throw Object.assign(new Error("Sale not found"), { status: 404 });
+  }
   if (sale.status === "Cancelled") {
     throw Object.assign(new Error("Cannot return items from a cancelled sale"), { status: 400 });
   }
@@ -165,6 +170,7 @@ export async function processSaleReturn(
   const newReturn = await tx.saleReturn.create({
     data: {
       saleId,
+      businessId,
       userId: userId || null,
       refundAmount,
       refundMethod: mappedMethod,
@@ -193,6 +199,7 @@ export async function processSaleReturn(
 
   await tx.stockHistory.createMany({
     data: productIds.map((pid) => ({
+      businessId,
       productId: pid,
       changeType: "return",
       quantity: productReturnMap[pid],
@@ -253,6 +260,7 @@ export async function processSaleReturn(
         });
         await tx.ledgerEntry.create({
           data: {
+            businessId,
             customerId: sale.customerId,
             entryType: "debit",
             amount: dueReduction,
@@ -280,6 +288,7 @@ export async function processSaleReturn(
       if (dueReduction.gt(0)) {
         await tx.ledgerEntry.create({
           data: {
+            businessId,
             customerId: sale.customerId,
             entryType: "debit",
             amount: dueReduction,
@@ -292,6 +301,7 @@ export async function processSaleReturn(
       if (prepaidAdd.gt(0)) {
         await tx.ledgerEntry.create({
           data: {
+            businessId,
             customerId: sale.customerId,
             entryType: "prepayment-added",
             amount: prepaidAdd,
@@ -311,6 +321,7 @@ export async function processSaleReturn(
         });
         await tx.ledgerEntry.create({
           data: {
+            businessId,
             customerId: sale.customerId,
             entryType: "debit",
             amount: dueReduction,

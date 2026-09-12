@@ -1,64 +1,66 @@
 export const dynamic = 'force-dynamic';
-import { getServerSession } from "next-auth";
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
-import { authOptions } from "@/lib/auth";
+import { requireAuth } from "@/lib/api-middleware";
+import { requireBusinessContext, checkPermission, BusinessRole } from "@/lib/tenant";
+import { logAudit } from "@/lib/audit";
 
-// Helper function to check admin access
-async function requireAdmin(session: any) {
-  if (!session?.user?.role || session.user.role !== "ADMIN") {
-    return null;
-  }
-  return true;
-}
+const VALID_ROLES: BusinessRole[] = ["OWNER", "ADMIN", "MANAGER", "CASHIER", "VIEWER"];
 
-// PATCH /api/users/[userId] - Update user (Admin only)
+// PATCH /api/users/[userId] - Update user/membership (Admin/Owner only)
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ userId: string }> }
 ) {
+  const authResult = await requireAuth(request);
+  if (!authResult.authorized) return authResult.response;
+
+  const ctx = await requireBusinessContext();
+  if (ctx instanceof NextResponse) return ctx;
+
+  const denied = checkPermission(ctx, "users.change_role");
+  if (denied) return denied;
+
+  const businessId = ctx.business.id;
+
   try {
-    const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    if (!(await requireAdmin(session))) {
-      return NextResponse.json(
-        { success: false, error: "Only admins can update users" },
-        { status: 403 }
-      );
-    }
-
     const { userId } = await params;
     const body = await request.json();
     const { username, email, name, phone, password, role, isActive } = body;
 
-    // Check if user exists
-    const user = await db.user.findUnique({
-      where: { id: userId },
+    // Check if membership exists for this user in this business
+    const membership = await db.membership.findUnique({
+      where: {
+        userId_businessId: {
+          userId,
+          businessId,
+        },
+      },
+      include: {
+        user: true,
+      },
     });
 
-    if (!user) {
-      return NextResponse.json({ success: false, error: "User not found" }, { status: 404 });
+    if (!membership) {
+      return NextResponse.json({ success: false, error: "User not found in this business" }, { status: 404 });
     }
 
-    // Prevent updating the last admin
-    if (user.role === "ADMIN" && role !== "ADMIN") {
-      const adminCount = await db.user.count({
-        where: { role: "ADMIN", isActive: true },
+    // Prevent demoting/disabling the last OWNER
+    if (membership.role === "OWNER" && (role !== "OWNER" || isActive === false)) {
+      const ownerCount = await db.membership.count({
+        where: { businessId, role: "OWNER", isActive: true },
       });
-      if (adminCount === 1) {
+      if (ownerCount <= 1) {
         return NextResponse.json(
-          { success: false, error: "Cannot remove the last admin user" },
+          { success: false, error: "Cannot remove or demote the only business owner" },
           { status: 400 }
         );
       }
     }
 
-    // Check for duplicate username/email
-    if (username && username !== user.username) {
+    // Check for duplicate username/phone if changing
+    if (username && username !== membership.user.username) {
       const existingUser = await db.user.findFirst({
         where: {
           username: { equals: username, mode: "insensitive" },
@@ -73,50 +75,82 @@ export async function PATCH(
       }
     }
 
-    if (email && email !== user.email) {
-      const existingEmail = await db.user.findFirst({
+    if (phone && phone !== membership.user.phone) {
+      const existingPhone = await db.user.findFirst({
         where: {
-          email: { equals: email, mode: "insensitive" },
+          phone,
           NOT: { id: userId },
         },
       });
-      if (existingEmail) {
+      if (existingPhone) {
         return NextResponse.json(
-          { success: false, error: "Email already exists" },
+          { success: false, error: "Phone number already in use" },
           { status: 409 }
         );
       }
     }
 
-    // Update user
-    const updateData: any = {};
-    if (username !== undefined) updateData.username = username;
-    if (email !== undefined) updateData.email = email;
-    if (name !== undefined) updateData.name = name;
-    if (phone !== undefined) updateData.phone = phone;
-    if (role !== undefined) updateData.role = role;
-    if (isActive !== undefined) updateData.isActive = isActive;
+    // Perform updates in transaction
+    const updated = await db.$transaction(async (tx) => {
+      // 1. Update membership role / status
+      const membershipUpdateData: { role?: BusinessRole; isActive?: boolean } = {};
+      if (role && VALID_ROLES.includes(role as BusinessRole)) {
+        membershipUpdateData.role = role as BusinessRole;
+      }
+      if (isActive !== undefined) {
+        membershipUpdateData.isActive = Boolean(isActive);
+      }
 
-    if (password) {
-      updateData.password = await bcrypt.hash(password, 10);
-    }
+      const updatedMembership = Object.keys(membershipUpdateData).length > 0
+        ? await tx.membership.update({
+            where: { id: membership.id },
+            data: membershipUpdateData,
+          })
+        : membership;
 
-    const updatedUser = await db.user.update({
-      where: { id: userId },
-      data: updateData,
-      select: {
-        id: true,
-        username: true,
-        email: true,
-        name: true,
-        phone: true,
-        role: true,
-        isActive: true,
-        updatedAt: true,
-      },
+      // 2. Update user profile fields if provided
+      const userUpdateData: Record<string, unknown> = {};
+      if (username !== undefined) userUpdateData.username = username;
+      if (email !== undefined) userUpdateData.email = email;
+      if (name !== undefined) userUpdateData.name = name;
+      if (phone !== undefined) userUpdateData.phone = phone;
+      if (password) {
+        userUpdateData.passwordHash = await bcrypt.hash(password, 10);
+      }
+
+      const updatedUser = Object.keys(userUpdateData).length > 0
+        ? await tx.user.update({
+            where: { id: userId },
+            data: userUpdateData,
+          })
+        : membership.user;
+
+      return { user: updatedUser, membership: updatedMembership };
     });
 
-    return NextResponse.json({ success: true, data: updatedUser });
+    await logAudit({
+      businessId,
+      userId: ctx.user.id,
+      action: "UPDATE_MEMBER",
+      entityType: "Membership",
+      entityId: membership.id,
+      details: { targetUserId: userId, role, isActive },
+    });
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        id: updated.user.id,
+        membershipId: updated.membership.id,
+        username: updated.user.username,
+        email: updated.user.email,
+        name: updated.user.name,
+        phone: updated.user.phone,
+        role: updated.membership.role,
+        isActive: updated.membership.isActive,
+        updatedAt: updated.user.updatedAt,
+      },
+    });
   } catch (error: unknown) {
     console.error("[USERS_PATCH]", error);
     return NextResponse.json(
@@ -126,63 +160,76 @@ export async function PATCH(
   }
 }
 
-// DELETE /api/users/[userId] - Delete user (Admin only)
+// DELETE /api/users/[userId] - Remove member from business
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ userId: string }> }
 ) {
+  const authResult = await requireAuth(request);
+  if (!authResult.authorized) return authResult.response;
+
+  const ctx = await requireBusinessContext();
+  if (ctx instanceof NextResponse) return ctx;
+
+  const denied = checkPermission(ctx, "users.remove");
+  if (denied) return denied;
+
+  const businessId = ctx.business.id;
+
   try {
-    const session = await getServerSession(authOptions);
-    if (!session) {
-      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
-    }
-
-    if (!(await requireAdmin(session))) {
-      return NextResponse.json(
-        { success: false, error: "Only admins can delete users" },
-        { status: 403 }
-      );
-    }
-
     const { userId } = await params;
 
-    // Check if user exists
-    const user = await db.user.findUnique({
-      where: { id: userId },
+    // Check if membership exists
+    const membership = await db.membership.findUnique({
+      where: {
+        userId_businessId: {
+          userId,
+          businessId,
+        },
+      },
     });
 
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    if (!membership) {
+      return NextResponse.json({ error: "User not found in this business" }, { status: 404 });
     }
 
-    // Prevent deleting the last admin
-    if (user.role === "ADMIN") {
-      const adminCount = await db.user.count({
-        where: { role: "ADMIN" },
+    // Prevent removing the only OWNER
+    if (membership.role === "OWNER") {
+      const ownerCount = await db.membership.count({
+        where: { businessId, role: "OWNER", isActive: true },
       });
-      if (adminCount === 1) {
+      if (ownerCount <= 1) {
         return NextResponse.json(
-          { error: "Cannot delete the last admin user" },
+          { error: "Cannot remove the only business owner" },
           { status: 400 }
         );
       }
     }
 
-    // Prevent deleting current user
-    if (user.id === (session.user as { id?: string; role?: string; username?: string })?.id) {
+    // Prevent removing oneself
+    if (userId === ctx.user.id) {
       return NextResponse.json(
-        { error: "Cannot delete your own account" },
+        { error: "Cannot remove your own account from the business" },
         { status: 400 }
       );
     }
 
-    // Delete user (soft delete - deactivate)
-    await db.user.update({
-      where: { id: userId },
+    // Soft delete membership (deactivate)
+    await db.membership.update({
+      where: { id: membership.id },
       data: { isActive: false },
     });
 
-    return NextResponse.json({ success: true });
+    await logAudit({
+      businessId,
+      userId: ctx.user.id,
+      action: "REMOVE_MEMBER",
+      entityType: "Membership",
+      entityId: membership.id,
+      details: { targetUserId: userId },
+    });
+
+    return NextResponse.json({ success: true, message: "Member deactivated successfully" });
   } catch (error: unknown) {
     console.error("[USERS_DELETE]", error);
     return NextResponse.json(

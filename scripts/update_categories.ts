@@ -86,13 +86,23 @@ const categoryNameMappings: Record<string, string> = {
 async function main() {
   const { db: prisma } = await import('../src/lib/db');
   try {
+    const business = await prisma.business.findFirst();
+    if (!business) {
+      console.log('No business found');
+      return;
+    }
     for (const cat of categories) {
       await prisma.category.upsert({
-      where: { name: cat.name },
-      update: { nameBn: cat.nameBn },
-      create: { name: cat.name, nameBn: cat.nameBn },
-    });
-  }
+        where: {
+          businessId_name: {
+            businessId: business.id,
+            name: cat.name,
+          },
+        },
+        update: { nameBn: cat.nameBn },
+        create: { businessId: business.id, name: cat.name, nameBn: cat.nameBn },
+      });
+    }
   
   const mappings = [
     { contains: 'দুধ', category: 'Dairy & Frozen' },

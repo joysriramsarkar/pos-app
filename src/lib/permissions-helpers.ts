@@ -1,12 +1,23 @@
 import { Session } from "next-auth";
 
-export type UserRole = "ADMIN" | "MANAGER" | "CASHIER" | "VIEWER";
+export type UserRole = "OWNER" | "ADMIN" | "MANAGER" | "CASHIER" | "VIEWER";
 
 export function getUserRole(session: Session | null): UserRole | null {
   return (session?.user as { id?: string; role?: UserRole; username?: string })?.role || null;
 }
 
 export const rolePermissions: Record<UserRole, string[]> = {
+  OWNER: [
+    "users.view", "users.create", "users.edit", "users.delete",
+    "products.view", "products.create", "products.edit", "products.delete",
+    "sales.view", "sales.create", "sales.edit", "sales.delete",
+    "stock.view", "stock.edit", "stock.import",
+    "reports.view", "reports.export",
+    "settings.view", "settings.edit",
+    "customers.view", "customers.create", "customers.edit", "customers.delete",
+    "suppliers.view", "suppliers.create", "suppliers.edit", "suppliers.delete",
+    "expenses.view", "expenses.create", "expenses.edit", "expenses.delete",
+  ],
   ADMIN: [
     "users.view", "users.create", "users.edit", "users.delete",
     "products.view", "products.create", "products.edit", "products.delete",

@@ -1,20 +1,27 @@
-import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { requireRole } from "@/lib/api-middleware";
-import bcrypt from "bcryptjs";
-import crypto from "crypto";
-import type { Prisma } from "@prisma/client";
-
-type UserRestoreInput = Prisma.UserCreateManyInput;
-
 export const dynamic = "force-dynamic";
 
-export async function GET(request: NextRequest) {
-  try {
-    const roleCheck = await requireRole(request, ['ADMIN']);
-    if (roleCheck) return roleCheck;
+import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db";
+import { requireAuth } from "@/lib/api-middleware";
+import { requireBusinessContext } from "@/lib/tenant";
 
-    // Fetch all table data
+export async function GET(request: NextRequest) {
+  const authResult = await requireAuth(request);
+  if (!authResult.authorized) return authResult.response;
+
+  const ctx = await requireBusinessContext();
+  if (ctx instanceof NextResponse) return ctx;
+
+  if (ctx.role !== "OWNER" && ctx.role !== "ADMIN") {
+    return NextResponse.json(
+      { success: false, error: "Only business owners or admins can export backup" },
+      { status: 403 }
+    );
+  }
+
+  const businessId = ctx.business.id;
+
+  try {
     const [
       products,
       categories,
@@ -26,38 +33,47 @@ export async function GET(request: NextRequest) {
       suppliers,
       purchases,
       purchaseItems,
-      settings,
-      users,
+      businessSettings,
+      memberships,
     ] = await Promise.all([
-      db.product.findMany(),
-      db.category.findMany(),
-      db.stockHistory.findMany(),
-      db.customer.findMany(),
-      db.ledgerEntry.findMany(),
-      db.sale.findMany(),
-      db.saleItem.findMany(),
-      db.supplier.findMany(),
-      db.purchase.findMany(),
-      db.purchaseItem.findMany(),
-      db.setting.findMany(),
-      db.user.findMany({
-        select: {
-          id: true,
-          username: true,
-          email: true,
-          name: true,
-          phone: true,
-          role: true,
-          isActive: true,
-          createdAt: true,
-          updatedAt: true,
+      db.product.findMany({ where: { businessId } }),
+      db.category.findMany({ where: { businessId } }),
+      db.stockHistory.findMany({ where: { businessId } }),
+      db.customer.findMany({ where: { businessId } }),
+      db.ledgerEntry.findMany({ where: { businessId } }),
+      db.sale.findMany({ where: { businessId } }),
+      db.saleItem.findMany({ where: { sale: { businessId } } }),
+      db.supplier.findMany({ where: { businessId } }),
+      db.purchase.findMany({ where: { businessId } }),
+      db.purchaseItem.findMany({ where: { purchase: { businessId } } }),
+      db.businessSetting.findMany({ where: { businessId } }),
+      db.membership.findMany({
+        where: { businessId },
+        include: {
+          user: {
+            select: {
+              id: true,
+              username: true,
+              email: true,
+              name: true,
+              phone: true,
+              isActive: true,
+              createdAt: true,
+              updatedAt: true,
+            },
+          },
         },
       }),
     ]);
 
     const backupData = {
       timestamp: new Date().toISOString(),
-      version: "1.0",
+      version: "2.0-multi-tenant",
+      business: {
+        id: ctx.business.id,
+        name: ctx.business.name,
+        slug: ctx.business.slug,
+      },
       data: {
         products,
         categories,
@@ -69,8 +85,8 @@ export async function GET(request: NextRequest) {
         suppliers,
         purchases,
         purchaseItems,
-        settings,
-        users,
+        businessSettings,
+        memberships,
       },
     };
 
@@ -88,14 +104,26 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  try {
-    const roleCheck = await requireRole(request, ['ADMIN']);
-    if (roleCheck) return roleCheck;
+  const authResult = await requireAuth(request);
+  if (!authResult.authorized) return authResult.response;
 
+  const ctx = await requireBusinessContext();
+  if (ctx instanceof NextResponse) return ctx;
+
+  if (ctx.role !== "OWNER") {
+    return NextResponse.json(
+      { success: false, error: "Only business owners can restore backup" },
+      { status: 403 }
+    );
+  }
+
+  const businessId = ctx.business.id;
+
+  try {
     let backupData;
     try {
       backupData = await request.json();
-    } catch (e) {
+    } catch {
       return NextResponse.json(
         { error: "Invalid JSON backup file" },
         { status: 400 },
@@ -109,12 +137,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // CRITICAL: Require confirmation token to prevent accidental data loss
-    const confirmationToken = request.headers.get('x-restore-confirmation');
+    const confirmationToken = request.headers.get("x-restore-confirmation");
     const expectedToken = process.env.RESTORE_CONFIRMATION_TOKEN;
     if (!expectedToken || confirmationToken !== expectedToken) {
       return NextResponse.json(
-        { error: "Restore confirmation required. This operation will DELETE ALL existing data." },
+        { error: "Restore confirmation required. This operation will replace business data." },
         { status: 400 },
       );
     }
@@ -130,81 +157,81 @@ export async function POST(request: NextRequest) {
       suppliers = [],
       purchases = [],
       purchaseItems = [],
-      settings = [],
-      users = [],
+      businessSettings = [],
     } = backupData.data;
 
-    // Ensure all restored users have a secure password hash.
-    // Since passwords are not exported in the backup, users will be assigned
-    // cryptographically strong random passwords upon restore and will require a password reset
-    // by an administrator (or through an email reset flow if implemented).
-    // Use chunking to avoid blocking the event loop with too many concurrent bcrypt operations.
-    const usersWithPassword: UserRestoreInput[] = [];
-    const CHUNK_SIZE = 5;
-    for (let i = 0; i < users.length; i += CHUNK_SIZE) {
-      const chunk = users.slice(i, i + CHUNK_SIZE);
-      const processedChunk = await Promise.all(
-        chunk.map(async (user: UserRestoreInput) => {
-          if (!user.password) {
-            // Generate a strong 32-character random hex string as the new temporary password
-            const randomPassword = crypto.randomBytes(16).toString("hex");
-            const secureRandomHash = await bcrypt.hash(randomPassword, 10);
-            return {
-              ...user,
-              password: secureRandomHash,
-            };
-          }
-          return user;
-        }),
-      );
-      usersWithPassword.push(...processedChunk);
-      // Yield to the event loop to ensure the server remains responsive
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    }
-
-    // Use interactive transaction to sequentially clear and restore data to avoid foreign key issues
+    // Transactionally clear this business's data and restore
     await db.$transaction(async (tx) => {
-      // CLEAR EVERYTHING first (order matters for foreign keys)
-      await tx.saleItem.deleteMany();
-      await tx.purchaseItem.deleteMany();
-      await tx.stockHistory.deleteMany();
-      await tx.ledgerEntry.deleteMany();
-      await tx.sale.deleteMany();
-      await tx.purchase.deleteMany();
-      await tx.product.deleteMany();
-      await tx.category.deleteMany();
-      await tx.customer.deleteMany();
-      await tx.supplier.deleteMany();
-      await tx.setting.deleteMany();
-      await tx.user.deleteMany();
+      // Clear tenant records in dependency order
+      await tx.saleItem.deleteMany({ where: { sale: { businessId } } });
+      await tx.purchaseItem.deleteMany({ where: { purchase: { businessId } } });
+      await tx.stockHistory.deleteMany({ where: { businessId } });
+      await tx.ledgerEntry.deleteMany({ where: { businessId } });
+      await tx.sale.deleteMany({ where: { businessId } });
+      await tx.purchase.deleteMany({ where: { businessId } });
+      await tx.product.deleteMany({ where: { businessId } });
+      await tx.category.deleteMany({ where: { businessId } });
+      await tx.customer.deleteMany({ where: { businessId } });
+      await tx.supplier.deleteMany({ where: { businessId } });
+      await tx.businessSetting.deleteMany({ where: { businessId } });
 
-      // RESTORE EVERYTHING (order matters for foreign keys)
-      if (usersWithPassword.length > 0)
-        await tx.user.createMany({ data: usersWithPassword });
-      if (settings.length > 0) await tx.setting.createMany({ data: settings });
-      if (categories.length > 0)
-        await tx.category.createMany({ data: categories });
-      if (products.length > 0) await tx.product.createMany({ data: products });
-      if (customers.length > 0)
-        await tx.customer.createMany({ data: customers });
-      if (suppliers.length > 0)
-        await tx.supplier.createMany({ data: suppliers });
-      if (sales.length > 0) await tx.sale.createMany({ data: sales });
-      if (saleItems.length > 0)
-        await tx.saleItem.createMany({ data: saleItems });
-      if (purchases.length > 0)
-        await tx.purchase.createMany({ data: purchases });
-      if (purchaseItems.length > 0)
+      // Restore data with businessId enforcement
+      if (businessSettings.length > 0) {
+        await tx.businessSetting.createMany({
+          data: businessSettings.map((s: Record<string, unknown>) => ({ ...s, businessId })),
+        });
+      }
+      if (categories.length > 0) {
+        await tx.category.createMany({
+          data: categories.map((c: Record<string, unknown>) => ({ ...c, businessId })),
+        });
+      }
+      if (suppliers.length > 0) {
+        await tx.supplier.createMany({
+          data: suppliers.map((s: Record<string, unknown>) => ({ ...s, businessId })),
+        });
+      }
+      if (products.length > 0) {
+        await tx.product.createMany({
+          data: products.map((p: Record<string, unknown>) => ({ ...p, businessId })),
+        });
+      }
+      if (customers.length > 0) {
+        await tx.customer.createMany({
+          data: customers.map((c: Record<string, unknown>) => ({ ...c, businessId })),
+        });
+      }
+      if (purchases.length > 0) {
+        await tx.purchase.createMany({
+          data: purchases.map((p: Record<string, unknown>) => ({ ...p, businessId })),
+        });
+      }
+      if (purchaseItems.length > 0) {
         await tx.purchaseItem.createMany({ data: purchaseItems });
-      if (ledgerEntries.length > 0)
-        await tx.ledgerEntry.createMany({ data: ledgerEntries });
-      if (stockHistory.length > 0)
-        await tx.stockHistory.createMany({ data: stockHistory });
+      }
+      if (sales.length > 0) {
+        await tx.sale.createMany({
+          data: sales.map((s: Record<string, unknown>) => ({ ...s, businessId })),
+        });
+      }
+      if (saleItems.length > 0) {
+        await tx.saleItem.createMany({ data: saleItems });
+      }
+      if (ledgerEntries.length > 0) {
+        await tx.ledgerEntry.createMany({
+          data: ledgerEntries.map((l: Record<string, unknown>) => ({ ...l, businessId })),
+        });
+      }
+      if (stockHistory.length > 0) {
+        await tx.stockHistory.createMany({
+          data: stockHistory.map((sh: Record<string, unknown>) => ({ ...sh, businessId })),
+        });
+      }
     });
 
     return NextResponse.json({
       success: true,
-      message: "Database restored successfully",
+      message: "Business data restored successfully",
     });
   } catch (error: unknown) {
     console.error("Error restoring backup:", error);

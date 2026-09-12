@@ -88,3 +88,29 @@ export const db: PrismaClient = (() => {
 
   return prisma
 })()
+
+/**
+ * Execute a callback within a PostgreSQL transaction with RLS tenant context.
+ *
+ * Sets `app.current_business_id` as a transaction-local setting so PostgreSQL
+ * RLS policies can enforce tenant isolation at the database level.
+ *
+ * Using SET LOCAL (not SET) ensures the setting is reset when the transaction
+ * ends — critical for pooled connections where sessions are shared.
+ *
+ * @example
+ * const result = await withTenantContext(businessId, async (tx) => {
+ *   return tx.product.findMany();
+ * });
+ */
+export async function withTenantContext<T>(
+  businessId: string,
+  fn: (tx: Prisma.TransactionClient) => Promise<T>
+): Promise<T> {
+  return db.$transaction(async (tx) => {
+    // SET LOCAL only applies within this transaction — safe for pooled connections
+    await tx.$executeRaw`SELECT set_config('app.current_business_id', ${businessId}, TRUE)`
+    return fn(tx)
+  })
+}
+

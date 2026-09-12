@@ -121,8 +121,8 @@ export default proxy;
 
 export const config = {
   matcher: [
-    // Public: auth pages, static assets, health check (uptime monitors)
-    "/((?!api/auth|api/health|login|_next/static|_next/image|favicon.ico|logo.svg|manifest.json).*)",
+    // Public: auth pages, static assets, health check, icons, manifest
+    "/((?!api/auth|api/health|login|register|_next/static|_next/image|sw\\.js|manifest\\.json|site\\.webmanifest|favicon.*|.*\\.(?:ico|png|jpg|jpeg|svg|webp|gif|woff2?|ttf|eot)).*)",
     "/api/auth/callback/credentials",
     "/api/auth/signin",
     "/api/auth/change-password",

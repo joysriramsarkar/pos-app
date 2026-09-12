@@ -1,15 +1,16 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 
-vi.mock('next/server', () => ({
-  NextResponse: {
-    json: (body: any, init?: { status?: number }) => {
+vi.mock('next/server', () => {
+  class MockNextResponse extends Response {
+    static json(body: any, init?: { status?: number }) {
       return new Response(JSON.stringify(body), {
         status: init?.status || 200,
         headers: { 'Content-Type': 'application/json' },
       });
-    },
-  },
-}));
+    }
+  }
+  return { NextResponse: MockNextResponse };
+});
 
 vi.mock('next-auth', () => ({
   getServerSession: vi.fn(() => Promise.resolve({ user: { id: '1', role: 'ADMIN' } })),
@@ -26,6 +27,17 @@ vi.mock('@/lib/api-middleware', () => ({
   requirePermission: vi.fn(() => Promise.resolve(null)),
   requireRole: mockRequireRole,
   getAuthenticatedUser: vi.fn(() => Promise.resolve({ id: '1', role: 'ADMIN' })),
+}));
+
+vi.mock('@/lib/tenant', () => ({
+  requireBusinessContext: vi.fn(() => Promise.resolve({
+    user: { id: '1', username: 'admin', name: 'Admin', isActive: true },
+    business: { id: 'biz_1', name: 'Test Store', slug: 'test-store', currency: 'INR', timezone: 'Asia/Kolkata', isActive: true },
+    membership: { id: 'mem_1', role: 'OWNER', isActive: true },
+    role: 'OWNER',
+    permissions: ['settings.view', 'settings.update'],
+  })),
+  checkPermission: vi.fn(() => null),
 }));
 
 vi.mock('bcryptjs', () => ({

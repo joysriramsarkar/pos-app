@@ -2,7 +2,8 @@ export const dynamic = 'force-dynamic';
 
 import { db } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuthenticatedUser, requirePermission } from "@/lib/api-middleware";
+import { requireAuth } from "@/lib/api-middleware";
+import { requireBusinessContext, checkPermission } from '@/lib/tenant';
 import { logAudit } from "@/lib/audit";
 import { toMoneyNumber, toUnitPriceNumber } from '@/lib/money';
 
@@ -10,15 +11,23 @@ const getIp = (req: NextRequest) => req.headers.get('x-forwarded-for') || req.he
 
 // GET /api/purchase-orders - List purchase orders
 export async function GET(request: NextRequest) {
-  const authError = await requirePermission(request, 'suppliers.view');
-  if (authError) return authError;
+  const authResult = await requireAuth(request);
+  if (!authResult.authorized) return authResult.response;
+
+  const ctx = await requireBusinessContext();
+  if (ctx instanceof NextResponse) return ctx;
+
+  const denied = checkPermission(ctx, 'suppliers.view');
+  if (denied) return denied;
+
+  const businessId = ctx.business.id;
 
   try {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
     const supplierId = searchParams.get('supplierId');
 
-    const where: Record<string, any> = {};
+    const where: Record<string, any> = { businessId };
     if (supplierId) where.supplierId = supplierId;
 
     if (status && status !== 'সব') {
@@ -99,8 +108,16 @@ export async function GET(request: NextRequest) {
 
 // POST /api/purchase-orders - Create new purchase order
 export async function POST(request: NextRequest) {
-  const authError = await requirePermission(request, 'suppliers.create');
-  if (authError) return authError;
+  const authResult = await requireAuth(request);
+  if (!authResult.authorized) return authResult.response;
+
+  const ctx = await requireBusinessContext();
+  if (ctx instanceof NextResponse) return ctx;
+
+  const denied = checkPermission(ctx, 'suppliers.create');
+  if (denied) return denied;
+
+  const businessId = ctx.business.id;
 
   try {
     const body = await request.json();
@@ -114,7 +131,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (supplierId && supplierId !== 'none') {
-      const supplier = await db.supplier.findUnique({ where: { id: supplierId } });
+      const supplier = await db.supplier.findFirst({ where: { id: supplierId, businessId } });
       if (!supplier) {
         return NextResponse.json(
           { success: false, error: 'সাপ্লায়ার খুঁজে পাওয়া যায়নি' },
@@ -124,7 +141,7 @@ export async function POST(request: NextRequest) {
     }
 
     for (const item of items) {
-      const product = await db.product.findUnique({ where: { id: item.productId } });
+      const product = await db.product.findFirst({ where: { id: item.productId, businessId } });
       if (!product) {
         return NextResponse.json(
           { success: false, error: `পণ্য খুঁজে পাওয়া যায়নি: ${item.productId}` },
@@ -196,6 +213,7 @@ export async function POST(request: NextRequest) {
           // Find the latest order number for today inside transaction to be serial and safe
           const latestOrder = await tx.purchase.findFirst({
             where: {
+              businessId,
               invoiceNumber: { startsWith: `PO-${dateStr}-` },
             },
             orderBy: {
@@ -228,6 +246,7 @@ export async function POST(request: NextRequest) {
             // Create and receive in one transaction
             const p = await tx.purchase.create({
               data: {
+                businessId,
                 invoiceNumber: orderNumber,
                 supplierId: (supplierId && supplierId !== 'none') ? supplierId : null,
                 totalAmount: roundedTotal,
@@ -299,6 +318,7 @@ export async function POST(request: NextRequest) {
 
                 await tx.stockHistory.create({
                   data: {
+                    businessId,
                     productId: item.productId,
                     changeType: 'purchase',
                     quantity: qty,
@@ -319,6 +339,7 @@ export async function POST(request: NextRequest) {
               }
               await tx.expense.create({
                 data: {
+                  businessId,
                   amount: actualAmountPaid,
                   category: 'Supplier Payment',
                   notes: expenseNotes,
@@ -334,6 +355,7 @@ export async function POST(request: NextRequest) {
             // Normal flow (Pending status)
             return await tx.purchase.create({
               data: {
+                businessId,
                 invoiceNumber: orderNumber,
                 supplierId: (supplierId && supplierId !== 'none') ? supplierId : null,
                 totalAmount: Math.round(totalAmount),
@@ -385,16 +407,15 @@ export async function POST(request: NextRequest) {
       throw new Error('Failed to generate purchase order');
     }
 
-    const user = await getAuthenticatedUser(request);
     await logAudit({
-      userId: user?.id,
-      action: directReceive ? 'RECEIVE_PURCHASE_ORDER' : 'CREATE_PURCHASE_ORDER',
+      userId: ctx.user.id,
+      businessId,
+      action: directReceive ? 'CREATE_DIRECT_PURCHASE' : 'CREATE_PURCHASE_ORDER',
       entityType: 'Purchase',
       entityId: purchase.id,
       details: {
         orderNumber: purchase.invoiceNumber,
         totalAmount: Number(purchase.totalAmount),
-        supplierId: purchase.supplierId,
         itemCount: purchase.items.length,
         direct: directReceive,
       },
@@ -457,8 +478,16 @@ export async function POST(request: NextRequest) {
 
 // PUT /api/purchase-orders - Update purchase order (status change)
 export async function PUT(request: NextRequest) {
-  const authError = await requirePermission(request, 'suppliers.edit');
-  if (authError) return authError;
+  const authResult = await requireAuth(request);
+  if (!authResult.authorized) return authResult.response;
+
+  const ctx = await requireBusinessContext();
+  if (ctx instanceof NextResponse) return ctx;
+
+  const denied = checkPermission(ctx, 'suppliers.edit');
+  if (denied) return denied;
+
+  const businessId = ctx.business.id;
 
   try {
     const body = await request.json();
@@ -471,8 +500,8 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    const order = await db.purchase.findUnique({
-      where: { id },
+    const order = await db.purchase.findFirst({
+      where: { id, businessId },
     });
 
     if (!order) {
@@ -535,6 +564,7 @@ export async function PUT(request: NextRequest) {
               // Create negative stock history entry for trail
               await tx.stockHistory.create({
                 data: {
+                  businessId,
                   productId: entry.productId,
                   changeType: 'adjustment',
                   quantity: -qty,
@@ -591,9 +621,9 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    const user = await getAuthenticatedUser(request);
     await logAudit({
-      userId: user?.id,
+      userId: ctx.user.id,
+      businessId,
       action: 'UPDATE_PURCHASE_ORDER_STATUS',
       entityType: 'Purchase',
       entityId: updated.id,

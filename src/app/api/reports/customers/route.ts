@@ -2,13 +2,22 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { db as prisma } from "@/lib/db";
 import { parseISO } from "date-fns";
-import { requirePermission } from "@/lib/api-middleware";
+import { requireAuth } from "@/lib/api-middleware";
+import { requireBusinessContext, checkPermission } from "@/lib/tenant";
 import { toMoneyNumber } from "@/lib/money";
 import { resolveUnitCost, roundMoney, roundPct, marginPercent } from "@/lib/report-profit";
 
 export async function GET(request: NextRequest) {
-  const authResponse = await requirePermission(request, "reports.view");
-  if (authResponse) return authResponse;
+  const authResult = await requireAuth(request);
+  if (!authResult.authorized) return authResult.response;
+
+  const ctx = await requireBusinessContext();
+  if (ctx instanceof NextResponse) return ctx;
+
+  const denied = checkPermission(ctx, "reports.view");
+  if (denied) return denied;
+
+  const businessId = ctx.business.id;
 
   try {
     const sp = request.nextUrl.searchParams;
@@ -48,8 +57,15 @@ export async function GET(request: NextRequest) {
 
     // Single customer detail
     if (customerId) {
+      const customer = await prisma.customer.findFirst({
+        where: { id: customerId, businessId },
+      });
+      if (!customer) {
+        return NextResponse.json({ error: "Customer not found" }, { status: 404 });
+      }
+
       const orders = await prisma.sale.findMany({
-        where: { customerId, createdAt: { gte: startDate, lte: endDate }, status: { in: ["Completed", "PartialReturn"] } },
+        where: { businessId, customerId, createdAt: { gte: startDate, lte: endDate }, status: { in: ["Completed", "PartialReturn"] } },
         include: {
           items: {
             include: {
@@ -170,6 +186,7 @@ export async function GET(request: NextRequest) {
     // Top customers list with profit (invoice total − item costs)
     const sales = await prisma.sale.findMany({
       where: {
+        businessId,
         createdAt: { gte: startDate, lte: endDate },
         status: { in: ["Completed", "PartialReturn"] },
         customerId: { not: null },
@@ -190,7 +207,7 @@ export async function GET(request: NextRequest) {
 
     const productIds = [...new Set(sales.flatMap((s) => s.items.map((i) => i.productId)))];
     const products = await prisma.product.findMany({
-      where: { id: { in: productIds } },
+      where: { businessId, id: { in: productIds } },
       select: { id: true, buyingPrice: true },
     });
     const liveCostMap = new Map(products.map((p) => [p.id, toMoneyNumber(p.buyingPrice)]));
@@ -225,7 +242,7 @@ export async function GET(request: NextRequest) {
 
     const customerIds = ranked.map((c) => c.id);
     const customers = await prisma.customer.findMany({
-      where: { id: { in: customerIds } },
+      where: { businessId, id: { in: customerIds } },
       select: { id: true, name: true, phone: true, totalDue: true },
     });
     const customerMap = new Map(customers.map((c) => [c.id, c]));

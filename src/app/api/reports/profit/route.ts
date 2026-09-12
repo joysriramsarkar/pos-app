@@ -3,7 +3,8 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { parseISO } from "date-fns";
 import { db as prisma } from "@/lib/db";
-import { requirePermission } from "@/lib/api-middleware";
+import { requireAuth } from "@/lib/api-middleware";
+import { requireBusinessContext, checkPermission } from "@/lib/tenant";
 import { reportSaleStatusFilter } from "@/lib/report-filters";
 import { toMoneyNumber } from "@/lib/money";
 import {
@@ -54,8 +55,16 @@ function parseDateRange(sp: URLSearchParams): { startDate: Date; endDate: Date }
 }
 
 export async function GET(request: NextRequest) {
-  const authResponse = await requirePermission(request, "reports.view");
-  if (authResponse) return authResponse;
+  const authResult = await requireAuth(request);
+  if (!authResult.authorized) return authResult.response;
+
+  const ctx = await requireBusinessContext();
+  if (ctx instanceof NextResponse) return ctx;
+
+  const denied = checkPermission(ctx, "reports.view");
+  if (denied) return denied;
+
+  const businessId = ctx.business.id;
 
   try {
     const sp = request.nextUrl.searchParams;
@@ -72,6 +81,7 @@ export async function GET(request: NextRequest) {
     const { startDate, endDate } = parseDateRange(sp);
 
     const saleWhere = {
+      businessId,
       createdAt: { gte: startDate, lte: endDate },
       status: reportSaleStatusFilter,
     };
@@ -107,7 +117,7 @@ export async function GET(request: NextRequest) {
       ...new Set(sales.flatMap((s) => s.items.map((i) => i.productId))),
     ];
     const products = await prisma.product.findMany({
-      where: { id: { in: productIds } },
+      where: { businessId, id: { in: productIds } },
       select: { id: true, name: true, nameBn: true, unit: true, buyingPrice: true },
     });
     const productMap = new Map(products.map((p) => [p.id, p]));

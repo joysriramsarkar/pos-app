@@ -4,7 +4,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import Decimal from 'decimal.js';
 import { db } from '@/lib/db';
-import { requirePermission } from '@/lib/api-middleware';
+import { requireAuth } from '@/lib/api-middleware';
+import { requireBusinessContext, checkPermission } from '@/lib/tenant';
 import { toMoneyNumber } from '@/lib/money';
 
 const withdrawSchema = z.object({
@@ -14,8 +15,16 @@ const withdrawSchema = z.object({
 
 export async function POST(req: NextRequest) {
   try {
-    const authError = await requirePermission(req, 'customers.edit');
-    if (authError) return authError;
+    const authResult = await requireAuth(req);
+    if (!authResult.authorized) return authResult.response;
+
+    const ctx = await requireBusinessContext();
+    if (ctx instanceof NextResponse) return ctx;
+
+    const denied = checkPermission(ctx, 'customers.update');
+    if (denied) return denied;
+
+    const businessId = ctx.business.id;
 
     const body = await req.json();
     const validation = withdrawSchema.safeParse(body);
@@ -31,7 +40,7 @@ export async function POST(req: NextRequest) {
       >`
         SELECT id, "total_due" as "totalDue", "prepaid_balance" as "prepaidBalance"
         FROM customers
-        WHERE id = ${customerId}
+        WHERE id = ${customerId} AND business_id = ${businessId}
         FOR UPDATE
       `;
       const customer = customerRaw[0];
@@ -45,12 +54,13 @@ export async function POST(req: NextRequest) {
       );
 
       const result = await tx.customer.update({
-        where: { id: customerId },
+        where: { id: customerId, businessId },
         data: { prepaidBalance: newBalance },
       });
 
       await tx.ledgerEntry.create({
         data: {
+          businessId,
           customerId,
           entryType: 'prepayment-withdraw',
           amount,

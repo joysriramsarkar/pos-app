@@ -41,6 +41,17 @@ vi.mock('@/app/api/auth/[...nextauth]/route', () => ({
   authOptions: {},
 }));
 
+vi.mock('@/lib/tenant', () => ({
+  requireBusinessContext: vi.fn(() => Promise.resolve({
+    user: { id: '1', username: 'admin', name: 'Admin', isActive: true },
+    business: { id: 'biz_1', name: 'Test Store', slug: 'test-store', currency: 'INR', timezone: 'Asia/Kolkata', isActive: true },
+    membership: { id: 'mem_1', role: 'OWNER', isActive: true },
+    role: 'OWNER',
+    permissions: ['products.view', 'products.create', 'products.update', 'products.delete'],
+  })),
+  checkPermission: vi.fn(() => null),
+}));
+
 const { GET } = await import('./route');
 
 describe('GET /api/products', () => {
