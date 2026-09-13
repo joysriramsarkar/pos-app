@@ -1,9 +1,15 @@
 'use client';
 
 import { useEffect } from 'react';
+import { SplashScreen } from '@capacitor/splash-screen';
 
 export function SplashScreenRemover() {
   useEffect(() => {
+    // Hide native Capacitor Splash Screen smoothly once web page is mounted
+    SplashScreen.hide({ fadeOutDuration: 400 }).catch(() => {
+      // Ignored if running in browser
+    });
+
     const splash = document.getElementById('splash-screen');
     if (splash) {
       splash.style.opacity = '0';

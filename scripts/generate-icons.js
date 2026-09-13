@@ -15,22 +15,35 @@ const mipmaps = [
   { folder: 'mipmap-xxxhdpi', size: 192, fgSize: 432 },
 ];
 
+const splashScreens = [
+  { folder: 'drawable', width: 512, height: 512, iconScale: 0.6 },
+  { folder: 'drawable-port-mdpi', width: 320, height: 480, iconScale: 0.4 },
+  { folder: 'drawable-port-hdpi', width: 480, height: 800, iconScale: 0.4 },
+  { folder: 'drawable-port-xhdpi', width: 720, height: 1280, iconScale: 0.38 },
+  { folder: 'drawable-port-xxhdpi', width: 960, height: 1600, iconScale: 0.36 },
+  { folder: 'drawable-port-xxxhdpi', width: 1280, height: 1920, iconScale: 0.35 },
+  { folder: 'drawable-land-mdpi', width: 480, height: 320, iconScale: 0.4 },
+  { folder: 'drawable-land-hdpi', width: 800, height: 480, iconScale: 0.4 },
+  { folder: 'drawable-land-xhdpi', width: 1280, height: 720, iconScale: 0.38 },
+  { folder: 'drawable-land-xxhdpi', width: 1600, height: 960, iconScale: 0.36 },
+  { folder: 'drawable-land-xxxhdpi', width: 1920, height: 1280, iconScale: 0.35 },
+];
+
 async function generate() {
-  console.log('Generating app icons from public/app-icon.svg with centered crop...');
+  console.log('Generating zoomed app icons and splash screens...');
 
-  // Read SVG and adjust viewBox from 0 0 112 112 to 8 0 96 96
+  // Read SVG and adjust viewBox from 8 0 96 96 to 13 5 86 86
   // Card is at x=16..96, y=8..88 (80x80).
-  // In 96x96 box from (8, 0):
-  // left margin = 16 - 8 = 8px, right margin = 104 - 96 = 8px
-  // top margin = 8 - 0 = 8px, bottom margin = 96 - 88 = 8px
-  // This removes the bottom 16px excess shadow/space and makes it perfectly centered!
+  // In 86x86 box from (13, 5):
+  // left margin = 16 - 13 = 3px, right margin = 99 - 96 = 3px
+  // top margin = 8 - 5 = 3px, bottom margin = 91 - 88 = 3px
+  // Card takes 80/86 = 93% of box (clearly zoomed in!)
   const svgContent = fs.readFileSync(sourceSvgPath, 'utf-8');
-  const centeredSvg = svgContent.replace(/viewBox="[^"]+"/, 'viewBox="8 0 96 96"');
-  const svgBuffer = Buffer.from(centeredSvg);
+  const zoomedSvg = svgContent.replace(/viewBox="[^"]+"/, 'viewBox="13 5 86 86"');
+  const svgBuffer = Buffer.from(zoomedSvg);
 
-  // Overwrite public/app-icon.svg with the centered viewBox
-  fs.writeFileSync(sourceSvgPath, centeredSvg, 'utf-8');
-  console.log('Updated public/app-icon.svg with centered viewBox (8 0 96 96)');
+  fs.writeFileSync(sourceSvgPath, zoomedSvg, 'utf-8');
+  console.log('Updated public/app-icon.svg with zoomed viewBox (13 5 86 86)');
 
   // 1. Play Store 512x512 icon
   const playstoreIconPath = path.join(resDir, 'playstore-icon-512.png');
@@ -53,7 +66,7 @@ async function generate() {
     .png()
     .toFile(publicIcon192);
 
-  // 3. Browser tab favicon (32x32, 48x48) & Next.js app icon
+  // 3. Browser tab favicon & Next.js app icon
   const faviconIcoPath = path.join(publicDir, 'favicon.ico');
   await sharp(svgBuffer)
     .resize(48, 48)
@@ -61,7 +74,6 @@ async function generate() {
     .toFile(faviconIcoPath);
   console.log('Saved updated public/favicon.ico');
 
-  // Next.js convention: src/app/icon.png automatically becomes the favicon
   const appIconPath = path.join(appDir, 'icon.png');
   await sharp(svgBuffer)
     .resize(64, 64)
@@ -69,8 +81,7 @@ async function generate() {
     .toFile(appIconPath);
   console.log('Saved src/app/icon.png for Next.js tab favicon');
 
-  // Update public/logo.svg as well
-  fs.writeFileSync(path.join(publicDir, 'logo.svg'), centeredSvg, 'utf-8');
+  fs.writeFileSync(path.join(publicDir, 'logo.svg'), zoomedSvg, 'utf-8');
 
   // 4. Android Mipmap icons
   for (const m of mipmaps) {
@@ -95,7 +106,7 @@ async function generate() {
       .png()
       .toFile(path.join(targetDir, 'ic_launcher_round.png'));
 
-    // ic_launcher_foreground.png (for adaptive icon: centered with safe-margin padding)
+    // ic_launcher_foreground.png (adaptive icon)
     const innerSize = Math.round(m.fgSize * 0.72);
     const resizedInner = await sharp(svgBuffer)
       .resize(innerSize, innerSize)
@@ -125,9 +136,38 @@ async function generate() {
 </resources>
 `;
   fs.writeFileSync(bgXmlPath, bgXmlContent, 'utf-8');
-  console.log('Updated ic_launcher_background.xml with #312E81');
 
-  console.log('All icons cropped and generated successfully!');
+  // 6. Generate Android Splash Screens
+  console.log('Generating splash screens for all screen densities...');
+  for (const s of splashScreens) {
+    const splashDir = path.join(resDir, s.folder);
+    if (!fs.existsSync(splashDir)) {
+      fs.mkdirSync(splashDir, { recursive: true });
+    }
+
+    const minDim = Math.min(s.width, s.height);
+    const logoSize = Math.round(minDim * s.iconScale);
+    const logoBuffer = await sharp(svgBuffer)
+      .resize(logoSize, logoSize)
+      .png()
+      .toBuffer();
+
+    await sharp({
+      create: {
+        width: s.width,
+        height: s.height,
+        channels: 4,
+        background: { r: 30, g: 27, b: 75, alpha: 1 } // #1E1B4B
+      }
+    })
+      .composite([{ input: logoBuffer, gravity: 'center' }])
+      .png()
+      .toFile(path.join(splashDir, 'splash.png'));
+
+    console.log(`Generated splash.png for ${s.folder} (${s.width}x${s.height})`);
+  }
+
+  console.log('All icons and splash screens generated successfully!');
 }
 
 generate().catch(err => {
