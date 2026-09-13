@@ -1,0 +1,4 @@
+-- DEPRECATED: This file has been moved to prisma/migrations/20260913_enable_rls/migration.sql
+-- It is now part of the official Prisma migration history.
+-- This file is kept for reference only — do NOT run manually.
+-- See: prisma/migrations/20260913_enable_rls/migration.sql

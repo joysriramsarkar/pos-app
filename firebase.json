@@ -1,0 +1,18 @@
+{
+  "auth": {
+    "authorizedDomains": [
+      "localhost",
+      "pos-app-508501.firebaseapp.com",
+      "pos-app-508501.web.app",
+      "lakhanb.vercel.app"
+    ],
+    "providers": {
+      "emailPassword": true,
+      "phone": true
+    }
+  },
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  }
+}

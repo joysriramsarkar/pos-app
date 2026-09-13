@@ -66,8 +66,8 @@ export function TransactionDetailsDialog({
     : transaction.customer?.name;
 
   const storeConfig = {
-    name: settings.store_name || "Lakhan Bhandar",
-    nameBn: settings.store_name_bn || "লক্ষ্মণ ভাণ্ডার",
+    name: settings.store_name || "Onuron POS",
+    nameBn: settings.store_name_bn || "অনুরণ পিওএস",
     address: settings.store_address || "",
     phone: settings.store_phone || "",
     gstNumber: settings.store_gst || "",

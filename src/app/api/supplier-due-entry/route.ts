@@ -3,7 +3,8 @@ export const dynamic = 'force-dynamic';
 import { db } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { requirePermission, getAuthenticatedUser } from '@/lib/api-middleware';
+import { requireAuth } from '@/lib/api-middleware';
+import { requireBusinessContext, checkPermission } from '@/lib/tenant';
 import { toMoneyNumber } from '@/lib/money';
 import { logAudit } from '@/lib/audit';
 
@@ -52,8 +53,16 @@ function calculateSupplierBalances(supplier: {
 // POST /api/supplier-due-entry - Manually record a due to a supplier (increase supplier outstanding due/total due)
 export async function POST(request: NextRequest) {
   try {
-    const authError = await requirePermission(request, 'suppliers.edit');
-    if (authError) return authError;
+    const authResult = await requireAuth(request);
+    if (!authResult.authorized) return authResult.response;
+
+    const ctx = await requireBusinessContext();
+    if (ctx instanceof NextResponse) return ctx;
+
+    const denied = checkPermission(ctx, 'suppliers.edit');
+    if (denied) return denied;
+
+    const businessId = ctx.business.id;
 
     const body = await request.json();
     const validation = supplierDueSchema.safeParse(body);
@@ -65,8 +74,8 @@ export async function POST(request: NextRequest) {
     const { supplierId, amount, description } = validation.data;
 
     const result = await db.$transaction(async (tx) => {
-      const supplier = await tx.supplier.findUnique({
-        where: { id: supplierId }
+      const supplier = await tx.supplier.findFirst({
+        where: { id: supplierId, businessId }
       });
 
       if (!supplier) {
@@ -78,6 +87,7 @@ export async function POST(request: NextRequest) {
       // Create a manual purchase order that counts as a due/purchase
       await tx.purchase.create({
         data: {
+          businessId,
           supplierId,
           totalAmount: Math.round(amount),
           paidAmount: 0,
@@ -89,8 +99,8 @@ export async function POST(request: NextRequest) {
         }
       });
 
-      const updatedSupplier = await tx.supplier.findUnique({
-        where: { id: supplierId },
+      const updatedSupplier = await tx.supplier.findFirst({
+        where: { id: supplierId, businessId },
         include: {
           purchases: {
             where: { deliveryStatus: { in: ['Received', 'PartiallyReceived'] } },
@@ -110,9 +120,9 @@ export async function POST(request: NextRequest) {
 
       const { totalPurchases, totalPaid, totalDue } = calculateSupplierBalances(updatedSupplier);
 
-      const authUser = await getAuthenticatedUser(request);
       await logAudit({
-        userId: authUser?.id,
+        userId: ctx.user.id,
+        businessId,
         action: 'MANUAL_SUPPLIER_DUE_ENTRY',
         entityType: 'Supplier',
         entityId: supplierId,

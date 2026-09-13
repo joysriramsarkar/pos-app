@@ -1,7 +1,8 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { requirePermission, getAuthenticatedUser } from '@/lib/api-middleware';
+import { requireAuth } from '@/lib/api-middleware';
+import { requireBusinessContext, checkPermission } from '@/lib/tenant';
 import { logAudit } from '@/lib/audit';
 import { SupplierInputSchema } from '@/schemas';
 
@@ -41,8 +42,16 @@ function calculateSupplierBalances(supplier: {
 const getIp = (req: NextRequest) => req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || undefined;
 
 export async function GET(request: NextRequest) {
-  const authError = await requirePermission(request, 'suppliers.view');
-  if (authError) return authError;
+  const authResult = await requireAuth(request);
+  if (!authResult.authorized) return authResult.response;
+
+  const ctx = await requireBusinessContext();
+  if (ctx instanceof NextResponse) return ctx;
+
+  const denied = checkPermission(ctx, 'suppliers.view');
+  if (denied) return denied;
+
+  const businessId = ctx.business.id;
 
   try {
     const { searchParams } = new URL(request.url);
@@ -53,8 +62,8 @@ export async function GET(request: NextRequest) {
     const pageSize = Math.min(10000, Math.max(1, parseInt(searchParams.get('pageSize') ?? '10000', 10)));
 
     if (id) {
-      const supplier = await db.supplier.findUnique({
-        where: { id },
+      const supplier = await db.supplier.findFirst({
+        where: { id, businessId },
         include: {
           purchases: {
             where: { deliveryStatus: { in: ['Received', 'PartiallyReceived'] } },
@@ -75,7 +84,6 @@ export async function GET(request: NextRequest) {
       // Compile ledger
       const creditEntries = [];
 
-      // Purchases from the Purchase model (received POs)
       for (const p of supplier.purchases) {
         creditEntries.push({
           id: p.id,
@@ -87,8 +95,6 @@ export async function GET(request: NextRequest) {
         });
       }
 
-
-
       const debitEntries = [];
 
       for (const e of supplier.expenses) {
@@ -99,56 +105,30 @@ export async function GET(request: NextRequest) {
           id: e.id,
           entryType: 'debit' as const,
           amount,
-          referenceId: `EXP-${e.id.substring(0, 8)}`,
-          description: notes || 'টাকা পরিশোধ (পেমেন্ট)',
-          createdAt: e.date,
+          referenceId: notes.replace('Paid supplier: ', '').replace('Paid for purchase order: ', '').replace('Paid for direct purchase: ', '') || `EXP-${e.id.substring(0, 8)}`,
+          description: notes || 'Payment made',
+          createdAt: e.createdAt,
         });
-
-        if (!notes.startsWith('Paid supplier:') && !notes.startsWith('Paid for purchase order:') && !notes.startsWith('Paid for direct purchase:')) {
-          creditEntries.push({
-            id: `${e.id}-credit`,
-            entryType: 'credit' as const,
-            amount,
-            referenceId: `EXP-${e.id.substring(0, 8)}`,
-            description: `খরচ ক্রয়: ${e.category} ${notes ? `(${notes})` : ''}`,
-            createdAt: e.date,
-          });
-        }
       }
 
-      const combined = [...creditEntries, ...debitEntries]
-        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      const ledger = [...creditEntries, ...debitEntries].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
 
-      let balance = 0;
-      const ledgerEntries = combined.map(entry => {
-        if (entry.entryType === 'credit') {
-          balance += entry.amount;
-        } else {
-          balance -= entry.amount;
-        }
-        return {
-          ...entry,
-          balanceAfter: balance,
-        };
-      }).reverse();
-
-      const { totalPurchases, totalPaid, totalDue } = calculateSupplierBalances(supplier);
+      const balances = calculateSupplierBalances(supplier);
 
       return NextResponse.json({
         success: true,
         data: {
           ...supplier,
-          purchases: undefined,
-          expenses: undefined,
-          totalPurchases,
-          totalPaid,
-          totalDue,
-          ledgerEntries,
+          ...balances,
+          ledger,
+          ledgerEntries: ledger,
         }
       });
     }
 
-    const where: Record<string, unknown> = {};
+    const where: Record<string, unknown> = { businessId };
     if (!includeInactive) where.isActive = true;
     if (search) {
       where.OR = [
@@ -202,8 +182,16 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const authError = await requirePermission(request, 'suppliers.create');
-  if (authError) return authError;
+  const authResult = await requireAuth(request);
+  if (!authResult.authorized) return authResult.response;
+
+  const ctx = await requireBusinessContext();
+  if (ctx instanceof NextResponse) return ctx;
+
+  const denied = checkPermission(ctx, 'suppliers.create');
+  if (denied) return denied;
+
+  const businessId = ctx.business.id;
 
   try {
     const body = await request.json();
@@ -213,11 +201,22 @@ export async function POST(request: NextRequest) {
     }
 
     const supplier = await db.supplier.create({
-      data: { ...parsed.data, isActive: true },
+      data: {
+        ...parsed.data,
+        businessId,
+        isActive: true,
+      },
     });
 
-    const user = await getAuthenticatedUser(request);
-    await logAudit({ userId: user?.id, action: 'CREATE_SUPPLIER', entityType: 'Supplier', entityId: supplier.id, details: { name: supplier.name }, ipAddress: getIp(request) });
+    await logAudit({
+      userId: ctx.user.id,
+      businessId,
+      action: 'CREATE_SUPPLIER',
+      entityType: 'Supplier',
+      entityId: supplier.id,
+      details: { name: supplier.name },
+      ipAddress: getIp(request),
+    });
 
     return NextResponse.json({ success: true, data: supplier, message: 'Supplier created successfully' });
   } catch (error: unknown) {
@@ -227,8 +226,16 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  const authError = await requirePermission(request, 'suppliers.edit');
-  if (authError) return authError;
+  const authResult = await requireAuth(request);
+  if (!authResult.authorized) return authResult.response;
+
+  const ctx = await requireBusinessContext();
+  if (ctx instanceof NextResponse) return ctx;
+
+  const denied = checkPermission(ctx, 'suppliers.update');
+  if (denied) return denied;
+
+  const businessId = ctx.business.id;
 
   try {
     const body = await request.json();
@@ -236,15 +243,28 @@ export async function PUT(request: NextRequest) {
 
     if (!id) return NextResponse.json({ success: false, error: 'Supplier ID is required' }, { status: 400 });
 
+    const existing = await db.supplier.findFirst({ where: { id, businessId } });
+    if (!existing) return NextResponse.json({ success: false, error: 'Supplier not found' }, { status: 404 });
+
     const parsed = SupplierInputSchema.safeParse(rest);
     if (!parsed.success) {
       return NextResponse.json({ success: false, error: parsed.error.issues[0].message }, { status: 400 });
     }
 
-    const supplier = await db.supplier.update({ where: { id }, data: { ...parsed.data, updatedAt: new Date() } });
+    const supplier = await db.supplier.update({
+      where: { id },
+      data: { ...parsed.data, updatedAt: new Date() },
+    });
 
-    const user = await getAuthenticatedUser(request);
-    await logAudit({ userId: user?.id, action: 'UPDATE_SUPPLIER', entityType: 'Supplier', entityId: supplier.id, details: { name: supplier.name }, ipAddress: getIp(request) });
+    await logAudit({
+      userId: ctx.user.id,
+      businessId,
+      action: 'UPDATE_SUPPLIER',
+      entityType: 'Supplier',
+      entityId: supplier.id,
+      details: { name: supplier.name },
+      ipAddress: getIp(request),
+    });
 
     return NextResponse.json({ success: true, data: supplier, message: 'Supplier updated successfully' });
   } catch (error: unknown) {
@@ -254,8 +274,16 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const authError = await requirePermission(request, 'suppliers.delete');
-  if (authError) return authError;
+  const authResult = await requireAuth(request);
+  if (!authResult.authorized) return authResult.response;
+
+  const ctx = await requireBusinessContext();
+  if (ctx instanceof NextResponse) return ctx;
+
+  const denied = checkPermission(ctx, 'suppliers.delete');
+  if (denied) return denied;
+
+  const businessId = ctx.business.id;
 
   try {
     const { searchParams } = new URL(request.url);
@@ -263,10 +291,19 @@ export async function DELETE(request: NextRequest) {
 
     if (!id) return NextResponse.json({ success: false, error: 'Supplier ID is required' }, { status: 400 });
 
+    const existing = await db.supplier.findFirst({ where: { id, businessId } });
+    if (!existing) return NextResponse.json({ success: false, error: 'Supplier not found' }, { status: 404 });
+
     await db.supplier.update({ where: { id }, data: { isActive: false, updatedAt: new Date() } });
 
-    const user = await getAuthenticatedUser(request);
-    await logAudit({ userId: user?.id, action: 'DELETE_SUPPLIER', entityType: 'Supplier', entityId: id, ipAddress: getIp(request) });
+    await logAudit({
+      userId: ctx.user.id,
+      businessId,
+      action: 'DELETE_SUPPLIER',
+      entityType: 'Supplier',
+      entityId: id,
+      ipAddress: getIp(request),
+    });
 
     return NextResponse.json({ success: true, message: 'Supplier deleted successfully' });
   } catch (error: unknown) {

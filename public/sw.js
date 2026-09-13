@@ -31,8 +31,8 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(event.request.url);
 
-  // Exclude API requests & web sockets from cache-fallback
-  if (url.pathname.startsWith('/api/')) return;
+  // Exclude API requests, Next.js internal assets/HMR, and web sockets from cache-fallback
+  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/_next/')) return;
 
   event.respondWith(
     fetch(event.request)

@@ -3,7 +3,8 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { StockAdjustmentInputSchema } from '@/schemas';
-import { requirePermission, getAuthenticatedUser } from '@/lib/api-middleware';
+import { requireAuth } from '@/lib/api-middleware';
+import { requireBusinessContext, checkPermission } from '@/lib/tenant';
 import { logAudit } from '@/lib/audit';
 
 const ADJUSTMENT_LABELS: Record<string, string> = {
@@ -14,8 +15,16 @@ const ADJUSTMENT_LABELS: Record<string, string> = {
 };
 
 export async function POST(request: NextRequest) {
-  const authError = await requirePermission(request, 'stock.edit');
-  if (authError) return authError;
+  const authResult = await requireAuth(request);
+  if (!authResult.authorized) return authResult.response;
+
+  const ctx = await requireBusinessContext();
+  if (ctx instanceof NextResponse) return ctx;
+
+  const denied = checkPermission(ctx, 'stock.edit');
+  if (denied) return denied;
+
+  const businessId = ctx.business.id;
 
   try {
     const body = await request.json().catch(() => null);
@@ -35,7 +44,7 @@ export async function POST(request: NextRequest) {
       >`
         SELECT id, name, unit, "current_stock"
         FROM products
-        WHERE id = ${productId}
+        WHERE id = ${productId} AND business_id = ${businessId}
         FOR UPDATE
       `;
       const product = locked[0];
@@ -53,6 +62,7 @@ export async function POST(request: NextRequest) {
 
       await tx.stockHistory.create({
         data: {
+          businessId,
           productId,
           changeType: 'adjustment',
           quantity: -quantity,
@@ -63,9 +73,9 @@ export async function POST(request: NextRequest) {
       return updated;
     });
 
-    const user = await getAuthenticatedUser(request);
     await logAudit({
-      userId: (user as { id?: string } | null)?.id,
+      userId: ctx.user.id,
+      businessId,
       action: 'STOCK_ADJUSTMENT',
       entityType: 'Product',
       entityId: updatedProduct.id,

@@ -2,7 +2,8 @@ export const dynamic = 'force-dynamic';
 
 import { db } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
-import { requirePermission } from '@/lib/api-middleware';
+import { requireAuth } from '@/lib/api-middleware';
+import { requireBusinessContext, checkPermission } from '@/lib/tenant';
 import { toMoneyNumber } from '@/lib/money';
 
 // Helper: convert number to Bengali digits
@@ -31,8 +32,16 @@ function formatBengaliDate(date: Date): string {
 
 // GET /api/daily-summary - Comprehensive daily closing report
 export async function GET(request: NextRequest) {
-  const authError = await requirePermission(request, 'reports.view');
-  if (authError) return authError;
+  const authResult = await requireAuth(request);
+  if (!authResult.authorized) return authResult.response;
+
+  const ctx = await requireBusinessContext();
+  if (ctx instanceof NextResponse) return ctx;
+
+  const denied = checkPermission(ctx, 'reports.view');
+  if (denied) return denied;
+
+  const businessId = ctx.business.id;
 
   try {
     // ---- TIMEZONE-AWARE DATE WINDOW ----
@@ -62,6 +71,7 @@ export async function GET(request: NextRequest) {
     // Legacy negative refund invoices (status Refunded, totalAmount < 0) are applied as offsets.
     const todaySalesRaw = await db.sale.findMany({
       where: {
+        businessId,
         createdAt: { gte: startOfDay, lt: endOfDay },
         status: { notIn: ['Cancelled'] },
       },
@@ -73,6 +83,7 @@ export async function GET(request: NextRequest) {
 
     const returnsToday = await db.saleReturn.findMany({
       where: {
+        businessId,
         OR: [
           { createdAt: { gte: startOfDay, lt: endOfDay } },
           { saleId: { in: todaySaleIds } },
@@ -171,6 +182,7 @@ export async function GET(request: NextRequest) {
     // Include both formal purchases (all statuses) and informal manual stock entries
     const todayPurchases = await db.purchase.findMany({
       where: {
+        businessId,
         createdAt: { gte: startOfDay, lt: endOfDay },
       },
     });
@@ -178,6 +190,7 @@ export async function GET(request: NextRequest) {
 
     const informalStockEntries = await db.stockHistory.findMany({
       where: {
+        businessId,
         createdAt: { gte: startOfDay, lt: endOfDay },
         changeType: 'purchase',
         purchaseId: null,
@@ -202,6 +215,7 @@ export async function GET(request: NextRequest) {
     // ---- EXPENSES ----
     const todayExpenses = await db.expense.findMany({
       where: {
+        businessId,
         date: { gte: startOfDay, lt: endOfDay },
         isActive: true,
       },
@@ -220,6 +234,7 @@ export async function GET(request: NextRequest) {
     const todaySaleItems = await db.saleItem.findMany({
       where: {
         sale: {
+          businessId,
           createdAt: { gte: startOfDay, lt: endOfDay },
           status: { in: ['Completed', 'PartialReturn'] },
         },
@@ -238,6 +253,7 @@ export async function GET(request: NextRequest) {
     const returnItemsToday = await db.saleReturnItem.findMany({
       where: {
         saleReturn: {
+          businessId,
           OR: [
             { createdAt: { gte: startOfDay, lt: endOfDay } },
             { saleId: { in: todaySaleIds } },
@@ -253,7 +269,10 @@ export async function GET(request: NextRequest) {
 
     const productIds = [...new Set(todaySaleItems.map((item) => item.productId))];
     const products = await db.product.findMany({
-      where: { id: { in: productIds } },
+      where: {
+        businessId,
+        id: { in: productIds }
+      },
       select: { id: true, buyingPrice: true, nameBn: true },
     });
     const productBuyingPriceMap = new Map(products.map((p) => [p.id, Number(p.buyingPrice)]));
@@ -301,6 +320,7 @@ export async function GET(request: NextRequest) {
     // include manual collection, sale payments, due clearance). Prepayments use entryType prepayment-*.
     const todayDebitLedger = await db.ledgerEntry.findMany({
       where: {
+        businessId,
         entryType: 'debit',
         createdAt: { gte: startOfDay, lt: endOfDay },
         NOT: {
@@ -376,7 +396,7 @@ export async function GET(request: NextRequest) {
 
     // ---- LOW STOCK ALERTS ----
     const allActiveProducts = await db.product.findMany({
-      where: { isActive: true },
+      where: { businessId, isActive: true },
       select: {
         id: true,
         name: true,
@@ -390,7 +410,7 @@ export async function GET(request: NextRequest) {
 
     // ---- CUSTOMER DUES SUMMARY ----
     const customersWithDue = await db.customer.findMany({
-      where: { totalDue: { gt: 0 }, isActive: true },
+      where: { businessId, totalDue: { gt: 0 }, isActive: true },
       select: { id: true, name: true, totalDue: true },
     });
     const totalCustomerDues = customersWithDue.reduce((sum, c) => sum + Number(c.totalDue), 0);
@@ -402,6 +422,7 @@ export async function GET(request: NextRequest) {
     // 1. All past sales cash & UPI (direct cash that came in)
     const pastSales = await db.sale.aggregate({
       where: {
+        businessId,
         createdAt: { lt: startOfDay },
         status: { in: ['Completed', 'PartialReturn'] },
       },
@@ -414,6 +435,7 @@ export async function GET(request: NextRequest) {
     // 2. All past expenses (cash that went out — ALL categories including supplier payments)
     const pastExpenses = await db.expense.aggregate({
       where: {
+        businessId,
         date: { lt: startOfDay },
         isActive: true,
       },
@@ -425,6 +447,7 @@ export async function GET(request: NextRequest) {
     // 3. All past due collections (cash that came in via debit ledger entries)
     const pastDueCollections = await db.ledgerEntry.aggregate({
       where: {
+        businessId,
         entryType: 'debit',
         createdAt: { lt: startOfDay },
         NOT: {
@@ -444,6 +467,7 @@ export async function GET(request: NextRequest) {
     // 4. All past cash refunds (cash that went out)
     const pastRefunds = await db.saleReturn.aggregate({
       where: {
+        businessId,
         createdAt: { lt: startOfDay },
         refundMethod: 'Cash'
       },
@@ -456,6 +480,7 @@ export async function GET(request: NextRequest) {
     //    These are credit ledger entries with prepaid/topup descriptions.
     const pastPrepaidTopups = await db.ledgerEntry.aggregate({
       where: {
+        businessId,
         entryType: 'credit',
         createdAt: { lt: startOfDay },
         OR: [

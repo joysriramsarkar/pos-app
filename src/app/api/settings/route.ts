@@ -1,7 +1,8 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { requirePermission, getAuthenticatedUser } from "@/lib/api-middleware";
+import { requireAuth } from "@/lib/api-middleware";
+import { requireBusinessContext, checkPermission } from "@/lib/tenant";
 import { logAudit } from "@/lib/audit";
 
 const getIp = (req: NextRequest) => req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || undefined;
@@ -10,16 +11,43 @@ const getIp = (req: NextRequest) => req.headers.get('x-forwarded-for') || req.he
 const LOGO_KEY = 'store_logo';
 
 export async function GET(request: NextRequest) {
+  const authResult = await requireAuth(request);
+  if (!authResult.authorized) return authResult.response;
+
+  const ctx = await requireBusinessContext();
+  if (ctx instanceof NextResponse) return ctx;
+
+  const denied = checkPermission(ctx, "settings.view");
+  if (denied) return denied;
+
+  const businessId = ctx.business.id;
+
   try {
-    const authError = await requirePermission(request, "settings.view");
-    if (authError) return authError;
-
-    const settings = await db.setting.findMany();
-
-    const settingsObject = settings.reduce((acc: Record<string, string>, setting) => {
+    // 1. Fetch system defaults
+    const systemSettings = await db.setting.findMany();
+    const settingsObject = systemSettings.reduce((acc: Record<string, string>, setting) => {
       acc[setting.key] = setting.value;
       return acc;
     }, {});
+
+    // 2. Override with tenant-specific business settings
+    const businessSettings = await db.businessSetting.findMany({
+      where: { businessId },
+    });
+    for (const bs of businessSettings) {
+      settingsObject[bs.key] = bs.value;
+    }
+
+    // Default store_name, phone, address to tenant business profile if not specifically set
+    if (!businessSettings.some((s) => s.key === 'store_name')) {
+      settingsObject.store_name = ctx.business.name;
+    }
+    if (ctx.business.phone && !businessSettings.some((s) => s.key === 'store_phone')) {
+      settingsObject.store_phone = ctx.business.phone;
+    }
+    if (ctx.business.address && !businessSettings.some((s) => s.key === 'store_address')) {
+      settingsObject.store_address = ctx.business.address;
+    }
 
     return NextResponse.json({ success: true, data: settingsObject });
   } catch (error: unknown) {
@@ -32,10 +60,18 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  try {
-    const authError = await requirePermission(request, "settings.edit");
-    if (authError) return authError;
+  const authResult = await requireAuth(request);
+  if (!authResult.authorized) return authResult.response;
 
+  const ctx = await requireBusinessContext();
+  if (ctx instanceof NextResponse) return ctx;
+
+  const denied = checkPermission(ctx, "settings.update");
+  if (denied) return denied;
+
+  const businessId = ctx.business.id;
+
+  try {
     let body: Record<string, unknown>;
     try {
       body = await request.json();
@@ -55,25 +91,17 @@ export async function PUT(request: NextRequest) {
     const keys = entries.map(([key]) => key);
 
     // Fetch old values for audit diff
-    const oldSettings = await db.setting.findMany({
-      where: { key: { in: keys } },
+    const oldSettings = await db.businessSetting.findMany({
+      where: { businessId, key: { in: keys } },
       select: { key: true, value: true },
     });
     const oldMap = new Map(oldSettings.map((s) => [s.key, s.value]));
 
-    const toCreate: { key: string; value: string }[] = [];
-    const toUpdate: { key: string; value: string }[] = [];
     const changedDetails: Record<string, { from: string; to: string }> = {};
 
     for (const [key, rawValue] of entries) {
       const newVal = typeof rawValue === "string" ? rawValue : String(rawValue);
       const oldVal = oldMap.get(key);
-
-      if (oldVal !== undefined) {
-        toUpdate.push({ key, value: newVal });
-      } else {
-        toCreate.push({ key, value: newVal });
-      }
 
       const prevValStr = oldVal ?? '';
       if (newVal !== prevValStr) {
@@ -89,24 +117,33 @@ export async function PUT(request: NextRequest) {
     }
 
     await db.$transaction(async (tx) => {
-      if (toUpdate.length > 0) {
-        await Promise.all(
-          toUpdate.map(({ key, value }) =>
-            tx.setting.update({ where: { key }, data: { value } })
-          )
-        );
-      }
-      if (toCreate.length > 0) {
-        await tx.setting.createMany({ data: toCreate });
+      for (const [key, rawValue] of entries) {
+        const val = typeof rawValue === "string" ? rawValue : String(rawValue);
+        await tx.businessSetting.upsert({
+          where: {
+            businessId_key: {
+              businessId,
+              key,
+            },
+          },
+          create: {
+            businessId,
+            key,
+            value: val,
+          },
+          update: {
+            value: val,
+          },
+        });
       }
     });
 
     if (Object.keys(changedDetails).length > 0) {
-      const user = await getAuthenticatedUser(request);
       await logAudit({
-        userId: user?.id,
+        businessId,
+        userId: ctx.user.id,
         action: 'UPDATE_SETTINGS',
-        entityType: 'Setting',
+        entityType: 'BusinessSetting',
         details: changedDetails,
         ipAddress: getIp(request),
       });

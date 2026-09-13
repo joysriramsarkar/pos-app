@@ -1,13 +1,22 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { requirePermission } from '@/lib/api-middleware';
+import { requireAuth } from '@/lib/api-middleware';
+import { requireBusinessContext, checkPermission } from '@/lib/tenant';
 import { format } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
 
 export async function GET(request: NextRequest) {
-  const authError = await requirePermission(request, 'reports.view');
-  if (authError) return authError;
+  const authResult = await requireAuth(request);
+  if (!authResult.authorized) return authResult.response;
+
+  const ctx = await requireBusinessContext();
+  if (ctx instanceof NextResponse) return ctx;
+
+  const denied = checkPermission(ctx, 'reports.view');
+  if (denied) return denied;
+
+  const businessId = ctx.business.id;
 
   const sp = request.nextUrl.searchParams;
   const productId = sp.get('productId');
@@ -30,8 +39,8 @@ export async function GET(request: NextRequest) {
 
   try {
     const [product, stockHistory, saleItems] = await Promise.all([
-      db.product.findUnique({
-        where: { id: productId },
+      db.product.findFirst({
+        where: { id: productId, businessId },
         select: {
           id: true, name: true, nameBn: true, category: true,
           buyingPrice: true, sellingPrice: true, unit: true,
@@ -40,7 +49,7 @@ export async function GET(request: NextRequest) {
         },
       }),
       db.stockHistory.findMany({
-        where: { productId },
+        where: { productId, businessId },
         orderBy: { createdAt: 'desc' },
         take: 100,
         select: {
@@ -52,7 +61,7 @@ export async function GET(request: NextRequest) {
         where: {
           productId,
           createdAt: { gte: startDate, lte: endDate },
-          sale: { status: 'Completed' },
+          sale: { businessId, status: 'Completed' },
         },
         select: {
           quantity: true, unitPrice: true, totalPrice: true, createdAt: true,

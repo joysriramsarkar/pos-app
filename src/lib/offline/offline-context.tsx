@@ -6,7 +6,7 @@ import { useCartStore } from '@/stores/pos-store';
 import { useSettingsStore } from '@/stores/settings-store';
 import { NetworkStatusMonitor, type NetworkStatus } from './network-listener';
 import { getSyncWorker } from './sync-worker';
-import { SyncQueueDB } from './indexeddb';
+import { SyncQueueDB, closeAllDatabases } from './indexeddb';
 
 interface OfflineContextType {
   isOnline: boolean;
@@ -77,6 +77,9 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
 
         const handleSessionExpired = () => {
           setIsSyncing(false);
+          // Close all tenant IndexedDB instances before signing out
+          // to prevent cross-tenant data leakage on shared devices
+          try { closeAllDatabases(); } catch { /* non-critical */ }
           signOut({ callbackUrl: '/login' });
         };
 

@@ -2,7 +2,8 @@ export const dynamic = 'force-dynamic';
 
 import { db } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuthenticatedUser, requirePermission } from "@/lib/api-middleware";
+import { requireAuth } from "@/lib/api-middleware";
+import { requireBusinessContext, checkPermission } from '@/lib/tenant';
 import { logAudit } from "@/lib/audit";
 import { toMoneyNumber } from '@/lib/money';
 
@@ -12,8 +13,16 @@ export async function POST(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
-  const authError = await requirePermission(request, 'suppliers.edit');
-  if (authError) return authError;
+  const authResult = await requireAuth(request);
+  if (!authResult.authorized) return authResult.response;
+
+  const ctx = await requireBusinessContext();
+  if (ctx instanceof NextResponse) return ctx;
+
+  const denied = checkPermission(ctx, 'suppliers.edit');
+  if (denied) return denied;
+
+  const businessId = ctx.business.id;
 
   try {
     const { id } = await context.params;
@@ -34,8 +43,8 @@ export async function POST(
       );
     }
 
-    const order = await db.purchase.findUnique({
-      where: { id },
+    const order = await db.purchase.findFirst({
+      where: { id, businessId },
       include: { supplier: true },
     });
 
@@ -74,6 +83,7 @@ export async function POST(
 
       await tx.expense.create({
         data: {
+          businessId,
           amount: roundedAmountPaid,
           category: 'Supplier Payment',
           notes: expenseNotes,
@@ -86,9 +96,9 @@ export async function POST(
       return updatedOrder;
     });
 
-    const user = await getAuthenticatedUser(request);
     await logAudit({
-      userId: user?.id,
+      userId: ctx.user.id,
+      businessId,
       action: 'RECORD_PURCHASE_ORDER_PAYMENT',
       entityType: 'Purchase',
       entityId: result.id,
@@ -100,11 +110,15 @@ export async function POST(
       ipAddress: getIp(request)
     });
 
-    return NextResponse.json({ success: true, data: result });
-  } catch (error: any) {
-    console.error('ক্রয় অর্ডার পেমেন্ট ত্রুটি:', error);
+    return NextResponse.json({
+      success: true,
+      data: result,
+      message: 'পেমেন্ট সফলভাবে সংরক্ষিত হয়েছে',
+    });
+  } catch (error) {
+    console.error('Error recording payment for purchase order:', error);
     return NextResponse.json(
-      { success: false, error: 'পেমেন্ট রেকর্ড করতে ত্রুটি হয়েছে' },
+      { success: false, error: 'পেমেন্ট সংরক্ষণ করতে ত্রুটি হয়েছে' },
       { status: 500 }
     );
   }

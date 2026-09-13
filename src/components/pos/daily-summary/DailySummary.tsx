@@ -111,7 +111,7 @@ export function DailySummary({ open, onOpenChange }: DailySummaryProps) {
                 {/* Report Header */}
                 <div className="text-center space-y-1 bg-gradient-to-r from-primary/10 via-primary/5 to-primary/10 dark:from-primary/20 dark:via-primary/10 dark:to-primary/20 rounded-xl p-4">
                   <h2 className="text-xl font-bold text-primary">
-                    {settings.store_name_bn || settings.store_name || 'লক্ষ্মণ ভাণ্ডার'}
+                    {settings.store_name_bn || settings.store_name || 'Onuron POS'}
                   </h2>
                   <p className="text-lg font-semibold text-foreground">{t('daily_summary_of')}</p>
                   <p className="text-sm text-muted-foreground font-medium">{data.date}</p>

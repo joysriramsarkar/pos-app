@@ -8,7 +8,8 @@ export const dynamic = "force-dynamic";
 
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
-import { requirePermission, getAuthenticatedUser } from "@/lib/api-middleware";
+import { requireAuth } from "@/lib/api-middleware";
+import { requireBusinessContext, checkPermission } from "@/lib/tenant";
 import { logAudit } from "@/lib/audit";
 import {
   mapRefundMethod,
@@ -20,8 +21,17 @@ const getIp = (req: NextRequest) =>
   req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || undefined;
 
 export async function POST(request: NextRequest) {
-  const authError = await requirePermission(request, "sales.edit");
-  if (authError) return authError;
+  const authResult = await requireAuth(request);
+  if (!authResult.authorized) return authResult.response;
+
+  const ctx = await requireBusinessContext();
+  if (ctx instanceof NextResponse) return ctx;
+
+  const denied = checkPermission(ctx, "sales.refund");
+  if (denied) return denied;
+
+  const businessId = ctx.business.id;
+  const userId = ctx.user.id;
 
   try {
     const body = await request.json();
@@ -53,12 +63,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const user = await getAuthenticatedUser(request);
-    const userId = (user as { id?: string } | null)?.id || null;
-
     const result = await db.$transaction(async (tx) => {
-      const sale = await tx.sale.findUnique({
-        where: { id: saleId },
+      const sale = await tx.sale.findFirst({
+        where: { id: saleId, businessId },
         select: { id: true, items: { select: { id: true, productId: true, quantity: true } } },
       });
       if (!sale) {
@@ -78,6 +85,7 @@ export async function POST(request: NextRequest) {
 
       return processSaleReturn(tx, {
         saleId,
+        businessId,
         items: resolved,
         refundMethod: mappedMethod,
         reason: `Refund via /api/refunds (compat)`,
@@ -86,7 +94,8 @@ export async function POST(request: NextRequest) {
     });
 
     await logAudit({
-      userId: userId ?? undefined,
+      userId,
+      businessId,
       action: "CREATE_SALE_RETURN",
       entityType: "SaleReturn",
       entityId: result.saleReturn.id,
@@ -99,27 +108,17 @@ export async function POST(request: NextRequest) {
       ipAddress: getIp(request),
     });
 
-    // Shape kept compatible with RefundDialog expectations
-    return NextResponse.json(
-      {
-        success: true,
-        data: {
-          refund: result.saleReturn,
-          isFullRefund: result.isFullRefund,
-          refundAmount: result.refundAmount,
-          originalSaleId: result.originalSaleId,
-          originalInvoice: result.originalInvoice,
-        },
-      },
-      { status: 201 },
-    );
+    return NextResponse.json({
+      success: true,
+      data: result.saleReturn,
+      isFullRefund: result.isFullRefund,
+      refundAmount: result.refundAmount,
+      message: "রিফান্ড সফল হয়েছে",
+    });
   } catch (error: unknown) {
-    console.error("রিফান্ড প্রক্রিয়ায় ত্রুটি:", error);
-    const message = error instanceof Error ? error.message : "রিফান্ড প্রক্রিয়ায় ত্রুটি হয়েছে";
-    const status = (error as { status?: number })?.status || 400;
-    return NextResponse.json(
-      { success: false, error: message },
-      { status: status >= 400 && status < 600 ? status : 500 },
-    );
+    console.error("Refund error:", error);
+    const message = error instanceof Error ? error.message : "রিফান্ড প্রক্রিয়া করতে ত্রুটি হয়েছে";
+    const status = (error as { status?: number })?.status || 500;
+    return NextResponse.json({ success: false, error: message }, { status });
   }
 }

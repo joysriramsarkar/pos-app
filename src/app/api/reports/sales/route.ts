@@ -3,7 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { db as prisma } from "@/lib/db";
 import { format, eachDayOfInterval, eachMonthOfInterval, parseISO } from "date-fns";
 import { toZonedTime } from "date-fns-tz";
-import { requirePermission } from "@/lib/api-middleware";
+import { requireAuth } from "@/lib/api-middleware";
+import { requireBusinessContext, checkPermission } from "@/lib/tenant";
 import { reportSaleStatusFilter } from "@/lib/report-filters";
 import { aggregateSalePayments, breakdownSalePayment } from "@/lib/sale-payment-breakdown";
 import { toMoneyNumber } from "@/lib/money";
@@ -25,8 +26,16 @@ function toLocalBounds(date: Date, offsetMinutes: number): { start: Date; end: D
 const jsonHeaders = { "Content-Type": "application/json; charset=utf-8" };
 
 export async function GET(request: NextRequest) {
-  const authResponse = await requirePermission(request, "reports.view");
-  if (authResponse) return authResponse;
+  const authResult = await requireAuth(request);
+  if (!authResult.authorized) return authResult.response;
+
+  const ctx = await requireBusinessContext();
+  if (ctx instanceof NextResponse) return ctx;
+
+  const denied = checkPermission(ctx, "reports.view");
+  if (denied) return denied;
+
+  const businessId = ctx.business.id;
 
   try {
     const sp = request.nextUrl.searchParams;
@@ -55,6 +64,7 @@ export async function GET(request: NextRequest) {
     }
 
     const saleWhere = {
+      businessId,
       createdAt: { gte: startDate, lte: endDate },
       status: reportSaleStatusFilter,
     };
@@ -75,7 +85,7 @@ export async function GET(request: NextRequest) {
 
     const productIds = [...new Set(saleItems.map((i) => i.productId))];
     const products = await prisma.product.findMany({
-      where: { id: { in: productIds } },
+      where: { businessId, id: { in: productIds } },
       select: { id: true, buyingPrice: true },
     });
     const liveCostMap = new Map(products.map((p) => [p.id, Number(p.buyingPrice)]));
@@ -136,6 +146,7 @@ export async function GET(request: NextRequest) {
     const prevItems = await prisma.saleItem.findMany({
       where: {
         sale: {
+          businessId,
           createdAt: { gte: prevStart, lte: prevEnd },
           status: reportSaleStatusFilter,
         },
@@ -213,6 +224,7 @@ export async function GET(request: NextRequest) {
 
       const prevDailySales = await prisma.sale.findMany({
         where: {
+          businessId,
           createdAt: { gte: prevStart, lte: prevEnd },
           status: reportSaleStatusFilter,
         },

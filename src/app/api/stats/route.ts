@@ -6,7 +6,8 @@ export const revalidate = 0;
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { requirePermission } from '@/lib/api-middleware';
+import { requireAuth } from '@/lib/api-middleware';
+import { requireBusinessContext, checkPermission } from '@/lib/tenant';
 import { aggregateSalePayments } from '@/lib/sale-payment-breakdown';
 
 const jsonHeaders = {
@@ -16,8 +17,16 @@ const jsonHeaders = {
 };
 
 export async function GET(request: NextRequest) {
-  const authError = await requirePermission(request, 'sales.view');
-  if (authError) return authError;
+  const authResult = await requireAuth(request);
+  if (!authResult.authorized) return authResult.response;
+
+  const ctx = await requireBusinessContext();
+  if (ctx instanceof NextResponse) return ctx;
+
+  const denied = checkPermission(ctx, 'sales.view');
+  if (denied) return denied;
+
+  const businessId = ctx.business.id;
 
   try {
     const { searchParams } = new URL(request.url);
@@ -39,6 +48,7 @@ export async function GET(request: NextRequest) {
     // Today's sales (Completed + PartialReturn — exclude Cancelled/full Refunded originals)
     const todaySales = await db.sale.findMany({
       where: {
+        businessId,
         createdAt: {
           gte: startOfDay,
           lt: endOfDay,
@@ -63,6 +73,7 @@ export async function GET(request: NextRequest) {
     // Yesterday's sales
     const yesterdaySales = await db.sale.findMany({
       where: {
+        businessId,
         createdAt: {
           gte: yesterdayStart,
           lt: startOfDay,
@@ -77,6 +88,7 @@ export async function GET(request: NextRequest) {
     // Yesterday's expenses
     const yesterdayExpenses = await db.expense.findMany({
       where: {
+        businessId,
         date: {
           gte: yesterdayStart,
           lt: startOfDay,
@@ -89,6 +101,7 @@ export async function GET(request: NextRequest) {
     // Total due from all customers
     const customersWithDue = await db.customer.findMany({
       where: {
+        businessId,
         totalDue: { gt: 0 },
         isActive: true,
       },
@@ -117,19 +130,21 @@ export async function GET(request: NextRequest) {
         SELECT si.product_id, SUM(si.quantity) as sold
         FROM sale_items si
         INNER JOIN sales s ON s.id = si.sale_id
-        WHERE s.created_at >= ${day7StartForStock}
+        WHERE s.business_id = ${businessId}
+          AND s.created_at >= ${day7StartForStock}
           AND s.created_at < ${endOfDay}
           AND s.status IN ('Completed', 'PartialReturn')
           AND si.quantity > 0
         GROUP BY si.product_id
       ) v ON v.product_id = p.id
-      WHERE p.is_active = true AND p.current_stock <= p.min_stock_level
+      WHERE p.business_id = ${businessId} AND p.is_active = true AND p.current_stock <= p.min_stock_level
       ORDER BY COALESCE(v.sold, 0) DESC, p.current_stock ASC
       LIMIT 20
     `;
 
     // Recent transactions (last 10)
     const recentSales = await db.sale.findMany({
+      where: { businessId },
       take: 10,
       orderBy: { createdAt: 'desc' },
       include: {
@@ -177,6 +192,7 @@ export async function GET(request: NextRequest) {
     // Today's expenses
     const todayExpenses = await db.expense.findMany({
       where: {
+        businessId,
         date: {
           gte: startOfDay,
           lt: endOfDay,
@@ -209,18 +225,19 @@ export async function GET(request: NextRequest) {
 
     // Total products count
     const totalProducts = await db.product.count({
-      where: { isActive: true },
+      where: { businessId, isActive: true },
     });
 
     // Total customers count
     const totalCustomers = await db.customer.count({
-      where: { isActive: true },
+      where: { businessId, isActive: true },
     });
 
     // COGS from sale-time cost snapshot (fallback to current WAC for legacy rows)
     const todaySaleItems = await db.saleItem.findMany({
       where: {
         sale: {
+          businessId,
           createdAt: {
             gte: startOfDay,
             lt: endOfDay,
@@ -238,7 +255,7 @@ export async function GET(request: NextRequest) {
 
     const productIds = [...new Set(todaySaleItems.map(item => item.productId))];
     const products = await db.product.findMany({
-      where: { id: { in: productIds } },
+      where: { businessId, id: { in: productIds } },
       select: { id: true, buyingPrice: true },
     });
     const productBuyingPriceMap = new Map(products.map(p => [p.id, Number(p.buyingPrice || 0)]));
@@ -265,6 +282,7 @@ export async function GET(request: NextRequest) {
     const [week7Sales, week7Expenses] = await Promise.all([
       db.sale.findMany({
         where: {
+          businessId,
           createdAt: { gte: day7Start, lt: endOfDay },
           status: 'Completed',
         },
@@ -272,6 +290,7 @@ export async function GET(request: NextRequest) {
       }),
       db.expense.findMany({
         where: {
+          businessId,
           date: { gte: day7Start, lt: endOfDay },
           isActive: true,
         },

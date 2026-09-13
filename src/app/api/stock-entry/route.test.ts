@@ -2,13 +2,14 @@ import { describe, expect, it, beforeEach, vi } from 'vitest';
 
 vi.mock('@/lib/env', () => ({ env: {} }));
 
-vi.mock('next/server', () => ({
-  NextResponse: {
-    json: (body: any, init?: any) => {
+vi.mock('next/server', () => {
+  class MockNextResponse extends Response {
+    static json(body: any, init?: any) {
       return new Response(JSON.stringify(body), { status: init?.status || 200 });
     }
   }
-}));
+  return { NextResponse: MockNextResponse };
+});
 
 vi.mock('@/lib/db', () => ({
   db: {
@@ -38,6 +39,17 @@ vi.mock('@/lib/api-middleware', () => ({
   getAuthenticatedUser: vi.fn(() => Promise.resolve({ id: '1', role: 'ADMIN' })),
 }));
 
+vi.mock('@/lib/tenant', () => ({
+  requireBusinessContext: vi.fn(() => Promise.resolve({
+    user: { id: '1', username: 'admin', name: 'Admin', isActive: true },
+    business: { id: 'biz_1', name: 'Test Store', slug: 'test-store', currency: 'INR', timezone: 'Asia/Kolkata', isActive: true },
+    membership: { id: 'mem_1', role: 'OWNER', isActive: true },
+    role: 'OWNER',
+    permissions: ['stock.create', 'stock.edit'],
+  })),
+  checkPermission: vi.fn(() => null),
+}));
+
 vi.mock('@/schemas', () => ({
   StockEntryInputSchema: {
     safeParse: () => ({ success: false, error: { flatten: () => ({ fieldErrors: {} }) } })
@@ -45,7 +57,6 @@ vi.mock('@/schemas', () => ({
 }));
 
 const { POST } = await import('./route');
-const { requireRole } = await import('@/lib/api-middleware');
 
 describe('POST /api/stock-entry', () => {
   it('should return 403 if requireRole fails', async () => {
@@ -58,8 +69,6 @@ describe('POST /api/stock-entry', () => {
   });
 
   it('should return 400 on invalid body when authorized', async () => {
-    (requireRole as ReturnType<typeof mock>).mockResolvedValueOnce(null);
-
     const req = { json: async () => { throw new Error('Parse error'); } } as any;
     const res = await POST(req);
     expect(res.status).toBe(400);

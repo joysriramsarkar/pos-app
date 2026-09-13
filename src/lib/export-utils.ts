@@ -1,5 +1,5 @@
 /**
- * CSV Export Utilities for লক্ষ্মণ ভাণ্ডার POS Application
+ * CSV Export Utilities for Onuron POS Application
  * Handles UTF-8 BOM for proper Bengali text display in Excel
  */
 

@@ -1,6 +1,9 @@
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from "next/server";
 import { db as prisma } from "@/lib/db";
-import { requirePermission, getAuthenticatedUser } from "@/lib/api-middleware";
+import { requireAuth } from "@/lib/api-middleware";
+import { requireBusinessContext, checkPermission } from "@/lib/tenant";
 import { logAudit } from "@/lib/audit";
 import { ExpenseInputSchema } from "@/schemas";
 
@@ -25,8 +28,16 @@ const parseExpenseDate = (date?: string) => {
 };
 
 export async function GET(request: NextRequest) {
-  const authError = await requirePermission(request, "expenses.view");
-  if (authError) return authError;
+  const authResult = await requireAuth(request);
+  if (!authResult.authorized) return authResult.response;
+
+  const ctx = await requireBusinessContext();
+  if (ctx instanceof NextResponse) return ctx;
+
+  const denied = checkPermission(ctx, "expenses.view");
+  if (denied) return denied;
+
+  const businessId = ctx.business.id;
 
   try {
     const { searchParams } = new URL(request.url);
@@ -37,7 +48,7 @@ export async function GET(request: NextRequest) {
     const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get("pageSize") ?? "50", 10)));
     const tzOffset = parseInt(searchParams.get("tzOffset") ?? "0", 10);
 
-    const where: Record<string, unknown> = {};
+    const where: Record<string, unknown> = { businessId };
     if (!includeInactive) where.isActive = true;
     if (dateFrom || dateTo) {
       let gteDate: Date | undefined;
@@ -84,13 +95,22 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ success: true, data, total, page, pageSize });
   } catch (error: unknown) {
+    console.error("Error fetching expenses:", error);
     return NextResponse.json({ success: false, error: "Failed to fetch expenses" }, { status: 500 });
   }
 }
 
 export async function POST(request: NextRequest) {
-  const authError = await requirePermission(request, "expenses.create");
-  if (authError) return authError;
+  const authResult = await requireAuth(request);
+  if (!authResult.authorized) return authResult.response;
+
+  const ctx = await requireBusinessContext();
+  if (ctx instanceof NextResponse) return ctx;
+
+  const denied = checkPermission(ctx, "expenses.create");
+  if (denied) return denied;
+
+  const businessId = ctx.business.id;
 
   try {
     const body = await request.json();
@@ -109,6 +129,7 @@ export async function POST(request: NextRequest) {
         update: {}, // Idempotency: return existing if it exists
         create: {
           id,
+          businessId,
           amount,
           category,
           notes,
@@ -121,6 +142,7 @@ export async function POST(request: NextRequest) {
     } else {
       expense = await prisma.expense.create({
         data: {
+          businessId,
           amount,
           category,
           notes,
@@ -132,18 +154,34 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const user = await getAuthenticatedUser(request);
-    await logAudit({ userId: user?.id, action: 'CREATE_EXPENSE', entityType: 'Expense', entityId: expense.id, details: { amount: expense.amount, category: expense.category, notes: expense.notes ?? undefined }, ipAddress: getIp(request) });
+    await logAudit({
+      userId: ctx.user.id,
+      businessId,
+      action: 'CREATE_EXPENSE',
+      entityType: 'Expense',
+      entityId: expense.id,
+      details: { amount: expense.amount, category: expense.category, notes: expense.notes ?? undefined },
+      ipAddress: getIp(request)
+    });
 
     return NextResponse.json({ success: true, data: expense });
   } catch (error: unknown) {
+    console.error("Error creating expense:", error);
     return NextResponse.json({ success: false, error: "Failed to create expense" }, { status: 500 });
   }
 }
 
 export async function PUT(request: NextRequest) {
-  const authError = await requirePermission(request, "expenses.edit");
-  if (authError) return authError;
+  const authResult = await requireAuth(request);
+  if (!authResult.authorized) return authResult.response;
+
+  const ctx = await requireBusinessContext();
+  if (ctx instanceof NextResponse) return ctx;
+
+  const denied = checkPermission(ctx, "expenses.update");
+  if (denied) return denied;
+
+  const businessId = ctx.business.id;
 
   try {
     const body = await request.json();
@@ -151,6 +189,11 @@ export async function PUT(request: NextRequest) {
 
     if (!id) {
       return NextResponse.json({ success: false, error: "Expense ID is required" }, { status: 400 });
+    }
+
+    const existing = await prisma.expense.findFirst({ where: { id, businessId } });
+    if (!existing) {
+      return NextResponse.json({ success: false, error: "Expense not found" }, { status: 404 });
     }
 
     const parsed = ExpenseInputSchema.safeParse(rest);
@@ -177,8 +220,15 @@ export async function PUT(request: NextRequest) {
       data: updateData,
     });
 
-    const user = await getAuthenticatedUser(request);
-    await logAudit({ userId: user?.id, action: 'UPDATE_EXPENSE', entityType: 'Expense', entityId: expense.id, details: { amount: expense.amount, category: expense.category, notes: expense.notes ?? undefined }, ipAddress: getIp(request) });
+    await logAudit({
+      userId: ctx.user.id,
+      businessId,
+      action: 'UPDATE_EXPENSE',
+      entityType: 'Expense',
+      entityId: expense.id,
+      details: { amount: expense.amount, category: expense.category, notes: expense.notes ?? undefined },
+      ipAddress: getIp(request)
+    });
 
     return NextResponse.json({ success: true, data: expense });
   } catch (error: unknown) {
@@ -189,8 +239,16 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const authError = await requirePermission(request, "expenses.delete");
-  if (authError) return authError;
+  const authResult = await requireAuth(request);
+  if (!authResult.authorized) return authResult.response;
+
+  const ctx = await requireBusinessContext();
+  if (ctx instanceof NextResponse) return ctx;
+
+  const denied = checkPermission(ctx, "expenses.delete");
+  if (denied) return denied;
+
+  const businessId = ctx.business.id;
 
   try {
     const { searchParams } = new URL(request.url);
@@ -200,8 +258,8 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: false, error: "ID is required" }, { status: 400 });
     }
 
-    const expense = await prisma.expense.findUnique({
-      where: { id },
+    const expense = await prisma.expense.findFirst({
+      where: { id, businessId },
     });
 
     if (!expense) {
@@ -218,8 +276,8 @@ export async function DELETE(request: NextRequest) {
         const invoiceNumber = match ? match[1] : null;
 
         if (invoiceNumber) {
-          const po = await tx.purchase.findUnique({
-            where: { invoiceNumber },
+          const po = await tx.purchase.findFirst({
+            where: { invoiceNumber, businessId },
           });
           if (po) {
             const newPaid = Math.max(0, Number(po.paidAmount) - amount);
@@ -239,6 +297,7 @@ export async function DELETE(request: NextRequest) {
           // General supplier payment (FIFO) - revert using LIFO
           const purchases = await tx.purchase.findMany({
             where: {
+              businessId,
               supplierId: expense.supplierId,
               paidAmount: { gt: 0 },
               deliveryStatus: { in: ['Received', 'PartiallyReceived'] },
@@ -270,8 +329,14 @@ export async function DELETE(request: NextRequest) {
       }
     });
 
-    const user = await getAuthenticatedUser(request);
-    await logAudit({ userId: user?.id, action: 'DELETE_EXPENSE', entityType: 'Expense', entityId: id, ipAddress: getIp(request) });
+    await logAudit({
+      userId: ctx.user.id,
+      businessId,
+      action: 'DELETE_EXPENSE',
+      entityType: 'Expense',
+      entityId: id,
+      ipAddress: getIp(request)
+    });
 
     return NextResponse.json({ success: true, message: "Expense deleted" });
   } catch (error: unknown) {

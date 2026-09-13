@@ -216,10 +216,10 @@ export interface PaginatedResponse<T> {
 // ============================================================================
 
 export const STORE_CONFIG = {
-  name: 'Lakhan Bhandar',
-  nameBn: 'লক্ষ্মণ ভাণ্ডার',
-  address: '3 No Gate More, Military Road, Shivmandir, 734011',
-  phone: '7584864899',
+  name: 'Onuron POS',
+  nameBn: 'অনুরণ পিওএস',
+  address: '',
+  phone: '',
   gstNumber: '',
   logo: '',
 } as const;

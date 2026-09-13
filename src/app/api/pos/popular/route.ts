@@ -1,11 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { requirePermission } from '@/lib/api-middleware';
+import { requireAuth } from '@/lib/api-middleware';
+import { requireBusinessContext, checkPermission } from '@/lib/tenant';
 
 export async function GET(request: NextRequest) {
-  // sales.view পারমিশন চেক করুন (যা সব ক্যাশিয়ারের আছে)
-  const authResponse = await requirePermission(request, "sales.view");
-  if (authResponse) return authResponse;
+  const authResult = await requireAuth(request);
+  if (!authResult.authorized) return authResult.response;
+
+  const ctx = await requireBusinessContext();
+  if (ctx instanceof NextResponse) return ctx;
+
+  const denied = checkPermission(ctx, "sales.view");
+  if (denied) return denied;
+
+  const businessId = ctx.business.id;
 
   try {
     // গত ৩০ দিনের সেল ডেটা ফেচ করুন
@@ -16,6 +24,7 @@ export async function GET(request: NextRequest) {
       where: {
         createdAt: { gte: thirtyDaysAgo },
         sale: {
+          businessId,
           status: { in: ["Completed", "PartialReturn"] }
         },
         quantity: { gt: 0 },

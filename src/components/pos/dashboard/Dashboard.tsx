@@ -204,7 +204,7 @@ export function Dashboard({ onNavigate, refreshKey }: DashboardProps) {
 
       <GreetingHeader
         greeting={t(getGreetingKey(currentTime.getHours()))}
-        storeName={settings.store_name_bn || 'লক্ষ্মণ ভাণ্ডার'}
+        storeName={settings.store_name_bn || settings.store_name || 'Onuron POS'}
         dateLabel={getBengaliDate()}
         subtitle={t('greeting_card_subtitle')}
         timeLabel={formatDate(currentTime, { hour: '2-digit', minute: '2-digit' })}

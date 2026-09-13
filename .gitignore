@@ -84,7 +84,11 @@ diff.txt
 
 # IDE and tool caches
 .amazonq/
+.agents/
+skills-lock.json
 
 # Local scratch directory
 /scratch/
+backup_*.json
+
 

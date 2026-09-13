@@ -46,7 +46,7 @@ export function StockManagement({
   const tc = useTranslations('Common');
   const locale = useLocale();
   const userRole = useUserRole();
-  const canDelete = userRole === 'ADMIN' || userRole === 'MANAGER';
+  const canDelete = userRole === 'OWNER' || userRole === 'ADMIN' || userRole === 'MANAGER';
   const { formatPrice, formatNumber } = useNumberFormat();
   const formatNum = (num: number) => locale === 'bn' ? convertEnglishToBengaliNumerals(num) : num;
 

@@ -1,5 +1,5 @@
 // ============================================================================
-// POS Store - Zustand State Management for Lakhan Bhandar
+// POS Store - Zustand State Management for Onuron POS
 // ============================================================================
 
 import { create } from 'zustand';
@@ -268,7 +268,7 @@ export const useCartStore = create<CartState & CartActions>()(
       },
     }),
     {
-      name: 'lakhan-bhandar-cart-v2',
+      name: 'onuron-pos-cart-v2',
       storage: createJSONStorage(() => localStorage),
       skipHydration: true,
       partialize: (state) => ({
@@ -721,7 +721,7 @@ export const useQuantityUsageStore = create<QuantityUsageState & QuantityUsageAc
       reset: () => set({ usage: {} }),
     }),
     {
-      name: 'lakhan-bhandar-quantity-usage',
+      name: 'onuron-pos-quantity-usage',
       storage: createJSONStorage(() => localStorage),
     }
   )
@@ -795,7 +795,7 @@ export const useProductUsageStore = create<ProductUsageState & ProductUsageActio
       }
     }),
     {
-      name: 'lakhan-bhandar-product-usage',
+      name: 'onuron-pos-product-usage',
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         // We persist usage and lastFetched. The topSales is also persisted for offline support.

@@ -28,7 +28,7 @@ interface User {
   email?: string;
   name: string;
   phone?: string;
-  role: "ADMIN" | "MANAGER" | "CASHIER" | "VIEWER";
+  role: "OWNER" | "ADMIN" | "MANAGER" | "CASHIER" | "VIEWER";
   isActive?: boolean;
 }
 

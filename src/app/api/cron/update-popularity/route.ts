@@ -14,9 +14,10 @@ export async function GET(request: NextRequest) {
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
   try {
-    // Raw SQL for performance - aggregate sales per product
+    // Raw SQL for performance - aggregate sales per product per business
     const monthlyStats = await db.$queryRaw`
       SELECT 
+        s."business_id" as "businessId",
         si."product_id" as "productId",
         SUM(si.quantity)::int as monthly_count,
         SUM(si."total_price")::decimal(10,2) as revenue
@@ -25,11 +26,12 @@ export async function GET(request: NextRequest) {
       WHERE s."created_at" >= ${thirtyDaysAgo}
         AND s.status IN ('Completed', 'PartialReturn')
         AND si.quantity > 0
-      GROUP BY si."product_id"
-    ` as Array<{ productId: string; monthly_count: number; revenue: Prisma.Decimal }>;
+      GROUP BY s."business_id", si."product_id"
+    ` as Array<{ businessId: string; productId: string; monthly_count: number; revenue: Prisma.Decimal }>;
 
     const weeklyStats = await db.$queryRaw`
       SELECT 
+        s."business_id" as "businessId",
         si."product_id" as "productId",
         SUM(si.quantity)::int as weekly_count
       FROM "sale_items" si
@@ -37,8 +39,8 @@ export async function GET(request: NextRequest) {
       WHERE s."created_at" >= ${sevenDaysAgo}
         AND s.status IN ('Completed', 'PartialReturn')
         AND si.quantity > 0
-      GROUP BY si."product_id"
-    ` as Array<{ productId: string; weekly_count: number }>;
+      GROUP BY s."business_id", si."product_id"
+    ` as Array<{ businessId: string; productId: string; weekly_count: number }>;
 
     // Upsert into popularity table
     // Use the first day of the current month as the period start
@@ -46,7 +48,7 @@ export async function GET(request: NextRequest) {
     const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
 
     for (const stat of monthlyStats) {
-      const weekly = weeklyStats.find(w => w.productId === stat.productId);
+      const weekly = weeklyStats.find(w => w.productId === stat.productId && w.businessId === stat.businessId);
       
       await db.productPopularity.upsert({
         where: {
@@ -63,6 +65,7 @@ export async function GET(request: NextRequest) {
           updatedAt: new Date()
         },
         create: {
+          businessId: stat.businessId,
           productId: stat.productId,
           monthlySalesCount: stat.monthly_count,
           weeklySalesCount: weekly?.weekly_count || 0,

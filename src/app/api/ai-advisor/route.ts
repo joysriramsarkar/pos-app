@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import ZAI from 'z-ai-web-dev-sdk';
-import { requireRole } from '@/lib/api-middleware';
-import { db } from '@/lib/db';
+import { requireAuth } from '@/lib/api-middleware';
+import { requireBusinessContext } from '@/lib/tenant';
 
 export async function POST(request: NextRequest) {
-  const roleError = await requireRole(request, ['ADMIN', 'MANAGER']);
-  if (roleError) return roleError;
+  const authResult = await requireAuth(request);
+  if (!authResult.authorized) return authResult.response!;
+
+  const ctx = await requireBusinessContext();
+  if (ctx instanceof NextResponse) return ctx;
+
+  const business = ctx.business;
 
   try {
     let body: unknown;
@@ -34,12 +39,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const currencyRow = await db.setting.findUnique({ where: { key: 'currency_symbol' } });
-    const currencySymbol = currencyRow?.value || '₹';
+    const currencySymbol = business.currency || '₹';
 
     const zai = await ZAI.create();
 
-    const systemPrompt = `তুমি একটি বাংলা মুদি দোকানের AI ব্যবসায়িক উপদেষ্টা। তোমার নাম "লক্ষ্মণ AI"। 
+    const systemPrompt = `তুমি "${business.name}" দোকানের AI ব্যবসায়িক উপদেষ্টা।
 তুমি সবসময় বাংলায় উত্তর দাও। দোকানের রিপোর্ট ডেটা বিশ্লেষণ করে ব্যবহারিক পরামর্শ দাও।
 সংখ্যা ও পরিমাণ বাংলায় লিখো। টাকার প্রতীক ${currencySymbol} ব্যবহার করো।
 পরামর্শগুলো সংক্ষিপ্ত, স্পষ্ট এবং কার্যকর হওয়া চাই।`;

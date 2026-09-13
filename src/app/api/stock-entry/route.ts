@@ -6,15 +6,24 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { StockEntryInputSchema } from '@/schemas';
-import { requirePermission, getAuthenticatedUser } from '@/lib/api-middleware';
+import { requireAuth } from '@/lib/api-middleware';
+import { requireBusinessContext, checkPermission } from '@/lib/tenant';
 import { multiplyMoney, toMoneyNumber, toUnitPriceNumber } from '@/lib/money';
 import { logAudit } from '@/lib/audit';
 import Decimal from 'decimal.js';
 
 // POST /api/stock-entry - Create stock entry (purchase)
 export async function POST(request: NextRequest) {
-  const authError = await requirePermission(request, 'stock.edit');
-  if (authError) return authError;
+  const authResult = await requireAuth(request);
+  if (!authResult.authorized) return authResult.response;
+
+  const ctx = await requireBusinessContext();
+  if (ctx instanceof NextResponse) return ctx;
+
+  const denied = checkPermission(ctx, 'stock.create');
+  if (denied) return denied;
+
+  const businessId = ctx.business.id;
 
   try {
     let body;
@@ -41,7 +50,7 @@ export async function POST(request: NextRequest) {
     const { productId, quantity, purchasePrice, date, supplierId, amountPaid, notes } = result.data;
 
     const transactionResult = await db.$transaction(async (tx) => {
-      // Lock product row for concurrent stock/WAC safety
+      // Lock product row for concurrent stock/WAC safety scoped to business
       const locked = await tx.$queryRaw<
         Array<{
           id: string;
@@ -52,7 +61,7 @@ export async function POST(request: NextRequest) {
       >`
         SELECT id, name, "current_stock", "buying_price"
         FROM products
-        WHERE id = ${productId}
+        WHERE id = ${productId} AND business_id = ${businessId}
         FOR UPDATE
       `;
 
@@ -90,10 +99,14 @@ export async function POST(request: NextRequest) {
         data: updateData,
       });
 
-      const currencyRow = await tx.setting.findUnique({ where: { key: 'currency_symbol' } });
+      const currencyRow = await tx.businessSetting.findFirst({
+        where: { businessId, key: 'currency_symbol' },
+      });
       const currencySymbol = currencyRow?.value || '₹';
+
       const stockHistory = await tx.stockHistory.create({
         data: {
+          businessId,
           productId,
           changeType: 'purchase',
           quantity,
@@ -103,8 +116,8 @@ export async function POST(request: NextRequest) {
       });
 
       if (supplierId) {
-        const supplier = await tx.supplier.findUnique({
-          where: { id: supplierId },
+        const supplier = await tx.supplier.findFirst({
+          where: { id: supplierId, businessId },
         });
 
         if (supplier) {
@@ -121,6 +134,7 @@ export async function POST(request: NextRequest) {
 
           const purchase = await tx.purchase.create({
             data: {
+              businessId,
               supplierId,
               invoiceNumber: `PUR-${Date.now()}`,
               totalAmount,
@@ -151,6 +165,7 @@ export async function POST(request: NextRequest) {
           if (actualAmountPaid.gt(0)) {
             await tx.expense.create({
               data: {
+                businessId,
                 amount: actualAmountPaid,
                 category: 'Supplier Payment',
                 notes: notes || `Paid for stock: ${quantity} units of ${productRow.name}`,
@@ -166,10 +181,9 @@ export async function POST(request: NextRequest) {
       return updatedProduct;
     });
 
-    const user = await getAuthenticatedUser(request);
-    const userId = (user as { id?: string } | null)?.id;
     await logAudit({
-      userId,
+      userId: ctx.user.id,
+      businessId,
       action: 'STOCK_ENTRY',
       entityType: 'Product',
       entityId: transactionResult.id,

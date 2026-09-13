@@ -2,18 +2,28 @@ export const dynamic = 'force-dynamic';
 
 import { db } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
-import { requirePermission, getAuthenticatedUser } from '@/lib/api-middleware';
+import { requireAuth } from '@/lib/api-middleware';
+import { requireBusinessContext, checkPermission } from '@/lib/tenant';
 import { toMoneyDecimal, toMoneyNumber } from '@/lib/money';
 import { logAudit } from '@/lib/audit';
 
 // GET /api/due-collection - List customers with totalDue > 0
 export async function GET(request: NextRequest) {
-  const authError = await requirePermission(request, 'customers.view');
-  if (authError) return authError;
+  const authResult = await requireAuth(request);
+  if (!authResult.authorized) return authResult.response;
+
+  const ctx = await requireBusinessContext();
+  if (ctx instanceof NextResponse) return ctx;
+
+  const denied = checkPermission(ctx, 'customers.view');
+  if (denied) return denied;
+
+  const businessId = ctx.business.id;
 
   try {
     const customers = await db.customer.findMany({
       where: {
+        businessId,
         isActive: true,
         totalDue: { gt: 0 },
       },
@@ -32,6 +42,7 @@ export async function GET(request: NextRequest) {
       customers.map(async (customer) => {
         const lastSale = await db.sale.findFirst({
           where: {
+            businessId,
             customerId: customer.id,
             status: 'Completed',
           },
@@ -63,8 +74,16 @@ export async function GET(request: NextRequest) {
 
 // POST /api/due-collection - Collect due payment from a customer
 export async function POST(request: NextRequest) {
-  const authError = await requirePermission(request, 'customers.edit');
-  if (authError) return authError;
+  const authResult = await requireAuth(request);
+  if (!authResult.authorized) return authResult.response;
+
+  const ctx = await requireBusinessContext();
+  if (ctx instanceof NextResponse) return ctx;
+
+  const denied = checkPermission(ctx, 'due.collect');
+  if (denied) return denied;
+
+  const businessId = ctx.business.id;
 
   try {
     const body = await request.json();
@@ -85,7 +104,7 @@ export async function POST(request: NextRequest) {
       >`
         SELECT id, name, "total_due" as "totalDue", "total_paid" as "totalPaid"
         FROM customers
-        WHERE id = ${customerId}
+        WHERE id = ${customerId} AND business_id = ${businessId}
         FOR UPDATE
       `;
       const customer = customerRaw[0];
@@ -118,6 +137,7 @@ export async function POST(request: NextRequest) {
 
       await tx.ledgerEntry.create({
         data: {
+          businessId,
           customerId,
           entryType: 'debit',
           amount: collectAmount,
@@ -135,9 +155,9 @@ export async function POST(request: NextRequest) {
       };
     });
 
-    const user = await getAuthenticatedUser(request);
     await logAudit({
-      userId: (user as { id?: string } | null)?.id,
+      userId: ctx.user.id,
+      businessId,
       action: 'DUE_COLLECTION',
       entityType: 'Customer',
       entityId: customerId,

@@ -1,10 +1,10 @@
 apply plugin: 'com.android.application'
 
 android {
-    namespace = "com.lakhan.pos"
+    namespace = "com.onuron.pos"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.lakhan.pos"
+        applicationId "com.onuron.pos"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
@@ -34,6 +34,11 @@ dependencies {
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')
+
+    // Import the Firebase BoM
+    implementation platform('com.google.firebase:firebase-bom:34.19.0')
+    implementation 'com.google.firebase:firebase-analytics'
+    implementation 'com.google.firebase:firebase-auth'
 }
 
 apply from: 'capacitor.build.gradle'

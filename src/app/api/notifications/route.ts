@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireAuth } from '@/lib/api-middleware';
+import { requireBusinessContext } from '@/lib/tenant';
 
 export interface NotificationItem {
   id: string;
@@ -36,6 +37,11 @@ export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (!authResult.authorized) return authResult.response!;
 
+  const ctx = await requireBusinessContext();
+  if (ctx instanceof NextResponse) return ctx;
+
+  const businessId = ctx.business.id;
+
   const headers = { 'Content-Type': 'application/json; charset=utf-8' };
 
   try {
@@ -43,7 +49,7 @@ export async function GET(request: NextRequest) {
 
     // 1. Out of stock — capped, newest first
     const outOfStockProducts = await db.product.findMany({
-      where: { currentStock: 0, isActive: true },
+      where: { businessId, currentStock: 0, isActive: true },
       orderBy: { updatedAt: 'desc' },
       take: MAX_OUT_OF_STOCK,
       select: {
@@ -89,7 +95,8 @@ export async function GET(request: NextRequest) {
              CAST(min_stock_level AS FLOAT) as "minStockLevel",
              updated_at as "updatedAt"
       FROM products
-      WHERE is_active = true
+      WHERE business_id = ${businessId}
+        AND is_active = true
         AND current_stock > 0
         AND current_stock <= min_stock_level
       ORDER BY current_stock ASC, updated_at DESC
@@ -121,6 +128,7 @@ export async function GET(request: NextRequest) {
 
     const customersWithDue = await db.customer.findMany({
       where: {
+        businessId,
         totalDue: { gt: 0 },
         isActive: true,
       },

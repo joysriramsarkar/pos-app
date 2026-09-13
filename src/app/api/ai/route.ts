@@ -1,21 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
-import { requireRole } from "@/lib/api-middleware";
-import { db } from "@/lib/db";
+import { requireAuth } from "@/lib/api-middleware";
+import { requireBusinessContext } from "@/lib/tenant";
 
 export async function POST(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session) {
-    return NextResponse.json(
-      { success: false, error: "Unauthorized" },
-      { status: 401 },
-    );
-  }
+  const authResult = await requireAuth(request);
+  if (!authResult.authorized) return authResult.response!;
 
-  // Only allow ADMIN or MANAGER to query AI
-  const roleCheck = await requireRole(request, ["ADMIN", "MANAGER"]);
-  if (roleCheck) return roleCheck;
+  const ctx = await requireBusinessContext();
+  if (ctx instanceof NextResponse) return ctx;
+
+  const business = ctx.business;
 
   try {
     let body: unknown;
@@ -44,8 +38,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const currencyRow = await db.setting.findUnique({ where: { key: "currency_symbol" } });
-    const currencySymbol = currencyRow?.value || "₹";
+    const currencySymbol = business.currency || "₹";
 
     const summaryData = summary as Record<string, unknown>;
     const margin = parseFloat(String(summaryData.profitMargin ?? "0"));

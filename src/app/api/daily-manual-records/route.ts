@@ -1,16 +1,28 @@
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { requirePermission, getAuthenticatedUser } from '@/lib/api-middleware';
+import { requireAuth } from '@/lib/api-middleware';
+import { requireBusinessContext, checkPermission } from '@/lib/tenant';
 import { logAudit } from '@/lib/audit';
 import { DailyManualRecordInputSchema } from '@/schemas';
 
 // GET /api/daily-manual-records - Fetch all manual daily profit records
 export async function GET(request: NextRequest) {
-  const authError = await requirePermission(request, 'reports.view');
-  if (authError) return authError;
+  const authResult = await requireAuth(request);
+  if (!authResult.authorized) return authResult.response;
+
+  const ctx = await requireBusinessContext();
+  if (ctx instanceof NextResponse) return ctx;
+
+  const denied = checkPermission(ctx, 'reports.view');
+  if (denied) return denied;
+
+  const businessId = ctx.business.id;
 
   try {
     const records = await db.dailyManualRecord.findMany({
+      where: { businessId },
       orderBy: { date: 'desc' },
     });
 
@@ -34,8 +46,16 @@ export async function GET(request: NextRequest) {
 
 // POST /api/daily-manual-records - Save/upsert a record
 export async function POST(request: NextRequest) {
-  const authError = await requirePermission(request, 'reports.view');
-  if (authError) return authError;
+  const authResult = await requireAuth(request);
+  if (!authResult.authorized) return authResult.response;
+
+  const ctx = await requireBusinessContext();
+  if (ctx instanceof NextResponse) return ctx;
+
+  const denied = checkPermission(ctx, 'reports.view');
+  if (denied) return denied;
+
+  const businessId = ctx.business.id;
 
   try {
     let body: unknown;
@@ -61,7 +81,7 @@ export async function POST(request: NextRequest) {
     const profitNum = salesNum - expensesNum;
 
     const record = await db.dailyManualRecord.upsert({
-      where: { date },
+      where: { businessId_date: { businessId, date } },
       update: {
         sales: salesNum,
         expenses: expensesNum,
@@ -69,6 +89,7 @@ export async function POST(request: NextRequest) {
         notes: notes || null,
       },
       create: {
+        businessId,
         date,
         sales: salesNum,
         expenses: expensesNum,
@@ -77,9 +98,9 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    const user = await getAuthenticatedUser(request);
     await logAudit({
-      userId: user?.id,
+      userId: ctx.user.id,
+      businessId,
       action: 'SAVE_DAILY_MANUAL_RECORD',
       entityType: 'DailyManualRecord',
       entityId: record.id,
@@ -108,8 +129,16 @@ export async function POST(request: NextRequest) {
 
 // DELETE /api/daily-manual-records - Delete a manual record
 export async function DELETE(request: NextRequest) {
-  const authError = await requirePermission(request, 'reports.view');
-  if (authError) return authError;
+  const authResult = await requireAuth(request);
+  if (!authResult.authorized) return authResult.response;
+
+  const ctx = await requireBusinessContext();
+  if (ctx instanceof NextResponse) return ctx;
+
+  const denied = checkPermission(ctx, 'reports.view');
+  if (denied) return denied;
+
+  const businessId = ctx.business.id;
 
   try {
     const { searchParams } = new URL(request.url);
@@ -121,11 +150,19 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
+    const existing = await db.dailyManualRecord.findFirst({ where: { id, businessId } });
+    if (!existing) {
+      return NextResponse.json(
+        { success: false, error: 'Record not found' },
+        { status: 404 }
+      );
+    }
+
     await db.dailyManualRecord.delete({ where: { id } });
 
-    const user = await getAuthenticatedUser(request);
     await logAudit({
-      userId: user?.id,
+      userId: ctx.user.id,
+      businessId,
       action: 'DELETE_DAILY_MANUAL_RECORD',
       entityType: 'DailyManualRecord',
       entityId: id,

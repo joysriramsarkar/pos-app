@@ -3,7 +3,8 @@ export const dynamic = 'force-dynamic';
 import { db } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { requirePermission, getAuthenticatedUser } from '@/lib/api-middleware';
+import { requireAuth } from '@/lib/api-middleware';
+import { requireBusinessContext, checkPermission } from '@/lib/tenant';
 import { addMoney, toMoneyNumber } from '@/lib/money';
 import { logAudit } from '@/lib/audit';
 
@@ -18,8 +19,16 @@ const getIp = (req: NextRequest) => req.headers.get('x-forwarded-for') || req.he
 // POST /api/due-entry - Manually record a due (increase customer outstanding due)
 export async function POST(request: NextRequest) {
   try {
-    const authError = await requirePermission(request, 'customers.edit');
-    if (authError) return authError;
+    const authResult = await requireAuth(request);
+    if (!authResult.authorized) return authResult.response;
+
+    const ctx = await requireBusinessContext();
+    if (ctx instanceof NextResponse) return ctx;
+
+    const denied = checkPermission(ctx, 'due.create');
+    if (denied) return denied;
+
+    const businessId = ctx.business.id;
 
     const body = await request.json();
     const validation = dueEntrySchema.safeParse(body);
@@ -32,9 +41,9 @@ export async function POST(request: NextRequest) {
 
     const updatedCustomer = await db.$transaction(async (tx) => {
       const customerRaw = await tx.$queryRaw<any[]>`
-        SELECT id, "total_due" as "totalDue", "total_paid" as "totalPaid"
+        SELECT id, name, "total_due" as "totalDue", "total_paid" as "totalPaid"
         FROM customers
-        WHERE id = ${customerId}
+        WHERE id = ${customerId} AND business_id = ${businessId}
         FOR UPDATE
       `;
       const customer = customerRaw[0];
@@ -58,6 +67,7 @@ export async function POST(request: NextRequest) {
 
       await tx.ledgerEntry.create({
         data: {
+          businessId,
           customerId,
           entryType: 'credit', // Credit increases due balance
           amount: amount,
@@ -67,9 +77,9 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      const authUser = await getAuthenticatedUser(request);
       await logAudit({
-        userId: authUser?.id,
+        userId: ctx.user.id,
+        businessId,
         action: 'MANUAL_DUE_ENTRY',
         entityType: 'Customer',
         entityId: customerId,

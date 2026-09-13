@@ -14,10 +14,10 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
  */
 
 export const metadata: Metadata = {
-  title: "Lakhan Bhandar POS - লক্ষ্মণ ভাণ্ডার",
-  description: "Point of Sale system for Lakhan Bhandar grocery store. Fast billing, inventory management, and customer credit tracking.",
-  keywords: ["POS", "Point of Sale", "Grocery Store", "Billing", "Inventory", "Lakhan Bhandar"],
-  authors: [{ name: "জয়শ্রীরাম সরকার" }],
+  title: "Onuron POS",
+  description: "Smart Multi-Tenant Point of Sale (POS) System. Fast billing, inventory management, and customer credit tracking.",
+  keywords: ["POS", "Point of Sale", "Onuron POS", "Billing", "Inventory", "Store Management"],
+  authors: [{ name: "Onuron" }],
   icons: {
     icon: "/favicon.ico",
   },
@@ -61,9 +61,9 @@ export default function RootLayout({
             transition: 'opacity 0.3s ease',
           }}
         >
-          <img src="/logo.svg" alt="Lakhan Bhandar" style={{ width: '80px', height: '80px' }} />
+          <img src="/logo.svg" alt="Onuron POS" style={{ width: '80px', height: '80px' }} />
           <p style={{ marginTop: '14px', color: '#2563eb', fontWeight: 600, fontSize: '18px', fontFamily: 'sans-serif' }}>
-            লক্ষ্মণ ভাণ্ডার (Lakhan Bhandar)
+            Onuron POS
           </p>
           <div
             style={{
@@ -77,7 +77,7 @@ export default function RootLayout({
             }}
           />
           <style dangerouslySetInnerHTML={{ __html: '@keyframes splash-spin { to { transform: rotate(360deg); } }' }} />
-          <script dangerouslySetInnerHTML={{ __html: `setTimeout(function(){ var s = document.getElementById('splash-screen'); if(s) { s.style.opacity = '0'; setTimeout(function(){ s.remove(); }, 300); } }, 3500);` }} />
+          <script dangerouslySetInnerHTML={{ __html: `setTimeout(function(){ var s = document.getElementById('splash-screen'); if(s) { s.style.opacity = '0'; setTimeout(function(){ s.remove(); }, 300); } }, 2000); if(location.hostname === 'localhost' && 'serviceWorker' in navigator) { navigator.serviceWorker.getRegistrations().then(function(regs){ for(var i=0; i<regs.length; i++){ regs[i].unregister(); } }); }` }} />
         </div>
 
         <SplashScreenRemover />

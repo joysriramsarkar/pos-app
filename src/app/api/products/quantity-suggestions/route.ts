@@ -1,19 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { requirePermission } from '@/lib/api-middleware';
+import { requireAuth } from '@/lib/api-middleware';
+import { requireBusinessContext, checkPermission } from '@/lib/tenant';
 
 export async function GET(request: NextRequest) {
-  const authError = await requirePermission(request, 'sales.view');
-  if (authError) return authError;
+  const authResult = await requireAuth(request);
+  if (!authResult.authorized) return authResult.response;
+
+  const ctx = await requireBusinessContext();
+  if (ctx instanceof NextResponse) return ctx;
+
+  const denied = checkPermission(ctx, 'sales.view');
+  if (denied) return denied;
+
+  const businessId = ctx.business.id;
 
   try {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - 30);
 
-    // Fetch Completed sale items in the last 30 days
+    // Fetch Completed sale items in the last 30 days for this business
     const saleItems = await db.saleItem.findMany({
       where: {
         sale: {
+          businessId,
           createdAt: { gte: startDate },
           status: 'Completed',
         },

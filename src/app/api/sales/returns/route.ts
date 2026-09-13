@@ -2,9 +2,8 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
-import { requirePermission, getAuthenticatedUser } from "@/lib/api-middleware";
+import { requireAuth } from "@/lib/api-middleware";
+import { requireBusinessContext, checkPermission } from "@/lib/tenant";
 import { logAudit } from "@/lib/audit";
 import { mapRefundMethod, processSaleReturn } from "@/lib/sale-returns";
 
@@ -13,20 +12,31 @@ const getIp = (req: NextRequest) =>
 
 // GET /api/sales/returns?saleId=xxx
 export async function GET(request: NextRequest) {
-  const authError = await requirePermission(request, "sales.view");
-  if (authError) return authError;
+  const authResult = await requireAuth(request);
+  if (!authResult.authorized) return authResult.response;
 
+  const ctx = await requireBusinessContext();
+  if (ctx instanceof NextResponse) return ctx;
+
+  const denied = checkPermission(ctx, "sales.view");
+  if (denied) return denied;
+
+  const businessId = ctx.business.id;
   const { searchParams } = new URL(request.url);
   const saleId = searchParams.get("saleId");
 
   try {
     const returns = await db.saleReturn.findMany({
-      where: saleId ? { saleId } : undefined,
+      where: {
+        businessId,
+        ...(saleId ? { saleId } : {}),
+      },
       include: { items: true, user: { select: { name: true } } },
       orderBy: { createdAt: "desc" },
     });
     return NextResponse.json({ success: true, data: returns });
-  } catch {
+  } catch (error) {
+    console.error("Error fetching returns:", error);
     return NextResponse.json({ success: false, error: "Failed to fetch returns" }, { status: 500 });
   }
 }
@@ -34,11 +44,17 @@ export async function GET(request: NextRequest) {
 // POST /api/sales/returns — canonical refund/return endpoint
 // Body: { saleId, items: [{ saleItemId, quantity }], refundMethod: Cash|Due|Prepaid, reason }
 export async function POST(request: NextRequest) {
-  const authError = await requirePermission(request, "sales.edit");
-  if (authError) return authError;
+  const authResult = await requireAuth(request);
+  if (!authResult.authorized) return authResult.response;
 
-  const session = await getServerSession(authOptions);
-  const userId = (session?.user as { id?: string })?.id || null;
+  const ctx = await requireBusinessContext();
+  if (ctx instanceof NextResponse) return ctx;
+
+  const denied = checkPermission(ctx, "sales.refund");
+  if (denied) return denied;
+
+  const businessId = ctx.business.id;
+  const userId = ctx.user.id;
 
   try {
     let body: unknown;
@@ -93,6 +109,7 @@ export async function POST(request: NextRequest) {
     const result = await db.$transaction((tx) =>
       processSaleReturn(tx, {
         saleId,
+        businessId,
         items: items.map((i: { saleItemId: string; quantity: number }) => ({
           saleItemId: i.saleItemId,
           quantity: Number(i.quantity),
@@ -103,9 +120,9 @@ export async function POST(request: NextRequest) {
       }),
     );
 
-    const user = await getAuthenticatedUser(request);
     await logAudit({
-      userId: (user as { id?: string } | null)?.id,
+      userId,
+      businessId,
       action: "CREATE_SALE_RETURN",
       entityType: "SaleReturn",
       entityId: result.saleReturn.id,

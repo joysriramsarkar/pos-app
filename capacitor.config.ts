@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.lakhan.pos',
-  appName: 'Lakhan POS',
+  appId: 'com.onuron.pos',
+  appName: 'Onuron POS',
   webDir: 'out',
   server: {
     url: 'https://lakhanb.vercel.app', // production URL — app loads same-origin, fixes WebView cookie/session issues
