@@ -1,19 +1,46 @@
 const worker = {
   async fetch(request) {
     const url = new URL(request.url);
+    const originalHost = request.headers.get('Host') || 'pos.onuron.org';
+
+    // Target Vercel production deployment
     url.hostname = 'lakhanb.vercel.app';
     url.protocol = 'https:';
 
-    const headers = new Headers(request.headers);
-    headers.set('Host', 'lakhanb.vercel.app');
-    headers.set('X-Forwarded-Host', request.headers.get('Host') || 'pos.onuron.org');
-    headers.set('X-Forwarded-Proto', 'https');
+    const reqHeaders = new Headers(request.headers);
+    reqHeaders.set('Host', 'lakhanb.vercel.app');
+    reqHeaders.set('X-Forwarded-Host', originalHost);
+    reqHeaders.set('X-Forwarded-Proto', 'https');
 
-    return fetch(url.toString(), {
+    const newReq = new Request(url.toString(), {
       method: request.method,
-      headers: headers,
+      headers: reqHeaders,
       body: request.body,
       redirect: 'manual',
+    });
+
+    const response = await fetch(newReq);
+
+    // Forward response and rewrite redirects to stay on pos.onuron.org
+    const respHeaders = new Headers(response.headers);
+    const location = respHeaders.get('Location');
+    if (location) {
+      try {
+        const locUrl = new URL(location, url.origin);
+        if (locUrl.hostname === 'lakhanb.vercel.app') {
+          locUrl.hostname = originalHost;
+          locUrl.protocol = 'https:';
+          respHeaders.set('Location', locUrl.toString());
+        }
+      } catch {
+        // Ignore malformed redirect headers
+      }
+    }
+
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: respHeaders,
     });
   },
 };
