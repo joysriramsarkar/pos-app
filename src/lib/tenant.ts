@@ -16,87 +16,24 @@ import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import type { BusinessRole } from "@prisma/client";
+import {
+  ROLE_PERMISSIONS,
+  PERMISSION_ALIASES,
+  normalizePermission,
+  roleHasPermission,
+  getPermissionsForRole,
+  type BusinessRole,
+} from "./permissions-helpers";
 
 export type { BusinessRole };
-
-// Permission map: which roles can do what
-// Higher roles inherit lower role permissions
-const ROLE_PERMISSIONS: Record<BusinessRole, string[]> = {
-  OWNER: [
-    // Full access
-    "products.view", "products.create", "products.update", "products.delete",
-    "categories.view", "categories.create", "categories.update", "categories.delete",
-    "inventory.view", "inventory.create", "inventory.update",
-    "sales.view", "sales.create", "sales.edit", "sales.cancel", "sales.refund",
-    "customers.view", "customers.create", "customers.update", "customers.delete",
-    "suppliers.view", "suppliers.create", "suppliers.update", "suppliers.delete",
-    "purchases.view", "purchases.create", "purchases.update",
-    "expenses.view", "expenses.create", "expenses.update", "expenses.delete",
-    "reports.view", "reports.export",
-    "settings.view", "settings.update",
-    "users.view", "users.invite", "users.remove", "users.change_role",
-    "audit.view",
-    "business.update", "business.delete",
-    "stock.create", "stock.edit",
-    "due.view", "due.create", "due.collect",
-  ],
-  ADMIN: [
-    "products.view", "products.create", "products.update", "products.delete",
-    "categories.view", "categories.create", "categories.update", "categories.delete",
-    "inventory.view", "inventory.create", "inventory.update",
-    "sales.view", "sales.create", "sales.edit", "sales.cancel", "sales.refund",
-    "customers.view", "customers.create", "customers.update", "customers.delete",
-    "suppliers.view", "suppliers.create", "suppliers.update", "suppliers.delete",
-    "purchases.view", "purchases.create", "purchases.update",
-    "expenses.view", "expenses.create", "expenses.update", "expenses.delete",
-    "reports.view", "reports.export",
-    "settings.view", "settings.update",
-    "users.view", "users.invite", "users.remove", "users.change_role",
-    "audit.view",
-    "business.update",
-    "stock.create", "stock.edit",
-    "due.view", "due.create", "due.collect",
-  ],
-  MANAGER: [
-    "products.view", "products.create", "products.update",
-    "categories.view", "categories.create", "categories.update",
-    "inventory.view", "inventory.create", "inventory.update",
-    "sales.view", "sales.create", "sales.edit", "sales.cancel", "sales.refund",
-    "customers.view", "customers.create", "customers.update",
-    "suppliers.view", "suppliers.create", "suppliers.update",
-    "purchases.view", "purchases.create", "purchases.update",
-    "expenses.view", "expenses.create", "expenses.update",
-    "reports.view", "reports.export",
-    "settings.view",
-    "users.view",
-    "stock.create", "stock.edit",
-    "due.view", "due.create", "due.collect",
-  ],
-  CASHIER: [
-    "products.view",
-    "categories.view",
-    "inventory.view",
-    "sales.view", "sales.create",
-    "customers.view", "customers.create", "customers.update",
-    "purchases.view",
-    "expenses.view",
-    "due.view", "due.collect",
-    "stock.create",
-  ],
-  VIEWER: [
-    "products.view",
-    "categories.view",
-    "inventory.view",
-    "sales.view",
-    "customers.view",
-    "suppliers.view",
-    "purchases.view",
-    "expenses.view",
-    "reports.view",
-    "due.view",
-  ],
+export {
+  ROLE_PERMISSIONS,
+  PERMISSION_ALIASES,
+  normalizePermission,
+  roleHasPermission,
+  getPermissionsForRole,
 };
+
 
 export type BusinessContext = {
   user: {
@@ -232,21 +169,6 @@ export async function requireBusinessContext(): Promise<
   };
 }
 
-// Canonical alias map for backward compatibility
-const PERMISSION_ALIASES: Record<string, string> = {
-  "users.create": "users.invite",
-  "products.edit": "products.update",
-  "settings.edit": "settings.update",
-  "categories.edit": "categories.update",
-  "customers.edit": "customers.update",
-  "suppliers.edit": "suppliers.update",
-  "expenses.edit": "expenses.update",
-};
-
-export function normalizePermission(permissionCode: string): string {
-  return PERMISSION_ALIASES[permissionCode] || permissionCode;
-}
-
 /**
  * Check if a context has a specific permission.
  * Throws a 403 NextResponse if not.
@@ -283,23 +205,5 @@ export function checkRole(
     );
   }
   return null;
-}
-
-/**
- * Check if a role has a specific permission (static lookup, no DB).
- */
-export function roleHasPermission(role: BusinessRole, permissionCode: string): boolean {
-  if (!role || !permissionCode) return false;
-  const canonical = normalizePermission(permissionCode);
-  const permissions = ROLE_PERMISSIONS[role];
-  if (!permissions) return false;
-  return permissions.includes(canonical) || permissions.includes(permissionCode);
-}
-
-/**
- * Get all permissions for a given role (static lookup).
- */
-export function getPermissionsForRole(role: BusinessRole): string[] {
-  return ROLE_PERMISSIONS[role] ?? [];
 }
 

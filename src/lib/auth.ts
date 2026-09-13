@@ -2,7 +2,6 @@ import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
-import { headers } from "next/headers";
 import { ipLoginLimiter, usernameLoginLimiter, checkLocalRateLimit } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
 
@@ -22,7 +21,7 @@ export const authOptions: NextAuthOptions = {
         isGoogleVerified: { label: "isGoogleVerified", type: "text" },
         googleEmail: { label: "googleEmail", type: "text" },
       },
-      async authorize(credentials) {
+      async authorize(credentials, req) {
         const isOtp = credentials?.isOtpVerified === "true";
         const isGoogle = credentials?.isGoogleVerified === "true";
         console.log("[NextAuth] authorize called with username:", sanitizeLogInput(credentials?.username), "isOtp:", isOtp, "isGoogle:", isGoogle);
@@ -78,10 +77,17 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
-        const reqHeaders = await headers();
-        const rawRealIp = reqHeaders.get("x-real-ip")?.trim();
-        const rawForwardedFor = reqHeaders.get("x-forwarded-for")?.split(",")[0]?.trim();
-        const ip = rawRealIp || rawForwardedFor || "127.0.0.1";
+        let ip = "127.0.0.1";
+        try {
+          const rawHeaders = req?.headers as any;
+          const rawRealIp = typeof rawHeaders?.get === "function"
+            ? (rawHeaders.get("x-real-ip") || rawHeaders.get("x-forwarded-for"))
+            : (rawHeaders?.["x-real-ip"] || rawHeaders?.["x-forwarded-for"]);
+          ip = (typeof rawRealIp === "string" ? rawRealIp.split(",")[0]?.trim() : "") || "127.0.0.1";
+        } catch {
+          ip = "127.0.0.1";
+        }
+
 
         // Rate limit by IP
         if (ipLoginLimiter) {
