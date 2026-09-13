@@ -232,6 +232,21 @@ export async function requireBusinessContext(): Promise<
   };
 }
 
+// Canonical alias map for backward compatibility
+const PERMISSION_ALIASES: Record<string, string> = {
+  "users.create": "users.invite",
+  "products.edit": "products.update",
+  "settings.edit": "settings.update",
+  "categories.edit": "categories.update",
+  "customers.edit": "customers.update",
+  "suppliers.edit": "suppliers.update",
+  "expenses.edit": "expenses.update",
+};
+
+export function normalizePermission(permissionCode: string): string {
+  return PERMISSION_ALIASES[permissionCode] || permissionCode;
+}
+
 /**
  * Check if a context has a specific permission.
  * Throws a 403 NextResponse if not.
@@ -240,7 +255,8 @@ export function checkPermission(
   context: BusinessContext,
   permissionCode: string
 ): NextResponse | null {
-  if (!context.permissions.includes(permissionCode)) {
+  const canonical = normalizePermission(permissionCode);
+  if (!context.permissions.includes(canonical) && !context.permissions.includes(permissionCode)) {
     return NextResponse.json(
       {
         error: `Permission denied: ${permissionCode}`,
@@ -273,7 +289,11 @@ export function checkRole(
  * Check if a role has a specific permission (static lookup, no DB).
  */
 export function roleHasPermission(role: BusinessRole, permissionCode: string): boolean {
-  return ROLE_PERMISSIONS[role]?.includes(permissionCode) ?? false;
+  if (!role || !permissionCode) return false;
+  const canonical = normalizePermission(permissionCode);
+  const permissions = ROLE_PERMISSIONS[role];
+  if (!permissions) return false;
+  return permissions.includes(canonical) || permissions.includes(permissionCode);
 }
 
 /**
@@ -282,3 +302,4 @@ export function roleHasPermission(role: BusinessRole, permissionCode: string): b
 export function getPermissionsForRole(role: BusinessRole): string[] {
   return ROLE_PERMISSIONS[role] ?? [];
 }
+

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "457449274796",
+    "project_id": "pos-app-508501",
+    "storage_bucket": "pos-app-508501.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:457449274796:android:3c3f684800190c38ac4e09",
+        "android_client_info": {
+          "package_name": "com.onuron.pos"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCGAgTGEqJjEjQ2URfiHQ-LP0E7BKTa3qU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

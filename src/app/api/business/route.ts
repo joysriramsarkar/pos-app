@@ -156,3 +156,57 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: "Failed to update business" }, { status: 500 });
   }
 }
+
+/**
+ * DELETE /api/business — Soft-delete the business (OWNER only).
+ *
+ * Sets isActive = false and deactivates all memberships.
+ * Financial records (sales, purchases, ledger) are preserved for audit trail.
+ * Hard-delete is intentionally NOT supported.
+ */
+export async function DELETE(request: NextRequest) {
+  const authResult = await requireAuth(request);
+  if (!authResult.authorized) return authResult.response;
+
+  const ctx = await requireBusinessContext();
+  if (ctx instanceof NextResponse) return ctx;
+
+  // Only OWNER can deactivate a business
+  const denied = checkPermission(ctx, "business.delete");
+  if (denied) return denied;
+
+  const businessId = ctx.business.id;
+
+  try {
+    await db.$transaction(async (tx) => {
+      // 1. Deactivate all memberships for this business
+      await tx.membership.updateMany({
+        where: { businessId },
+        data: { isActive: false },
+      });
+
+      // 2. Soft-delete the business itself
+      await tx.business.update({
+        where: { id: businessId },
+        data: { isActive: false, updatedAt: new Date() },
+      });
+    });
+
+    await logAudit({
+      businessId,
+      userId: ctx.user.id,
+      action: "DEACTIVATE_BUSINESS",
+      entityType: "Business",
+      entityId: businessId,
+      details: { name: ctx.business.name },
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: "Business deactivated. All data is preserved and can be restored by a platform admin.",
+    });
+  } catch (error) {
+    console.error("[BUSINESS_DELETE]", error);
+    return NextResponse.json({ error: "Failed to deactivate business" }, { status: 500 });
+  }
+}

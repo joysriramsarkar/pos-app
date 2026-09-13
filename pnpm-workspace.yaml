@@ -1,4 +1,5 @@
 allowBuilds:
+  '@firebase/util': true
   '@parcel/watcher': true
   '@prisma/client': true
   '@prisma/engines': true
@@ -7,6 +8,7 @@ allowBuilds:
   es5-ext: true
   esbuild: true
   prisma: true
+  protobufjs: true
   sharp: true
   unrs-resolver: true
 

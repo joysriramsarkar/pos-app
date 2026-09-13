@@ -1,7 +1,7 @@
 {
-  "name": "POS App",
-  "short_name": "POS",
-  "description": "Point of Sale Application",
+  "name": "Onuron POS",
+  "short_name": "Onuron POS",
+  "description": "Smart Multi-Tenant Point of Sale Application",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",

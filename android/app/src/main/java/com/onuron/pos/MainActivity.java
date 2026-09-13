@@ -1,4 +1,4 @@
-package com.lakhan.pos;
+package com.onuron.pos;
 
 import com.getcapacitor.BridgeActivity;
 

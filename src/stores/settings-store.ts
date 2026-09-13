@@ -33,10 +33,10 @@ export interface AppSettings {
 }
 
 const defaultSettings: AppSettings = {
-  store_name: 'Lakhan Bhandar',
-  store_name_bn: 'লক্ষ্মণ ভাণ্ডার',
-  store_address: '3 No Gate More, Military Road, Shivmandir, 734011',
-  store_phone: '7584864899',
+  store_name: 'Onuron POS',
+  store_name_bn: 'অনুরণ পিওএস',
+  store_address: '',
+  store_phone: '',
   store_gst: '',
   store_logo: '',
 
@@ -151,7 +151,7 @@ export const useSettingsStore = create<SettingsState>()(
       },
     }),
     {
-      name: 'lakhan-bhandar-settings',
+      name: 'onuron-pos-settings',
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         settings: state.settings,

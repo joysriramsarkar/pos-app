@@ -124,6 +124,7 @@ export default function RegisterPage() {
 
       // Clear any prior store settings cache
       try {
+        localStorage.removeItem("onuron-pos-settings");
         localStorage.removeItem("lakhan-bhandar-settings");
         localStorage.removeItem("pos-app-session-user");
       } catch {}

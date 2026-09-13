@@ -180,7 +180,7 @@ export default function OnboardingPage() {
   };
 
   const handleFinish = () => {
-    router.push("/");
+    window.location.href = "/";
   };
 
   return (

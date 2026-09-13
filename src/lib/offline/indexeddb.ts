@@ -1,14 +1,28 @@
 // ============================================================================
 // IndexedDB Manager for Offline-First POS System
-// Lakhan Bhandar - Local Data Persistence
+// Onuron POS - Local Data Persistence
 // ============================================================================
 
 import type { Product, Cart, Sale, SyncQueueItem, Customer, Supplier } from '@/types/pos';
 import { Decimal } from 'decimal.js';
 import { toMoneyNumber } from '@/lib/money';
 
-export const DB_NAME = 'lakhan-bhandar-pos';
 export const DB_VERSION = 3; // bumped to include action_queue upgrade for existing DB state
+
+/**
+ * Returns a tenant-scoped IndexedDB database name.
+ * Each business gets its own isolated database — this prevents cross-tenant
+ * data leakage when multiple users share the same device (Android POS).
+ *
+ * @param businessId - The active business ID from the authenticated session
+ */
+export function getDBName(businessId: string): string {
+  if (!businessId) throw new Error('businessId is required to open IndexedDB');
+  return `pos-db-${businessId}`;
+}
+
+/** @deprecated Use getDBName(businessId) instead. Kept for legacy reads during migration. */
+export const DB_NAME = 'onuron-pos-db';
 
 // Database store names
 export const STORES = {
@@ -25,13 +39,53 @@ export const STORES = {
 // DATABASE INITIALIZATION
 // ============================================================================
 
-let dbInstance: IDBDatabase | null = null;
+// Per-tenant DB instances — keyed by businessId
+const dbInstances = new Map<string, IDBDatabase>();
 
-export async function initDatabase(): Promise<IDBDatabase> {
-  if (dbInstance) return dbInstance;
+/**
+ * The currently active tenant's businessId.
+ * Set this when the user logs in / switches business.
+ * All internal DB operations use this for tenant isolation.
+ */
+let activeTenantBusinessId: string | null = null;
+
+/**
+ * Set the active tenant for all subsequent IndexedDB operations.
+ * Must be called after login / business-switch with the authenticated businessId.
+ */
+export function setActiveTenant(businessId: string): void {
+  activeTenantBusinessId = businessId;
+}
+
+/**
+ * Get the currently active tenant's businessId.
+ * Throws if no tenant is set (prevents accidental cross-tenant access).
+ */
+export function getActiveTenant(): string {
+  if (!activeTenantBusinessId) {
+    throw new Error('[IndexedDB] No active tenant set. Call setActiveTenant(businessId) after login.');
+  }
+  return activeTenantBusinessId;
+}
+
+/**
+ * Initialize (or reuse) the IndexedDB for the given business tenant.
+ * Each businessId gets its own isolated database.
+ *
+ * @param businessId - Must match the authenticated session's businessId
+ */
+export async function initDatabase(businessId?: string): Promise<IDBDatabase> {
+  // Use explicit businessId or fall back to active tenant
+  const tenantId = businessId ?? activeTenantBusinessId;
+  if (!tenantId) throw new Error('businessId is required to open IndexedDB — call setActiveTenant(businessId) after login');
+
+  const existing = dbInstances.get(tenantId);
+  if (existing) return existing;
+
+  const dbName = getDBName(tenantId);
 
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    const request = indexedDB.open(dbName, DB_VERSION);
 
     request.onerror = () => {
       console.error('Failed to open IndexedDB:', request.error);
@@ -39,8 +93,13 @@ export async function initDatabase(): Promise<IDBDatabase> {
     };
 
     request.onsuccess = () => {
-      dbInstance = request.result;
-      resolve(dbInstance);
+      const db = request.result;
+      dbInstances.set(tenantId, db);
+
+      // Clean up instance map entry when the DB connection is closed
+      db.onclose = () => dbInstances.delete(tenantId);
+
+      resolve(db);
     };
 
     request.onupgradeneeded = (event) => {
@@ -108,8 +167,37 @@ export async function initDatabase(): Promise<IDBDatabase> {
 // GENERIC CRUD OPERATIONS
 // ============================================================================
 
-async function getStore(storeName: string, mode: IDBTransactionMode = 'readonly'): Promise<IDBObjectStore> {
-  const db = await initDatabase();
+/**
+ * Close and remove the IndexedDB instance for a given business tenant.
+ * Call this on logout or business switch to prevent data leakage.
+ */
+export function closeDatabase(businessId: string): void {
+  const db = dbInstances.get(businessId);
+  if (db) {
+    db.close();
+    dbInstances.delete(businessId);
+    console.info(`[IndexedDB] Closed tenant database for business: ${businessId}`);
+  }
+}
+
+/**
+ * Close ALL open tenant databases (full logout / app reset).
+ */
+export function closeAllDatabases(): void {
+  for (const [businessId, db] of dbInstances) {
+    db.close();
+    console.info(`[IndexedDB] Closed tenant database for business: ${businessId}`);
+  }
+  dbInstances.clear();
+}
+
+async function getStore(storeName: string, mode: IDBTransactionMode = 'readonly', businessId?: string): Promise<IDBObjectStore> {
+  // Resolve tenant: explicit arg → active tenant → error
+  const tenantId = businessId ?? activeTenantBusinessId;
+  if (!tenantId) {
+    throw new Error('[IndexedDB] businessId is required — call setActiveTenant(businessId) after login');
+  }
+  const db = await initDatabase(tenantId);
   
   // Check if object store exists, if not throw helpful error
   if (!db.objectStoreNames.contains(storeName)) {
@@ -135,6 +223,7 @@ async function batchTransaction<T>(
     operation: (store: IDBObjectStore) => IDBRequest<any>;
   }>,
 ): Promise<any[]> {
+  // Use active tenant for internal batch operations
   const db = await initDatabase();
   
   // Collect all store names and determine if any need write access

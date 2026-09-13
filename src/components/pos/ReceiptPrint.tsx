@@ -67,8 +67,8 @@ export default function ReceiptPrint({ open, onOpenChange, saleData }: ReceiptPr
   const L = getReceiptLabels(lang);
   const storeTitle = getReceiptStoreTitle(
     {
-      name: settings.store_name || 'Lakhan Bhandar',
-      nameBn: settings.store_name_bn || 'লক্ষ্মণ ভাণ্ডার',
+      name: settings.store_name || 'Onuron POS',
+      nameBn: settings.store_name_bn || 'অনুরণ পিওএস',
     },
     lang,
   );

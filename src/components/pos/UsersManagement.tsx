@@ -48,7 +48,7 @@ export interface User {
   email?: string;
   name: string;
   phone?: string;
-  role: "ADMIN" | "MANAGER" | "CASHIER" | "VIEWER";
+  role: "OWNER" | "ADMIN" | "MANAGER" | "CASHIER" | "VIEWER";
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -134,10 +134,11 @@ export function UsersManagement({ currentUserRole }: UsersManagementProps) {
 
   const getRoleColor = (role: string) => {
     const colors: Record<string, string> = {
-      ADMIN: "bg-red-100 text-red-800",
-      MANAGER: "bg-blue-100 text-blue-800",
-      CASHIER: "bg-green-100 text-green-800",
-      VIEWER: "bg-gray-100 text-gray-800",
+      OWNER: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300 border-purple-300",
+      ADMIN: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300 border-red-300",
+      MANAGER: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 border-blue-300",
+      CASHIER: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 border-green-300",
+      VIEWER: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300 border-gray-300",
     };
     return colors[role] || "bg-gray-100 text-gray-800";
   };
@@ -233,9 +234,15 @@ export function UsersManagement({ currentUserRole }: UsersManagementProps) {
                           variant="ghost"
                           size="sm"
                           onClick={() => setDeleteConfirm(user)}
-                          className="text-destructive hover:text-destructive"
-                          disabled={user.role === "ADMIN"}
-                          title={user.role === "ADMIN" ? t("admin_cannot_delete") : t("delete_user_tooltip")}
+                          className="text-destructive hover:text-destructive disabled:opacity-30 disabled:cursor-not-allowed"
+                          disabled={user.role === "ADMIN" || user.role === "OWNER"}
+                          title={
+                            user.role === "OWNER"
+                              ? "ওনার অ্যাকাউন্ট ডিলিট করা যাবে না (Owner account cannot be deleted)"
+                              : user.role === "ADMIN"
+                              ? t("admin_cannot_delete")
+                              : t("delete_user_tooltip")
+                          }
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -295,10 +302,16 @@ export function UsersManagement({ currentUserRole }: UsersManagementProps) {
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-8 px-2 text-xs text-destructive hover:bg-destructive/5"
+                      className="h-8 px-2 text-xs text-destructive hover:bg-destructive/5 disabled:opacity-30 disabled:cursor-not-allowed"
                       onClick={() => setDeleteConfirm(user)}
-                      disabled={user.role === "ADMIN"}
-                      title={user.role === "ADMIN" ? t("admin_cannot_delete") : t("delete_user_tooltip")}
+                      disabled={user.role === "ADMIN" || user.role === "OWNER"}
+                      title={
+                        user.role === "OWNER"
+                          ? "ওনার অ্যাকাউন্ট ডিলিট করা যাবে না (Owner account cannot be deleted)"
+                          : user.role === "ADMIN"
+                          ? t("admin_cannot_delete")
+                          : t("delete_user_tooltip")
+                      }
                     >
                       <Trash2 className="h-3.5 w-3.5 mr-1" />
                       {tc("delete")}

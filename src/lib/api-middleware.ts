@@ -169,23 +169,26 @@ export async function requirePermission(
 
 /**
  * Middleware to check if user has specific role.
+ * Uses requireBusinessContext() to get the DB-verified role,
+ * NOT session.user.role which can be stale (JWT token).
  */
 export async function requireRole(
   request: NextRequest,
   allowedRoles: string[],
   existingSession?: Session | null
 ) {
-  let session = existingSession ?? null;
-  if (!session) {
+  if (!existingSession) {
     const authResult = await requireAuth(request);
     if (!authResult.authorized) {
       return authResult.response;
     }
-    session = authResult.session;
   }
 
-  const userRole = session?.user?.role;
-  if (!userRole || !allowedRoles.includes(userRole)) {
+  // Always resolve role from DB, not from JWT session which may be stale
+  const businessContext = await requireBusinessContext();
+  if (businessContext instanceof NextResponse) return businessContext;
+
+  if (!allowedRoles.includes(businessContext.role)) {
     return NextResponse.json(
       { error: "আপনার এই কাজ করার অনুমতি নেই।" },
       { status: 403 }

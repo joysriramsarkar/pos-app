@@ -26,7 +26,7 @@ export default function BackupTab() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `lakhan-bhandar-backup-${new Date().toISOString().split("T")[0]}.json`;
+      a.download = `onuron-pos-backup-${new Date().toISOString().split("T")[0]}.json`;
       a.click();
       window.URL.revokeObjectURL(url);
       toast({ title: t("backup_success"), description: t("backup_success_desc") });

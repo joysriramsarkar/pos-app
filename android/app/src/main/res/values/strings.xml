@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Lakhan Bhandar</string>
-    <string name="title_activity_main">Lakhan Bhandar</string>
-    <string name="package_name">com.lakhan.pos</string>
-    <string name="custom_url_scheme">com.lakhan.pos</string>
+    <string name="app_name">Onuron POS</string>
+    <string name="title_activity_main">Onuron POS</string>
+    <string name="package_name">com.onuron.pos</string>
+    <string name="custom_url_scheme">com.onuron.pos</string>
 </resources>
