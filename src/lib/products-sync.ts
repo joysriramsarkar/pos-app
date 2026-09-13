@@ -10,7 +10,7 @@ export async function refreshProductsFromServer(showLoadingState = false): Promi
 
   try {
     const { products, ok } = await fetchAllProductsFromApi({ pageSize: 250 });
-    if (!ok || !products.length) {
+    if (!ok) {
       // still apply partial if any
       if (products.length) {
         setProducts(products as never[], false, null);
@@ -21,7 +21,9 @@ export async function refreshProductsFromServer(showLoadingState = false): Promi
     }
 
     setProducts(products as never[], false, null);
-    await ProductsDB.upsertMany(products as never[]);
+    if (products.length > 0) {
+      await ProductsDB.upsertMany(products as never[]);
+    }
     return true;
   } catch (error) {
     console.error('Failed to refresh products from server:', error);

@@ -436,7 +436,7 @@ export function ProductGrid({
 
       <div className="flex-1 min-h-0 overflow-y-auto">
         <div className="p-2 sm:p-4 md:p-5">
-          {(isStoreLoading || (!externalProducts && lastUpdated === null)) && filteredProducts.length === 0 ? (
+          {isStoreLoading && filteredProducts.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-10 sm:py-16 text-center bg-card rounded-xl sm:rounded-2xl border border-dashed border-border/60">
               <Loader2 className="w-10 h-10 sm:w-12 sm:h-12 text-primary animate-spin mb-3" />
               <p className="text-base sm:text-lg font-medium text-muted-foreground">{tc('loading')}</p>
@@ -445,7 +445,13 @@ export function ProductGrid({
             <div className="flex flex-col items-center justify-center py-10 sm:py-16 text-center bg-card rounded-xl sm:rounded-2xl border border-dashed border-border/60">
               <Package className="w-10 h-10 sm:w-12 sm:h-12 text-muted-foreground mb-3" />
               <p className="text-base sm:text-lg font-medium text-muted-foreground">{t('no_products')}</p>
-              <p className="text-xs sm:text-sm text-muted-foreground mt-1">{t('try_adjusting')}</p>
+              {products.length === 0 ? (
+                <p className="text-xs sm:text-sm text-muted-foreground mt-1 max-w-sm">
+                  স্টকে কোনো পণ্য নেই। পণ্য যোগ করতে স্টক ম্যানেজমেন্টে যান।
+                </p>
+              ) : (
+                <p className="text-xs sm:text-sm text-muted-foreground mt-1">{t('try_adjusting')}</p>
+              )}
               {(searchQuery || selectedCategoryId) && (
                 <Button variant="outline" size="sm" onClick={clearFilters} className="mt-3">
                   {t('clear_all_filters')}

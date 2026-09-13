@@ -57,9 +57,11 @@ export function usePosProducts(activeUser: any) {
         // Effect cleaned up (Strict Mode remount / navigate away) — ignore result
         if (cancelled) return;
 
-        if (ok && products.length > 0) {
+        if (ok) {
           setProducts(products as never[], false, null);
-          await ProductsDB.upsertMany(products as never[]);
+          if (products.length > 0) {
+            await ProductsDB.upsertMany(products as never[]);
+          }
           if (!cancelled) setOnline(true);
           return;
         }
@@ -110,7 +112,12 @@ export function usePosProducts(activeUser: any) {
         await loadFromCache();
       } finally {
         if (!cancelled) {
-          useProductsStore.getState().setLoading(false);
+          const state = useProductsStore.getState();
+          if (state.lastUpdated === null) {
+            state.setProducts(state.products, false, null);
+          } else {
+            state.setLoading(false);
+          }
         }
       }
     };
