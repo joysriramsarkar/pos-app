@@ -1,12 +1,12 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { signOut } from 'next-auth/react';
+import { signOut, useSession } from 'next-auth/react';
 import { useCartStore } from '@/stores/pos-store';
 import { useSettingsStore } from '@/stores/settings-store';
 import { NetworkStatusMonitor, type NetworkStatus } from './network-listener';
 import { getSyncWorker } from './sync-worker';
-import { SyncQueueDB, closeAllDatabases } from './indexeddb';
+import { SyncQueueDB, closeAllDatabases, setActiveTenant } from './indexeddb';
 
 interface OfflineContextType {
   isOnline: boolean;
@@ -18,6 +18,9 @@ interface OfflineContextType {
 const OfflineContext = createContext<OfflineContextType | undefined>(undefined);
 
 export function OfflineProvider({ children }: { children: React.ReactNode }) {
+  const { data: session } = useSession();
+  const businessId = session?.user?.businessId;
+
   const [networkStatus, setNetworkStatus] = useState<NetworkStatus>('online');
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncStats, setSyncStats] = useState<{ synced: number; failed: number; total: number } | null>(null);
@@ -30,17 +33,29 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     let monitor: NetworkStatusMonitor | null = null;
     let cleanup = () => {};
 
+    if (businessId) {
+      setActiveTenant(businessId);
+    }
+
     async function initialize() {
       try {
         monitor = new NetworkStatusMonitor();
 
-        try {
-          await getSyncWorker();
-        } catch (syncError) {
-          console.error('⚠️ Failed to initialize sync worker:', syncError);
+        if (businessId) {
+          try {
+            await getSyncWorker();
+          } catch (syncError) {
+            console.error('⚠️ Failed to initialize sync worker:', syncError);
+          }
         }
 
         const refreshCounts = async () => {
+          if (!businessId) {
+            setPendingSyncCount(0);
+            setFailedSyncCount(0);
+            setFailedSyncPreview(null);
+            return;
+          }
           try {
             const [unsynced, failed] = await Promise.all([
               SyncQueueDB.getUnsynced(),
@@ -109,7 +124,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cleanup();
     };
-  }, []);
+  }, [businessId]);
 
   useEffect(() => {
     const callback = () => {

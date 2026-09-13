@@ -1,21 +1,27 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
-#
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
+# Project specific ProGuard rules
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# Preserve line numbers and source file names for crash reports / Play Console deobfuscation
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+# Preserve annotations and interfaces
+-keepattributes *Annotation*
+-keepattributes JavascriptInterface
+-keepattributes Signature
+-keepattributes Exceptions
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# Capacitor Core and Bridge
+-keep public class * extends com.getcapacitor.Plugin {
+    public <methods>;
+}
+-keep public class * extends com.getcapacitor.BridgeActivity
+-keep public class com.getcapacitor.** { *; }
+
+# WebView JavaScript Interfaces
+-keepclassmembers class * {
+    @android.webkit.JavascriptInterface <methods>;
+}
+
+# Plugins
+-keep class io.capawesome.capacitorjs.plugins.mlkit.barcodescanning.** { *; }
+-keep class com.capacitorjs.plugins.** { *; }

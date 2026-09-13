@@ -19,7 +19,11 @@ export const metadata: Metadata = {
   keywords: ["POS", "Point of Sale", "Onuron POS", "Billing", "Inventory", "Store Management"],
   authors: [{ name: "Onuron" }],
   icons: {
-    icon: "/favicon.ico",
+    icon: [
+      { url: "/icon.png", type: "image/png" },
+      { url: "/favicon.ico" }
+    ],
+    apple: "/icon-512.png",
   },
   manifest: "/manifest.json",
 };
