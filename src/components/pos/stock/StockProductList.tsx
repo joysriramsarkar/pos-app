@@ -46,6 +46,7 @@ export interface StockProductListProps {
   isAllSelected: boolean;
   isSomeSelected: boolean;
   onAddStock?: (product: Product) => void;
+  onAddProduct?: () => void;
   onEditProduct?: (product: Product) => void;
   onDeleteProduct?: (product: Product) => void;
   onAdjustStock: (product: Product) => void;
@@ -372,6 +373,7 @@ export function StockProductList({
   isAllSelected,
   isSomeSelected,
   onAddStock,
+  onAddProduct,
   onEditProduct,
   onDeleteProduct,
   onAdjustStock,
@@ -392,9 +394,18 @@ export function StockProductList({
           <span className="ml-2 text-muted-foreground">{tc('loading')}</span>
         </div>
       ) : products.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-          <Package className="h-12 w-12 mb-2 opacity-50" />
-          <p>{t('no_items')}</p>
+        <div className="flex flex-col items-center justify-center py-12 text-muted-foreground gap-3">
+          <Package className="h-12 w-12 opacity-50" />
+          <p className="font-medium text-sm">{t('no_items')}</p>
+          {onAddProduct && (
+            <Button
+              onClick={onAddProduct}
+              className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm mt-1"
+            >
+              <Plus className="w-4 h-4" />
+              <span>{t('add_item') || 'পণ্য যোগ করুন'}</span>
+            </Button>
+          )}
         </div>
       ) : (
         <>

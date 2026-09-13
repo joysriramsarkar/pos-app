@@ -504,6 +504,7 @@ export function StockManagement({
           isAllSelected={isAllSelected}
           isSomeSelected={isSomeSelected}
           onAddStock={onAddStock}
+          onAddProduct={onAddProduct}
           onEditProduct={onEditProduct}
           onDeleteProduct={onDeleteProduct}
           onAdjustStock={setAdjustmentProduct}

@@ -264,9 +264,10 @@ export const authOptions: NextAuthOptions = {
       // never trust client-supplied values to prevent privilege escalation.
       if (trigger === "update" && updateSession?.businessId) {
         try {
+          const userId = (token.id || token.sub) as string;
           const membership = await db.membership.findFirst({
             where: {
-              userId: token.id as string,
+              userId,
               businessId: updateSession.businessId,
               isActive: true,
               business: { isActive: true },
@@ -293,7 +294,7 @@ export const authOptions: NextAuthOptions = {
     },
     async session({ session, token }) {
       if (session.user) {
-        session.user.id = token.id as string;
+        session.user.id = (token.id || token.sub) as string;
         session.user.name = (token.name as string) || session.user.name;
         session.user.username = token.username as string;
         session.user.role = token.role as "OWNER" | "ADMIN" | "MANAGER" | "CASHIER" | "VIEWER";

@@ -40,36 +40,53 @@ export async function requireAuth(request: NextRequest): Promise<AuthResult> {
   // CSRF Protection Check for state-changing methods
   if (["POST", "PUT", "DELETE", "PATCH"].includes(request.method)) {
     const origin = request.headers.get("origin");
-    const host = request.headers.get("host") || request.headers.get("x-forwarded-host");
+    const rawHost = request.headers.get("host");
+    const forwardedHost = request.headers.get("x-forwarded-host");
     const secFetchSite = request.headers.get("sec-fetch-site");
 
-    // Explicit cross-site browser requests are always rejected
-    if (secFetchSite === "cross-site") {
-      return {
-        authorized: false,
-        response: NextResponse.json({ error: "Forbidden: CSRF check failed" }, { status: 403 }),
-      };
-    }
+    const defaultAllowedOrigins = [
+      "https://pos.onuron.org",
+      "https://lakhanb.vercel.app",
+      "http://localhost:3000",
+      "http://localhost",
+      "https://localhost",
+    ];
 
-    if (origin && host) {
+    const envOrigins = (process.env.ALLOWED_ORIGINS ?? "")
+      .split(",")
+      .map((o) => o.trim())
+      .filter(Boolean);
+
+    const allAllowedOrigins = [...defaultAllowedOrigins, ...envOrigins];
+
+    if (origin) {
       try {
         const originUrl = new URL(origin);
-        if (originUrl.host !== host) {
-          // Capacitor / custom schemes (capacitor://, ionic://, http://localhost on device) may differ
-          const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? "")
-            .split(",")
-            .map((o) => o.trim())
-            .filter(Boolean);
-          const originAllowed =
-            allowedOrigins.includes(origin) ||
-            origin.startsWith("capacitor://") ||
-            origin.startsWith("ionic://");
-          if (!originAllowed) {
-            return {
-              authorized: false,
-              response: NextResponse.json({ error: "Forbidden: CSRF check failed" }, { status: 403 }),
-            };
-          }
+        const originHost = originUrl.host;
+
+        // Same-origin check: matches host or forwarded host (Cloudflare proxy / Vercel)
+        const isSameOrigin =
+          originHost === rawHost ||
+          originHost === forwardedHost ||
+          originHost.endsWith(".onuron.org") ||
+          originHost.endsWith(".vercel.app");
+
+        // Mobile Capacitor / Ionic or explicitly configured origins
+        const isAllowedOrigin =
+          isSameOrigin ||
+          allAllowedOrigins.includes(origin) ||
+          allAllowedOrigins.some((ao) => origin.startsWith(ao)) ||
+          origin.startsWith("capacitor://") ||
+          origin.startsWith("ionic://") ||
+          originUrl.hostname === "localhost" ||
+          originUrl.hostname === "127.0.0.1";
+
+        if (!isAllowedOrigin) {
+          console.warn("[CSRF] Blocked origin:", origin, "rawHost:", rawHost, "forwardedHost:", forwardedHost);
+          return {
+            authorized: false,
+            response: NextResponse.json({ error: "Forbidden: CSRF check failed" }, { status: 403 }),
+          };
         }
       } catch {
         return {
@@ -77,7 +94,7 @@ export async function requireAuth(request: NextRequest): Promise<AuthResult> {
           response: NextResponse.json({ error: "Forbidden: Invalid origin" }, { status: 403 }),
         };
       }
-    } else if (process.env.NODE_ENV === "production" && !origin && secFetchSite === "cross-site") {
+    } else if (process.env.NODE_ENV === "production" && secFetchSite === "cross-site") {
       return {
         authorized: false,
         response: NextResponse.json({ error: "Forbidden: CSRF check failed" }, { status: 403 }),

@@ -733,12 +733,12 @@ export function POSDashboard() {
         });
 
         if (!response.ok) {
-          const errorData = await response.json();
-          const msg = response.status === 403
+          const errorData = await response.json().catch(() => ({}));
+          const msg = errorData.error || (response.status === 403
             ? 'আপনার স্টক যোগ করার অনুমতি নেই।'
             : response.status === 401
             ? 'আপনি লগইন করা নেই। পুনরায় লগইন করুন।'
-            : errorData.error;
+            : 'স্টক এন্ট্রি ব্যর্থ হয়েছে');
           console.error('Stock entry failed:', msg);
           toast({ title: 'স্টক এন্ট্রি ব্যর্থ', description: msg, variant: 'destructive' });
           return;
@@ -860,12 +860,12 @@ export function POSDashboard() {
         });
 
         if (!response.ok) {
-          const errorData = await response.json();
-          const msg = response.status === 403
+          const errorData = await response.json().catch(() => ({}));
+          const msg = errorData.error || (response.status === 403
             ? 'আপনার প্রডাক্ট এডিট করার অনুমতি নেই।'
             : response.status === 401
             ? 'আপনি লগইন করা নেই। পুনরায় লগইন করুন।'
-            : errorData.error || 'Failed to update product';
+            : 'Failed to update product');
           throw new Error(msg);
         }
         
@@ -883,12 +883,12 @@ export function POSDashboard() {
         });
 
         if (!response.ok) {
-          const errorData = await response.json();
-          const msg = response.status === 403
+          const errorData = await response.json().catch(() => ({}));
+          const msg = errorData.error || (response.status === 403
             ? 'আপনার নতুন প্রডাক্ট যোগ করার অনুমতি নেই।'
             : response.status === 401
             ? 'আপনি লগইন করা নেই। পুনরায় লগইন করুন।'
-            : errorData.error || 'Failed to create product';
+            : 'Failed to create product');
           throw new Error(msg);
         }
 
