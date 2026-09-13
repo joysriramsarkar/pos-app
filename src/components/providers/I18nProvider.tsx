@@ -4,9 +4,11 @@ import { NextIntlClientProvider } from 'next-intl';
 import { useSettingsStore } from '@/stores/settings-store';
 import { useEffect, useState } from 'react';
 
+import enMessages from '../../../messages/en.json';
+
 export function I18nProvider({ children }: { children: React.ReactNode }) {
   const { settings } = useSettingsStore();
-  const [messages, setMessages] = useState<any>(null);
+  const [messages, setMessages] = useState<any>(enMessages);
 
   useEffect(() => {
     // Keep <html lang> in sync so formatPriceGlobal / isBengali() work outside hooks
@@ -24,13 +26,12 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
       .then((mod) => setMessages(mod.default))
       .catch((err) => {
         console.error('Failed to load translations', err);
-        loaders.en().then((mod) => setMessages(mod.default));
+        setMessages(enMessages);
       });
   }, [settings.app_language]);
 
-  // Optionally show a loading state while translations are loading
   if (!messages) {
-    return null;
+    return <>{children}</>;
   }
 
   return (

@@ -632,6 +632,24 @@ export default function LoginPage() {
               নতুন একাউন্ট খুলুন (Register Store)
             </a>
           </div>
+
+          <div className="mt-5 pt-3 border-t border-border/60 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+            <a href="/privacy-policy" className="hover:text-foreground hover:underline transition-colors">
+              Privacy Policy
+            </a>
+            <span>•</span>
+            <a href="/terms" className="hover:text-foreground hover:underline transition-colors">
+              Terms
+            </a>
+            <span>•</span>
+            <a href="/account-deletion" className="hover:text-foreground hover:underline transition-colors">
+              Account Deletion
+            </a>
+            <span>•</span>
+            <a href="/contact" className="hover:text-foreground hover:underline transition-colors">
+              Contact
+            </a>
+          </div>
         </CardContent>
       </Card>
     </div>

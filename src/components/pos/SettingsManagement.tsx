@@ -18,6 +18,8 @@ import ThemeTab from "./settings/ThemeTab";
 import UsersTab from "./settings/UsersTab";
 import LanguageTab from "./settings/LanguageTab";
 import BillingTab from "./settings/BillingTab";
+import AboutTab from "./settings/AboutTab";
+import { ShieldCheck } from "lucide-react";
 
 export default function SettingsManagement() {
   const t = useTranslations("Settings");
@@ -115,6 +117,7 @@ export default function SettingsManagement() {
     { value: "users", label: t("users"), icon: Users, hasChanges: () => false },
     { value: "password", label: t("change_password"), icon: Key, hasChanges: () => false },
     { value: "backup", label: t("backup"), icon: Database, hasChanges: () => false },
+    { value: "about", label: "About & Legal", icon: ShieldCheck, hasChanges: () => false },
   ];
 
   return (
@@ -194,6 +197,9 @@ export default function SettingsManagement() {
               </TabsContent>
               <TabsContent value="backup" className="m-0 focus-visible:outline-none focus-visible:ring-0">
                 <BackupTab />
+              </TabsContent>
+              <TabsContent value="about" className="m-0 focus-visible:outline-none focus-visible:ring-0">
+                <AboutTab />
               </TabsContent>
             </div>
           </Tabs>
