@@ -27,7 +27,7 @@ import {
   type ConfirmationResult,
 } from "firebase/auth";
 import { Lock, Phone, RefreshCw, KeyRound, ArrowLeft, ShieldCheck } from "lucide-react";
-import { signInWithPopup, GoogleAuthProvider, auth as firebaseAuth } from "@/lib/firebase";
+import { signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, auth as firebaseAuth } from "@/lib/firebase";
 
 function LoginForm() {
   const router = useRouter();
@@ -131,6 +131,9 @@ function LoginForm() {
   };
 
   // 4. Google Sign-in
+  // On native Capacitor (Android/iOS) we use signInWithRedirect because
+  // signInWithPopup is not supported in WebView environments and opens an
+  // external browser. On web we keep the popup for a smoother UX.
   const handleGoogleSignIn = async () => {
     setGoogleLoading(true);
     setGoogleError("");
@@ -144,6 +147,25 @@ function LoginForm() {
     try {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: "select_account" });
+
+      // Detect Capacitor native platform (Android / iOS)
+      let isNative = false;
+      try {
+        const { Capacitor } = await import("@capacitor/core");
+        isNative = Capacitor.isNativePlatform();
+      } catch {
+        // Running in browser — Capacitor not available
+      }
+
+      if (isNative) {
+        // On native WebView: use redirect flow.
+        // getRedirectResult() is called on next mount via useEffect below.
+        await signInWithRedirect(firebaseAuth, provider);
+        // Execution stops here; page will reload and useEffect handles the result.
+        return;
+      }
+
+      // Web: use popup flow
       const result = await signInWithPopup(firebaseAuth, provider);
       const email = result.user.email;
 
@@ -166,7 +188,7 @@ function LoginForm() {
           title: "✅ Google লগইন সফল!",
           description: "ড্যাশবোর্ডে প্রবেশ করা হচ্ছে...",
         });
-        window.location.href = "/";
+        window.location.replace("/");
       }
     } catch (err: unknown) {
       console.error("Google sign-in error:", err);
@@ -182,6 +204,43 @@ function LoginForm() {
       setGoogleLoading(false);
     }
   };
+
+  // Handle redirect result from signInWithRedirect (Capacitor Android/iOS)
+  useEffect(() => {
+    if (!firebaseAuth) return;
+    getRedirectResult(firebaseAuth)
+      .then(async (result) => {
+        if (!result) return; // No pending redirect result
+        const email = result.user.email;
+        if (!email) {
+          setGoogleError("Google অ্যাকাউন্ট থেকে ইমেইল পাওয়া যায়নি।");
+          return;
+        }
+        setGoogleLoading(true);
+        const signInResult = await signIn("credentials", {
+          isGoogleVerified: "true",
+          googleEmail: email,
+          redirect: false,
+        });
+        if (signInResult?.error) {
+          setGoogleError(signInResult.error);
+        } else {
+          toast({
+            title: "✅ Google লগইন সফল!",
+            description: "ড্যাশবোর্ডে প্রবেশ করা হচ্ছে...",
+          });
+          window.location.replace("/");
+        }
+      })
+      .catch((err) => {
+        const errorObj = err as { code?: string; message?: string };
+        if (errorObj.code && !errorObj.code.includes("no-redirect")) {
+          setGoogleError(errorObj.message || "Google লগইনে সমস্যা হয়েছে।");
+        }
+      })
+      .finally(() => setGoogleLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Helper to get formatted international phone number
   const getFormattedPhone = () => {

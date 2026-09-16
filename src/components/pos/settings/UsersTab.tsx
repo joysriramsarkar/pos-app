@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { signOut } from "next-auth/react";
+import { useLogout } from "@/hooks/use-logout";
 import { Users, Loader2, LogOut, Eye, EyeOff } from "lucide-react";
 import { Session } from "next-auth";
 
@@ -32,6 +32,7 @@ function getPasswordStrength(password: string, t: (key: string) => string): { sc
 export default function UsersTab({ session }: UsersTabProps) {
   const t = useTranslations("Settings");
   const { toast } = useToast();
+  const handleLogout = useLogout();
   const [passwords, setPasswords] = useState({ current: "", new: "", confirm: "" });
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [showPasswords, setShowPasswords] = useState({ current: false, new: false, confirm: false });
@@ -97,7 +98,7 @@ export default function UsersTab({ session }: UsersTabProps) {
               <h3 className="font-semibold truncate">{username}</h3>
             </div>
           </div>
-          <Button variant="outline" size="sm" onClick={() => signOut()} className="gap-2 shrink-0">
+          <Button variant="outline" size="sm" onClick={handleLogout} className="gap-2 shrink-0">
             <LogOut className="w-4 h-4" />
             {t("logout")}
           </Button>

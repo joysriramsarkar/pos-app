@@ -48,7 +48,10 @@ export function ForcePasswordChangeDialog() {
 
       // Force re-login so JWT token gets fresh requiresPasswordChange: false
       const { signOut } = await import("next-auth/react");
-      await signOut({ redirect: true, callbackUrl: "/login?passwordChanged=1" });
+      // IMPORTANT: redirect: false is required for Capacitor Android WebView —
+      // redirect:true causes navigation to open in external browser.
+      await signOut({ redirect: false });
+      window.location.replace("/login?passwordChanged=1");
     } catch {
       setError(t("generic_error"));
     } finally {

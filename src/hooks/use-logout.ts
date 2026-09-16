@@ -33,8 +33,13 @@ export function useLogout() {
       console.error("Error clearing IndexedDB:", error);
     }
 
-    // Sign out from next-auth
-    await signOut({ callbackUrl: "/login" });
+    // Sign out from next-auth.
+    // IMPORTANT: redirect: false is required for Capacitor Android —
+    // signOut with redirect:true causes the WebView to open an external browser.
+    // We manually navigate with window.location.replace so navigation stays
+    // inside the WebView.
+    await signOut({ redirect: false });
+    window.location.replace("/login");
   };
 
   return handleLogout;

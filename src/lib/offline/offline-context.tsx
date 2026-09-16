@@ -95,7 +95,9 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
           // Close all tenant IndexedDB instances before signing out
           // to prevent cross-tenant data leakage on shared devices
           try { closeAllDatabases(); } catch { /* non-critical */ }
-          signOut({ callbackUrl: '/login' });
+          signOut({ redirect: false }).then(() => {
+            window.location.replace('/login');
+          });
         };
 
         monitor.subscribe(handleNetworkStatus);
