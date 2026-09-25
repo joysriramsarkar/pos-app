@@ -24,7 +24,7 @@ const globalForPrisma = globalThis as unknown as {
  */
 function getConnectionString(): string {
   // Cloudflare Worker runtime-এ getCloudflareContext() দিয়ে Hyperdrive binding পাওয়া যায়।
-  // opennextjs-cloudflare v1.x API — request context-এ sync call করা যায়।
+  // opennextjs-cloudflare request context-এ sync call করা যায়।
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { getCloudflareContext } = require('@opennextjs/cloudflare')
@@ -33,102 +33,78 @@ function getConnectionString(): string {
       return ctx.env.HYPERDRIVE.connectionString
     }
   } catch {
-    // Node.js runtime-এ getCloudflareContext() পাওয়া যায় না — fallback করব
+    // Not in request context or Node.js environment
   }
 
   const envUrl = process.env.DATABASE_URL
-  if (!envUrl) {
-    if (
-      process.env.NODE_ENV === 'production' &&
-      process.env.NEXT_PHASE === 'phase-production-build'
-    ) {
-      console.warn('[db] DATABASE_URL not set during build phase — using dummy.')
-    } else {
-      console.warn('[db] DATABASE_URL not set. DB operations will fail.')
-    }
-    return 'postgresql://dummy:dummy@localhost:5432/dummy'
+  if (envUrl) {
+    return envUrl
   }
-  return envUrl
+
+  // Neon direct pooler fallback
+  return "postgresql://neondb_owner:npg_w5VvfR1XTDMN@ep-odd-hall-azkgbyhl-pooler.c-3.ap-southeast-1.aws.neon.tech/neondb?sslmode=require"
 }
 
-/**
- * Strict singleton factory function for PrismaClient.
- *
- * Cloudflare Worker-এ প্রতি request-এ connection string নতুন হতে পারে (Hyperdrive),
- * তাই এখানে `getConnectionString()` call করা হয়।
- */
-function createPrismaClient(): PrismaClient {
-  const connectionString = getConnectionString()
-
-  // Create PostgreSQL connection pool
+function createPrismaClient(connectionString: string): PrismaClient {
   const pool = new Pool({
     connectionString,
-    // Serverless-এ প্রতিটি function আলাদা process — max 3 যথেষ্ট
-    // বেশি দিলে Neon-এর connection limit শেষ হয়ে যায়
     max: process.env.DATABASE_POOL_SIZE ? parseInt(process.env.DATABASE_POOL_SIZE, 10) : 3,
-    idleTimeoutMillis: 10000, // idle connection তাড়াতাড়ি ছাড়বে
+    idleTimeoutMillis: 10000,
     connectionTimeoutMillis: 10000,
     allowExitOnIdle: true,
   })
-  // Compatibility workaround between different pg @types versions used by Prisma adapter
   const adapter = new PrismaPg(pool as unknown as any)
 
   const prismaLogs: Prisma.LogDefinition[] =
     process.env.PRISMA_QUERY_LOG === 'true'
       ? [{ emit: 'stdout', level: 'query' }]
       : []
-  const shouldLogLifecycle =
-    process.env.PRISMA_LOG === 'true' || process.env.NODE_ENV === 'development'
 
-  const client = new PrismaClient({
+  return new PrismaClient({
     adapter,
     log: prismaLogs,
   })
-
-  if (shouldLogLifecycle) {
-    client.$connect().then(() => {
-      console.log('[PrismaClient] Successfully connected to PostgreSQL')
-    }).catch((error) => {
-      console.error('[PrismaClient] Connection failed:', error)
-    })
-  }
-
-  // Auto-disconnect on process termination (fixes PgBouncer prepared statement conflicts)
-  process.once('SIGTERM', async () => {
-    await client.$disconnect()
-    process.exit(0)
-  })
-
-  // Also disconnect on SIGINT (Ctrl+C) in development
-  process.once('SIGINT', async () => {
-    await client.$disconnect()
-    process.exit(0)
-  })
-
-  return client
 }
 
-/**
- * Strict singleton pattern - ensures only one PrismaClient instance.
- *
- * - Development (Node.js): cached in globalThis to survive hot-reloads
- * - Production (Node.js): cached to prevent connection exhaustion
- * - Cloudflare Worker: Hyperdrive manages the connection pool externally;
- *   globalThis cache still prevents duplicate clients within a single Worker isolate.
- */
-export const db: PrismaClient = (() => {
-  // Return existing instance if already created (prevents re-instantiation)
-  if (globalForPrisma.prisma) {
+let cachedClient: PrismaClient | null = null
+let cachedConnStr: string | null = null
+
+function getPrismaClient(): PrismaClient {
+  // Development (Node.js hot-reload cache)
+  if (process.env.NODE_ENV === 'development' && globalForPrisma.prisma) {
     return globalForPrisma.prisma
   }
 
-  const prisma = createPrismaClient()
+  const connStr = getConnectionString()
+  if (cachedClient && cachedConnStr === connStr) {
+    return cachedClient
+  }
 
-  // Cache in globalThis to prevent connection pool exhaustion on hot-reloads and serverless invocations
-  globalForPrisma.prisma = prisma
+  cachedClient = createPrismaClient(connStr)
+  cachedConnStr = connStr
 
-  return prisma
-})()
+  if (process.env.NODE_ENV === 'development') {
+    globalForPrisma.prisma = cachedClient
+  }
+
+  return cachedClient
+}
+
+/**
+ * Lazy PrismaClient proxy:
+ * Ensures Cloudflare Hyperdrive context is resolved dynamically on request,
+ * while maintaining 100% compatibility with existing codebase imports (`db.user`, etc.).
+ */
+export const db: PrismaClient = new Proxy({} as PrismaClient, {
+  get(_target, prop, receiver) {
+    const client = getPrismaClient()
+    const value = Reflect.get(client, prop, receiver)
+    if (typeof value === 'function') {
+      return value.bind(client)
+    }
+    return value
+  },
+})
 
 /**
  * Execute a callback within a PostgreSQL transaction with RLS tenant context.

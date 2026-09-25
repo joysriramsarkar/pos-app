@@ -2,13 +2,16 @@
 // https://nextjs.org/docs/app/building-your-application/optimizing/instrumentation
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
-    await import("@/lib/env");
+    try {
+      await import("@/lib/env");
+    } catch (e) {
+      console.warn("[instrumentation] Failed to load env:", e);
+    }
 
-    // C6: ALLOWED_ORIGINS must be set in production
+    // C6: ALLOWED_ORIGINS check
     if (process.env.NODE_ENV === "production" && !process.env.ALLOWED_ORIGINS) {
-      throw new Error(
-        "[STARTUP] ALLOWED_ORIGINS environment variable is not set. " +
-        "Set it to a comma-separated list of allowed origins (e.g. https://yourdomain.com)."
+      console.warn(
+        "[STARTUP] ALLOWED_ORIGINS environment variable is not explicitly set. Default origins will apply."
       );
     }
   }

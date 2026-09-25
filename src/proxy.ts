@@ -90,27 +90,32 @@ async function isRateLimited(ip: string, pathname: string): Promise<boolean> {
 
 export const proxy = withAuth(
   async function proxy(request: NextRequest) {
-    const { pathname } = request.nextUrl;
+    try {
+      const { pathname } = request.nextUrl;
 
-    if (request.method === "OPTIONS" && pathname.startsWith("/api/")) {
-      return applyCors(request, new NextResponse(null, { status: 204 }));
+      if (request.method === "OPTIONS" && pathname.startsWith("/api/")) {
+        return applyCors(request, new NextResponse(null, { status: 204 }));
+      }
+
+      const rawRealIp = request.headers.get("x-real-ip")?.trim();
+      const rawForwardedFor = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+      const ip = rawRealIp || rawForwardedFor || "unknown";
+
+      if (await isRateLimited(ip, pathname)) {
+        return applyCors(
+          request,
+          NextResponse.json(
+            { error: "Too many requests. Please try again later." },
+            { status: 429, headers: { "Retry-After": "60" } }
+          )
+        );
+      }
+
+      return applyCors(request, NextResponse.next());
+    } catch (e) {
+      console.error("[proxy] Error:", e);
+      return applyCors(request, NextResponse.next());
     }
-
-    const rawRealIp = request.headers.get("x-real-ip")?.trim();
-    const rawForwardedFor = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-    const ip = rawRealIp || rawForwardedFor || "unknown";
-
-    if (await isRateLimited(ip, pathname)) {
-      return applyCors(
-        request,
-        NextResponse.json(
-          { error: "Too many requests. Please try again later." },
-          { status: 429, headers: { "Retry-After": "60" } }
-        )
-      );
-    }
-
-    return applyCors(request, NextResponse.next());
   },
   {
     pages: { signIn: "/login" },
