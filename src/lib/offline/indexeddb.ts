@@ -6,6 +6,7 @@
 import type { Product, Cart, Sale, SyncQueueItem, Customer, Supplier } from '@/types/pos';
 import { Decimal } from 'decimal.js';
 import { toMoneyNumber } from '@/lib/money';
+import { readStoredSessionUser } from '@/lib/session-utils';
 
 export const DB_VERSION = 3; // bumped to include action_queue upgrade for existing DB state
 
@@ -62,6 +63,12 @@ export function setActiveTenant(businessId: string): void {
  * Throws if no tenant is set (prevents accidental cross-tenant access).
  */
 export function getActiveTenant(): string {
+  if (!activeTenantBusinessId && typeof window !== 'undefined') {
+    const stored = readStoredSessionUser();
+    if (stored?.businessId) {
+      activeTenantBusinessId = stored.businessId;
+    }
+  }
   if (!activeTenantBusinessId) {
     throw new Error('[IndexedDB] No active tenant set. Call setActiveTenant(businessId) after login.');
   }
@@ -75,9 +82,15 @@ export function getActiveTenant(): string {
  * @param businessId - Must match the authenticated session's businessId
  */
 export async function initDatabase(businessId?: string): Promise<IDBDatabase> {
-  // Use explicit businessId or fall back to active tenant
-  const tenantId = businessId ?? activeTenantBusinessId;
-  if (!tenantId) throw new Error('businessId is required to open IndexedDB — call setActiveTenant(businessId) after login');
+  // Use explicit businessId or fall back to active tenant or stored session
+  const tenantId =
+    businessId ??
+    activeTenantBusinessId ??
+    (typeof window !== 'undefined' ? readStoredSessionUser()?.businessId : null);
+
+  if (!tenantId) {
+    throw new Error('businessId is required to open IndexedDB — call setActiveTenant(businessId) after login');
+  }
 
   const existing = dbInstances.get(tenantId);
   if (existing) return existing;
@@ -839,9 +852,4 @@ export async function clearAllOfflineData(): Promise<void> {
       tx.objectStore(storeName).clear();
     }
   });
-}
-
-// Initialize database on module load
-if (typeof window !== 'undefined' && typeof indexedDB !== 'undefined') {
-  initDatabase().catch(console.error);
 }

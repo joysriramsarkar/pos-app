@@ -50,6 +50,7 @@ export async function requireAuth(request: NextRequest): Promise<AuthResult> {
       "http://localhost:3000",
       "http://localhost",
       "https://localhost",
+      "capacitor://localhost",
     ];
 
     const envOrigins = (process.env.ALLOWED_ORIGINS ?? "")

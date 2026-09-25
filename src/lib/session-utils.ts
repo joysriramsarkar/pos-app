@@ -8,6 +8,8 @@ export interface StoredSessionUser {
   username?: string;
   email?: string;
   role?: UserRole;
+  businessId?: string;
+  businessName?: string;
   requiresPasswordChange?: boolean;
 }
 

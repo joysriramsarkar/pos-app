@@ -5,7 +5,7 @@ const config: CapacitorConfig = {
   appName: 'Onuron POS',
   webDir: 'out',
   server: {
-    url: 'https://lakhanb.vercel.app', // production URL — app loads same-origin, fixes WebView cookie/session issues
+    url: 'https://pos.onuron.org', // production URL — app loads same-origin, fixes WebView cookie/session issues
     cleartext: false
   },
   plugins: {

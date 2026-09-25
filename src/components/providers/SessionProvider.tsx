@@ -23,6 +23,8 @@ function SessionStateSync() {
       username: (session.user as any).username || undefined,
       email: session.user.email || undefined,
       role: (session.user as any).role,
+      businessId: (session.user as any).businessId || undefined,
+      businessName: (session.user as any).businessName || undefined,
       requiresPasswordChange: false,
     });
   }, [session, status]);
