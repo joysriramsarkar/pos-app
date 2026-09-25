@@ -15,10 +15,10 @@ const withBundleAnalyzer = bundleAnalyzer({
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // standalone output — Docker build-এর জন্য; opennextjs-cloudflare নিজে bundle করে
   output: 'standalone',
   allowedDevOrigins: ["192.168.1.11"],
-  // Prisma/pg must use Node resolution — Turbopack breaks `.prisma/client/default` otherwise,
-  // which 500s /api/auth/* as HTML and surfaces next-auth CLIENT_FETCH_ERROR.
+  // Prisma/pg Node.js resolution চাই — Cloudflare Worker-এও nodejs_compat flag দিয়ে চলে
   serverExternalPackages: [
     "@prisma/client",
     "@prisma/adapter-pg",
@@ -31,11 +31,11 @@ const nextConfig: NextConfig = {
       "date-fns",
       "date-fns-tz",
     ],
-    // inlineCss is disabled because it can break modern CSS parsing for color functions
-    // such as oklch() used by Tailwind / modern UI libs.
+    // inlineCss disabled — oklch() / Tailwind v4 modern CSS-এর সাথে conflict করে
     inlineCss: false,
   },
   transpilePackages: [],
 };
 
 export default withBundleAnalyzer(nextConfig);
+

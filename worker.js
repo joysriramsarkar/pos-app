@@ -1,3 +1,13 @@
+/**
+ * @deprecated এই ফাইলটি পুরনো — Vercel-এ proxy করার জন্য তৈরি হয়েছিল।
+ *
+ * এখন opennextjs-cloudflare ব্যবহার হচ্ছে।
+ * `npm run build:worker` চালালে `.open-next/worker.js` তৈরি হয়,
+ * এবং `wrangler.jsonc`-এ `"main": ".open-next/worker.js"` সেট আছে।
+ *
+ * এই ফাইলটি deploy-এ ব্যবহার হয় না।
+ */
+
 const worker = {
   async fetch(request) {
     const url = new URL(request.url);
@@ -46,3 +56,4 @@ const worker = {
 };
 
 export default worker;
+

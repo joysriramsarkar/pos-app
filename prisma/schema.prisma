@@ -1,5 +1,5 @@
 // Lakhan Bhandar POS System - Multi-Tenant Database Schema
-// Compatible with Supabase/PostgreSQL
+// Compatible with PostgreSQL (Neon / Cloudflare Hyperdrive)
 
 generator client {
   provider = "prisma-client-js"
@@ -7,7 +7,10 @@ generator client {
 
 datasource db {
   provider  = "postgresql"
+  // Prisma 7: url ও directUrl এখন prisma.config.ts-এ configure করা হয়
+  // দেখো: https://pris.ly/d/config-datasource
 }
+
 
 // ============================================================================
 // MULTI-TENANT FOUNDATION

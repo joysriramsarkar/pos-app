@@ -2,33 +2,71 @@ import { PrismaClient, type Prisma } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { Pool } from 'pg'
 
+// ─── Type for Cloudflare Hyperdrive Binding ────────────────────────────────
+interface HyperdriveBinding {
+  connectionString: string
+}
+
+interface CloudflareEnv {
+  HYPERDRIVE?: HyperdriveBinding
+}
+
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
 }
 
 /**
- * Strict singleton factory function for PrismaClient
- * Prevents connection exhaustion during hot-reloading
+ * Cloudflare Worker runtime-এ `getCloudflareContext().env.HYPERDRIVE.connectionString` পাওয়া যায়।
+ * Node.js / local dev-এ `process.env.DATABASE_URL` ব্যবহার করা হয়।
+ *
+ * Hyperdrive Neon-এর connection pool Cloudflare-এর কাছে রেখে দেয় —
+ * এতে per-request cold-start latency অনেক কমে।
  */
-function createPrismaClient(): PrismaClient {
-  // Create PostgreSQL connection pool
-  const connectionString = process.env.DATABASE_URL
-  if (!connectionString) {
-    if (process.env.NODE_ENV === 'production' && process.env.NEXT_PHASE === 'phase-production-build') {
-      // Allow build to pass without DATABASE_URL by returning a mock client or avoiding throwing
-      console.warn('DATABASE_URL environment variable is not set during build phase.');
-    } else {
-      console.warn('DATABASE_URL environment variable is not set. Database operations will fail.');
+function getConnectionString(): string {
+  // Cloudflare Worker runtime-এ getCloudflareContext() দিয়ে Hyperdrive binding পাওয়া যায়।
+  // opennextjs-cloudflare v1.x API — request context-এ sync call করা যায়।
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getCloudflareContext } = require('@opennextjs/cloudflare')
+    const ctx = getCloudflareContext() as { env: CloudflareEnv } | null
+    if (ctx?.env?.HYPERDRIVE?.connectionString) {
+      return ctx.env.HYPERDRIVE.connectionString
     }
+  } catch {
+    // Node.js runtime-এ getCloudflareContext() পাওয়া যায় না — fallback করব
   }
 
-  // Use dummy connection string if building to prevent throw
+  const envUrl = process.env.DATABASE_URL
+  if (!envUrl) {
+    if (
+      process.env.NODE_ENV === 'production' &&
+      process.env.NEXT_PHASE === 'phase-production-build'
+    ) {
+      console.warn('[db] DATABASE_URL not set during build phase — using dummy.')
+    } else {
+      console.warn('[db] DATABASE_URL not set. DB operations will fail.')
+    }
+    return 'postgresql://dummy:dummy@localhost:5432/dummy'
+  }
+  return envUrl
+}
+
+/**
+ * Strict singleton factory function for PrismaClient.
+ *
+ * Cloudflare Worker-এ প্রতি request-এ connection string নতুন হতে পারে (Hyperdrive),
+ * তাই এখানে `getConnectionString()` call করা হয়।
+ */
+function createPrismaClient(): PrismaClient {
+  const connectionString = getConnectionString()
+
+  // Create PostgreSQL connection pool
   const pool = new Pool({
-    connectionString: connectionString || "postgresql://dummy:dummy@localhost:5432/dummy",
-    // Vercel Serverless-এ প্রতিটি function আলাদা process — max 3 যথেষ্ট
-    // বেশি দিলে Supabase-এর connection limit শেষ হয়ে যায়
+    connectionString,
+    // Serverless-এ প্রতিটি function আলাদা process — max 3 যথেষ্ট
+    // বেশি দিলে Neon-এর connection limit শেষ হয়ে যায়
     max: process.env.DATABASE_POOL_SIZE ? parseInt(process.env.DATABASE_POOL_SIZE, 10) : 3,
-    idleTimeoutMillis: 10000, // 30s থেকে কমিয়ে 10s — idle connection তাড়াতাড়ি ছাড়বে
+    idleTimeoutMillis: 10000, // idle connection তাড়াতাড়ি ছাড়বে
     connectionTimeoutMillis: 10000,
     allowExitOnIdle: true,
   })
@@ -55,7 +93,7 @@ function createPrismaClient(): PrismaClient {
     })
   }
 
-  // Auto-disconnect on process termination (fixes PgBouncer prepared statement conflicts on Vercel)
+  // Auto-disconnect on process termination (fixes PgBouncer prepared statement conflicts)
   process.once('SIGTERM', async () => {
     await client.$disconnect()
     process.exit(0)
@@ -71,9 +109,12 @@ function createPrismaClient(): PrismaClient {
 }
 
 /**
- * Strict singleton pattern - ensures only one PrismaClient instance
- * In development: cached in globalThis to survive hot-reloads
- * In production: also cached to prevent connection exhaustion
+ * Strict singleton pattern - ensures only one PrismaClient instance.
+ *
+ * - Development (Node.js): cached in globalThis to survive hot-reloads
+ * - Production (Node.js): cached to prevent connection exhaustion
+ * - Cloudflare Worker: Hyperdrive manages the connection pool externally;
+ *   globalThis cache still prevents duplicate clients within a single Worker isolate.
  */
 export const db: PrismaClient = (() => {
   // Return existing instance if already created (prevents re-instantiation)
@@ -113,4 +154,3 @@ export async function withTenantContext<T>(
     return fn(tx)
   })
 }
-

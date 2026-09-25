@@ -20,8 +20,10 @@ const { PrismaClient } = require('@prisma/client');
 const { PrismaPg } = require('@prisma/adapter-pg');
 const { Pool } = require('pg');
 
-const connectionString = process.env.DATABASE_URL ||
-  'postgresql://postgres:i181h5Nky2gBTrWU@db.ijpkklczlzcjbfynoqer.supabase.co:5432/postgres?schema=public';
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+  throw new Error("DATABASE_URL environment variable is required.");
+}
 
 const pool = new Pool({ connectionString, max: 3 });
 const adapter = new PrismaPg(pool);

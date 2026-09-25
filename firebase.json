@@ -4,7 +4,8 @@
       "localhost",
       "pos-app-508501.firebaseapp.com",
       "pos-app-508501.web.app",
-      "lakhanb.vercel.app"
+      "lakhanb.vercel.app",
+      "pos.onuron.org"
     ],
     "providers": {
       "emailPassword": true,

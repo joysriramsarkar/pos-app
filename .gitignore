@@ -36,10 +36,15 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+pnpm-lock.yaml
 bun.lock
-bun.lockb
-package-lock.json
 yarn.lock
+
+
+# Cloudflare OpenNext
+.open-next/
+.wrangler/
+.dev.vars
 
 # env files (keep .env.example committed)
 .env

@@ -37,7 +37,7 @@
 | **Language** | TypeScript |
 | **Styling** | Tailwind CSS 4, shadcn/ui |
 | **State Management** | Zustand |
-| **Database & ORM** | Prisma 7 (PostgreSQL via Supabase) |
+| **Database & ORM** | Prisma 7 (Neon PostgreSQL via Cloudflare Hyperdrive) |
 | **Offline Storage** | IndexedDB |
 | **Authentication** | NextAuth.js |
 | **Native (Android)** | Capacitor 8, ML Kit barcode, Filesystem + Share for PDF |
@@ -50,12 +50,12 @@
 ## 🏁 Quick Start
 
 ### Prerequisites
-- [Node.js](https://nodejs.org/) 18+
-- A PostgreSQL database (e.g. [Supabase](https://supabase.com) free tier)
+- [Node.js](https://nodejs.org/) 20+
+- A PostgreSQL database (e.g. [Neon](https://neon.tech))
 
 ### Installation
 
-**Package manager:** pnpm (`pnpm-lock.yaml`). Do not commit `package-lock.json` or `bun.lock`.
+**Package manager:** npm (`package-lock.json`).
 
 **1. Clone & install dependencies**
 ```bash
