@@ -225,7 +225,7 @@ export async function POST(request: NextRequest) {
       });
 
       return { user, business, membership };
-    });
+    }, { maxWait: 15000, timeout: 30000 });
 
     return NextResponse.json(
       {

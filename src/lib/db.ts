@@ -64,9 +64,9 @@ function createPrismaClient(connectionString: string): PrismaClient {
 
   const pool = new Pool({
     connectionString: cleanUrl,
-    max: isEdgeOrWorker ? 1 : (process.env.DATABASE_POOL_SIZE ? parseInt(process.env.DATABASE_POOL_SIZE, 10) : 3),
-    idleTimeoutMillis: isEdgeOrWorker ? 3000 : 10000,
-    connectionTimeoutMillis: isEdgeOrWorker ? 5000 : 10000,
+    max: isEdgeOrWorker ? 5 : (process.env.DATABASE_POOL_SIZE ? parseInt(process.env.DATABASE_POOL_SIZE, 10) : 10),
+    idleTimeoutMillis: 10000,
+    connectionTimeoutMillis: 15000,
     allowExitOnIdle: true,
   })
 
@@ -85,6 +85,10 @@ function createPrismaClient(connectionString: string): PrismaClient {
 
   return new PrismaClient({
     adapter,
+    transactionOptions: {
+      maxWait: 15000,
+      timeout: 30000,
+    },
     log: prismaLogs,
   })
 }
