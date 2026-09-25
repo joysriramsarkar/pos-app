@@ -92,8 +92,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: true, data: products, nextCursor });
   } catch (error: unknown) {
     console.error('Error fetching products:', error);
+    const details = error instanceof Error ? error.message : String(error);
     return NextResponse.json(
-      { success: false, error: 'Failed to fetch products' },
+      { success: false, error: 'Failed to fetch products', details },
       { status: 500 },
     );
   }

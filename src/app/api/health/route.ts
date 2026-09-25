@@ -13,7 +13,13 @@ export async function GET() {
   };
 
   try {
-    await db.$queryRaw`SELECT 1 as connection_test`;
+    const [rawTest, businessCount, productCount, userCount, sampleProduct] = await Promise.all([
+      db.$queryRaw<{ now: string; current_database: string }[]>`SELECT NOW() as now, current_database()`,
+      db.business.count().catch((e: Error) => `error: ${e.message}`),
+      db.product.count().catch((e: Error) => `error: ${e.message}`),
+      db.user.count().catch((e: Error) => `error: ${e.message}`),
+      db.product.findFirst({ select: { id: true, name: true, businessId: true } }).catch((e: Error) => `error: ${e.message}`),
+    ]);
 
     return Response.json(
       {
@@ -21,6 +27,13 @@ export async function GET() {
         database: "connected",
         timestamp: new Date().toISOString(),
         environment: process.env.NODE_ENV,
+        dbInfo: rawTest?.[0] ?? null,
+        counts: {
+          businesses: businessCount,
+          products: productCount,
+          users: userCount,
+        },
+        sampleProduct,
       },
       { status: 200, headers },
     );

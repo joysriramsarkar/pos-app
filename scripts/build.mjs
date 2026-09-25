@@ -10,11 +10,11 @@ const isCloudflare = Boolean(
 
 console.log(`[Build] Target environment: isVercel=${isVercel}, isCloudflare=${isCloudflare}, platform=${process.platform}`);
 
-execSync('npx prisma generate --config prisma.config.ts', { stdio: 'inherit' });
+execSync('npm run db:generate', { stdio: 'inherit' });
 
 if (isCloudflare) {
   console.log('[Build] Building for Cloudflare Workers (opennextjs-cloudflare build)...');
-  execSync('npx opennextjs-cloudflare build', { stdio: 'inherit' });
+  execSync('npm run build:worker', { stdio: 'inherit' });
 } else {
   console.log('[Build] Building standard Next.js application...');
   execSync('npx next build', { stdio: 'inherit' });
