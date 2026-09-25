@@ -5,8 +5,7 @@
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "node scripts/build.mjs",
-    "build:next": "prisma generate --config prisma.config.ts && next build && shx mkdir -p .next/standalone/.next && shx cp -r public .next/standalone/public && shx cp -r .next/static .next/standalone/.next/static",
-    "build:worker": "npm run db:generate && opennextjs-cloudflare build",
+    "build:worker": "cross-env BUILD_TARGET=cloudflare node scripts/build.mjs",
     "preview:worker": "opennextjs-cloudflare preview",
     "deploy": "opennextjs-cloudflare build && wrangler deploy",
     "analyze": "cross-env BUNDLE_ANALYZE=true next build --webpack",
