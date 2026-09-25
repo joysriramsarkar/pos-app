@@ -2,7 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "onuron-pos",
   "main": ".open-next/worker.js",
-  "compatibility_date": "2025-02-15",
+  "compatibility_date": "2026-03-01",
   "compatibility_flags": [
     "nodejs_compat"
   ],
@@ -11,12 +11,11 @@
     "binding": "ASSETS"
   },
   // Cloudflare Hyperdrive — Neon DB connection pool প্রক্সি
-  // Setup: wrangler hyperdrive create neon-pos-db --connection-string="<NEON_POOLED_URL>"
-  // তারপর নিচের id-তে আউটপুটের id বসাও
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",
-      "id": "93a58f1dbd244c3d93ad71ca450204d5"
+      "id": "93a58f1dbd244c3d93ad71ca450204d5",
+      "localConnectionString": "postgresql://neondb_owner:npg_w5VvfR1XTDMN@ep-odd-hall-azkgbyhl-pooler.c-3.ap-southeast-1.aws.neon.tech/neondb?sslmode=require"
     }
   ],
   "vars": {

@@ -105,7 +105,6 @@
     "@opennextjs/cloudflare": "^1.20.6",
     "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "^4",
-    "@types/bcryptjs": "^3.0.0",
     "@types/node": "^25.9.1",
     "@types/papaparse": "^5.5.2",
     "@types/pg": "^8.20.0",
