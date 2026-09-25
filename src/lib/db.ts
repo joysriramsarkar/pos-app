@@ -9,34 +9,40 @@ interface HyperdriveBinding {
 
 interface CloudflareEnv {
   HYPERDRIVE?: HyperdriveBinding
+  DATABASE_URL?: string
 }
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
 }
 
-/**
- * Cloudflare Worker runtime-এ `getCloudflareContext().env.HYPERDRIVE.connectionString` পাওয়া যায়।
- * Node.js / local dev-এ `process.env.DATABASE_URL` ব্যবহার করা হয়।
- *
- * Hyperdrive Neon-এর connection pool Cloudflare-এর কাছে রেখে দেয় —
- * এতে per-request cold-start latency অনেক কমে।
- */
-function getConnectionString(): string {
-  // Cloudflare Worker runtime-এ getCloudflareContext() দিয়ে Hyperdrive binding পাওয়া যায়।
-  // opennextjs-cloudflare request context-এ sync call করা যায়।
+function getCloudflareEnv(): CloudflareEnv | null {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { getCloudflareContext } = require('@opennextjs/cloudflare')
     const ctx = getCloudflareContext() as { env: CloudflareEnv } | null
-    if (ctx?.env?.HYPERDRIVE?.connectionString) {
-      return ctx.env.HYPERDRIVE.connectionString
-    }
+    return ctx?.env ?? null
   } catch {
-    // Not in request context or Node.js environment
+    return null
+  }
+}
+
+function getConnectionString(): string {
+  const cfEnv = getCloudflareEnv()
+
+  // Prefer direct DATABASE_URL if configured to bypass Hyperdrive issues
+  if (process.env.PREFER_DIRECT_DB === 'true') {
+    const direct = cfEnv?.DATABASE_URL || process.env.DATABASE_URL
+    if (direct) return direct
   }
 
-  const envUrl = process.env.DATABASE_URL
+  // Use Hyperdrive if available in Cloudflare context
+  if (cfEnv?.HYPERDRIVE?.connectionString) {
+    return cfEnv.HYPERDRIVE.connectionString
+  }
+
+  // Fallback to Worker secret or process.env DATABASE_URL
+  const envUrl = cfEnv?.DATABASE_URL || process.env.DATABASE_URL
   if (envUrl) {
     return envUrl
   }
@@ -50,13 +56,26 @@ function createPrismaClient(connectionString: string): PrismaClient {
     .replace(/([?&])channel_binding=[^&]+(&|$)/, '$1')
     .replace(/[?&]$/, '')
 
+  const isEdgeOrWorker = Boolean(
+    typeof (globalThis as any).WebSocketPair !== 'undefined' ||
+    process.env.NEXT_RUNTIME === 'edge' ||
+    getCloudflareEnv() !== null
+  )
+
   const pool = new Pool({
     connectionString: cleanUrl,
-    max: process.env.DATABASE_POOL_SIZE ? parseInt(process.env.DATABASE_POOL_SIZE, 10) : 3,
-    idleTimeoutMillis: 10000,
-    connectionTimeoutMillis: 10000,
+    max: isEdgeOrWorker ? 1 : (process.env.DATABASE_POOL_SIZE ? parseInt(process.env.DATABASE_POOL_SIZE, 10) : 3),
+    idleTimeoutMillis: isEdgeOrWorker ? 3000 : 10000,
+    connectionTimeoutMillis: isEdgeOrWorker ? 5000 : 10000,
     allowExitOnIdle: true,
   })
+
+  pool.on('error', (err) => {
+    console.error('[DB Pool error] Resetting cached client:', err?.message || err)
+    cachedClient = null
+    cachedConnStr = null
+  })
+
   const adapter = new PrismaPg(pool as unknown as any)
 
   const prismaLogs: Prisma.LogDefinition[] =
@@ -74,7 +93,6 @@ let cachedClient: PrismaClient | null = null
 let cachedConnStr: string | null = null
 
 function getPrismaClient(): PrismaClient {
-  // Development (Node.js hot-reload cache)
   if (process.env.NODE_ENV === 'development' && globalForPrisma.prisma) {
     return globalForPrisma.prisma
   }
@@ -97,14 +115,39 @@ function getPrismaClient(): PrismaClient {
 /**
  * Lazy PrismaClient proxy:
  * Ensures Cloudflare Hyperdrive context is resolved dynamically on request,
- * while maintaining 100% compatibility with existing codebase imports (`db.user`, etc.).
+ * resets automatically on connection failure.
  */
 export const db: PrismaClient = new Proxy({} as PrismaClient, {
   get(_target, prop, receiver) {
     const client = getPrismaClient()
     const value = Reflect.get(client, prop, receiver)
     if (typeof value === 'function') {
-      return value.bind(client)
+      return (...args: any[]) => {
+        try {
+          const res = value.apply(client, args)
+          if (res && typeof res.catch === 'function') {
+            return res.catch((err: any) => {
+              if (
+                err?.message?.includes('timeout') ||
+                err?.message?.includes('Connection') ||
+                err?.message?.includes('closed') ||
+                err?.code === 'ECONNRESET' ||
+                err?.code === 'EPIPE'
+              ) {
+                console.warn('[PrismaClient] Connection error detected, resetting client cache:', err.message)
+                cachedClient = null
+                cachedConnStr = null
+              }
+              throw err
+            })
+          }
+          return res
+        } catch (syncErr: any) {
+          cachedClient = null
+          cachedConnStr = null
+          throw syncErr
+        }
+      }
     }
     return value
   },
