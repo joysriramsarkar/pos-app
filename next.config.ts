@@ -23,7 +23,14 @@ const nextConfig: NextConfig = {
     "@prisma/client",
     "@prisma/adapter-pg",
     "pg",
+    "pg-cloudflare",
   ],
+  outputFileTracingIncludes: {
+    "**/*": [
+      "./node_modules/pg-cloudflare/dist/**",
+      "./node_modules/pg-cloudflare/esm/**",
+    ],
+  },
   experimental: {
     optimizePackageImports: [
       "lucide-react",
