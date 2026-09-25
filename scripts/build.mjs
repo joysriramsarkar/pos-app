@@ -10,16 +10,15 @@ const isCloudflare = Boolean(
 
 console.log(`[Build] Target environment: isVercel=${isVercel}, isCloudflare=${isCloudflare}, platform=${process.platform}`);
 
-execSync('npm run db:generate', { stdio: 'inherit' });
+// When running inside opennextjs-cloudflare build context, this script is called
+// as the Next.js build step — just run next build to avoid infinite recursion.
+// Prisma generate is handled by the build:worker script before opennextjs runs.
+execSync('next build', { stdio: 'inherit' });
 
-if (isCloudflare) {
-  console.log('[Build] Building for Cloudflare Workers (opennextjs-cloudflare build)...');
-  execSync('npm run build:worker', { stdio: 'inherit' });
-} else {
-  console.log('[Build] Building standard Next.js application...');
-  execSync('npx next build', { stdio: 'inherit' });
+if (!isCloudflare) {
+  // Standalone mode: copy files for Docker/Node.js server
   try {
-    execSync('npx shx mkdir -p .next/standalone/.next && npx shx cp -r public .next/standalone/public && npx shx cp -r .next/static .next/standalone/.next/static', { stdio: 'inherit' });
+    execSync('shx mkdir -p .next/standalone/.next && shx cp -r public .next/standalone/public && shx cp -r .next/static .next/standalone/.next/static', { stdio: 'inherit' });
   } catch {
     // Non-fatal if standalone folders already exist
   }
