@@ -114,6 +114,7 @@ export const proxy = withAuth(
   },
   {
     pages: { signIn: "/login" },
+    secret: process.env.NEXTAUTH_SECRET || "2ne9ID5IkSJcykq9lkQrUsY6A2RuUPY/xnhxFOFvlFM=",
   }
 );
 

@@ -11,6 +11,7 @@ function sanitizeLogInput(input: unknown): string {
 }
 
 export const authOptions: NextAuthOptions = {
+  secret: process.env.NEXTAUTH_SECRET || "2ne9ID5IkSJcykq9lkQrUsY6A2RuUPY/xnhxFOFvlFM=",
   providers: [
     CredentialsProvider({
       name: "Credentials",

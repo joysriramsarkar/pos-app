@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "onuron-pos",
+  "name": "pos-app",
   "main": ".open-next/worker.js",
   "compatibility_date": "2026-03-01",
   "compatibility_flags": [
@@ -19,8 +19,8 @@
     }
   ],
   "vars": {
-    "NEXTAUTH_URL": "https://pos.onuron.org",
-    "ALLOWED_ORIGINS": "https://pos.onuron.org"
+    "NEXTAUTH_SECRET": "2ne9ID5IkSJcykq9lkQrUsY6A2RuUPY/xnhxFOFvlFM=",
+    "ALLOWED_ORIGINS": "https://pos.onuron.org,https://pos-app.joysriram-sarkar-56.workers.dev,http://localhost:3000"
   },
   "observability": {
     "enabled": true
