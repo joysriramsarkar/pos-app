@@ -41,13 +41,17 @@ function getConnectionString(): string {
     return envUrl
   }
 
-  // Neon direct pooler fallback
-  return "postgresql://neondb_owner:npg_w5VvfR1XTDMN@ep-odd-hall-azkgbyhl-pooler.c-3.ap-southeast-1.aws.neon.tech/neondb?sslmode=require"
+  return 'postgresql://dummy:dummy@localhost:5432/dummy'
 }
 
 function createPrismaClient(connectionString: string): PrismaClient {
+  // node-postgres and pgbouncer/hyperdrive do not support channel_binding=require
+  const cleanUrl = connectionString
+    .replace(/([?&])channel_binding=[^&]+(&|$)/, '$1')
+    .replace(/[?&]$/, '')
+
   const pool = new Pool({
-    connectionString,
+    connectionString: cleanUrl,
     max: process.env.DATABASE_POOL_SIZE ? parseInt(process.env.DATABASE_POOL_SIZE, 10) : 3,
     idleTimeoutMillis: 10000,
     connectionTimeoutMillis: 10000,

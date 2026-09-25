@@ -15,13 +15,11 @@
     {
       "binding": "HYPERDRIVE",
       "id": "93a58f1dbd244c3d93ad71ca450204d5",
-      "localConnectionString": "postgresql://neondb_owner:npg_w5VvfR1XTDMN@ep-odd-hall-azkgbyhl-pooler.c-3.ap-southeast-1.aws.neon.tech/neondb?sslmode=require"
+      "localConnectionString": "postgresql://postgres:postgres@localhost:5432/postgres"
     }
   ],
   "vars": {
-    "NEXTAUTH_SECRET": "2ne9ID5IkSJcykq9lkQrUsY6A2RuUPY/xnhxFOFvlFM=",
     "NEXTAUTH_URL": "https://pos.onuron.org",
-    "DATABASE_URL": "postgresql://neondb_owner:npg_w5VvfR1XTDMN@ep-odd-hall-azkgbyhl-pooler.c-3.ap-southeast-1.aws.neon.tech/neondb?sslmode=require",
     "ALLOWED_ORIGINS": "https://pos.onuron.org,https://pos-app.joysriram-sarkar-56.workers.dev,http://localhost:3000"
   },
   "observability": {

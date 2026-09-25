@@ -34,8 +34,8 @@ export async function GET() {
       {
         status: "error",
         database: "failed",
-        // Do not expose raw DB errors to unauthenticated callers
         error: "database_unavailable",
+        details: error instanceof Error ? error.message : String(error),
         timestamp: new Date().toISOString(),
       },
       { status: 503, headers },

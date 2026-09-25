@@ -1,8 +1,8 @@
 import { z } from "zod";
 
 const envSchema = z.object({
-  DATABASE_URL:    z.string().min(1).optional().default("postgresql://neondb_owner:npg_w5VvfR1XTDMN@ep-odd-hall-azkgbyhl-pooler.c-3.ap-southeast-1.aws.neon.tech/neondb?sslmode=require"),
-  NEXTAUTH_SECRET: z.string().min(32).optional().default("2ne9ID5IkSJcykq9lkQrUsY6A2RuUPY/xnhxFOFvlFM="),
+  DATABASE_URL:    z.string().min(1).optional(),
+  NEXTAUTH_SECRET: z.string().min(32).optional(),
   NEXTAUTH_URL:    z.string().optional().default("https://pos.onuron.org"),
   NODE_ENV:        z.enum(["development", "test", "production"]).default("development"),
   // Optional
