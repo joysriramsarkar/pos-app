@@ -62,7 +62,7 @@ export const authOptions: NextAuthOptions = {
             role: primaryMembership?.role as "OWNER" | "ADMIN" | "MANAGER" | "CASHIER" | "VIEWER" | undefined,
             businessId: primaryMembership?.business?.id,
             businessName: primaryMembership?.business?.name,
-            requiresPasswordChange: user.requiresPasswordChange,
+            requiresPasswordChange: false,
           };
         }
         // --- End Google fast path ---
@@ -226,7 +226,7 @@ export const authOptions: NextAuthOptions = {
           role: role as "OWNER" | "ADMIN" | "MANAGER" | "CASHIER" | "VIEWER" | undefined,
           businessId: businessId,
           businessName: businessName,
-          requiresPasswordChange: user.requiresPasswordChange,
+          requiresPasswordChange: false,
         };
       }
     })
@@ -256,7 +256,7 @@ export const authOptions: NextAuthOptions = {
         token.email = u.email ?? undefined;
         token.businessId = u.businessId;
         token.businessName = u.businessName;
-        token.requiresPasswordChange = u.requiresPasswordChange;
+        token.requiresPasswordChange = false;
       }
 
       // Business switch: client can only REQUEST a businessId change.
@@ -301,7 +301,7 @@ export const authOptions: NextAuthOptions = {
         session.user.email = (token.email as string) || session.user.email;
         session.user.businessId = token.businessId as string;
         session.user.businessName = token.businessName as string;
-        session.user.requiresPasswordChange = token.requiresPasswordChange as boolean;
+        session.user.requiresPasswordChange = false;
       }
       return session;
     }

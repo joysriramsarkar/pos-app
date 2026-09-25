@@ -2,9 +2,8 @@ import { useEffect } from 'react';
 import { useCustomersStore } from '@/stores/pos-store';
 import { CustomersDB } from '@/lib/offline/indexeddb';
 
-export function usePosCustomers(activeUser: any) {
+export function usePosCustomers(_activeUser?: any) {
   useEffect(() => {
-    if (activeUser?.requiresPasswordChange) return;
     const loadCustomers = async () => {
       const { setCustomers, setLoading: setCustomersLoading } = useCustomersStore.getState();
       setCustomersLoading(true);
@@ -36,5 +35,5 @@ export function usePosCustomers(activeUser: any) {
       }
     };
     loadCustomers();
-  }, [activeUser?.requiresPasswordChange]);
+  }, []);
 }

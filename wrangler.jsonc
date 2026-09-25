@@ -6,6 +6,15 @@
   "compatibility_flags": [
     "nodejs_compat"
   ],
+  "rules": [
+    {
+      "type": "CompiledWasm",
+      "globs": [
+        "**/*.wasm"
+      ],
+      "fallthrough": false
+    }
+  ],
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"
@@ -26,4 +35,3 @@
     "enabled": true
   }
 }
-

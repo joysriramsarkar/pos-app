@@ -3,10 +3,9 @@ import { useProductsStore, useSyncStore, useQuantityUsageStore } from '@/stores/
 import { ProductsDB } from '@/lib/offline/indexeddb';
 import { refreshProductsFromServer } from '@/lib/products-sync';
 
-export function usePosProducts(activeUser: any) {
+export function usePosProducts(_activeUser?: any) {
   // Load products on mount (paginated — allow longer than a single request)
   useEffect(() => {
-    if (activeUser?.requiresPasswordChange) return;
 
     let cancelled = false;
     const controller = new AbortController();
@@ -133,11 +132,10 @@ export function usePosProducts(activeUser: any) {
       window.clearTimeout(timeoutId);
       controller.abort(new DOMException('Products load cancelled', 'AbortError'));
     };
-  }, [activeUser?.requiresPasswordChange]);
+  }, []);
 
   // Load quantity suggestions on mount from last 30 days of sales
   useEffect(() => {
-    if (activeUser?.requiresPasswordChange) return;
     const loadQuantitySuggestions = async () => {
       try {
         const res = await fetch('/api/products/quantity-suggestions');
@@ -150,11 +148,10 @@ export function usePosProducts(activeUser: any) {
       }
     };
     loadQuantitySuggestions();
-  }, [activeUser?.requiresPasswordChange]);
+  }, []);
 
   // Refresh products when tab becomes visible or after offline sync completes
   useEffect(() => {
-    if (activeUser?.requiresPasswordChange) return;
 
     const handleVisibility = () => {
       if (document.visibilityState === 'visible' && navigator.onLine) {
@@ -182,5 +179,5 @@ export function usePosProducts(activeUser: any) {
       window.removeEventListener('offlineSyncComplete', handleSyncComplete);
       window.clearInterval(intervalId);
     };
-  }, [activeUser?.requiresPasswordChange]);
+  }, []);
 }

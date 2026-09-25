@@ -110,16 +110,6 @@ export async function requireAuth(request: NextRequest): Promise<AuthResult> {
     };
   }
 
-  if (session.user?.requiresPasswordChange) {
-    return {
-      authorized: false,
-      response: NextResponse.json(
-        { error: "Password change required", requiresPasswordChange: true },
-        { status: 403 }
-      ),
-    };
-  }
-
   return { authorized: true, response: null, session };
 }
 

@@ -21,12 +21,15 @@ const nextConfig: NextConfig = {
   // Prisma/pg Node.js resolution চাই — Cloudflare Worker-এও nodejs_compat flag দিয়ে চলে
   serverExternalPackages: [
     "@prisma/client",
+    ".prisma/client",
     "@prisma/adapter-pg",
     "pg",
     "pg-cloudflare",
   ],
   outputFileTracingIncludes: {
     "**/*": [
+      "./node_modules/.prisma/client/**",
+      "./node_modules/@prisma/client/**",
       "./node_modules/pg-cloudflare/dist/**",
       "./node_modules/pg-cloudflare/esm/**",
     ],

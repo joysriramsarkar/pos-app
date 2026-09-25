@@ -210,6 +210,10 @@ export function POSDashboard() {
     isAuditPageMounted,
   ]);
 
+  // Refresh keys for dashboard and parties
+  const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0);
+  const [partiesRefreshKey, setPartiesRefreshKey] = useState(0);
+
   // Bump refresh key each time the dashboard or parties page becomes active
   const prevPageRef = useRef<string>('');
   useEffect(() => {
@@ -258,8 +262,6 @@ export function POSDashboard() {
   const [scannedItems, setScannedItems] = useState<{ name: string; qty: number }[]>([]);
   const [liveScanError, setLiveScanError] = useState<string | null>(null);
   const [mobileSearchQuery, setMobileSearchQuery] = useState('');
-  const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0);
-  const [partiesRefreshKey, setPartiesRefreshKey] = useState(0);
 
   // Store hooks
   const products = useProductsStore((state) => state.products);

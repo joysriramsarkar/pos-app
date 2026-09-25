@@ -38,7 +38,7 @@ async function main() {
         username: "admin",
         passwordHash: hashedPassword,
         name: "Administrator",
-        requiresPasswordChange: true,
+        requiresPasswordChange: false,
       },
     });
 
