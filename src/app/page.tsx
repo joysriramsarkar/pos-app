@@ -1,7 +1,12 @@
-﻿'use client';
+'use client';
 
+import dynamic from 'next/dynamic';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { POSDashboard } from '@/app/pos/POSDashboard';
+
+const POSDashboard = dynamic(
+  () => import('@/app/pos/POSDashboard').then((mod) => mod.POSDashboard),
+  { ssr: false }
+);
 
 export default function Home() {
   return (
