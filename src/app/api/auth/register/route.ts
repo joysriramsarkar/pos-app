@@ -246,8 +246,9 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     console.error("[register] Error:", error);
+    const details = error instanceof Error ? error.message : String(error);
     return NextResponse.json(
-      { error: "Registration failed. Please try again." },
+      { error: details || "Registration failed. Please try again.", details },
       { status: 500 }
     );
   }

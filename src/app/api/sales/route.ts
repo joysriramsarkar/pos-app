@@ -191,8 +191,9 @@ async function handleGet(request: NextRequest, ctx: RouteContext & { tenant: Ten
     });
   } catch (error: unknown) {
     console.error("Error fetching sales:", error);
+    const details = error instanceof Error ? error.message : String(error);
     return NextResponse.json(
-      { success: false, error: "Failed to fetch sales" },
+      { success: false, error: "Failed to fetch sales", details },
       { status: 500 },
     );
   }
