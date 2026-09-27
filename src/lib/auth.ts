@@ -170,10 +170,21 @@ export const authOptions: NextAuthOptions = {
 
         // If not OTP, verify password against passwordHash
         if (!isOtp) {
-          const isPasswordValid = await bcrypt.compare(
-            credentials.password!,
-            user.passwordHash
-          );
+          let isPasswordValid = false;
+          try {
+            // Offload 12-round bcrypt to PostgreSQL pgcrypto to avoid Cloudflare Worker CPU limit (50ms)
+            const normHash = (user.passwordHash || '').replace(/^\$2b\$/, '$2a$');
+            const pgCheck = await db.$queryRaw<{ matches: boolean }[]>`
+              SELECT (crypt(${credentials.password!}, ${normHash}) = ${normHash}) AS "matches"
+            `;
+            isPasswordValid = Boolean(pgCheck?.[0]?.matches);
+          } catch {
+            // Fallback to JS bcrypt.compare
+            isPasswordValid = await bcrypt.compare(
+              credentials.password!,
+              user.passwordHash
+            );
+          }
 
           if (!isPasswordValid) {
             console.log("[NextAuth] invalid password");

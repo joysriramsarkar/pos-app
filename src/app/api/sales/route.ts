@@ -188,6 +188,10 @@ async function handleGet(request: NextRequest, ctx: RouteContext & { tenant: Ten
         limit,
         totalPages: Math.ceil(total / limit),
       },
+    }, {
+      headers: {
+        'Cache-Control': 'private, max-age=5, stale-while-revalidate=15',
+      },
     });
   } catch (error: unknown) {
     console.error("Error fetching sales:", error);

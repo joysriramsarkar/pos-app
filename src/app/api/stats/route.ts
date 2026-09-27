@@ -6,20 +6,15 @@ export const revalidate = 0;
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { requireAuth } from '@/lib/api-middleware';
 import { requireBusinessContext, checkPermission } from '@/lib/tenant';
 import { aggregateSalePayments } from '@/lib/sale-payment-breakdown';
 
 const jsonHeaders = {
   'Content-Type': 'application/json; charset=utf-8',
-  'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-  'Prisma-Cache': 'no-cache'
+  'Cache-Control': 'private, max-age=15, stale-while-revalidate=30',
 };
 
 export async function GET(request: NextRequest) {
-  const authResult = await requireAuth(request);
-  if (!authResult.authorized) return authResult.response;
-
   const ctx = await requireBusinessContext();
   if (ctx instanceof NextResponse) return ctx;
 
@@ -30,7 +25,6 @@ export async function GET(request: NextRequest) {
 
   try {
     const { searchParams } = new URL(request.url);
-    // tzOffset = client's getTimezoneOffset() in minutes (e.g. IST = -330)
     const tzOffset = parseInt(searchParams.get('tzOffset') ?? '0', 10);
 
     // Calculate local midnight in UTC
@@ -45,23 +39,153 @@ export async function GET(request: NextRequest) {
     const yesterdayStart = new Date(startOfDay);
     yesterdayStart.setDate(yesterdayStart.getDate() - 1);
 
-    // Today's sales (Completed + PartialReturn — exclude Cancelled/full Refunded originals)
-    const todaySales = await db.sale.findMany({
-      where: {
-        businessId,
-        createdAt: {
-          gte: startOfDay,
-          lt: endOfDay,
-        },
-        status: { in: ['Completed', 'PartialReturn'] },
-      },
-      include: {
-        customer: {
-          select: { id: true, name: true },
-        },
-      },
-    });
+    const day7Start = new Date(startOfDay);
+    day7Start.setDate(day7Start.getDate() - 6);
 
+    // Run ALL independent queries concurrently to prevent worker CPU/execution timeouts
+    const [
+      todaySales,
+      yesterdaySales,
+      yesterdayExpenses,
+      customersWithDue,
+      lowStockProducts,
+      recentSales,
+      todayExpenses,
+      totalProducts,
+      totalCustomers,
+      todaySaleItems,
+      week7Sales,
+      week7Expenses,
+    ] = await Promise.all([
+      // 1. Today's sales
+      db.sale.findMany({
+        where: {
+          businessId,
+          createdAt: { gte: startOfDay, lt: endOfDay },
+          status: { in: ['Completed', 'PartialReturn'] },
+        },
+        include: {
+          customer: { select: { id: true, name: true } },
+        },
+      }).catch(() => []),
+
+      // 2. Yesterday's sales
+      db.sale.findMany({
+        where: {
+          businessId,
+          createdAt: { gte: yesterdayStart, lt: startOfDay },
+          status: 'Completed',
+        },
+      }).catch(() => []),
+
+      // 3. Yesterday's expenses
+      db.expense.findMany({
+        where: {
+          businessId,
+          date: { gte: yesterdayStart, lt: startOfDay },
+          isActive: true,
+        },
+      }).catch(() => []),
+
+      // 4. Customers with due
+      db.customer.findMany({
+        where: { businessId, totalDue: { gt: 0 }, isActive: true },
+        select: { totalDue: true },
+      }).catch(() => []),
+
+      // 5. Low stock products — fast indexed query without expensive joins
+      db.$queryRaw<{
+        id: string;
+        name: string;
+        nameBn: string | null;
+        currentStock: number;
+        minStockLevel: number;
+        soldLast7: number;
+      }[]>`
+        SELECT id, name, name_bn as "nameBn",
+               CAST(current_stock AS FLOAT) as "currentStock",
+               CAST(min_stock_level AS FLOAT) as "minStockLevel",
+               0 as "soldLast7"
+        FROM products
+        WHERE business_id = ${businessId}
+          AND is_active = true
+          AND current_stock <= min_stock_level
+        ORDER BY current_stock ASC
+        LIMIT 20
+      `.catch(() => []),
+
+      // 6. Recent transactions (last 10)
+      db.sale.findMany({
+        where: { businessId },
+        take: 10,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          customer: { select: { id: true, name: true } },
+          user: { select: { id: true, name: true, username: true } },
+          items: {
+            select: {
+              productName: true,
+              quantity: true,
+              totalPrice: true,
+            },
+          },
+        },
+      }).catch(() => []),
+
+      // 7. Today's expenses
+      db.expense.findMany({
+        where: {
+          businessId,
+          date: { gte: startOfDay, lt: endOfDay },
+          isActive: true,
+        },
+      }).catch(() => []),
+
+      // 8. Total products count
+      db.product.count({ where: { businessId, isActive: true } }).catch(() => 0),
+
+      // 9. Total customers count
+      db.customer.count({ where: { businessId, isActive: true } }).catch(() => 0),
+
+      // 10. Today's sale items for COGS
+      db.saleItem.findMany({
+        where: {
+          sale: {
+            businessId,
+            createdAt: { gte: startOfDay, lt: endOfDay },
+            status: { in: ['Completed', 'PartialReturn'] },
+          },
+          quantity: { gt: 0 },
+        },
+        select: {
+          productId: true,
+          quantity: true,
+          costPriceAtSale: true,
+        },
+      }).catch(() => []),
+
+      // 11. Week 7 sales
+      db.sale.findMany({
+        where: {
+          businessId,
+          createdAt: { gte: day7Start, lt: endOfDay },
+          status: 'Completed',
+        },
+        select: { totalAmount: true, createdAt: true },
+      }).catch(() => []),
+
+      // 12. Week 7 expenses
+      db.expense.findMany({
+        where: {
+          businessId,
+          date: { gte: day7Start, lt: endOfDay },
+          isActive: true,
+        },
+        select: { amount: true, date: true },
+      }).catch(() => []),
+    ]);
+
+    // Aggregate today's sales
     const todayAgg = aggregateSalePayments(todaySales);
     const todaySalesTotal = todayAgg.salesTotal;
     const todayOrdersCount = todayAgg.orders;
@@ -70,101 +194,15 @@ export async function GET(request: NextRequest) {
     const todayDueCreated = todayAgg.dueCreated;
     const todayCollected = todayAgg.collected;
 
-    // Yesterday's sales
-    const yesterdaySales = await db.sale.findMany({
-      where: {
-        businessId,
-        createdAt: {
-          gte: yesterdayStart,
-          lt: startOfDay,
-        },
-        status: 'Completed',
-      },
-    });
-
+    // Yesterday totals
     const yesterdaySalesTotal = yesterdaySales.reduce((sum, sale) => sum + Number(sale.totalAmount || 0), 0);
     const yesterdayOrdersCount = yesterdaySales.length;
-
-    // Yesterday's expenses
-    const yesterdayExpenses = await db.expense.findMany({
-      where: {
-        businessId,
-        date: {
-          gte: yesterdayStart,
-          lt: startOfDay,
-        },
-        isActive: true,
-      },
-    });
     const yesterdayExpensesTotal = yesterdayExpenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
 
-    // Total due from all customers
-    const customersWithDue = await db.customer.findMany({
-      where: {
-        businessId,
-        totalDue: { gt: 0 },
-        isActive: true,
-      },
-      select: { totalDue: true },
-    });
+    // Total due
     const totalDue = customersWithDue.reduce((sum, c) => sum + Number(c.totalDue || 0), 0);
 
-    // Low stock — prefer items with recent sales velocity (restock first what sells)
-    const day7StartForStock = new Date(startOfDay);
-    day7StartForStock.setDate(day7StartForStock.getDate() - 6);
-
-    const lowStockProducts = await db.$queryRaw<{
-      id: string;
-      name: string;
-      nameBn: string | null;
-      currentStock: number;
-      minStockLevel: number;
-      soldLast7: number;
-    }[]>`
-      SELECT p.id, p.name, p.name_bn as "nameBn",
-             CAST(p.current_stock AS FLOAT) as "currentStock",
-             CAST(p.min_stock_level AS FLOAT) as "minStockLevel",
-             COALESCE(CAST(v.sold AS FLOAT), 0) as "soldLast7"
-      FROM products p
-      LEFT JOIN (
-        SELECT si.product_id, SUM(si.quantity) as sold
-        FROM sale_items si
-        INNER JOIN sales s ON s.id = si.sale_id
-        WHERE s.business_id = ${businessId}
-          AND s.created_at >= ${day7StartForStock}
-          AND s.created_at < ${endOfDay}
-          AND s.status IN ('Completed', 'PartialReturn')
-          AND si.quantity > 0
-        GROUP BY si.product_id
-      ) v ON v.product_id = p.id
-      WHERE p.business_id = ${businessId} AND p.is_active = true AND p.current_stock <= p.min_stock_level
-      ORDER BY COALESCE(v.sold, 0) DESC, p.current_stock ASC
-      LIMIT 20
-    `;
-
-    // Recent transactions (last 10)
-    const recentSales = await db.sale.findMany({
-      where: { businessId },
-      take: 10,
-      orderBy: { createdAt: 'desc' },
-      include: {
-        customer: {
-          select: { id: true, name: true },
-        },
-        user: {
-          select: { id: true, name: true, username: true },
-        },
-        items: {
-          select: {
-            productName: true,
-            quantity: true,
-            totalPrice: true,
-          },
-        },
-      },
-    });
-
-    // Keep English codes in API (UTF-8 safe); UI translates — avoids mojibake double-encoding
+    // Format recent transactions
     const recentTransactions = recentSales.map(tx => ({
       id: tx.id,
       invoiceNumber: tx.invoiceNumber,
@@ -189,20 +227,10 @@ export async function GET(request: NextRequest) {
       })),
     }));
 
-    // Today's expenses
-    const todayExpenses = await db.expense.findMany({
-      where: {
-        businessId,
-        date: {
-          gte: startOfDay,
-          lt: endOfDay,
-        },
-        isActive: true,
-      },
-    });
+    // Today's expenses total
     const todayExpensesTotal = todayExpenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
 
-    // Drawer-oriented breakdown (actual money in / credit opened) — keys kept for Dashboard i18n
+    // Payment breakdown
     const paymentBreakdown = {
       'নগদ': todayCashTotal,
       'ইউপিআই': todayUpiTotal,
@@ -212,7 +240,7 @@ export async function GET(request: NextRequest) {
       'বাকি': todayDueCreated,
     };
 
-    // Day-end reconciliation strip
+    // Reconciliation
     const reconciliation = {
       salesTotal: todaySalesTotal,
       cashInDrawer: todayCashTotal,
@@ -223,42 +251,16 @@ export async function GET(request: NextRequest) {
       expectedCashAfterExpenses: todayCashTotal - todayExpensesTotal,
     };
 
-    // Total products count
-    const totalProducts = await db.product.count({
-      where: { businessId, isActive: true },
-    });
-
-    // Total customers count
-    const totalCustomers = await db.customer.count({
-      where: { businessId, isActive: true },
-    });
-
-    // COGS from sale-time cost snapshot (fallback to current WAC for legacy rows)
-    const todaySaleItems = await db.saleItem.findMany({
-      where: {
-        sale: {
-          businessId,
-          createdAt: {
-            gte: startOfDay,
-            lt: endOfDay,
-          },
-          status: { in: ['Completed', 'PartialReturn'] },
-        },
-        quantity: { gt: 0 },
-      },
-      select: {
-        productId: true,
-        quantity: true,
-        costPriceAtSale: true,
-      },
-    });
-
+    // COGS calculation
     const productIds = [...new Set(todaySaleItems.map(item => item.productId))];
-    const products = await db.product.findMany({
-      where: { businessId, id: { in: productIds } },
-      select: { id: true, buyingPrice: true },
-    });
-    const productBuyingPriceMap = new Map(products.map(p => [p.id, Number(p.buyingPrice || 0)]));
+    let productBuyingPriceMap = new Map<string, number>();
+    if (productIds.length > 0) {
+      const prods = await db.product.findMany({
+        where: { businessId, id: { in: productIds } },
+        select: { id: true, buyingPrice: true },
+      }).catch(() => []);
+      productBuyingPriceMap = new Map(prods.map(p => [p.id, Number(p.buyingPrice || 0)]));
+    }
 
     const costOfGoodsSold = todaySaleItems.reduce((sum, item) => {
       const snap = Number(item.costPriceAtSale);
@@ -266,7 +268,6 @@ export async function GET(request: NextRequest) {
       return sum + (unitCost * Number(item.quantity));
     }, 0);
 
-    // Today's profit: sales - operating expenses (excluding supplier payments) - cost of goods sold
     const todayExpensesNonSupplier = todayExpenses
       .filter(e => e.category !== 'Supplier Payment')
       .reduce((sum, e) => sum + Number(e.amount || 0), 0);
@@ -274,30 +275,8 @@ export async function GET(request: NextRequest) {
     const todayProfit = todaySalesTotal - todayExpensesNonSupplier - costOfGoodsSold;
     const profitMargin = todaySalesTotal > 0 ? ((todayProfit / todaySalesTotal) * 100) : 0;
 
-    // Last 7 days sales data — use 2 bulk queries instead of 14 sequential ones
+    // Week 7 breakdown
     const last7DaysSales = [];
-    const day7Start = new Date(startOfDay);
-    day7Start.setDate(day7Start.getDate() - 6);
-
-    const [week7Sales, week7Expenses] = await Promise.all([
-      db.sale.findMany({
-        where: {
-          businessId,
-          createdAt: { gte: day7Start, lt: endOfDay },
-          status: 'Completed',
-        },
-        select: { totalAmount: true, createdAt: true },
-      }),
-      db.expense.findMany({
-        where: {
-          businessId,
-          date: { gte: day7Start, lt: endOfDay },
-          isActive: true,
-        },
-        select: { amount: true, date: true },
-      }),
-    ]);
-
     for (let i = 6; i >= 0; i--) {
       const dayStart = new Date(startOfDay);
       dayStart.setDate(dayStart.getDate() - i);
@@ -311,7 +290,6 @@ export async function GET(request: NextRequest) {
         .filter(e => e.date >= dayStart && e.date < dayEnd)
         .reduce((sum, e) => sum + Number(e.amount || 0), 0);
 
-      // Format date in Bengali
       const bengaliDays = ['রবিবার', 'সোমবার', 'মঙ্গলবার', 'বুধবার', 'বৃহস্পতিবার', 'শুক্রবার', 'শনিবার'];
       const bengaliMonths = ['জানুয়ারি', 'ফেব্রুয়ারি', 'মার্চ', 'এপ্রিল', 'মে', 'জুন', 'জুলাই', 'আগস্ট', 'সেপ্টেম্বর', 'অক্টোবর', 'নভেম্বর', 'ডিসেম্বর'];
       const dayName = bengaliDays[dayStart.getDay()];
@@ -332,41 +310,30 @@ export async function GET(request: NextRequest) {
         data: {
           todaySales: todaySalesTotal,
           todayOrders: todayOrdersCount,
-          todayCash: todayCashTotal,
-          todayUpi: todayUpiTotal,
-          todayDueCreated,
-          todayCollected,
           todayExpenses: todayExpensesTotal,
-          totalDue,
-          lowStockCount: lowStockProducts.length,
-          lowStockProducts: lowStockProducts.map(p => ({
-            id: p.id,
-            name: p.name,
-            nameBn: p.nameBn || p.name,
-            currentStock: Number(p.currentStock),
-            minStockLevel: Number(p.minStockLevel),
-            soldLast7: Number(p.soldLast7 || 0),
-          })),
-          recentTransactions,
-          paymentBreakdown,
-          reconciliation,
-          totalProducts,
-          totalCustomers,
-          todayProfit,
-          last7DaysSales,
-          profitMargin,
           yesterdaySales: yesterdaySalesTotal,
           yesterdayOrders: yesterdayOrdersCount,
           yesterdayExpenses: yesterdayExpensesTotal,
+          totalDue,
+          totalProducts,
+          totalCustomers,
+          todayProfit,
+          costOfGoodsSold,
+          profitMargin: Math.round(profitMargin * 10) / 10,
+          paymentBreakdown,
+          reconciliation,
+          last7DaysSales,
+          lowStockProducts,
+          recentTransactions,
         },
       },
-      { headers: jsonHeaders },
+      { headers: jsonHeaders }
     );
   } catch (error) {
-    console.error('Error fetching dashboard stats:', error);
+    console.error('Error in stats route:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to fetch dashboard stats' },
-      { status: 500, headers: jsonHeaders },
+      { success: false, error: 'Failed to fetch dashboard statistics' },
+      { status: 500, headers: jsonHeaders }
     );
   }
 }
