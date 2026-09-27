@@ -43,147 +43,133 @@ export async function GET(request: NextRequest) {
     day7Start.setDate(day7Start.getDate() - 6);
 
     // Run ALL independent queries concurrently to prevent worker CPU/execution timeouts
-    const [
-      todaySales,
-      yesterdaySales,
-      yesterdayExpenses,
-      customersWithDue,
-      lowStockProducts,
-      recentSales,
-      todayExpenses,
-      totalProducts,
-      totalCustomers,
-      todaySaleItems,
-      week7Sales,
-      week7Expenses,
-    ] = await Promise.all([
-      // 1. Today's sales
-      db.sale.findMany({
-        where: {
+    // Run queries sequentially or in small batches to prevent Edge Worker memory exhaustion (128MB limit)
+    // 1. Today's sales
+    const todaySales = await db.sale.findMany({
+      where: {
+        businessId,
+        createdAt: { gte: startOfDay, lt: endOfDay },
+        status: { in: ['Completed', 'PartialReturn'] },
+      },
+      include: {
+        customer: { select: { id: true, name: true } },
+      },
+    }).catch(() => []);
+
+    // 2. Yesterday's sales
+    const yesterdaySales = await db.sale.findMany({
+      where: {
+        businessId,
+        createdAt: { gte: yesterdayStart, lt: startOfDay },
+        status: 'Completed',
+      },
+    }).catch(() => []);
+
+    // 3. Yesterday's expenses
+    const yesterdayExpenses = await db.expense.findMany({
+      where: {
+        businessId,
+        date: { gte: yesterdayStart, lt: startOfDay },
+        isActive: true,
+      },
+    }).catch(() => []);
+
+    // 4. Customers with due
+    const customersWithDue = await db.customer.findMany({
+      where: { businessId, totalDue: { gt: 0 }, isActive: true },
+      select: { totalDue: true },
+    }).catch(() => []);
+
+    // 5. Low stock products
+    const lowStockProducts = await db.$queryRaw<{
+      id: string;
+      name: string;
+      nameBn: string | null;
+      currentStock: number;
+      minStockLevel: number;
+      soldLast7: number;
+    }[]>`
+      SELECT id, name, name_bn as "nameBn",
+             CAST(current_stock AS FLOAT) as "currentStock",
+             CAST(min_stock_level AS FLOAT) as "minStockLevel",
+             0 as "soldLast7"
+      FROM products
+      WHERE business_id = ${businessId}
+        AND is_active = true
+        AND current_stock <= min_stock_level
+      ORDER BY current_stock ASC
+      LIMIT 20
+    `.catch(() => []);
+
+    // 6. Recent transactions
+    const recentSales = await db.sale.findMany({
+      where: { businessId },
+      take: 10,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        customer: { select: { id: true, name: true } },
+        user: { select: { id: true, name: true, username: true } },
+        items: {
+          select: {
+            productName: true,
+            quantity: true,
+            totalPrice: true,
+          },
+        },
+      },
+    }).catch(() => []);
+
+    // 7. Today's expenses
+    const todayExpenses = await db.expense.findMany({
+      where: {
+        businessId,
+        date: { gte: startOfDay, lt: endOfDay },
+        isActive: true,
+      },
+    }).catch(() => []);
+
+    // 8. Total products count
+    const totalProducts = await db.product.count({ where: { businessId, isActive: true } }).catch(() => 0);
+
+    // 9. Total customers count
+    const totalCustomers = await db.customer.count({ where: { businessId, isActive: true } }).catch(() => 0);
+
+    // 10. Today's sale items
+    const todaySaleItems = await db.saleItem.findMany({
+      where: {
+        sale: {
           businessId,
           createdAt: { gte: startOfDay, lt: endOfDay },
           status: { in: ['Completed', 'PartialReturn'] },
         },
-        include: {
-          customer: { select: { id: true, name: true } },
-        },
-      }).catch(() => []),
+        quantity: { gt: 0 },
+      },
+      select: {
+        productId: true,
+        quantity: true,
+        costPriceAtSale: true,
+      },
+    }).catch(() => []);
 
-      // 2. Yesterday's sales
-      db.sale.findMany({
-        where: {
-          businessId,
-          createdAt: { gte: yesterdayStart, lt: startOfDay },
-          status: 'Completed',
-        },
-      }).catch(() => []),
+    // 11. Week 7 sales
+    const week7Sales = await db.sale.findMany({
+      where: {
+        businessId,
+        createdAt: { gte: day7Start, lt: endOfDay },
+        status: 'Completed',
+      },
+      select: { totalAmount: true, createdAt: true },
+    }).catch(() => []);
 
-      // 3. Yesterday's expenses
-      db.expense.findMany({
-        where: {
-          businessId,
-          date: { gte: yesterdayStart, lt: startOfDay },
-          isActive: true,
-        },
-      }).catch(() => []),
-
-      // 4. Customers with due
-      db.customer.findMany({
-        where: { businessId, totalDue: { gt: 0 }, isActive: true },
-        select: { totalDue: true },
-      }).catch(() => []),
-
-      // 5. Low stock products — fast indexed query without expensive joins
-      db.$queryRaw<{
-        id: string;
-        name: string;
-        nameBn: string | null;
-        currentStock: number;
-        minStockLevel: number;
-        soldLast7: number;
-      }[]>`
-        SELECT id, name, name_bn as "nameBn",
-               CAST(current_stock AS FLOAT) as "currentStock",
-               CAST(min_stock_level AS FLOAT) as "minStockLevel",
-               0 as "soldLast7"
-        FROM products
-        WHERE business_id = ${businessId}
-          AND is_active = true
-          AND current_stock <= min_stock_level
-        ORDER BY current_stock ASC
-        LIMIT 20
-      `.catch(() => []),
-
-      // 6. Recent transactions (last 10)
-      db.sale.findMany({
-        where: { businessId },
-        take: 10,
-        orderBy: { createdAt: 'desc' },
-        include: {
-          customer: { select: { id: true, name: true } },
-          user: { select: { id: true, name: true, username: true } },
-          items: {
-            select: {
-              productName: true,
-              quantity: true,
-              totalPrice: true,
-            },
-          },
-        },
-      }).catch(() => []),
-
-      // 7. Today's expenses
-      db.expense.findMany({
-        where: {
-          businessId,
-          date: { gte: startOfDay, lt: endOfDay },
-          isActive: true,
-        },
-      }).catch(() => []),
-
-      // 8. Total products count
-      db.product.count({ where: { businessId, isActive: true } }).catch(() => 0),
-
-      // 9. Total customers count
-      db.customer.count({ where: { businessId, isActive: true } }).catch(() => 0),
-
-      // 10. Today's sale items for COGS
-      db.saleItem.findMany({
-        where: {
-          sale: {
-            businessId,
-            createdAt: { gte: startOfDay, lt: endOfDay },
-            status: { in: ['Completed', 'PartialReturn'] },
-          },
-          quantity: { gt: 0 },
-        },
-        select: {
-          productId: true,
-          quantity: true,
-          costPriceAtSale: true,
-        },
-      }).catch(() => []),
-
-      // 11. Week 7 sales
-      db.sale.findMany({
-        where: {
-          businessId,
-          createdAt: { gte: day7Start, lt: endOfDay },
-          status: 'Completed',
-        },
-        select: { totalAmount: true, createdAt: true },
-      }).catch(() => []),
-
-      // 12. Week 7 expenses
-      db.expense.findMany({
-        where: {
-          businessId,
-          date: { gte: day7Start, lt: endOfDay },
-          isActive: true,
-        },
-        select: { amount: true, date: true },
-      }).catch(() => []),
-    ]);
+    // 12. Week 7 expenses
+    const week7Expenses = await db.expense.findMany({
+      where: {
+        businessId,
+        date: { gte: day7Start, lt: endOfDay },
+        isActive: true,
+      },
+      select: { amount: true, date: true },
+    }).catch(() => []);
 
     // Aggregate today's sales
     const todayAgg = aggregateSalePayments(todaySales);
