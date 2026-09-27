@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useNumberFormat } from '@/hooks/use-number-format';
 import { useSalesStore } from '@/stores/pos-store';
+import { SalesDB } from '@/lib/offline/indexeddb';
 import { TransactionFilters } from './TransactionFilters';
 import { TransactionTable } from './TransactionTable';
 import { TransactionDetailsDialog } from './TransactionDetailsDialog';
@@ -93,13 +94,35 @@ export function TransactionHistory() {
           // Merge local store sales that might not be synced yet if we are on the first page
           let mergedTransactions = [...apiTransactions];
           if (currentPage === 1 && !searchQuery && filterStatus === 'all' && filterPaymentMethod === 'all') {
-            const currentSales = useSalesStore.getState().sales;
             const apiIds = new Set(apiTransactions.map((t: Transaction) => t.id));
+            let localSales: any[] = useSalesStore.getState().sales || [];
+            try {
+              const idbSales = await SalesDB.getAll();
+              if (idbSales && idbSales.length > 0) {
+                const map = new Map<string, any>();
+                for (const s of idbSales) map.set(s.id, s);
+                for (const s of localSales) map.set(s.id, s);
+                localSales = Array.from(map.values());
+              }
+            } catch {
+              // fallback to in-memory store
+            }
             
             // Only prepend local sales that are not in the API response
-            const localUnsynced = currentSales
-              .filter(ls => !apiIds.has(ls.id))
-              .map(ls => ({ ...ls, createdAt: new Date(ls.createdAt || Date.now()) } as unknown as Transaction));
+            const localUnsynced = localSales
+              .filter(ls => ls && ls.id && !apiIds.has(ls.id))
+              .map(ls => ({
+                ...ls,
+                createdAt: new Date(ls.createdAt || Date.now()),
+                totalAmount: Number(ls.totalAmount ?? 0),
+                amountPaid: Number(ls.amountPaid ?? 0),
+                items: (ls.items || []).map((item: any) => ({
+                  ...item,
+                  quantity: Number(item.quantity ?? 0),
+                  unitPrice: Number(item.unitPrice ?? 0),
+                  totalPrice: Number(item.totalPrice ?? 0),
+                })),
+              } as unknown as Transaction));
               
             mergedTransactions = [...localUnsynced, ...apiTransactions];
           }

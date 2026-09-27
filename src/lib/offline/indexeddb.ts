@@ -672,6 +672,34 @@ export const SyncQueueDB = {
     return all.filter((i) => i.failed);
   },
 
+  async resetFailed(): Promise<number> {
+    try {
+      const db = await initDatabase();
+      const transaction = db.transaction(STORES.SYNC_QUEUE, 'readwrite');
+      const store = transaction.objectStore(STORES.SYNC_QUEUE);
+      return new Promise((resolve, reject) => {
+        const request = store.getAll();
+        request.onsuccess = () => {
+          const items = request.result as SyncQueueItem[];
+          let count = 0;
+          for (const item of items) {
+            if (item.failed || (!item.synced && item.retryCount >= 5)) {
+              item.failed = false;
+              item.retryCount = 0;
+              delete item.error;
+              store.put(item);
+              count++;
+            }
+          }
+          resolve(count);
+        };
+        request.onerror = () => reject(request.error);
+      });
+    } catch {
+      return 0;
+    }
+  },
+
   async incrementRetry(id: string, error?: string): Promise<void> {
     const item = await getFromStore<SyncQueueItem>(STORES.SYNC_QUEUE, id);
     if (item) {

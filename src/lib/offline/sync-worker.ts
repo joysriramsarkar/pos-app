@@ -26,7 +26,7 @@ export class OfflineSyncWorker {
    * START SYNC: Begin processing all pending actions
    * Safe to call multiple times (only runs once at a time)
    */
-  async startSync(): Promise<void> {
+  async startSync(options?: { retryFailed?: boolean }): Promise<void> {
     console.log('[SyncWorker] startSync requested. isRunning:', this.isRunning);
     if (this.isRunning) {
       return;
@@ -42,7 +42,18 @@ export class OfflineSyncWorker {
       let failureCount = 0;
 
       // Get pending sync items from SyncQueueDB
-      const pendingItems = await SyncQueueDB.getUnsynced();
+      if (options?.retryFailed) {
+        await SyncQueueDB.resetFailed();
+      }
+      let pendingItems = await SyncQueueDB.getUnsynced();
+      if (pendingItems.length === 0) {
+        const failedItems = await SyncQueueDB.getFailed();
+        if (failedItems.length > 0) {
+          console.log(`[SyncWorker] Auto-recovering ${failedItems.length} previously failed items...`);
+          await SyncQueueDB.resetFailed();
+          pendingItems = await SyncQueueDB.getUnsynced();
+        }
+      }
       console.log('[SyncWorker] Pending items found:', pendingItems.length);
 
       if (pendingItems.length === 0) {

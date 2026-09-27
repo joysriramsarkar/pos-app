@@ -155,7 +155,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     try {
       setIsSyncing(true);
       const worker = await getSyncWorker();
-      await worker.startSync();
+      await worker.startSync({ retryFailed: true });
     } catch (e) {
       console.error('Manual sync retry failed', e);
       setIsSyncing(false);
