@@ -2,7 +2,6 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { requireAuth } from '@/lib/api-middleware';
 import { requireBusinessContext } from '@/lib/tenant';
 
 export interface NotificationItem {
@@ -23,43 +22,82 @@ export interface NotificationItem {
   referenceId?: string;
 }
 
-const MAX_OUT_OF_STOCK = 15;
-const MAX_LOW_STOCK = 15;
-const MAX_DUE = 15;
-const MAX_TOTAL = 40;
-
-function toBnNum(num: number): string {
-  const bnDigits = ['০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯'];
-  return num.toString().replace(/\d/g, (d) => bnDigits[parseInt(d)]);
-}
+const MAX_OUT_OF_STOCK = 10;
+const MAX_LOW_STOCK = 10;
+const MAX_DUE = 10;
+const MAX_TOTAL = 30;
 
 export async function GET(request: NextRequest) {
-  const authResult = await requireAuth(request);
-  if (!authResult.authorized) return authResult.response!;
-
-  const ctx = await requireBusinessContext();
-  if (ctx instanceof NextResponse) return ctx;
-
-  const businessId = ctx.business.id;
-
-  const headers = { 'Content-Type': 'application/json; charset=utf-8' };
+  const headers = {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Cache-Control': 'private, max-age=60, stale-while-revalidate=120',
+  };
 
   try {
+    const ctx = await requireBusinessContext();
+    if (ctx instanceof NextResponse) return ctx;
+
+    const businessId = ctx.business.id;
     const notifications: NotificationItem[] = [];
 
-    // 1. Out of stock — capped, newest first
-    const outOfStockProducts = await db.product.findMany({
-      where: { businessId, currentStock: 0, isActive: true },
-      orderBy: { updatedAt: 'desc' },
-      take: MAX_OUT_OF_STOCK,
-      select: {
-        id: true,
-        name: true,
-        nameBn: true,
-        unit: true,
-        updatedAt: true,
-      },
-    });
+    // Parallel lightweight queries without heavy relation joins
+    const [outOfStockProducts, lowStockProducts, customersWithDue] = await Promise.all([
+      // 1. Out of stock — capped
+      db.product.findMany({
+        where: { businessId, currentStock: 0, isActive: true },
+        orderBy: { updatedAt: 'desc' },
+        take: MAX_OUT_OF_STOCK,
+        select: {
+          id: true,
+          name: true,
+          nameBn: true,
+          unit: true,
+          updatedAt: true,
+        },
+      }).catch(() => []),
+
+      // 2. Low stock via SQL — exclude already out of stock
+      db.$queryRaw<
+        Array<{
+          id: string;
+          name: string;
+          nameBn: string | null;
+          unit: string;
+          currentStock: number;
+          minStockLevel: number;
+          updatedAt: Date;
+        }>
+      >`
+        SELECT id, name, name_bn as "nameBn", unit,
+               CAST(current_stock AS FLOAT) as "currentStock",
+               CAST(min_stock_level AS FLOAT) as "minStockLevel",
+               updated_at as "updatedAt"
+        FROM products
+        WHERE business_id = ${businessId}
+          AND is_active = true
+          AND current_stock > 0
+          AND current_stock <= min_stock_level
+        ORDER BY current_stock ASC, updated_at DESC
+        LIMIT ${MAX_LOW_STOCK}
+      `.catch(() => []),
+
+      // 3. Due reminders — top balances directly from customer table (no nested sales join)
+      db.customer.findMany({
+        where: {
+          businessId,
+          totalDue: { gt: 0 },
+          isActive: true,
+        },
+        orderBy: { totalDue: 'desc' },
+        take: MAX_DUE,
+        select: {
+          id: true,
+          name: true,
+          totalDue: true,
+          updatedAt: true,
+        },
+      }).catch(() => []),
+    ]);
 
     for (const product of outOfStockProducts) {
       const name = product.nameBn || product.name;
@@ -77,31 +115,6 @@ export async function GET(request: NextRequest) {
         referenceId: product.id,
       });
     }
-
-    // 2. Low stock via SQL (avoid loading entire catalog) — exclude already out of stock
-    const lowStockProducts = await db.$queryRaw<
-      Array<{
-        id: string;
-        name: string;
-        nameBn: string | null;
-        unit: string;
-        currentStock: number;
-        minStockLevel: number;
-        updatedAt: Date;
-      }>
-    >`
-      SELECT id, name, name_bn as "nameBn", unit,
-             CAST(current_stock AS FLOAT) as "currentStock",
-             CAST(min_stock_level AS FLOAT) as "minStockLevel",
-             updated_at as "updatedAt"
-      FROM products
-      WHERE business_id = ${businessId}
-        AND is_active = true
-        AND current_stock > 0
-        AND current_stock <= min_stock_level
-      ORDER BY current_stock ASC, updated_at DESC
-      LIMIT ${MAX_LOW_STOCK}
-    `;
 
     for (const product of lowStockProducts) {
       const name = product.nameBn || product.name;
@@ -122,34 +135,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // 3. Due reminders — top balances with old open sales (cap)
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
-    const customersWithDue = await db.customer.findMany({
-      where: {
-        businessId,
-        totalDue: { gt: 0 },
-        isActive: true,
-      },
-      orderBy: { totalDue: 'desc' },
-      take: MAX_DUE * 2,
-      include: {
-        sales: {
-          where: {
-            createdAt: { lte: sevenDaysAgo },
-            paymentStatus: { in: ['Due', 'Partial'] },
-          },
-          orderBy: { createdAt: 'desc' },
-          take: 1,
-        },
-      },
-    });
-
-    let dueCount = 0;
     for (const customer of customersWithDue) {
-      if (dueCount >= MAX_DUE) break;
-      if (customer.sales.length === 0) continue;
       const due = Number(customer.totalDue);
       notifications.push({
         id: `due-payment-${customer.id}`,
@@ -160,11 +146,10 @@ export async function GET(request: NextRequest) {
         dueAmount: due,
         icon: 'wallet',
         severity: 'info',
-        createdAt: customer.sales[0].createdAt.toISOString(),
+        createdAt: customer.updatedAt.toISOString(),
         read: false,
         referenceId: customer.id,
       });
-      dueCount += 1;
     }
 
     const typeOrder: Record<string, number> = {
@@ -181,10 +166,6 @@ export async function GET(request: NextRequest) {
 
     const capped = notifications.slice(0, MAX_TOTAL);
     const unreadCount = capped.filter((n) => !n.read).length;
-    const truncated =
-      outOfStockProducts.length >= MAX_OUT_OF_STOCK ||
-      lowStockProducts.length >= MAX_LOW_STOCK ||
-      dueCount >= MAX_DUE;
 
     return NextResponse.json(
       {
@@ -192,12 +173,11 @@ export async function GET(request: NextRequest) {
         data: capped,
         unreadCount,
         meta: {
-          capped: truncated,
           maxTotal: MAX_TOTAL,
           counts: {
             outOfStock: outOfStockProducts.length,
             lowStock: lowStockProducts.length,
-            due: dueCount,
+            due: customersWithDue.length,
           },
         },
       },

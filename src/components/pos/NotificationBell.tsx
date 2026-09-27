@@ -104,7 +104,10 @@ export default function NotificationBell({ variant = 'desktop' }: NotificationBe
 
   useEffect(() => {
     fetchNotifications();
-    const interval = setInterval(fetchNotifications, 60000);
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      fetchNotifications();
+    }, 120000);
     return () => clearInterval(interval);
   }, [fetchNotifications]);
 
