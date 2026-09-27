@@ -1,4 +1,20 @@
 import { execSync } from 'child_process';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
+
+function patchOpenNextForWindows() {
+  try {
+    const filePath = 'node_modules/@opennextjs/aws/dist/build/copyTracedFiles.js';
+    if (!existsSync(filePath)) return;
+    let content = readFileSync(filePath, 'utf8');
+    if (content.includes('symlinkSync(symlink, to);') && !content.includes('cpSync(from, to')) {
+      content = content.replace(
+        'if (e.code !== "EEXIST") {\n                    throw e;\n                }',
+        'if (e.code === "EPERM") {\n                    try { cpSync(from, to, { recursive: true, dereference: true }); } catch {}\n                } else if (e.code !== "EEXIST") {\n                    throw e;\n                }'
+      );
+      writeFileSync(filePath, content, 'utf8');
+    }
+  } catch {}
+}
 
 const isVercel = process.env.VERCEL === '1';
 const isCloudflare = Boolean(
@@ -21,6 +37,7 @@ execSync('npx next build', { stdio: 'inherit' });
 
 // Step 3: Cloudflare OpenNext packaging or Standalone mode
 if (isCloudflare) {
+  patchOpenNextForWindows();
   console.log('[Build] Step 3: Packaging with OpenNext for Cloudflare Workers (--skipNextBuild)...');
   execSync('npx opennextjs-cloudflare build --skipNextBuild', { stdio: 'inherit' });
 } else {

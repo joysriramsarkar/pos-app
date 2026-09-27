@@ -1,4 +1,4 @@
-export const revalidate = 30;
+export const dynamic = 'force-dynamic';
 
 // ============================================================================
 // Products API Route - Multi-Tenant POS

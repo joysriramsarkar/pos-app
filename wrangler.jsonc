@@ -6,6 +6,13 @@
   "compatibility_flags": [
     "nodejs_compat"
   ],
+  "rules": [
+    {
+      "type": "CompiledWasm",
+      "globs": ["**/*.wasm"],
+      "fallthrough": true
+    }
+  ],
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"
@@ -20,7 +27,8 @@
   ],
   "vars": {
     "NEXTAUTH_URL": "https://pos.onuron.org",
-    "ALLOWED_ORIGINS": "https://pos.onuron.org,https://pos-app.joysriram-sarkar-56.workers.dev,http://localhost:3000"
+    "ALLOWED_ORIGINS": "https://pos.onuron.org,https://pos-app.joysriram-sarkar-56.workers.dev,http://localhost:3000",
+    "PREFER_DIRECT_DB": "false"
   },
   "observability": {
     "enabled": true
