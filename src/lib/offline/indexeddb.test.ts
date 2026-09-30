@@ -2,28 +2,41 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { isOnline } from './indexeddb';
 
 describe('isOnline', () => {
-  const originalNavigator = global.navigator;
+  const originalNavigator = globalThis.navigator;
 
   afterEach(() => {
     // Restore navigator after each test
-    global.navigator = originalNavigator;
+    Object.defineProperty(globalThis, 'navigator', {
+      value: originalNavigator,
+      configurable: true,
+      writable: true,
+    });
   });
 
   it('should return false when navigator is undefined', () => {
-    // @ts-ignore - explicitly setting to undefined for testing
-    global.navigator = undefined;
+    Object.defineProperty(globalThis, 'navigator', {
+      value: undefined,
+      configurable: true,
+      writable: true,
+    });
     expect(isOnline()).toBe(false);
   });
 
   it('should return true when navigator.onLine is true', () => {
-    // @ts-ignore
-    global.navigator = { onLine: true };
+    Object.defineProperty(globalThis, 'navigator', {
+      value: { onLine: true } as any,
+      configurable: true,
+      writable: true,
+    });
     expect(isOnline()).toBe(true);
   });
 
   it('should return false when navigator.onLine is false', () => {
-    // @ts-ignore
-    global.navigator = { onLine: false };
+    Object.defineProperty(globalThis, 'navigator', {
+      value: { onLine: false } as any,
+      configurable: true,
+      writable: true,
+    });
     expect(isOnline()).toBe(false);
   });
 });

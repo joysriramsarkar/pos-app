@@ -8,7 +8,15 @@ const setupDOM = () => {
   const window = new GlobalWindow();
   global.window = window as any;
   global.document = window.document as any;
-  global.navigator = window.navigator as any;
+  try {
+    Object.defineProperty(global, 'navigator', {
+      value: window.navigator,
+      configurable: true,
+      writable: true,
+    });
+  } catch {
+    // navigator might already be defined by the environment
+  }
   return window;
 };
 
@@ -44,7 +52,15 @@ describe('printToIframe', () => {
   afterEach(() => {
     global.window = originalWindow;
     global.document = originalDocument;
-    global.navigator = originalNavigator;
+    try {
+      Object.defineProperty(global, 'navigator', {
+        value: originalNavigator,
+        configurable: true,
+        writable: true,
+      });
+    } catch {
+      // ignore restore if unchanged
+    }
     global.setTimeout = originalSetTimeout;
 
     consoleErrorSpy.mockRestore();
