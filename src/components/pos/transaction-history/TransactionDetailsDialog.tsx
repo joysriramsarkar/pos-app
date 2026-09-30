@@ -17,11 +17,12 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
-import { Share2, X, Printer } from "lucide-react";
+import { Share2, X, Printer, MessageSquare } from "lucide-react";
 import { getPaymentStatusColor } from "./utils";
 import { Transaction, TransactionItem } from "./types";
 import { useState, useEffect } from "react";
 import { shareInvoiceFromSale, preloadPdfLibs } from "@/lib/invoicePdf";
+import { openWhatsAppReceipt } from "@/lib/receipt-share";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useIsAdmin } from "@/hooks/use-permissions";
 import { useToast } from '@/hooks/use-toast';
@@ -367,6 +368,42 @@ export function TransactionDetailsDialog({
                 >
                   <Share2 className="w-4 h-4" />
                   {isSharing ? t('sharing') : t('share_whatsapp')}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    const receiptSale = {
+                      id: transaction.id,
+                      invoiceNumber: transaction.invoiceNumber,
+                      createdAt: transaction.createdAt,
+                      subtotal: Number(transaction.totalAmount ?? 0),
+                      discount: Number(transaction.discount ?? 0),
+                      tax: Number(transaction.tax ?? 0),
+                      totalAmount: Number(transaction.totalAmount ?? 0),
+                      amountPaid: Number(transaction.amountPaid ?? 0),
+                      paymentMethod: transaction.paymentMethod,
+                      customerName: customerName,
+                      customerPhone: transaction.customer?.phone,
+                      items: transaction.items.map((i) => ({
+                        productName: i.productName,
+                        quantity: Number(i.quantity ?? 1),
+                        unitPrice: Number(i.unitPrice ?? 0),
+                        totalPrice: Number(i.totalPrice ?? 0),
+                      })),
+                    };
+                    const receiptBusiness = {
+                      name: storeConfig.name,
+                      phone: storeConfig.phone,
+                      address: storeConfig.address,
+                      currency: '₹',
+                    };
+                    openWhatsAppReceipt(receiptSale, receiptBusiness, transaction.customer?.phone || undefined);
+                  }}
+                  className="h-10 gap-2 border-emerald-500 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/20"
+                  title="WhatsApp Text Memo"
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  ডিজিটাল মেমো (WhatsApp)
                 </Button>
                 {isAdmin && transaction.status === "Completed" && (
                   <>

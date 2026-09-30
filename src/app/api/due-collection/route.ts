@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
           where: {
             businessId,
             customerId: customer.id,
-            status: 'Completed',
+            status: 'COMPLETED',
           },
           orderBy: { createdAt: 'desc' },
           select: { createdAt: true },
@@ -139,7 +139,7 @@ export async function POST(request: NextRequest) {
         data: {
           businessId,
           customerId,
-          entryType: 'debit',
+          entryType: 'DEBIT',
           amount: collectAmount,
           balanceAfter: newDueAmount,
           description: notes || `Manual due collection (${paymentMethod || 'Cash'})`,

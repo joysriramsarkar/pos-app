@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
         data: {
           businessId,
           customerId: customerId,
-          entryType: 'prepayment-added',
+          entryType: 'PREPAYMENT_ADDED',
           amount: amount,
           balanceAfter: customer.totalDue,
           description: 'Prepayment added',

@@ -73,12 +73,12 @@ export async function GET(request: NextRequest) {
       where: {
         businessId,
         createdAt: { gte: startOfDay, lt: endOfDay },
-        status: { notIn: ['Cancelled'] },
+        status: { notIn: ['CANCELLED'] },
       },
     });
 
     const todaySaleIds = todaySalesRaw
-      .filter((s) => s.status === 'Completed' || s.status === 'PartialReturn')
+      .filter((s) => s.status === 'COMPLETED' || s.status === 'PARTIAL_RETURN')
       .map((s) => s.id);
 
     const returnsToday = await db.saleReturn.findMany({
@@ -100,12 +100,12 @@ export async function GET(request: NextRequest) {
 
     // Active sales for breakdown (Completed / PartialReturn net of returns)
     const todaySales = todaySalesRaw.filter(
-      (s) => s.status === 'Completed' || s.status === 'PartialReturn',
+      (s) => s.status === 'COMPLETED' || s.status === 'PARTIAL_RETURN',
     );
 
     // Legacy negative refund sales created today
     const legacyRefundOffset = todaySalesRaw
-      .filter((s) => s.status === 'Refunded' && Number(s.totalAmount) < 0)
+      .filter((s) => s.status === 'REFUNDED' && Number(s.totalAmount) < 0)
       .reduce((sum, s) => sum + Number(s.totalAmount), 0);
 
     const grossSalesAmount = todaySales.reduce((sum, s) => {
@@ -147,7 +147,7 @@ export async function GET(request: NextRequest) {
       }
 
       if (allocatedPaid > 0) {
-        if (method === 'Mixed' || (sale.cashAmount != null && sale.upiAmount != null)) {
+        if (method === 'MIXED' || (sale.cashAmount != null && sale.upiAmount != null)) {
           const cAmt = Number(sale.cashAmount || 0);
           const uAmt = Number(sale.upiAmount || 0);
           const totalMix = cAmt + uAmt;
@@ -166,7 +166,7 @@ export async function GET(request: NextRequest) {
         } else if (method === 'UPI') {
           paymentBreakdown['ইউপিআই'].amount += allocatedPaid;
           paymentBreakdown['ইউপিআই'].count += 1;
-        } else if (method === 'Prepaid') {
+        } else if (method === 'PREPAID') {
           paymentBreakdown['বাকি'].amount += allocatedPaid;
           paymentBreakdown['বাকি'].count += 1;
         } else {
@@ -192,7 +192,7 @@ export async function GET(request: NextRequest) {
       where: {
         businessId,
         createdAt: { gte: startOfDay, lt: endOfDay },
-        changeType: 'purchase',
+        changeType: 'PURCHASE',
         purchaseId: null,
       },
       include: { product: true }
@@ -236,7 +236,7 @@ export async function GET(request: NextRequest) {
         sale: {
           businessId,
           createdAt: { gte: startOfDay, lt: endOfDay },
-          status: { in: ['Completed', 'PartialReturn'] },
+          status: { in: ['COMPLETED', 'PARTIAL_RETURN'] },
         },
         quantity: { gt: 0 },
       },
@@ -309,7 +309,7 @@ export async function GET(request: NextRequest) {
     // ---- DUE COLLECTION ----
     // Dues created today: difference between totalAmount and amountPaid on Due/Partial sales
     const salesWithDue = todaySales.filter(
-      (s) => s.paymentMethod === 'Due' || Number(s.amountPaid) < Number(s.totalAmount)
+      (s) => s.paymentMethod === 'CREDIT' || Number(s.amountPaid) < Number(s.totalAmount)
     );
     const newDuesCreated = salesWithDue.reduce(
       (sum, s) => sum + (Number(s.totalAmount) - Number(s.amountPaid)),
@@ -321,7 +321,7 @@ export async function GET(request: NextRequest) {
     const todayDebitLedger = await db.ledgerEntry.findMany({
       where: {
         businessId,
-        entryType: 'debit',
+        entryType: 'DEBIT',
         createdAt: { gte: startOfDay, lt: endOfDay },
         NOT: {
           OR: [
@@ -424,7 +424,7 @@ export async function GET(request: NextRequest) {
       where: {
         businessId,
         createdAt: { lt: startOfDay },
-        status: { in: ['Completed', 'PartialReturn'] },
+        status: { in: ['COMPLETED', 'PARTIAL_RETURN'] },
       },
       _sum: {
         cashAmount: true,
@@ -448,7 +448,7 @@ export async function GET(request: NextRequest) {
     const pastDueCollections = await db.ledgerEntry.aggregate({
       where: {
         businessId,
-        entryType: 'debit',
+        entryType: 'DEBIT',
         createdAt: { lt: startOfDay },
         NOT: {
           OR: [
@@ -469,7 +469,7 @@ export async function GET(request: NextRequest) {
       where: {
         businessId,
         createdAt: { lt: startOfDay },
-        refundMethod: 'Cash'
+        refundMethod: 'CASH'
       },
       _sum: {
         refundAmount: true,
@@ -481,7 +481,7 @@ export async function GET(request: NextRequest) {
     const pastPrepaidTopups = await db.ledgerEntry.aggregate({
       where: {
         businessId,
-        entryType: 'credit',
+        entryType: 'CREDIT',
         createdAt: { lt: startOfDay },
         OR: [
           { description: { contains: 'prepaid topup', mode: 'insensitive' } },
@@ -496,14 +496,14 @@ export async function GET(request: NextRequest) {
     const openingBalance =
       Number(pastSales._sum.cashAmount || 0) +
       Number(pastSales._sum.upiAmount || 0) +
-      Number(pastDueCollections._sum.amount || 0) +
-      Number(pastPrepaidTopups._sum.amount || 0) -
-      Number(pastExpenses._sum.amount || 0) -
-      Number(pastRefunds._sum.refundAmount || 0);
+      Number(pastDueCollections._sum?.amount || 0) +
+      Number(pastPrepaidTopups._sum?.amount || 0) -
+      Number(pastExpenses._sum?.amount || 0) -
+      Number(pastRefunds._sum?.refundAmount || 0);
 
     // Today's cash and UPI (adjusted for dues collected and refunds today)
     const todayCashRefunds = returnsToday
-      .filter(r => r.refundMethod === 'Cash' || !r.refundMethod)
+      .filter(r => r.refundMethod === 'CASH' || !r.refundMethod)
       .reduce((sum, r) => sum + Number(r.refundAmount), 0);
 
     const todayCashTotal = todaySales.reduce((sum, s) => sum + Number(s.cashAmount || 0), 0) + duesCollected - todayCashRefunds;

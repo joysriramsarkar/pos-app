@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
         data: {
           businessId,
           customerId,
-          entryType: 'prepayment-withdraw',
+          entryType: 'PREPAYMENT_WITHDRAW',
           amount,
           balanceAfter: toMoneyNumber(Number(customer.totalDue)),
           description: 'অ্যাডভান্স ব্যালেন্স থেকে নগদ উত্তোলন',

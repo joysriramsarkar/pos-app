@@ -130,3 +130,44 @@ export const rolePermissions: Record<UserRole, string[]> = {
   CASHIER: getPermissionsForRole("CASHIER"),
   VIEWER: getPermissionsForRole("VIEWER"),
 };
+
+/**
+ * Maximum discount percentage each role is allowed to grant without manager approval.
+ * OWNER & ADMIN: 100% (unlimited)
+ * MANAGER: 25%
+ * CASHIER: 10%
+ * VIEWER: 0%
+ */
+export const ROLE_DISCOUNT_LIMITS: Record<BusinessRole, number> = {
+  OWNER: 100,
+  ADMIN: 100,
+  MANAGER: 25,
+  CASHIER: 10,
+  VIEWER: 0,
+};
+
+export interface DiscountCheckResult {
+  allowed: boolean;
+  maxAllowed: number;
+  requiresApproval: boolean;
+  message?: string;
+}
+
+/**
+ * Check if the given discount percentage is within the role's authorized threshold.
+ */
+export function checkDiscountLimit(
+  role: BusinessRole,
+  discountPercent: number
+): DiscountCheckResult {
+  const maxAllowed = ROLE_DISCOUNT_LIMITS[role] ?? 0;
+  const allowed = discountPercent <= maxAllowed;
+  return {
+    allowed,
+    maxAllowed,
+    requiresApproval: !allowed,
+    message: allowed
+      ? undefined
+      : `আপনার পদমর্যাদায় (${role}) সর্বোচ্চ ${maxAllowed}% ছাড় অনুমোদিত। অতিরিক্ত ছাড়ের জন্য ম্যানেজার অনুমোদনের প্রয়োজন।`,
+  };
+}

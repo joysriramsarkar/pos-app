@@ -4,10 +4,11 @@
  * ledger accounting stay single-sourced.
  */
 import type { Prisma } from "@prisma/client";
+import { RefundMethod } from "@prisma/client";
 import { addMoney, multiplyMoney, subtractMoney, toMoneyDecimal, toMoneyNumber } from "@/lib/money";
 import Decimal from "decimal.js";
 
-export type RefundMethod = "Cash" | "Due" | "Prepaid";
+export { RefundMethod };
 
 export interface ReturnItemInput {
   saleItemId: string;
@@ -25,15 +26,18 @@ export interface ProcessSaleReturnInput {
 
 export function mapRefundMethod(raw: string | undefined): RefundMethod | null {
   const methodMap: Record<string, RefundMethod> = {
-    নগদ: "Cash",
-    Cash: "Cash",
-    বাকি: "Due",
-    Due: "Due",
-    Prepaid: "Prepaid",
-    প্রিপেইড: "Prepaid",
+    নগদ: "CASH",
+    Cash: "CASH",
+    CASH: "CASH",
+    বাকি: "CREDIT",
+    Due: "CREDIT",
+    CREDIT: "CREDIT",
+    Prepaid: "PREPAID",
+    PREPAID: "PREPAID",
+    প্রিপেইড: "PREPAID",
   };
-  if (!raw) return "Cash";
-  return methodMap[raw] ?? (["Cash", "Due", "Prepaid"].includes(raw) ? (raw as RefundMethod) : null);
+  if (!raw) return "CASH";
+  return methodMap[raw] ?? (["CASH", "CREDIT", "PREPAID", "UPI", "BANK"].includes(raw.toUpperCase()) ? (raw.toUpperCase() as RefundMethod) : null);
 }
 
 export async function processSaleReturn(
@@ -52,10 +56,10 @@ export async function processSaleReturn(
   if (input.businessId && sale.businessId !== input.businessId) {
     throw Object.assign(new Error("Sale not found"), { status: 404 });
   }
-  if (sale.status === "Cancelled") {
+  if ((sale.status as any) === "CANCELLED" || (sale.status as any) === "Cancelled") {
     throw Object.assign(new Error("Cannot return items from a cancelled sale"), { status: 400 });
   }
-  if (sale.status === "Refunded") {
+  if ((sale.status as any) === "REFUNDED" || (sale.status as any) === "Refunded") {
     throw Object.assign(new Error("Sale is already fully refunded"), { status: 400 });
   }
 
@@ -75,7 +79,7 @@ export async function processSaleReturn(
       quantity: { lt: 0 },
       sale: {
         notes: { contains: sale.invoiceNumber },
-        status: "Refunded",
+        status: "REFUNDED",
       },
     },
     select: { productId: true, quantity: true },
@@ -148,14 +152,14 @@ export async function processSaleReturn(
   const refundTax = toMoneyDecimal(toMoneyDecimal(sale.tax).times(refundRatio));
   const refundAmount = addMoney(subtractMoney(grossRefund, refundDiscount), refundTax);
 
-  if ((mappedMethod === "Due" || mappedMethod === "Prepaid") && !sale.customerId) {
+  if ((mappedMethod === "CREDIT" || (mappedMethod as any) === "Due" || mappedMethod === "PREPAID" || (mappedMethod as any) === "Prepaid") && !sale.customerId) {
     throw Object.assign(
       new Error("Customer required for Due or Prepaid refund method"),
       { status: 400 },
     );
   }
 
-  if (mappedMethod === "Due" && sale.customerId) {
+  if ((mappedMethod === "CREDIT" || (mappedMethod as any) === "Due") && sale.customerId) {
     const peek = await tx.$queryRaw<Array<{ totalDue: unknown }>>`
       SELECT "total_due" as "totalDue" FROM customers WHERE id = ${sale.customerId} FOR UPDATE
     `;
@@ -201,7 +205,7 @@ export async function processSaleReturn(
     data: productIds.map((pid) => ({
       businessId,
       productId: pid,
-      changeType: "return",
+      changeType: "RETURN",
       quantity: productReturnMap[pid],
       reason: `Partial return: ${sale.invoiceNumber}`,
       referenceId: newReturn.id,
@@ -227,7 +231,7 @@ export async function processSaleReturn(
 
   await tx.sale.update({
     where: { id: saleId },
-    data: { status: allItemsFullyReturned ? "Refunded" : "PartialReturn" },
+    data: { status: allItemsFullyReturned ? "REFUNDED" : "PARTIAL_RETURN" },
   });
 
   if (sale.customerId) {
@@ -250,7 +254,7 @@ export async function processSaleReturn(
     const duePortion = toMoneyDecimal(refundAmount.times(new Decimal(1).minus(paidRatio)));
     const paidPortion = toMoneyDecimal(refundAmount.times(paidRatio));
 
-    if (mappedMethod === "Due") {
+    if (mappedMethod === "CREDIT" || (mappedMethod as any) === "Due") {
       const dueReduction = Decimal.min(refundAmount, currentDue);
       const newDue = toMoneyDecimal(currentDue.minus(dueReduction));
       if (dueReduction.gt(0)) {
@@ -262,7 +266,7 @@ export async function processSaleReturn(
           data: {
             businessId,
             customerId: sale.customerId,
-            entryType: "debit",
+            entryType: "DEBIT",
             amount: dueReduction,
             balanceAfter: newDue,
             description: `Partial return: reverse due for ${sale.invoiceNumber}`,
@@ -270,7 +274,7 @@ export async function processSaleReturn(
           },
         });
       }
-    } else if (mappedMethod === "Prepaid") {
+    } else if (mappedMethod === "PREPAID" || (mappedMethod as any) === "Prepaid") {
       const dueReduction = Decimal.min(duePortion, currentDue);
       const newDue = toMoneyDecimal(currentDue.minus(dueReduction));
       const prepaidAdd = addMoney(paidPortion, duePortion.minus(dueReduction));
@@ -290,7 +294,7 @@ export async function processSaleReturn(
           data: {
             businessId,
             customerId: sale.customerId,
-            entryType: "debit",
+            entryType: "DEBIT",
             amount: dueReduction,
             balanceAfter: newDue,
             description: `Partial return: reverse due for ${sale.invoiceNumber}`,
@@ -303,7 +307,7 @@ export async function processSaleReturn(
           data: {
             businessId,
             customerId: sale.customerId,
-            entryType: "prepayment-added",
+            entryType: "PREPAYMENT_ADDED",
             amount: prepaidAdd,
             balanceAfter: newDue,
             description: `Partial return refund (prepaid): ${sale.invoiceNumber}`,
@@ -323,7 +327,7 @@ export async function processSaleReturn(
           data: {
             businessId,
             customerId: sale.customerId,
-            entryType: "debit",
+            entryType: "DEBIT",
             amount: dueReduction,
             balanceAfter: newDue,
             description: `Partial return cash: reverse due for ${sale.invoiceNumber}`,

@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
       FROM "sale_items" si
       JOIN "sales" s ON s.id = si."sale_id"
       WHERE s."created_at" >= ${thirtyDaysAgo}
-        AND s.status IN ('Completed', 'PartialReturn')
+        AND s.status IN ('COMPLETED', 'PARTIAL_RETURN')
         AND si.quantity > 0
       GROUP BY s."business_id", si."product_id"
     ` as Array<{ businessId: string; productId: string; monthly_count: number; revenue: Prisma.Decimal }>;
@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
       FROM "sale_items" si
       JOIN "sales" s ON s.id = si."sale_id"
       WHERE s."created_at" >= ${sevenDaysAgo}
-        AND s.status IN ('Completed', 'PartialReturn')
+        AND s.status IN ('COMPLETED', 'PARTIAL_RETURN')
         AND si.quantity > 0
       GROUP BY s."business_id", si."product_id"
     ` as Array<{ businessId: string; productId: string; weekly_count: number }>;

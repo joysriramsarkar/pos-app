@@ -91,8 +91,8 @@ export async function POST(request: NextRequest) {
         include: {
           purchases: {
             where: {
-              deliveryStatus: { in: ['Received', 'PartiallyReceived'] },
-              paymentStatus: { in: ['Pending', 'Partial'] },
+              deliveryStatus: { in: ['RECEIVED', 'PARTIALLY_RECEIVED'] },
+              paymentStatus: { in: ['PENDING', 'PARTIAL'] },
             },
             orderBy: { createdAt: 'asc' }, // FIFO - oldest first
           },
@@ -117,7 +117,7 @@ export async function POST(request: NextRequest) {
           amount: roundedAmount,
           category: 'Supplier Payment',
           notes: paymentNotes,
-          paymentMethod,
+          paymentMethod: (paymentMethod ? paymentMethod.toUpperCase() : 'CASH') as any,
           date: new Date(),
           supplierId,
           supplierName: supplier.name,
@@ -134,8 +134,8 @@ export async function POST(request: NextRequest) {
 
         const toApply = Math.min(remaining, poDue);
         const newPaidAmount = Number(po.paidAmount || 0) + toApply;
-        const newPaymentStatus =
-          Math.abs(newPaidAmount - Number(po.totalAmount)) < 0.01 ? 'Paid' : 'Partial';
+        const newPaymentStatus: any =
+          Math.abs(newPaidAmount - Number(po.totalAmount)) < 0.01 ? 'PAID' : 'PARTIAL';
 
         await tx.purchase.update({
           where: { id: po.id },
@@ -153,7 +153,7 @@ export async function POST(request: NextRequest) {
         where: { id: supplierId, businessId },
         include: {
           purchases: {
-            where: { deliveryStatus: { in: ['Received', 'PartiallyReceived'] } },
+            where: { deliveryStatus: { in: ['RECEIVED', 'PARTIALLY_RECEIVED'] } },
           },
           expenses: {
             where: { isActive: true, category: 'Supplier Payment' },

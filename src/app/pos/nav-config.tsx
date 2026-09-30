@@ -56,6 +56,12 @@ export type MainNavId = Exclude<
   | 'profit-report'
 >;
 
+export interface NavItem {
+  id: PageType | 'more';
+  label: string;
+  icon: ReactNode;
+}
+
 export const navItems: { id: MainNavId; label: string; icon: ReactNode }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
   { id: 'billing', label: 'Billing', icon: <ShoppingCart className="w-5 h-5" /> },

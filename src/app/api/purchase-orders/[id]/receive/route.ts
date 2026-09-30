@@ -63,7 +63,7 @@ export async function POST(
       );
     }
 
-    if (order.deliveryStatus === 'Received' || order.deliveryStatus === 'Cancelled') {
+    if (order.deliveryStatus === 'RECEIVED' || order.deliveryStatus === 'CANCELLED') {
       return NextResponse.json(
         { success: false, error: 'শুধুমাত্র পেন্ডিং বা অর্ডার করা বা আংশিক প্রাপ্ত অর্ডার প্রাপ্ত করা যাবে' },
         { status: 400 }
@@ -96,7 +96,7 @@ export async function POST(
         allFullyReceived = false;
       }
     }
-    const nextDeliveryStatus = allFullyReceived ? 'Received' : 'PartiallyReceived';
+    const nextDeliveryStatus: any = allFullyReceived ? 'RECEIVED' : 'PARTIALLY_RECEIVED';
 
     // Update stock and create stock entries in a transaction
     const result: any = await db.$transaction(async (tx) => {
@@ -153,7 +153,7 @@ export async function POST(
             data: {
               businessId,
               productId: orderItem.productId,
-              changeType: 'purchase',
+              changeType: 'PURCHASE',
               quantity: qty,
               reason: `Purchase Order Received: ${order.invoiceNumber}`,
               referenceId: order.id,
@@ -174,11 +174,11 @@ export async function POST(
       }
       const roundedTotal = Math.round(receivedTotalAmount);
       const actualAmountPaid = amountPaid !== undefined ? Math.round(amountPaid) : roundedTotal;
-      let paymentStatus = 'Paid';
+      let paymentStatus: any = 'PAID';
       if (actualAmountPaid === 0) {
-        paymentStatus = 'Pending';
+        paymentStatus = 'PENDING';
       } else if (actualAmountPaid < roundedTotal) {
-        paymentStatus = 'Partial';
+        paymentStatus = 'PARTIAL';
       }
 
       // Update purchase status to received (Paid) and set totalAmount based on received quantities
@@ -189,7 +189,7 @@ export async function POST(
           deliveryStatus: nextDeliveryStatus,
           totalAmount: roundedTotal,
           paidAmount: actualAmountPaid,
-          paymentMethod: paymentMethod || 'Cash'
+          paymentMethod: (paymentMethod ? paymentMethod.toUpperCase() : order.paymentMethod) as any
         },
         include: {
           supplier: true,

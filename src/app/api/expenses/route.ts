@@ -133,7 +133,7 @@ export async function POST(request: NextRequest) {
           amount,
           category,
           notes,
-          paymentMethod: paymentMethod || 'Cash',
+          paymentMethod: (paymentMethod ? paymentMethod.toUpperCase() : 'CASH') as any,
           date: parsedDate,
           supplierId: supplierId ?? null,
           supplierName: supplierName ?? null,
@@ -146,7 +146,7 @@ export async function POST(request: NextRequest) {
           amount,
           category,
           notes,
-          paymentMethod: paymentMethod || 'Cash',
+          paymentMethod: (paymentMethod ? paymentMethod.toUpperCase() : 'CASH') as any,
           date: parsedDate,
           supplierId: supplierId ?? null,
           supplierName: supplierName ?? null,
@@ -281,9 +281,9 @@ export async function DELETE(request: NextRequest) {
           });
           if (po) {
             const newPaid = Math.max(0, Number(po.paidAmount) - amount);
-            let paymentStatus = 'Paid';
-            if (newPaid === 0) paymentStatus = 'Pending';
-            else if (newPaid < Number(po.totalAmount)) paymentStatus = 'Partial';
+            let paymentStatus: any = 'PAID';
+            if (newPaid === 0) paymentStatus = 'PENDING';
+            else if (newPaid < Number(po.totalAmount)) paymentStatus = 'PARTIAL';
 
             await tx.purchase.update({
               where: { id: po.id },
@@ -300,7 +300,7 @@ export async function DELETE(request: NextRequest) {
               businessId,
               supplierId: expense.supplierId,
               paidAmount: { gt: 0 },
-              deliveryStatus: { in: ['Received', 'PartiallyReceived'] },
+              deliveryStatus: { in: ['RECEIVED', 'PARTIALLY_RECEIVED'] },
             },
             orderBy: { createdAt: 'desc' }, // LIFO
           });
@@ -312,9 +312,9 @@ export async function DELETE(request: NextRequest) {
             const toDeduct = Math.min(remaining, paid);
 
             const newPaid = paid - toDeduct;
-            let paymentStatus = 'Paid';
-            if (newPaid === 0) paymentStatus = 'Pending';
-            else if (newPaid < Number(po.totalAmount)) paymentStatus = 'Partial';
+            let paymentStatus: any = 'PAID';
+            if (newPaid === 0) paymentStatus = 'PENDING';
+            else if (newPaid < Number(po.totalAmount)) paymentStatus = 'PARTIAL';
 
             await tx.purchase.update({
               where: { id: po.id },

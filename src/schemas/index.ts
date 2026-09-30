@@ -133,7 +133,7 @@ export const SalesListQuerySchema = z.object({
   id: z.string().max(64).optional(),
   invoiceNumber: z.string().max(100).optional(),
   customerId: z.string().max(64).optional(),
-  status: z.enum(['Completed', 'Cancelled', 'Refunded', 'Pending']).optional(),
+  status: z.enum(['Completed', 'Cancelled', 'Refunded', 'Pending', 'COMPLETED', 'CANCELLED', 'REFUNDED', 'PENDING', 'PARTIAL_RETURN']).optional(),
   dateFrom: z.string().max(40).optional(),
   dateTo: z.string().max(40).optional(),
   page: z.coerce.number().int().min(1).max(10_000).default(1),
@@ -144,7 +144,7 @@ export type SalesListQuery = z.infer<typeof SalesListQuerySchema>;
 
 export const SaleStatusUpdateSchema = z.object({
   id: z.string().min(1, 'Sale ID is required'),
-  status: z.enum(['Cancelled', 'Refunded']),
+  status: z.enum(['Cancelled', 'Refunded', 'CANCELLED', 'REFUNDED']),
   reason: z.string().max(500).optional(),
 });
 

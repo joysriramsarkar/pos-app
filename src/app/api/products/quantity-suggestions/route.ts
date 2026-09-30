@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
         sale: {
           businessId,
           createdAt: { gte: startDate },
-          status: 'Completed',
+          status: 'COMPLETED',
         },
       },
       select: {

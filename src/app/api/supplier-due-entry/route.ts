@@ -91,9 +91,9 @@ export async function POST(request: NextRequest) {
           supplierId,
           totalAmount: Math.round(amount),
           paidAmount: 0,
-          paymentStatus: 'Pending',
-          deliveryStatus: 'Received',
-          paymentMethod: 'Due',
+          paymentStatus: 'PENDING',
+          deliveryStatus: 'RECEIVED',
+          paymentMethod: 'CREDIT',
           notes: entryDescription,
           invoiceNumber: `SUP-DUE-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`,
         }
@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
         where: { id: supplierId, businessId },
         include: {
           purchases: {
-            where: { deliveryStatus: { in: ['Received', 'PartiallyReceived'] } },
+            where: { deliveryStatus: { in: ['RECEIVED', 'PARTIALLY_RECEIVED'] } },
           },
           expenses: {
             where: {

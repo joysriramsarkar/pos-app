@@ -31,7 +31,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         where: {
           productId: id,
           createdAt: { gte: startDate, lte: endDate },
-          sale: { status: { in: ['Completed', 'PartialReturn'] } },
+          sale: { status: { in: ['COMPLETED', 'PARTIAL_RETURN'] } },
           quantity: { gt: 0 },
         },
         select: {

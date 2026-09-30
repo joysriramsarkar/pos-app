@@ -200,7 +200,7 @@ export async function applySaleStockPlans(
         data: {
           businessId: opts.businessId,
           productId: plan.productId,
-          changeType: "adjustment",
+          changeType: "ADJUSTMENT",
           quantity: gap,
           reason: `Auto-adjusted for ${prefix.toLowerCase()}: ${opts.invoiceNumber}${
             parts.length ? ` [${parts.join("; ")}]` : ""
@@ -226,7 +226,7 @@ export async function applySaleStockPlans(
       .map((plan) => ({
         businessId: opts.businessId,
         productId: plan.productId,
-        changeType: "sale",
+        changeType: "SALE",
         quantity: -plan.requiredQty,
         reason: `${prefix}: ${opts.invoiceNumber}`,
         referenceId: opts.saleId,

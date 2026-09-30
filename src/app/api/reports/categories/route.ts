@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
         createdAt: { gte: startDate, lte: endDate },
         sale: {
           businessId,
-          status: { in: ["Completed", "PartialReturn"] }
+          status: { in: ['COMPLETED', 'PARTIAL_RETURN'] }
         },
         quantity: { gt: 0 },
       },
@@ -67,6 +67,7 @@ export async function GET(request: NextRequest) {
         quantity: true,
         totalPrice: true,
         costPriceAtSale: true,
+        productId: true,
         product: { select: { category: true, subCategory: true, buyingPrice: true } },
       },
     });

@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
       where: {
         businessId,
         createdAt: { gte: startOfDay, lt: endOfDay },
-        status: { in: ['Completed', 'PartialReturn'] },
+        status: { in: ['COMPLETED', 'PARTIAL_RETURN'] },
       },
       include: {
         customer: { select: { id: true, name: true } },
@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
       where: {
         businessId,
         createdAt: { gte: yesterdayStart, lt: startOfDay },
-        status: 'Completed',
+        status: 'COMPLETED',
       },
     }).catch(() => []);
 
@@ -140,7 +140,7 @@ export async function GET(request: NextRequest) {
         sale: {
           businessId,
           createdAt: { gte: startOfDay, lt: endOfDay },
-          status: { in: ['Completed', 'PartialReturn'] },
+          status: { in: ['COMPLETED', 'PARTIAL_RETURN'] },
         },
         quantity: { gt: 0 },
       },
@@ -156,7 +156,7 @@ export async function GET(request: NextRequest) {
       where: {
         businessId,
         createdAt: { gte: day7Start, lt: endOfDay },
-        status: 'Completed',
+        status: 'COMPLETED',
       },
       select: { totalAmount: true, createdAt: true },
     }).catch(() => []);
@@ -194,15 +194,15 @@ export async function GET(request: NextRequest) {
       invoiceNumber: tx.invoiceNumber,
       totalAmount: Number(tx.totalAmount || 0),
       amountPaid: Number(tx.amountPaid || 0),
-      paymentMethod: tx.paymentMethod || 'Cash',
+      paymentMethod: tx.paymentMethod || 'CASH',
       paymentMethodLabel:
-        tx.paymentMethod === 'Cash' ? 'নগদ'
+        tx.paymentMethod === 'CASH' ? 'নগদ'
         : tx.paymentMethod === 'UPI' ? 'ইউপিআই'
-        : tx.paymentMethod === 'Mixed' ? 'মিশ্র'
-        : tx.paymentMethod === 'Prepaid' ? 'প্রিপেইড'
+        : tx.paymentMethod === 'MIXED' ? 'মিশ্র'
+        : tx.paymentMethod === 'PREPAID' ? 'প্রিপেইড'
         : 'বাকি',
-      paymentStatus: tx.paymentStatus || 'Paid',
-      status: tx.status || 'Completed',
+      paymentStatus: tx.paymentStatus || 'PAID',
+      status: tx.status || 'COMPLETED',
       createdAt: tx.createdAt.toISOString(),
       customer: tx.customer,
       user: tx.user,
@@ -221,7 +221,7 @@ export async function GET(request: NextRequest) {
       'নগদ': todayCashTotal,
       'ইউপিআই': todayUpiTotal,
       'মিশ্র': todaySales
-        .filter((s) => s.paymentMethod === 'Mixed')
+        .filter((s) => s.paymentMethod === 'MIXED')
         .reduce((sum, s) => sum + Number(s.totalAmount || 0), 0),
       'বাকি': todayDueCreated,
     };

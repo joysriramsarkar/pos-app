@@ -89,13 +89,13 @@ export async function GET(request: NextRequest) {
 
     // Calculations for Summary
     const totalOrdersCount = purchases.length;
-    const pendingOrdersCount = purchases.filter(p => p.paymentStatus === 'Pending').length;
-    const orderedOrdersCount = purchases.filter(p => p.paymentStatus === 'Ordered').length;
-    const receivedOrdersCount = purchases.filter(p => p.paymentStatus === 'Paid').length;
-    const cancelledOrdersCount = purchases.filter(p => p.paymentStatus === 'Cancelled').length;
+    const pendingOrdersCount = purchases.filter(p => p.paymentStatus === 'PENDING').length;
+    const orderedOrdersCount = purchases.filter(p => p.deliveryStatus === 'PENDING').length;
+    const receivedOrdersCount = purchases.filter(p => p.paymentStatus === 'PAID').length;
+    const cancelledOrdersCount = purchases.filter(p => p.deliveryStatus === 'CANCELLED').length;
 
     const receivedPurchasesAmount = purchases
-      .filter(p => p.paymentStatus === 'Paid')
+      .filter(p => p.paymentStatus === 'PAID')
       .reduce((sum, p) => sum + Number(p.totalAmount), 0);
 
     const totalPurchasesAmount = receivedPurchasesAmount;
@@ -114,7 +114,7 @@ export async function GET(request: NextRequest) {
       }));
 
       purchases.forEach((p) => {
-        if (p.paymentStatus === 'Paid') {
+        if (p.paymentStatus === 'PAID') {
           const hour = toZonedTime(p.createdAt, TZ).getHours();
           chartMap[hour].amount += Number(p.totalAmount);
           chartMap[hour].count += 1;
@@ -126,7 +126,7 @@ export async function GET(request: NextRequest) {
       chartData = chartMap;
     } else {
       const isYearly = parseInt(sp.get("days") || "30") === 365;
-      const intervalList = isYearly 
+      const intervalList = isYearly
         ? eachMonthOfInterval({ start: startDate, end: endDate })
         : eachDayOfInterval({ start: startDate, end: endDate });
         
@@ -137,7 +137,7 @@ export async function GET(request: NextRequest) {
       });
 
       purchases.forEach((p) => {
-        if (p.paymentStatus === 'Paid') {
+        if (p.paymentStatus === 'PAID') {
           const isYearly = parseInt(sp.get("days") || "30") === 365;
           const key = format(toZonedTime(p.createdAt, TZ), isYearly ? "yyyy-MM" : "yyyy-MM-dd");
           const day = dailyMap.get(key);
@@ -157,7 +157,7 @@ export async function GET(request: NextRequest) {
     const supplierMap = new Map<string, { id: string; name: string; orderCount: number; totalAmount: number }>();
 
     purchases.forEach((p) => {
-      if (p.paymentStatus === 'Paid') {
+      if (p.paymentStatus === 'PAID') {
         const supId = p.supplierId || "none";
         const supName = p.supplier?.name || "সাপ্লায়ার ছাড়া";
         const existing = supplierMap.get(supId) || { id: supId, name: supName, orderCount: 0, totalAmount: 0 };
@@ -176,7 +176,7 @@ export async function GET(request: NextRequest) {
     const productMap = new Map<string, { id: string; name: string; nameBn: string | null; quantity: number; totalSpent: number; avgPrice: number }>();
 
     purchases.forEach((p) => {
-      if (p.paymentStatus === 'Paid') {
+      if (p.paymentStatus === 'PAID') {
         p.items.forEach((item) => {
           const prodId = item.productId;
           const prodName = item.product?.name || item.productName || "Unknown Product";

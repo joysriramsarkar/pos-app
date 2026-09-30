@@ -112,7 +112,7 @@ async function handleGet(request: NextRequest, ctx: RouteContext & { tenant: Ten
     }
 
     if (customerId) where.customerId = customerId;
-    if (status) where.status = status;
+    if (status) where.status = (status.toUpperCase() as any);
 
     if (dateFrom || dateTo) {
       where.createdAt = {};
@@ -277,10 +277,10 @@ async function handlePost(request: NextRequest, ctx: RouteContext & { tenant: Te
       return NextResponse.json({ success: false, error: "Received amount does not cover sale payment, prepaid change, and due clearance" }, { status: 400 });
     }
 
-    let paymentStatus = "Paid";
+    let paymentStatus: any = "PAID";
     if (customerId) {
-      if (amountPaidValue.isZero()) paymentStatus = "Due";
-      else if (amountPaidValue.lt(totalAmount)) paymentStatus = "Partial";
+      if (amountPaidValue.isZero()) paymentStatus = "DUE";
+      else if (amountPaidValue.lt(totalAmount)) paymentStatus = "PARTIAL";
     } else {
       // Walk-in customers must pay full amount
       if (amountPaidValue.lt(totalAmount)) {
@@ -307,11 +307,11 @@ async function handlePost(request: NextRequest, ctx: RouteContext & { tenant: Te
           tax: taxAmount,
           totalAmount,
           amountPaid: amountPaidValue,
-          paymentMethod: paymentMethod || "Cash",
+          paymentMethod: (paymentMethod ? paymentMethod.toUpperCase() : "CASH") as any,
           cashAmount: validatedData.cashAmount ?? null,
           upiAmount: validatedData.upiAmount ?? null,
           paymentStatus,
-          status: "Completed",
+          status: "COMPLETED",
           notes: notes || null,
           offlineSynced: true,
           items: {
@@ -382,7 +382,7 @@ async function handlePost(request: NextRequest, ctx: RouteContext & { tenant: Te
               data: {
                 businessId,
                 customerId,
-                entryType: "prepayment-used",
+                entryType: "PREPAYMENT_USED",
                 amount: prepaidToUse,
                 balanceAfter: currentTotalDue,
                 description: `Prepaid used for sale: ${newSale.invoiceNumber}`,
@@ -405,7 +405,7 @@ async function handlePost(request: NextRequest, ctx: RouteContext & { tenant: Te
                 data: {
                   businessId,
                   customerId,
-                  entryType: "credit",
+                  entryType: "CREDIT",
                   amount: creditAmount,
                   balanceAfter: creditBalanceAfter,
                   description: `Credit purchase: ${newSale.invoiceNumber}`,
@@ -418,7 +418,7 @@ async function handlePost(request: NextRequest, ctx: RouteContext & { tenant: Te
                 data: {
                   businessId,
                   customerId,
-                  entryType: "debit",
+                  entryType: "DEBIT",
                   amount: externalPaidAmount,
                   balanceAfter: balanceAfterPayment,
                   description: `Payment for sale: ${newSale.invoiceNumber}`,
@@ -437,7 +437,7 @@ async function handlePost(request: NextRequest, ctx: RouteContext & { tenant: Te
               data: {
                 businessId,
                 customerId,
-                entryType: "debit",
+                entryType: "DEBIT",
                 amount: debtRepaymentAmount,
                 balanceAfter: balanceAfterPayment,
                 description: `Due clearance during sale: ${newSale.invoiceNumber}`,
@@ -451,7 +451,7 @@ async function handlePost(request: NextRequest, ctx: RouteContext & { tenant: Te
               data: {
                 businessId,
                 customerId,
-                entryType: "prepayment-added",
+                entryType: "PREPAYMENT_ADDED",
                 amount: changeAsPrepayment,
                 balanceAfter: balanceAfterPayment,
                 description: `Change added as prepaid: ${newSale.invoiceNumber}`,
@@ -608,7 +608,7 @@ async function handlePut(request: NextRequest, ctx: RouteContext & { tenant: Ten
       return NextResponse.json({ success: false, error: "Sale not found" }, { status: 404 });
     }
 
-    if (existingSale.status !== "Completed") {
+    if (existingSale.status !== "COMPLETED") {
       return NextResponse.json(
         { success: false, error: "Only completed sales can be cancelled or refunded" },
         { status: 400 },
@@ -619,7 +619,7 @@ async function handlePut(request: NextRequest, ctx: RouteContext & { tenant: Ten
       const updatedSale = await tx.sale.update({
         where: { id },
         data: {
-          status,
+          status: (status.toUpperCase() === "CANCELLED" ? "CANCELLED" : "REFUNDED") as any,
           notes: reason ? `${existingSale.notes || ""}\n${status}: ${reason}` : existingSale.notes,
           updatedAt: new Date(),
         },
@@ -673,7 +673,7 @@ async function handlePut(request: NextRequest, ctx: RouteContext & { tenant: Ten
             .map((pid, index) => ({
               businessId,
               productId: pid,
-              changeType: "return",
+              changeType: "RETURN" as const,
               quantity: quantities[index],
               reason: `${status}: ${existingSale.invoiceNumber}`,
               referenceId: existingSale.id,
@@ -701,7 +701,7 @@ async function handlePut(request: NextRequest, ctx: RouteContext & { tenant: Ten
         if (!customer) throw new Error(`Customer ${existingSale.customerId} not found`);
 
         const prepaidUsedAmount = addMoney(
-          ...relatedLedgerEntries.filter((e) => e.entryType === "prepayment-used").map((e) => e.amount),
+          ...relatedLedgerEntries.filter((e) => e.entryType === "PREPAYMENT_USED" || (e.entryType as any) === "prepayment-used").map((e) => e.amount),
         );
         const changePrepaymentAmount = addMoney(
           ...relatedLedgerEntries.filter((e) => e.description?.startsWith("Change added as prepaid:")).map((e) => e.amount),
@@ -735,7 +735,7 @@ async function handlePut(request: NextRequest, ctx: RouteContext & { tenant: Ten
             data: {
               businessId,
               customerId: existingSale.customerId,
-              entryType: "debit",
+              entryType: "DEBIT",
               amount: dueAmount,
               balanceAfter: newTotalDue,
               description: `${status}: reverse due for ${existingSale.invoiceNumber}`,
@@ -748,7 +748,7 @@ async function handlePut(request: NextRequest, ctx: RouteContext & { tenant: Ten
             data: {
               businessId,
               customerId: existingSale.customerId,
-              entryType: "prepayment-restored",
+              entryType: "PREPAYMENT_RESTORED",
               amount: prepaidUsedAmount,
               balanceAfter: newTotalDue,
               description: `${status}: prepaid restored for ${existingSale.invoiceNumber}`,
@@ -761,7 +761,7 @@ async function handlePut(request: NextRequest, ctx: RouteContext & { tenant: Ten
             data: {
               businessId,
               customerId: existingSale.customerId,
-              entryType: "credit",
+              entryType: "CREDIT",
               amount: changePrepaymentAmount,
               balanceAfter: newTotalDue,
               description: `${status}: reverse prepaid change for ${existingSale.invoiceNumber}`,

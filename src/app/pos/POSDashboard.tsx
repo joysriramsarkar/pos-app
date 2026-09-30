@@ -59,6 +59,26 @@ const PrintDialog = dynamic(
   () => import('@/components/pos/PrintDialog').then((mod) => mod.PrintDialog),
   { ssr: false }
 );
+const ShiftManagementModal = dynamic(
+  () => import('@/components/pos/ShiftManagementModal').then((mod) => mod.ShiftManagementModal),
+  { ssr: false }
+);
+const ProductImportModal = dynamic(
+  () => import('@/components/pos/ProductImportModal').then((mod) => mod.ProductImportModal),
+  { ssr: false }
+);
+const DayCloseReportModal = dynamic(
+  () => import('@/components/pos/DayCloseReportModal').then((mod) => mod.DayCloseReportModal),
+  { ssr: false }
+);
+const CashierPinModal = dynamic(
+  () => import('@/components/auth/CashierPinModal').then((mod) => mod.CashierPinModal),
+  { ssr: false }
+);
+const BarcodeLabelModal = dynamic(
+  () => import('@/components/pos/BarcodeLabelModal').then((mod) => mod.BarcodeLabelModal),
+  { ssr: false }
+);
 import type { PaymentData } from '@/components/pos/CheckoutDialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -98,6 +118,9 @@ import {
   Moon,
   Truck,
   Loader2,
+  CalendarCheck,
+  Barcode,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { useCartStore, useProductsStore, useSyncStore, useUIStore, useCustomersStore, useSalesStore, useQuantityUsageStore, useProductUsageStore } from '@/stores/pos-store';
 import { useSettingsStore } from '@/stores/settings-store';
@@ -247,6 +270,25 @@ export function POSDashboard() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [completedCheckoutSale, setCompletedCheckoutSale] = useState<Sale | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
+
+  // Phase 2-5 Features Modal States
+  const [isShiftModalOpen, setIsShiftModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isDayCloseModalOpen, setIsDayCloseModalOpen] = useState(false);
+  const [isCashierPinOpen, setIsCashierPinOpen] = useState(false);
+  const [isBarcodeLabelModalOpen, setIsBarcodeLabelModalOpen] = useState(false);
+  const [activeShift, setActiveShift] = useState<{ id: string; status: string; openingCash: number } | null>(null);
+
+  useEffect(() => {
+    fetch('/api/shifts?status=OPEN')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.shift) {
+          setActiveShift(data.shift);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Redirect to login if unauthenticated and online, or offline with no cached session
   useEffect(() => {
@@ -1000,6 +1042,57 @@ export function POSDashboard() {
         ))}
       </div>
 
+      {/* Quick Retail Tools */}
+      <div className="p-3 border-t bg-slate-50/70 dark:bg-slate-900/40 space-y-1">
+        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-2 mb-1">
+          টুলস ও রেজিস্টার
+        </p>
+        <button
+          onClick={() => setIsShiftModalOpen(true)}
+          className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-medium hover:bg-slate-200/60 dark:hover:bg-slate-800 text-foreground transition-colors group"
+        >
+          <Banknote className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform" />
+          <span className="truncate flex-1 text-left">শিফট রেজিস্টার</span>
+          {activeShift ? (
+            <span className="text-[9px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-1.5 py-0.2 rounded-full font-semibold">চালু</span>
+          ) : (
+            <span className="text-[9px] bg-slate-200 dark:bg-slate-700 text-muted-foreground px-1.5 py-0.2 rounded-full font-semibold">বন্ধ</span>
+          )}
+        </button>
+
+        <button
+          onClick={() => setIsDayCloseModalOpen(true)}
+          className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-medium hover:bg-slate-200/60 dark:hover:bg-slate-800 text-foreground transition-colors group"
+        >
+          <CalendarCheck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform" />
+          <span className="truncate flex-1 text-left">ডে ক্লোজ (Z-রিপোর্ট)</span>
+        </button>
+
+        <button
+          onClick={() => setIsImportModalOpen(true)}
+          className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-medium hover:bg-slate-200/60 dark:hover:bg-slate-800 text-foreground transition-colors group"
+        >
+          <FileSpreadsheet className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 group-hover:scale-110 transition-transform" />
+          <span className="truncate flex-1 text-left">পণ্য CSV ইম্পোর্ট</span>
+        </button>
+
+        <button
+          onClick={() => setIsBarcodeLabelModalOpen(true)}
+          className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-medium hover:bg-slate-200/60 dark:hover:bg-slate-800 text-foreground transition-colors group"
+        >
+          <Barcode className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 group-hover:scale-110 transition-transform" />
+          <span className="truncate flex-1 text-left">বারকোড স্টিকার</span>
+        </button>
+
+        <button
+          onClick={() => setIsCashierPinOpen(true)}
+          className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-medium hover:bg-slate-200/60 dark:hover:bg-slate-800 text-foreground transition-colors group"
+        >
+          <UserCog className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 group-hover:scale-110 transition-transform" />
+          <span className="truncate flex-1 text-left">কাউন্টার লক (PIN)</span>
+        </button>
+      </div>
+
       {/* Desktop Toggles and Logout */}
       <div className="p-3 border-t bg-slate-100/50 dark:bg-slate-900/30 space-y-3">
         {activeUser && (
@@ -1188,7 +1281,30 @@ export function POSDashboard() {
               </div>
             </div>
 
-            <div className="flex items-center gap-0 shrink-0">
+            <div className="flex items-center gap-0.5 shrink-0">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsShiftModalOpen(true)}
+                className="h-8 w-8 text-emerald-600 dark:text-emerald-400 hover:bg-primary/10 touch-manipulation relative"
+                aria-label="Shift register"
+                title="শিফট রেজিস্টার"
+              >
+                <Banknote className="h-4 w-4" />
+                {activeShift && (
+                  <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                )}
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsCashierPinOpen(true)}
+                className="h-8 w-8 text-indigo-600 dark:text-indigo-400 hover:bg-primary/10 touch-manipulation"
+                aria-label="Lock register"
+                title="কাউন্টার লক"
+              >
+                <UserCog className="h-4 w-4" />
+              </Button>
               {!isOnline && (
                 <Badge variant="secondary" className="text-[9px] h-5 px-1 bg-amber-500/15 text-amber-700 dark:text-amber-400 border-0 mr-0.5">
                   <WifiOff className="w-2.5 h-2.5 mr-0.5" />
@@ -1508,6 +1624,44 @@ export function POSDashboard() {
             </div>
             
             <Separator />
+
+            {/* Quick Retail Actions in Mobile Sheet */}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => { setIsShiftModalOpen(true); setMoreMenuOpen(false); }}
+                className="flex items-center gap-2 p-2.5 rounded-lg border bg-muted/30 text-xs font-medium hover:bg-muted text-foreground transition-colors text-left"
+              >
+                <Banknote className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span className="truncate">শিফট রেজিস্টার</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => { setIsDayCloseModalOpen(true); setMoreMenuOpen(false); }}
+                className="flex items-center gap-2 p-2.5 rounded-lg border bg-muted/30 text-xs font-medium hover:bg-muted text-foreground transition-colors text-left"
+              >
+                <CalendarCheck className="w-4 h-4 text-blue-600 shrink-0" />
+                <span className="truncate">ডে ক্লোজ (Z-রিপোর্ট)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => { setIsImportModalOpen(true); setMoreMenuOpen(false); }}
+                className="flex items-center gap-2 p-2.5 rounded-lg border bg-muted/30 text-xs font-medium hover:bg-muted text-foreground transition-colors text-left"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-amber-600 shrink-0" />
+                <span className="truncate">পণ্য CSV</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => { setIsBarcodeLabelModalOpen(true); setMoreMenuOpen(false); }}
+                className="flex items-center gap-2 p-2.5 rounded-lg border bg-muted/30 text-xs font-medium hover:bg-muted text-foreground transition-colors text-left"
+              >
+                <Barcode className="w-4 h-4 text-purple-600 shrink-0" />
+                <span className="truncate">বারকোড স্টিকার</span>
+              </button>
+            </div>
+            
+            <Separator />
             
             <div className="flex flex-col gap-3 pt-1 pb-4">
               {activeUser && (
@@ -1588,6 +1742,45 @@ export function POSDashboard() {
         open={isPrintDialogOpen}
         onOpenChange={setPrintDialogOpen}
         sale={currentSale}
+      />
+
+      {/* Shift Management Modal */}
+      <ShiftManagementModal
+        open={isShiftModalOpen}
+        onOpenChange={setIsShiftModalOpen}
+        onShiftStatusChange={(shift) => setActiveShift(shift)}
+      />
+
+      {/* Product CSV Import/Export Modal */}
+      <ProductImportModal
+        open={isImportModalOpen}
+        onOpenChange={setIsImportModalOpen}
+        onImportSuccess={() => refreshProductsFromServer().catch(console.error)}
+      />
+
+      {/* Day Close Z-Report Modal */}
+      <DayCloseReportModal
+        open={isDayCloseModalOpen}
+        onOpenChange={setIsDayCloseModalOpen}
+        businessName={storeName}
+      />
+
+      {/* Fast Cashier PIN Switch / Lock Modal */}
+      <CashierPinModal
+        open={isCashierPinOpen}
+        onOpenChange={setIsCashierPinOpen}
+        cashierName={activeUser?.name || 'ক্যাশিয়ার'}
+        onSuccess={() => {
+          toast({ title: 'কাউন্টার আনলক সফল', description: `${activeUser?.name || 'ক্যাশিয়ার'} প্রস্তুত` });
+        }}
+      />
+
+      {/* Barcode Label Printing Modal */}
+      <BarcodeLabelModal
+        open={isBarcodeLabelModalOpen}
+        onOpenChange={setIsBarcodeLabelModalOpen}
+        products={products}
+        businessName={storeName}
       />
   </div>
 </div>

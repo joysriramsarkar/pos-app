@@ -4,7 +4,7 @@
  */
 
 /** Sales that still count toward revenue (not cancelled / fully refunded void) */
-export const REPORT_SALE_STATUSES = ["Completed", "PartialReturn"] as const;
+export const REPORT_SALE_STATUSES = ["COMPLETED", "PARTIAL_RETURN"] as const;
 
 export type ReportSaleStatus = (typeof REPORT_SALE_STATUSES)[number];
 
@@ -15,7 +15,12 @@ export const reportSaleStatusFilter = {
 
 /** Client-side: keep rows that should appear in reports */
 export function isReportableSaleStatus(status: string | null | undefined): boolean {
-  return status === "Completed" || status === "PartialReturn";
+  return (
+    status === "COMPLETED" ||
+    status === "PARTIAL_RETURN" ||
+    status === "Completed" ||
+    status === "PartialReturn"
+  );
 }
 
 /** Canonical payment method colors (matches CSS --chart-*) */

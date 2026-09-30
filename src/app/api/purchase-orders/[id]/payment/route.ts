@@ -60,11 +60,11 @@ export async function POST(
       const newPaid = toMoneyNumber(currentPaid + roundedAmountPaid);
       const totalAmount = Number(order.totalAmount);
 
-      let paymentStatus = 'Paid';
+      let paymentStatus: any = 'PAID';
       if (newPaid === 0) {
-        paymentStatus = 'Pending';
+        paymentStatus = 'PENDING';
       } else if (newPaid < totalAmount) {
-        paymentStatus = 'Partial';
+        paymentStatus = 'PARTIAL';
       }
 
       const updatedOrder = await tx.purchase.update({
@@ -72,7 +72,7 @@ export async function POST(
         data: {
           paidAmount: newPaid,
           paymentStatus,
-          paymentMethod: paymentMethod || order.paymentMethod || 'Cash',
+          paymentMethod: (paymentMethod ? paymentMethod.toUpperCase() : order.paymentMethod) as any,
         },
       });
 

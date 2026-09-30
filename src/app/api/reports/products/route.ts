@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
     const saleItems = await prisma.saleItem.findMany({
       where: {
         createdAt: { gte: startDate, lte: endDate },
-        sale: { businessId, status: { in: ["Completed", "PartialReturn"] } },
+        sale: { businessId, status: { in: ["COMPLETED", "PARTIAL_RETURN"] } },
         quantity: { gt: 0 },
       },
       select: {

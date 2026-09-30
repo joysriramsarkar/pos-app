@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
         data: {
           businessId,
           productId,
-          changeType: 'purchase',
+          changeType: 'PURCHASE',
           quantity,
           reason: notes || `Stock purchase: ${quantity} units @ ${currencySymbol}${purchasePrice}`,
           referenceId: undefined,
@@ -125,11 +125,11 @@ export async function POST(request: NextRequest) {
           const actualAmountPaid =
             amountPaid !== undefined ? new Decimal(amountPaid) : totalAmount;
 
-          let paymentStatus = 'Paid';
+          let paymentStatus: any = 'PAID';
           if (actualAmountPaid.lte(0)) {
-            paymentStatus = 'Pending';
+            paymentStatus = 'PENDING';
           } else if (actualAmountPaid.lt(totalAmount)) {
-            paymentStatus = 'Partial';
+            paymentStatus = 'PARTIAL';
           }
 
           const purchase = await tx.purchase.create({

@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
         data: {
           businessId,
           productId,
-          changeType: 'adjustment',
+          changeType: 'ADJUSTMENT',
           quantity: -quantity,
           reason: `[${ADJUSTMENT_LABELS[adjustmentType]}] ${reason}`,
         },

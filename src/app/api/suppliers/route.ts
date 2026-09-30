@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
         where: { id, businessId },
         include: {
           purchases: {
-            where: { deliveryStatus: { in: ['Received', 'PartiallyReceived'] } },
+            where: { deliveryStatus: { in: ['RECEIVED', 'PARTIALLY_RECEIVED'] } },
             orderBy: { createdAt: 'desc' }
           },
           expenses: {
@@ -145,7 +145,7 @@ export async function GET(request: NextRequest) {
         orderBy: [{ name: 'asc' }],
         include: {
           purchases: {
-            where: { deliveryStatus: { in: ['Received', 'PartiallyReceived'] } },
+            where: { deliveryStatus: { in: ['RECEIVED', 'PARTIALLY_RECEIVED'] } },
             select: { totalAmount: true, paidAmount: true, paymentStatus: true }
           },
           expenses: {

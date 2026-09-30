@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
         where: {
           productId,
           createdAt: { gte: startDate, lte: endDate },
-          sale: { businessId, status: 'Completed' },
+          sale: { businessId, status: 'COMPLETED' },
         },
         select: {
           quantity: true, unitPrice: true, totalPrice: true, createdAt: true,

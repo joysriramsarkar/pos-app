@@ -26,6 +26,7 @@ import {
 } from './DashboardSections';
 import { getComparison, getGreetingKey } from './utils';
 import { normalizeSearchText } from '@/lib/utils';
+import { DashboardAlerts } from './DashboardAlerts';
 
 export function Dashboard({ onNavigate, refreshKey }: DashboardProps) {
   const t = useTranslations('Dashboard');
@@ -212,6 +213,8 @@ export function Dashboard({ onNavigate, refreshKey }: DashboardProps) {
         currentTime={currentTime}
         onOpenDailySummary={() => setDailySummaryOpen(true)}
       />
+
+      <DashboardAlerts onNavigate={onNavigate} />
 
       <StatsGrid
         stats={stats}

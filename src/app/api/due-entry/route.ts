@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
         data: {
           businessId,
           customerId,
-          entryType: 'credit', // Credit increases due balance
+          entryType: 'CREDIT', // Credit increases due balance
           amount: amount,
           balanceAfter: newDueAmount,
           description: entryDescription,

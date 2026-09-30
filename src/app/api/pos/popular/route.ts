@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
         createdAt: { gte: thirtyDaysAgo },
         sale: {
           businessId,
-          status: { in: ["Completed", "PartialReturn"] }
+          status: { in: ["COMPLETED", "PARTIAL_RETURN"] }
         },
         quantity: { gt: 0 },
       },

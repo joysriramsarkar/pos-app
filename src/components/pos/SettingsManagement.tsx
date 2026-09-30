@@ -20,6 +20,7 @@ import LanguageTab from "./settings/LanguageTab";
 import BillingTab from "./settings/BillingTab";
 import AboutTab from "./settings/AboutTab";
 import { ShieldCheck } from "lucide-react";
+import { BusinessProfileCard } from "@/components/settings/BusinessProfileCard";
 
 export default function SettingsManagement() {
   const t = useTranslations("Settings");
@@ -173,7 +174,8 @@ export default function SettingsManagement() {
             </TabsList>
 
             <div className="flex-1 min-w-0 w-full">
-              <TabsContent value="profile" className="m-0 focus-visible:outline-none focus-visible:ring-0">
+              <TabsContent value="profile" className="m-0 focus-visible:outline-none focus-visible:ring-0 space-y-6">
+                <BusinessProfileCard />
                 <ProfileTab localSettings={localSettings} handleChange={handleChange} handleSave={handleSave} isSaving={isSaving} hasChanges={hasProfileChanges} />
               </TabsContent>
               <TabsContent value="printer" className="m-0 focus-visible:outline-none focus-visible:ring-0">

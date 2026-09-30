@@ -12,6 +12,97 @@ datasource db {
   // দেখো: https://pris.ly/d/config-datasource
 }
 
+// ============================================================================
+// DOMAIN ENUMS — typed instead of raw strings (prevents typo-driven bugs)
+// ============================================================================
+
+enum PaymentStatus {
+  PAID
+  PARTIAL
+  DUE
+}
+
+enum SaleStatus {
+  COMPLETED
+  CANCELLED
+  REFUNDED
+  PARTIAL_RETURN
+}
+
+enum PaymentMethod {
+  CASH
+  UPI
+  CARD
+  BANK
+  CREDIT
+  PREPAID
+  MIXED
+}
+
+enum StockChangeType {
+  PURCHASE
+  SALE
+  RETURN
+  ADJUSTMENT
+  TRANSFER_IN
+  TRANSFER_OUT
+  DAMAGE
+  OPENING
+}
+
+enum PurchasePaymentStatus {
+  PAID
+  PENDING
+  PARTIAL
+}
+
+enum PurchaseDeliveryStatus {
+  PENDING
+  ORDERED
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
+}
+
+enum RefundMethod {
+  CASH
+  PREPAID
+  UPI
+  BANK
+  CARD
+  CREDIT
+  ORIGINAL_METHOD
+}
+
+enum DiscountType {
+  FIXED
+  PERCENTAGE
+}
+
+enum LedgerEntryType {
+  CREDIT
+  DEBIT
+  PREPAYMENT_ADDED
+  PREPAYMENT_USED
+  PREPAYMENT_WITHDRAW
+  PREPAYMENT_RESTORED
+}
+
+enum SupplierLedgerType {
+  PURCHASE
+  PAYMENT
+  RETURN
+  ADJUSTMENT
+}
+
+enum ExpensePaymentMethod {
+  CASH
+  UPI
+  BANK
+  CARD
+  CHEQUE
+  OTHER
+}
 
 // ============================================================================
 // MULTI-TENANT FOUNDATION
@@ -45,12 +136,14 @@ model Business {
   expenses         Expense[]
   stockHistory     StockHistory[]
   ledgerEntries    LedgerEntry[]
+  supplierLedger   SupplierLedgerEntry[]
   saleReturns      SaleReturn[]
   auditLogs        AuditLog[]
   syncQueues       SyncQueue[]
   settings         BusinessSetting[]
   dailyRecords     DailyManualRecord[]
   productPopularity ProductPopularity[]
+  cashRegisterShifts CashRegisterShift[]
 
   @@map("businesses")
 }
@@ -155,16 +248,17 @@ model Category {
 }
 
 model StockHistory {
-  id           String   @id @default(cuid())
-  businessId   String   @map("business_id")
-  productId    String   @map("product_id")
-  changeType   String // "purchase", "sale", "adjustment", "return"
+  id           String          @id @default(cuid())
+  businessId   String          @map("business_id")
+  productId    String          @map("product_id")
+  changeType   StockChangeType // PURCHASE, SALE, ADJUSTMENT, RETURN, etc.
   quantity     Decimal // Positive for addition, negative for deduction
   reason       String?
   referenceId  String?     @map("reference_id") // Sale ID, Purchase ID, or Return ID
   saleId       String?     @map("sale_id")
   purchaseId   String?     @map("purchase_id")
   saleReturnId String?     @map("sale_return_id")
+  userId       String?     @map("user_id") // Who made the change (for adjustments)
   createdAt    DateTime    @default(now()) @map("created_at")
 
   business   Business    @relation(fields: [businessId], references: [id], onDelete: Cascade)
@@ -175,6 +269,7 @@ model StockHistory {
 
   @@index([businessId])
   @@index([businessId, productId])
+  @@index([businessId, productId, createdAt])
   @@index([createdAt])
   @@map("stock_history")
 }
@@ -233,15 +328,15 @@ model Customer {
 }
 
 model LedgerEntry {
-  id           String   @id @default(cuid())
-  businessId   String   @map("business_id")
-  customerId   String   @map("customer_id")
-  entryType    String // "credit" (customer owes more), "debit" (customer paid)
+  id           String           @id @default(cuid())
+  businessId   String           @map("business_id")
+  customerId   String           @map("customer_id")
+  entryType    LedgerEntryType // CREDIT (customer owes more), DEBIT (customer paid)
   amount       Decimal
-  balanceAfter Decimal  @map("balance_after") // Balance after this transaction
+  balanceAfter Decimal          @map("balance_after") // Balance after this transaction
   description  String?
-  referenceId  String?  @map("reference_id") // Sale ID or Payment ID
-  createdAt    DateTime @default(now()) @map("created_at")
+  referenceId  String?          @map("reference_id") // Sale ID or Payment ID
+  createdAt    DateTime         @default(now()) @map("created_at")
 
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
@@ -259,33 +354,37 @@ model LedgerEntry {
 // ============================================================================
 
 model Sale {
-  id            String   @id @default(cuid())
-  businessId    String   @map("business_id")
-  invoiceNumber String   @map("invoice_number")
-  customerId    String?  @map("customer_id")
-  userId        String?  @map("user_id") // Track which user created this sale
-  subtotal      Decimal  @default(0)
-  discount      Decimal  @default(0)
-  tax           Decimal  @default(0)
-  totalAmount   Decimal  @default(0) @map("total_amount")
-  amountPaid    Decimal  @default(0) @map("amount_paid")
-  paymentMethod String   @default("Cash") @map("payment_method") // Cash, UPI, Due
-  paymentStatus String   @default("Paid") @map("payment_status") // Paid, Partial, Due
-  status        String   @default("Completed") // Completed, Cancelled, Refunded, PartialReturn
-  cashAmount    Decimal? @map("cash_amount")
-  upiAmount     Decimal? @map("upi_amount")
+  id            String        @id @default(cuid())
+  businessId    String        @map("business_id")
+  invoiceNumber String        @map("invoice_number")
+  customerId    String?       @map("customer_id")
+  userId        String?       @map("user_id") // Track which user created this sale
+  shiftId       String?       @map("shift_id") // Cash register shift
+  subtotal      Decimal       @default(0)
+  discount      Decimal       @default(0)
+  discountType  DiscountType  @default(FIXED) @map("discount_type")
+  tax           Decimal       @default(0)
+  totalAmount   Decimal       @default(0) @map("total_amount")
+  amountPaid    Decimal       @default(0) @map("amount_paid")
+  paymentMethod PaymentMethod @default(CASH) @map("payment_method")
+  paymentStatus PaymentStatus @default(PAID) @map("payment_status")
+  status        SaleStatus    @default(COMPLETED)
+  cashAmount    Decimal?      @map("cash_amount")
+  upiAmount     Decimal?      @map("upi_amount")
   notes         String?
-  offlineSynced Boolean  @default(true) @map("offline_synced") // For offline-first
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  offlineSynced Boolean       @default(true) @map("offline_synced") // For offline-first
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
 
   // Relations
-  business  Business     @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  customer  Customer?    @relation(fields: [customerId], references: [id])
-  user      User?        @relation(fields: [userId], references: [id])
-  items     SaleItem[]
-  returns   SaleReturn[]
+  business     Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customer     Customer?         @relation(fields: [customerId], references: [id])
+  user         User?             @relation(fields: [userId], references: [id])
+  shift        CashRegisterShift? @relation(fields: [shiftId], references: [id])
+  items        SaleItem[]
+  returns      SaleReturn[]
   stockHistory StockHistory[]
+  payments     Payment[]
 
   @@unique([businessId, invoiceNumber]) // tenant-scoped invoice number
   @@index([businessId])
@@ -298,15 +397,19 @@ model Sale {
 }
 
 model SaleItem {
-  id              String   @id @default(cuid())
-  saleId          String   @map("sale_id")
-  productId       String   @map("product_id")
-  productName     String   @map("product_name") // Snapshot at time of sale
+  id              String       @id @default(cuid())
+  saleId          String       @map("sale_id")
+  productId       String       @map("product_id")
+  productName     String       @map("product_name") // Snapshot at time of sale
   quantity        Decimal
-  unitPrice       Decimal  @map("unit_price") // Selling price at time of sale
-  costPriceAtSale Decimal  @default(0) @map("cost_price_at_sale") // WAC/cost snapshot for historical profit
-  totalPrice      Decimal  @map("total_price")
-  createdAt       DateTime @default(now()) @map("created_at")
+  unitPrice       Decimal      @map("unit_price") // Selling price at time of sale
+  costPriceAtSale Decimal      @default(0) @map("cost_price_at_sale") // WAC/cost snapshot for historical profit
+  discount        Decimal      @default(0) // Per-item discount amount
+  discountType    DiscountType @default(FIXED) @map("discount_type")
+  totalPrice      Decimal      @map("total_price") // After item-level discount
+  taxRate         Decimal      @default(0) @map("tax_rate") // Tax rate applied
+  taxAmount       Decimal      @default(0) @map("tax_amount")
+  createdAt       DateTime     @default(now()) @map("created_at")
 
   sale        Sale             @relation(fields: [saleId], references: [id], onDelete: Cascade)
   product     Product          @relation(fields: [productId], references: [id])
@@ -317,19 +420,38 @@ model SaleItem {
   @@map("sale_items")
 }
 
+// Separate Payment records for split-payment support and reconciliation
+model Payment {
+  id            String        @id @default(cuid())
+  saleId        String        @map("sale_id")
+  businessId    String        @map("business_id")
+  method        PaymentMethod
+  amount        Decimal
+  referenceNo   String?       @map("reference_no") // UPI transaction ID, card ref, etc.
+  notes         String?
+  createdAt     DateTime      @default(now()) @map("created_at")
+
+  sale     Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  @@index([saleId])
+  @@index([businessId])
+  @@index([businessId, method])
+  @@map("payments")
+}
+
 // ============================================================================
 // PARTIAL RETURNS
 // ============================================================================
 
 model SaleReturn {
-  id           String   @id @default(cuid())
-  businessId   String   @map("business_id")
-  saleId       String   @map("sale_id")
-  userId       String?  @map("user_id")
-  refundAmount Decimal  @map("refund_amount")
-  refundMethod String   @default("Cash") @map("refund_method") // Cash, Prepaid
+  id           String       @id @default(cuid())
+  businessId   String       @map("business_id")
+  saleId       String       @map("sale_id")
+  userId       String?      @map("user_id")
+  refundAmount Decimal      @map("refund_amount")
+  refundMethod RefundMethod @default(CASH) @map("refund_method")
   reason       String?
-  createdAt    DateTime @default(now()) @map("created_at")
+  createdAt    DateTime     @default(now()) @map("created_at")
 
   business     Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
   sale         Sale             @relation(fields: [saleId], references: [id], onDelete: Cascade)
@@ -367,40 +489,64 @@ model SaleReturnItem {
 // ============================================================================
 
 model Supplier {
-  id        String   @id @default(cuid())
-  businessId String  @map("business_id")
-  name      String
-  nameEn    String?  @map("name_en")
-  phone     String?
-  address   String?
-  email     String?
-  gstNumber String?  @map("gst_number")
-  notes     String?
-  isActive  Boolean  @default(true) @map("is_active")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id         String   @id @default(cuid())
+  businessId String   @map("business_id")
+  name       String
+  nameEn     String?  @map("name_en")
+  phone      String?
+  address    String?
+  email      String?
+  gstNumber  String?  @map("gst_number")
+  notes      String?
+  totalDue   Decimal  @default(0) @map("total_due") // Amount owed to supplier
+  totalPaid  Decimal  @default(0) @map("total_paid") // Total paid historically
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
 
-  business  Business   @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  purchases Purchase[]
-  expenses  Expense[]
+  business       Business              @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  purchases      Purchase[]
+  expenses       Expense[]
+  ledgerEntries  SupplierLedgerEntry[]
 
   @@index([businessId])
   @@map("suppliers")
 }
 
+// Supplier Ledger — mirrors customer LedgerEntry for symmetric payable tracking
+model SupplierLedgerEntry {
+  id           String             @id @default(cuid())
+  businessId   String             @map("business_id")
+  supplierId   String             @map("supplier_id")
+  entryType    SupplierLedgerType
+  amount       Decimal
+  balanceAfter Decimal            @map("balance_after")
+  description  String?
+  referenceId  String?            @map("reference_id") // Purchase ID or Payment ID
+  createdAt    DateTime           @default(now()) @map("created_at")
+
+  business Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  supplier Supplier  @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+  @@index([businessId, supplierId])
+  @@index([businessId, supplierId, createdAt])
+  @@map("supplier_ledger_entries")
+}
+
 model Purchase {
-  id             String   @id @default(cuid())
-  businessId     String   @map("business_id")
-  supplierId     String?  @map("supplier_id")
-  invoiceNumber  String?  @map("invoice_number")
-  totalAmount    Decimal  @default(0) @map("total_amount")
-  paidAmount     Decimal  @default(0) @map("paid_amount")
-  paymentStatus  String   @default("Pending") @map("payment_status") // Paid, Pending, Partial
-  deliveryStatus String   @default("Pending") @map("delivery_status") // Pending, Ordered, PartiallyReceived, Received, Cancelled
+  id             String                 @id @default(cuid())
+  businessId     String                 @map("business_id")
+  supplierId     String?                @map("supplier_id")
+  invoiceNumber  String?                @map("invoice_number")
+  totalAmount    Decimal                @default(0) @map("total_amount")
+  paidAmount     Decimal                @default(0) @map("paid_amount")
+  paymentStatus  PurchasePaymentStatus  @default(PENDING) @map("payment_status")
+  deliveryStatus PurchaseDeliveryStatus @default(PENDING) @map("delivery_status")
   notes          String?
-  paymentMethod  String   @default("Cash") @map("payment_method") // Cash, UPI, Bank, etc.
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  paymentMethod  PaymentMethod          @default(CASH) @map("payment_method")
+  createdAt      DateTime               @default(now()) @map("created_at")
+  updatedAt      DateTime               @updatedAt @map("updated_at")
 
   business     Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
   supplier     Supplier?      @relation(fields: [supplierId], references: [id])
@@ -495,10 +641,11 @@ model User {
   updatedAt              DateTime  @updatedAt @map("updated_at")
 
   // Relations
-  memberships Membership[]
-  sales       Sale[]
-  saleReturns SaleReturn[]
-  auditLogs   AuditLog[]
+  memberships        Membership[]
+  sales              Sale[]
+  saleReturns        SaleReturn[]
+  auditLogs          AuditLog[]
+  cashRegisterShifts CashRegisterShift[]
 
   @@map("users")
 }
@@ -538,17 +685,17 @@ model RolePermission {
 // ============================================================================
 
 model Expense {
-  id            String   @id @default(cuid())
-  businessId    String   @map("business_id")
+  id            String               @id @default(cuid())
+  businessId    String               @map("business_id")
   amount        Decimal
   category      String
   notes         String?
-  paymentMethod String   @default("Cash") @map("payment_method")
-  date          DateTime @default(now())
-  supplierId    String?  @map("supplier_id")
-  supplierName  String?  @map("supplier_name")
-  isActive      Boolean  @default(true) @map("is_active")
-  createdAt     DateTime @default(now()) @map("created_at")
+  paymentMethod ExpensePaymentMethod @default(CASH) @map("payment_method")
+  date          DateTime             @default(now())
+  supplierId    String?              @map("supplier_id")
+  supplierName  String?              @map("supplier_name")
+  isActive      Boolean              @default(true) @map("is_active")
+  createdAt     DateTime             @default(now()) @map("created_at")
 
   business Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
   supplier Supplier? @relation(fields: [supplierId], references: [id])
@@ -610,4 +757,57 @@ model DailyManualRecord {
   @@unique([businessId, date]) // tenant-scoped daily record
   @@index([businessId])
   @@map("daily_manual_records")
+}
+
+// ============================================================================
+// CASH REGISTER & SHIFT MANAGEMENT
+// ============================================================================
+
+model CashRegisterShift {
+  id             String    @id @default(cuid())
+  businessId     String    @map("business_id")
+  userId         String    @map("user_id") // Cashier who opened the shift
+  shiftNumber    Int       @map("shift_number") // Auto-increment per business
+  openedAt       DateTime  @default(now()) @map("opened_at")
+  closedAt       DateTime? @map("closed_at")
+  openingCash    Decimal   @default(0) @map("opening_cash")
+  closingCash    Decimal?  @map("closing_cash") // Actual cash counted at end
+  expectedCash   Decimal?  @map("expected_cash") // Calculated expected cash
+  cashDifference Decimal?  @map("cash_difference") // closingCash - expectedCash
+  totalSales     Decimal   @default(0) @map("total_sales")
+  totalExpenses  Decimal   @default(0) @map("total_expenses")
+  totalRefunds   Decimal   @default(0) @map("total_refunds")
+  notes          String?
+  isActive       Boolean   @default(true) @map("is_active") // true = shift is open
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id])
+  sales    Sale[]
+
+  @@unique([businessId, shiftNumber])
+  @@index([businessId])
+  @@index([businessId, userId])
+  @@index([businessId, isActive])
+  @@map("cash_register_shifts")
+}
+
+// ============================================================================
+// TAX CATEGORIES (GST-ready)
+// ============================================================================
+
+model TaxCategory {
+  id         String   @id @default(cuid())
+  businessId String   @map("business_id")
+  name       String   // e.g., "GST 5%", "GST 12%", "GST 18%", "Exempt"
+  rate       Decimal  // Percentage (e.g., 5, 12, 18, 0)
+  cgst       Decimal  @default(0) // CGST component
+  sgst       Decimal  @default(0) // SGST component
+  igst       Decimal  @default(0) // IGST (interstate)
+  isDefault  Boolean  @default(false) @map("is_default")
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@unique([businessId, name])
+  @@index([businessId])
+  @@map("tax_categories")
 }

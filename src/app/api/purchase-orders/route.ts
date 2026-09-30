@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { db } from '@/lib/db';
+import { PurchasePaymentStatus, PurchaseDeliveryStatus, PaymentMethod } from '@prisma/client';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from "@/lib/api-middleware";
 import { requireBusinessContext, checkPermission } from '@/lib/tenant';
@@ -56,9 +57,9 @@ export async function GET(request: NextRequest) {
 
     const mappedOrders = purchases.map((p) => {
       let mappedStatus = 'পেন্ডিং';
-      if (p.deliveryStatus === 'Ordered') mappedStatus = 'অর্ডার করা';
-      else if (p.deliveryStatus === 'Received' || p.deliveryStatus === 'PartiallyReceived') mappedStatus = 'প্রাপ্ত';
-      else if (p.deliveryStatus === 'Cancelled') mappedStatus = 'বাতিল';
+      if (p.deliveryStatus === 'PENDING') mappedStatus = 'অর্ডার করা';
+      else if (p.deliveryStatus === 'RECEIVED' || p.deliveryStatus === 'PARTIALLY_RECEIVED') mappedStatus = 'প্রাপ্ত';
+      else if (p.deliveryStatus === 'CANCELLED') mappedStatus = 'বাতিল';
 
       return {
         id: p.id,
@@ -235,16 +236,16 @@ export async function POST(request: NextRequest) {
 
           if (directReceive) {
             const roundedTotal = Math.round(totalAmount);
-            let paymentStatus = 'Paid';
+            let paymentStatus: PurchasePaymentStatus = 'PAID';
             const actualAmountPaid = amountPaid !== undefined ? Math.round(amountPaid) : roundedTotal;
             if (actualAmountPaid === 0) {
-              paymentStatus = 'Pending';
+              paymentStatus = 'PENDING';
             } else if (actualAmountPaid < roundedTotal) {
-              paymentStatus = 'Partial';
+              paymentStatus = 'PARTIAL';
             }
 
             // Create and receive in one transaction
-            const p = await tx.purchase.create({
+            const p: any = await tx.purchase.create({
               data: {
                 businessId,
                 invoiceNumber: orderNumber,
@@ -252,8 +253,8 @@ export async function POST(request: NextRequest) {
                 totalAmount: roundedTotal,
                 paidAmount: actualAmountPaid,
                 paymentStatus,
-                paymentMethod: paymentMethod || 'Cash',
-                deliveryStatus: 'Received',
+                paymentMethod: (paymentMethod ? paymentMethod.toUpperCase() : 'CASH') as any,
+                deliveryStatus: 'RECEIVED',
                 notes: finalNotes || null,
                 createdAt: purchaseDate,
                  items: {
@@ -320,7 +321,7 @@ export async function POST(request: NextRequest) {
                   data: {
                     businessId,
                     productId: item.productId,
-                    changeType: 'purchase',
+                    changeType: 'PURCHASE',
                     quantity: qty,
                     reason: `Direct Purchase: ${p.invoiceNumber}`,
                     referenceId: p.id,
@@ -360,9 +361,9 @@ export async function POST(request: NextRequest) {
                 supplierId: (supplierId && supplierId !== 'none') ? supplierId : null,
                 totalAmount: Math.round(totalAmount),
                 paidAmount: 0,
-                paymentStatus: 'Pending',
-                paymentMethod: paymentMethod || 'Cash',
-                deliveryStatus: 'Pending',
+                paymentStatus: 'PENDING',
+                paymentMethod: paymentMethod || 'CASH',
+                deliveryStatus: 'PENDING',
                 notes: finalNotes || null,
                 createdAt: purchaseDate,
                  items: {
@@ -422,11 +423,11 @@ export async function POST(request: NextRequest) {
       ipAddress: getIp(request)
     });
 
-    const isPaid = purchase.paymentStatus === 'Paid';
+    const isPaid = purchase.paymentStatus === 'PAID';
     let mappedStatus = 'পেন্ডিং';
-    if (purchase.deliveryStatus === 'Ordered') mappedStatus = 'অর্ডার করা';
-    else if (purchase.deliveryStatus === 'Received' || purchase.deliveryStatus === 'PartiallyReceived') mappedStatus = 'প্রাপ্ত';
-    else if (purchase.deliveryStatus === 'Cancelled') mappedStatus = 'বাতিল';
+    if (purchase.deliveryStatus === 'ORDERED') mappedStatus = 'অর্ডার করা';
+    else if (purchase.deliveryStatus === 'RECEIVED' || purchase.deliveryStatus === 'PARTIALLY_RECEIVED') mappedStatus = 'প্রাপ্ত';
+    else if (purchase.deliveryStatus === 'CANCELLED') mappedStatus = 'বাতিল';
 
     const mappedOrder = {
       id: purchase.id,
@@ -513,10 +514,10 @@ export async function PUT(request: NextRequest) {
 
     let updated: any;
 
-    if (status === 'অর্ডার করা' && order.deliveryStatus === 'Pending') {
+    if (status === 'অর্ডার করা' && order.deliveryStatus === 'PENDING') {
       updated = await db.purchase.update({
         where: { id },
-        data: { deliveryStatus: 'Ordered' },
+        data: { deliveryStatus: 'ORDERED' },
         include: {
           supplier: true,
           items: {
@@ -527,12 +528,12 @@ export async function PUT(request: NextRequest) {
         },
       });
     } else if (status === 'বাতিল') {
-      if (order.deliveryStatus === 'Pending' || order.deliveryStatus === 'Ordered') {
+      if (order.deliveryStatus === 'PENDING' || order.deliveryStatus === 'ORDERED') {
         updated = await db.purchase.update({
           where: { id },
           data: {
-            deliveryStatus: 'Cancelled',
-            paymentStatus: 'Cancelled',
+            deliveryStatus: 'CANCELLED',
+            paymentStatus: 'PENDING',
           },
           include: {
             supplier: true,
@@ -543,11 +544,11 @@ export async function PUT(request: NextRequest) {
             },
           },
         });
-      } else if (order.deliveryStatus === 'Received' || order.deliveryStatus === 'PartiallyReceived') {
+      } else if (order.deliveryStatus === 'RECEIVED' || order.deliveryStatus === 'PARTIALLY_RECEIVED') {
         updated = await db.$transaction(async (tx) => {
           // Revert product stocks based on StockHistory entries
           const stockEntries = await tx.stockHistory.findMany({
-            where: { purchaseId: order.id, changeType: 'purchase' },
+            where: { purchaseId: order.id, changeType: 'PURCHASE' },
           });
 
           for (const entry of stockEntries) {
@@ -566,7 +567,7 @@ export async function PUT(request: NextRequest) {
                 data: {
                   businessId,
                   productId: entry.productId,
-                  changeType: 'adjustment',
+                  changeType: 'ADJUSTMENT',
                   quantity: -qty,
                   reason: `Purchase Order Cancelled: ${order.invoiceNumber}`,
                   referenceId: order.id,
@@ -594,8 +595,8 @@ export async function PUT(request: NextRequest) {
           return await tx.purchase.update({
             where: { id },
             data: {
-              deliveryStatus: 'Cancelled',
-              paymentStatus: 'Cancelled',
+              deliveryStatus: 'CANCELLED',
+              paymentStatus: 'PENDING',
               paidAmount: 0,
             },
             include: {

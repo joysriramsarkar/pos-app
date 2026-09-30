@@ -386,9 +386,9 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
         tax: saleData.tax || 0,
         totalAmount: saleData.totalAmount || 0,
         amountPaid: saleData.amountPaid || 0,
-        paymentMethod: saleData.paymentMethod || "Cash",
-        paymentStatus: saleData.paymentStatus || "Paid",
-        status: saleData.status || "Completed",
+        paymentMethod: (saleData.paymentMethod ? (saleData.paymentMethod as string).toUpperCase() : "CASH") as any,
+        paymentStatus: (saleData.paymentStatus ? (saleData.paymentStatus as string).toUpperCase() : "PAID") as any,
+        status: (saleData.status ? (saleData.status as string).toUpperCase() : "COMPLETED") as any,
         notes: saleData.notes || null,
         offlineSynced: true,
         items: {
@@ -451,7 +451,7 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
               data: {
                 businessId,
                 customerId: saleData.customerId,
-                entryType: "prepayment-used",
+                entryType: "PREPAYMENT_USED",
                 amount: prepaidToUse,
                 balanceAfter: currentTotalDue,
                 description: `Prepaid used for offline sale: ${saleData.invoiceNumber}`,
@@ -480,7 +480,7 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
                 data: {
                   businessId,
                   customerId: saleData.customerId,
-                  entryType: "credit",
+                  entryType: "CREDIT",
                   amount: creditAmount,
                   balanceAfter: creditBalanceAfter,
                   description: `Offline sync credit purchase: ${saleData.invoiceNumber}`,
@@ -493,7 +493,7 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
                 data: {
                   businessId,
                   customerId: saleData.customerId,
-                  entryType: "debit",
+                  entryType: "DEBIT",
                   amount: externalPaidAmount,
                   balanceAfter: balanceAfterPayment,
                   description: `Offline sync payment for: ${saleData.invoiceNumber}`,
@@ -512,7 +512,7 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
               data: {
                 businessId,
                 customerId: saleData.customerId,
-                entryType: "debit",
+                entryType: "DEBIT",
                 amount: debtRepaymentAmount,
                 balanceAfter: balanceAfterPayment,
                 description: `Offline sync due clearance: ${saleData.invoiceNumber}`,
@@ -526,7 +526,7 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
               data: {
                 businessId,
                 customerId: saleData.customerId,
-                entryType: "prepayment-added",
+                entryType: "PREPAYMENT_ADDED",
                 amount: changeAsPrepayment,
                 balanceAfter: balanceAfterPayment,
                 description: `Offline sync change added as prepaid: ${saleData.invoiceNumber}`,
@@ -620,7 +620,7 @@ async function syncPrepayment(tx: Prisma.TransactionClient, prepaymentData: { cu
     data: {
       businessId,
       customerId: prepaymentData.customerId,
-      entryType: "prepayment-added",
+      entryType: "PREPAYMENT_ADDED",
       amount: prepaymentData.amount,
       balanceAfter: customer.totalDue,
       description: "Offline sync prepayment added",
@@ -771,7 +771,7 @@ async function syncProduct(tx: Prisma.TransactionClient, productData: z.infer<ty
         data: {
           businessId,
           productId,
-          changeType: quantityChange > 0 ? "purchase" : "sale",
+          changeType: quantityChange > 0 ? "PURCHASE" : "SALE",
           quantity: quantityChange,
           reason: "Offline sync",
         },
