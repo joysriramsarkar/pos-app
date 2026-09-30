@@ -29,6 +29,36 @@
 
 ---
 
+## 📸 Screenshots / স্ক্রিনশট
+
+### 🔐 Authentication & Bilingual Support (লগইন ও দ্বিভাষিক সুবিধা)
+| বাংলা (Bengali) | English |
+| :---: | :---: |
+| ![Login Bengali](public/screenshots/login-bn.png) | ![Login English](public/screenshots/login-en.png) |
+
+### 🛒 POS Billing & Cart (পয়েন্ট অফ সেল বিলিং ও কার্ট)
+![POS Billing](public/screenshots/billing.png)
+
+### 📊 Real-time Dashboard & Trends (ড্যাশবোর্ড ও বিক্রয় প্রবণতা)
+![Dashboard](public/screenshots/dashboard.png)
+
+### 📦 Inventory & Stock Management (স্টক ম্যানেজমেন্ট ও ইনভেন্টরি)
+![Stock Management](public/screenshots/stock-management.png)
+
+### 🧾 Transaction History & Records (লেনদেনের ইতিহাস)
+![Transactions](public/screenshots/transactions.png)
+
+### 📈 Reports & Analytics (রিপোর্ট ও ক্রয় পরিসংখ্যান)
+| বিক্রয় ও লাভ রিপোর্ট | ক্রয় পরিসংখ্যান |
+| :---: | :---: |
+| ![Sales & Profit Report](public/screenshots/Screenshot%20(65).png) | ![Purchase Statistics](public/screenshots/Screenshot%20(67).png) |
+
+| ক্রয় অর্ডার তালিকা | পার্টিজ ও সরবরাহকারী |
+| :---: | :---: |
+| ![Purchase Order List](public/screenshots/Screenshot%20(64).png) | ![Parties List](public/screenshots/Screenshot%20(66).png) |
+
+---
+
 ## 🛠️ Technology Stack
 
 | Category | Technology |

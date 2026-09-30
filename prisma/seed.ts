@@ -33,6 +33,8 @@ async function main() {
       where: { username: "admin" },
       update: {
         name: "Administrator",
+        passwordHash: hashedPassword,
+        requiresPasswordChange: false,
       },
       create: {
         username: "admin",

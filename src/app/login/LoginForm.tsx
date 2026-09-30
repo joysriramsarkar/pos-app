@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef, Suspense } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useTranslations, useLocale } from "next-intl";
+import { useSettingsStore } from "@/stores/settings-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,10 +28,22 @@ import {
   signInWithPhoneNumber,
   type ConfirmationResult,
 } from "firebase/auth";
-import { Lock, Phone, RefreshCw, KeyRound, ArrowLeft, ShieldCheck } from "lucide-react";
+import { Lock, Phone, RefreshCw, KeyRound, ArrowLeft, ShieldCheck, Languages } from "lucide-react";
 import { signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, auth as firebaseAuth } from "@/lib/firebase";
 
 export default function LoginForm() {
+  const t = useTranslations("Login");
+  const { settings, updateSetting } = useSettingsStore();
+  const currentLocale = useLocale();
+  const isBn = settings.app_language === "bn" || currentLocale === "bn";
+
+  const handleLanguageChange = (newLang: "bn" | "en") => {
+    updateSetting("app_language", newLang);
+    if (typeof document !== "undefined") {
+      document.documentElement.lang = newLang;
+    }
+  };
+
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
@@ -69,14 +83,14 @@ export default function LoginForm() {
 
     if (searchParams.get("passwordChanged") === "1") {
       toast({
-        title: "✅ পাসওয়ার্ড পরিবর্তন সফল হয়েছে!",
-        description: "নতুন পাসওয়ার্ড দিয়ে লগইন করুন।",
+        title: `✅ ${t("password_changed")}`,
+        description: t("password_changed_desc"),
       });
     }
     if (searchParams.get("registered") === "1") {
       toast({
-        title: "✅ দোকান নিবন্ধন সফল হয়েছে!",
-        description: "এখন ইউজারনেম ও পাসওয়ার্ড দিয়ে লগইন করুন।",
+        title: `✅ ${t("store_registered")}`,
+        description: t("store_registered_desc"),
       });
     }
 
@@ -88,7 +102,7 @@ export default function LoginForm() {
         } catch {}
       }
     };
-  }, [searchParams, toast]);
+  }, [searchParams, toast, t]);
 
   // Countdown timer for resend OTP
   const startCountdown = () => {
@@ -119,12 +133,12 @@ export default function LoginForm() {
       });
 
       if (result?.error) {
-        setPasswordError("ভুল ইউজারনেম/মোবাইল বা পাসওয়ার্ড (Invalid username/phone or password)");
+        setPasswordError(t("invalid_credentials"));
       } else {
-        window.location.href = "/";
+        window.location.replace("/");
       }
     } catch {
-      setPasswordError("লগইন করার সময় ত্রুটি হয়েছে (An error occurred during login)");
+      setPasswordError(t("login_error"));
     } finally {
       setPasswordLoading(false);
     }
@@ -239,7 +253,6 @@ export default function LoginForm() {
         }
       })
       .finally(() => setGoogleLoading(false));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Helper to get formatted international phone number
@@ -381,10 +394,10 @@ export default function LoginForm() {
         setOtpError(result.error);
       } else {
         toast({
-          title: "✅ লগইন সফল হয়েছে!",
-          description: "দোকানের ড্যাশবোর্ডে প্রবেশ করা হচ্ছে...",
+          title: isBn ? "✅ লগইন সফল হয়েছে!" : "✅ Login successful!",
+          description: isBn ? "দোকানের ড্যাশবোর্ডে প্রবেশ করা হচ্ছে..." : "Entering store dashboard...",
         });
-        window.location.href = "/";
+        window.location.replace("/");
       }
     } catch (err: unknown) {
       console.error("Firebase verify OTP error:", err);
@@ -406,14 +419,60 @@ export default function LoginForm() {
       {/* Invisible reCAPTCHA container */}
       <div id="recaptcha-container"></div>
 
-      <Card className="w-full max-w-sm shadow-lg">
-        <CardHeader className="space-y-1 text-center pb-4">
-          <CardTitle className="text-2xl font-bold tracking-tight">
-            লগইন (Login)
-          </CardTitle>
-          <CardDescription>
-            Onuron POS-এ প্রবেশ করতে লগইন করুন
-          </CardDescription>
+      <Card className="w-full max-w-sm shadow-lg border-border/80">
+        <CardHeader className="space-y-3 text-center pb-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <img
+                src="/app-icon.svg"
+                alt="Onuron POS"
+                className="w-7 h-7 rounded-md object-contain"
+                onError={(e) => {
+                  (e.currentTarget as HTMLElement).style.display = 'none';
+                }}
+              />
+              <span className="font-bold text-base tracking-tight text-foreground">
+                Onuron <span className="text-blue-600 dark:text-blue-400">POS</span>
+              </span>
+            </div>
+
+            {/* Language Switcher */}
+            <div className="inline-flex items-center rounded-full border border-border/80 bg-muted/70 p-0.5 text-xs shadow-xs" role="group" aria-label="Language Switcher">
+              <button
+                type="button"
+                id="login-lang-bn"
+                onClick={() => handleLanguageChange("bn")}
+                className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all ${
+                  isBn
+                    ? "bg-blue-600 text-white shadow-xs"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                }`}
+              >
+                বাংলা
+              </button>
+              <button
+                type="button"
+                id="login-lang-en"
+                onClick={() => handleLanguageChange("en")}
+                className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all ${
+                  !isBn
+                    ? "bg-blue-600 text-white shadow-xs"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                }`}
+              >
+                EN
+              </button>
+            </div>
+          </div>
+
+          <div className="pt-1">
+            <CardTitle className="text-2xl font-bold tracking-tight">
+              {t("title")}
+            </CardTitle>
+            <CardDescription className="mt-1 text-xs sm:text-sm">
+              {t("subtitle")}
+            </CardDescription>
+          </div>
         </CardHeader>
 
         <CardContent className="space-y-4">
@@ -429,11 +488,11 @@ export default function LoginForm() {
             <TabsList className="grid w-full grid-cols-2 mb-4">
               <TabsTrigger value="password" className="flex items-center gap-1.5 text-xs sm:text-sm">
                 <KeyRound className="w-3.5 h-3.5" />
-                পাসওয়ার্ড (Password)
+                {t("tab_password")}
               </TabsTrigger>
               <TabsTrigger value="otp" className="flex items-center gap-1.5 text-xs sm:text-sm">
                 <Phone className="w-3.5 h-3.5" />
-                মোবাইল OTP
+                {t("tab_otp")}
               </TabsTrigger>
             </TabsList>
 
@@ -441,7 +500,7 @@ export default function LoginForm() {
             <TabsContent value="password">
               <form onSubmit={handlePasswordSubmit} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="username">ইমেইল, ইউজারনেম বা মোবাইল নম্বর</Label>
+                  <Label htmlFor="username">{t("identifier_label")}</Label>
                   <Input
                     id="username"
                     type="text"
@@ -453,21 +512,21 @@ export default function LoginForm() {
                     spellCheck={false}
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    placeholder="email@example.com / username / phone"
+                    placeholder={t("username_placeholder")}
                     required
                     disabled={passwordLoading}
                     className="h-11 text-base"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="password">পাসওয়ার্ড (Password)</Label>
+                  <Label htmlFor="password">{t("password_label")}</Label>
                   <Input
                     id="password"
                     type="password"
                     autoComplete="current-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
+                    placeholder={t("password_placeholder")}
                     required
                     disabled={passwordLoading}
                     className="h-11 text-base"
@@ -482,16 +541,16 @@ export default function LoginForm() {
 
                 <Button
                   type="submit"
-                  className="w-full h-11 text-base bg-blue-600 hover:bg-blue-700 text-white dark:bg-blue-500 dark:hover:bg-blue-600 touch-manipulation"
+                  className="w-full h-11 text-base bg-blue-600 hover:bg-blue-700 text-white dark:bg-blue-500 dark:hover:bg-blue-600 touch-manipulation font-semibold"
                   disabled={passwordLoading}
                 >
                   {passwordLoading ? (
                     <span className="flex items-center gap-2">
-                      <RefreshCw className="w-4 h-4 animate-spin" /> লগইন হচ্ছে...
+                      <RefreshCw className="w-4 h-4 animate-spin" /> {t("logging_in")}
                     </span>
                   ) : (
                     <span className="flex items-center gap-2">
-                      <Lock className="w-4 h-4" /> লগইন (Login)
+                      <Lock className="w-4 h-4" /> {t("login_btn")}
                     </span>
                   )}
                 </Button>
@@ -503,7 +562,7 @@ export default function LoginForm() {
               {otpStep === "phone" ? (
                 <form onSubmit={handleSendOtp} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="phone">মোবাইল নম্বর (Phone Number)</Label>
+                    <Label htmlFor="phone">{t("phone_label")}</Label>
                     <div className="flex gap-2">
                       <select
                         value={countryCode}
@@ -533,7 +592,7 @@ export default function LoginForm() {
                       />
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      এই নম্বরে একটি ৬ ডিজিটের এসএমএস কোড পাঠানো হবে।
+                      {t("phone_subtext")}
                     </p>
                   </div>
 
@@ -545,16 +604,16 @@ export default function LoginForm() {
 
                   <Button
                     type="submit"
-                    className="w-full h-11 text-base bg-emerald-600 hover:bg-emerald-700 text-white dark:bg-emerald-500 dark:hover:bg-emerald-600 touch-manipulation"
+                    className="w-full h-11 text-base bg-emerald-600 hover:bg-emerald-700 text-white dark:bg-emerald-500 dark:hover:bg-emerald-600 touch-manipulation font-semibold"
                     disabled={otpLoading}
                   >
                     {otpLoading ? (
                       <span className="flex items-center gap-2">
-                        <RefreshCw className="w-4 h-4 animate-spin" /> OTP পাঠানো হচ্ছে...
+                        <RefreshCw className="w-4 h-4 animate-spin" /> {t("sending_otp")}
                       </span>
                     ) : (
                       <span className="flex items-center gap-2">
-                        <Phone className="w-4 h-4" /> OTP কোড পাঠান (Send OTP)
+                        <Phone className="w-4 h-4" /> {t("send_otp")}
                       </span>
                     )}
                   </Button>
@@ -563,7 +622,7 @@ export default function LoginForm() {
                 <form onSubmit={handleVerifyOtp} className="space-y-4">
                   <div className="space-y-3 text-center">
                     <div className="flex items-center justify-between text-xs text-muted-foreground bg-muted/60 p-2 rounded-md">
-                      <span>নম্বর: <strong>{getFormattedPhone()}</strong></span>
+                      <span>{t("number_prefix")} <strong>{getFormattedPhone()}</strong></span>
                       <button
                         type="button"
                         onClick={() => {
@@ -572,12 +631,12 @@ export default function LoginForm() {
                         }}
                         className="text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 font-medium"
                       >
-                        <ArrowLeft className="w-3 h-3" /> পরিবর্তন
+                        <ArrowLeft className="w-3 h-3" /> {t("change_number")}
                       </button>
                     </div>
 
                     <Label className="text-sm font-semibold block text-left">
-                      ৬ ডিজিটের OTP কোড লিখুন
+                      {t("enter_otp")}
                     </Label>
 
                     <div className="flex justify-center py-2">
@@ -608,16 +667,16 @@ export default function LoginForm() {
 
                   <Button
                     type="submit"
-                    className="w-full h-11 text-base bg-emerald-600 hover:bg-emerald-700 text-white dark:bg-emerald-500 dark:hover:bg-emerald-600 touch-manipulation"
+                    className="w-full h-11 text-base bg-emerald-600 hover:bg-emerald-700 text-white dark:bg-emerald-500 dark:hover:bg-emerald-600 touch-manipulation font-semibold"
                     disabled={otpLoading || otpCode.length !== 6}
                   >
                     {otpLoading ? (
                       <span className="flex items-center gap-2">
-                        <RefreshCw className="w-4 h-4 animate-spin" /> যাচাই হচ্ছে...
+                        <RefreshCw className="w-4 h-4 animate-spin" /> {t("verifying")}
                       </span>
                     ) : (
                       <span className="flex items-center gap-2">
-                        <ShieldCheck className="w-4 h-4" /> ওটিপি যাচাই ও লগইন
+                        <ShieldCheck className="w-4 h-4" /> {t("verify_and_login")}
                       </span>
                     )}
                   </Button>
@@ -625,7 +684,7 @@ export default function LoginForm() {
                   <div className="text-center pt-1">
                     {countdown > 0 ? (
                       <p className="text-xs text-muted-foreground">
-                        পুনরায় কোড পাঠাতে অপেক্ষা করুন: <strong className="text-foreground">{countdown}s</strong>
+                        {t("wait_resend")} <strong className="text-foreground">{countdown}s</strong>
                       </p>
                     ) : (
                       <button
@@ -634,7 +693,7 @@ export default function LoginForm() {
                         disabled={otpLoading}
                         className="text-xs text-blue-600 dark:text-blue-400 hover:underline font-medium inline-flex items-center gap-1"
                       >
-                        <RefreshCw className="w-3 h-3" /> পুনরায় ওটিপি পাঠান (Resend OTP)
+                        <RefreshCw className="w-3 h-3" /> {t("resend_otp")}
                       </button>
                     )}
                   </div>
@@ -650,7 +709,7 @@ export default function LoginForm() {
                 <span className="w-full border-t" />
               </div>
               <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-card px-2 text-muted-foreground">অথবা (or)</span>
+                <span className="bg-card px-2 text-muted-foreground">{t("or")}</span>
               </div>
             </div>
 
@@ -664,7 +723,7 @@ export default function LoginForm() {
               type="button"
               id="google-signin-btn"
               variant="outline"
-              className="w-full h-11 text-base flex items-center justify-center gap-3 border-2 hover:bg-muted/60 transition-all touch-manipulation"
+              className="w-full h-11 text-base flex items-center justify-center gap-3 border-2 hover:bg-muted/60 transition-all touch-manipulation font-medium"
               onClick={handleGoogleSignIn}
               disabled={googleLoading}
             >
@@ -678,35 +737,35 @@ export default function LoginForm() {
                   <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
                 </svg>
               )}
-              <span className="font-medium">Google দিয়ে লগইন</span>
+              <span className="font-medium">{t("google_signin")}</span>
             </Button>
           </div>
 
           <div className="mt-6 text-center text-sm text-muted-foreground border-t pt-4">
-            নতুন দোকান শুরু করতে চান?{" "}
+            {t("new_store_prompt")}{" "}
             <a
               href="/register"
               className="font-medium text-blue-600 hover:text-blue-500 dark:text-blue-400 underline underline-offset-4"
             >
-              নতুন একাউন্ট খুলুন (Register Store)
+              {t("register_link")}
             </a>
           </div>
 
           <div className="mt-5 pt-3 border-t border-border/60 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
             <a href="/privacy-policy" className="hover:text-foreground hover:underline transition-colors">
-              Privacy Policy
+              {t("privacy_policy")}
             </a>
             <span>•</span>
             <a href="/terms" className="hover:text-foreground hover:underline transition-colors">
-              Terms
+              {t("terms")}
             </a>
             <span>•</span>
             <a href="/account-deletion" className="hover:text-foreground hover:underline transition-colors">
-              Account Deletion
+              {t("account_deletion")}
             </a>
             <span>•</span>
             <a href="/contact" className="hover:text-foreground hover:underline transition-colors">
-              Contact
+              {t("contact")}
             </a>
           </div>
         </CardContent>

@@ -141,7 +141,7 @@ export default function RegisterPage() {
         router.push("/login?registered=1");
       } else {
         // Success: Navigate to onboarding wizard for new users
-        window.location.href = "/onboarding";
+        window.location.replace("/onboarding");
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "নিবন্ধন ব্যর্থ হয়েছে। আবার চেষ্টা করুন।");
