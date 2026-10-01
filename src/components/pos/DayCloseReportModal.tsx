@@ -50,9 +50,11 @@ export function DayCloseReportModal({
     try {
       setLoading(true);
       const res = await fetch('/api/daily-summary');
-      if (!res.ok) throw new Error('Failed to fetch daily summary');
-      const data = await res.json();
-      if (data.success && data.data) {
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || `হিসাব লোড করতে সমস্যা হয়েছে (স্ট্যাটাস: ${res.status})`);
+      }
+      if (data?.data) {
         setSummary(data.data);
       }
     } catch (err: any) {
@@ -81,17 +83,21 @@ export function DayCloseReportModal({
       day: 'numeric',
     });
 
+    const todaySales = summary.todaySalesTotal ?? summary.totalSalesAmount ?? 0;
+    const salesCount = summary.salesCount ?? summary.totalSalesCount ?? 0;
+    const expenses = summary.todayExpensesNonSupplier ?? summary.totalExpenses ?? 0;
+
     const text =
       `*📊 দৈনিক সমাপ্তি প্রতিবেদন (Z-Report)*\n` +
       `🏪 *${businessName}*\n` +
       `📅 তারিখ: ${dateStr}\n` +
       `━━━━━━━━━━━━━━━━━━\n` +
-      `💰 *মোট বিক্রয়:* ${formatPrice(summary.todaySalesTotal || 0)}\n` +
+      `💰 *মোট বিক্রয়:* ${formatPrice(todaySales)}\n` +
       `💵 নগদ বিক্রয়: ${formatPrice(summary.todayCashTotal || 0)}\n` +
       `📱 ডিজিটাল (UPI): ${formatPrice(summary.todayUpiTotal || 0)}\n` +
       `📑 নতুন বাকি: ${formatPrice(summary.newDuesCreated || 0)}\n` +
       `📥 বাকি আদায়: ${formatPrice(summary.duesCollected || 0)}\n` +
-      `💸 মোট খরচ: ${formatPrice(summary.todayExpensesNonSupplier || 0)}\n` +
+      `💸 মোট খরচ: ${formatPrice(expenses)}\n` +
       `━━━━━━━━━━━━━━━━━━\n` +
       `📈 *দৈনিক নিট লাভ:* ${formatPrice(summary.netProfit || 0)}\n` +
       `🏦 *ড্রয়ার ক্যাশ:* ${formatPrice(summary.todayCashTotal || 0)}\n` +
@@ -137,10 +143,10 @@ export function DayCloseReportModal({
               <div>
                 <span className="text-[11px] font-semibold text-muted-foreground block">আজকের মোট বিক্রয়</span>
                 <span className="text-2xl font-black text-foreground">
-                  {formatPrice(summary.todaySalesTotal || 0)}
+                  {formatPrice(summary.todaySalesTotal ?? summary.totalSalesAmount ?? 0)}
                 </span>
                 <span className="text-[10px] text-muted-foreground block mt-0.5">
-                  মোট চালান: {summary.salesCount || 0}টি
+                  মোট চালান: {summary.salesCount ?? summary.totalSalesCount ?? 0}টি
                 </span>
               </div>
               <div className="text-right">
@@ -184,7 +190,7 @@ export function DayCloseReportModal({
               <div className="p-3 rounded-xl bg-card border border-border/60">
                 <span className="text-muted-foreground block text-[10px]">দোকানের খরচ (-)</span>
                 <span className="text-sm font-bold text-rose-600">
-                  {formatPrice(summary.todayExpensesNonSupplier || 0)}
+                  {formatPrice(summary.todayExpensesNonSupplier ?? summary.totalExpenses ?? 0)}
                 </span>
               </div>
 
@@ -209,7 +215,21 @@ export function DayCloseReportModal({
               </span>
             </div>
           </div>
-        ) : null}
+        ) : (
+          <div className="py-10 flex flex-col items-center justify-center gap-3 text-center">
+            <p className="text-xs text-muted-foreground">দৈনিক সারাংশ লোড করা সম্ভব হয়নি।</p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={fetchDailySummary}
+              className="rounded-xl gap-2 text-xs"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              পুনরায় চেষ্টা করুন
+            </Button>
+          </div>
+        )}
 
         <DialogFooter className="pt-3 sm:justify-between gap-2 border-t border-border/40 mt-1">
           <Button
@@ -217,7 +237,8 @@ export function DayCloseReportModal({
             variant="outline"
             size="sm"
             onClick={handleShareWhatsApp}
-            className="rounded-xl gap-1.5 text-xs font-semibold text-emerald-600 hover:text-emerald-700"
+            disabled={!summary}
+            className="rounded-xl gap-1.5 text-xs font-semibold text-emerald-600 hover:text-emerald-700 disabled:opacity-50"
           >
             <Share2 className="w-3.5 h-3.5" />
             <span>হোয়াটসঅ্যাপে পাঠান</span>
@@ -229,7 +250,8 @@ export function DayCloseReportModal({
               variant="outline"
               size="sm"
               onClick={handlePrintZReport}
-              className="rounded-xl gap-1.5 text-xs font-semibold"
+              disabled={!summary}
+              className="rounded-xl gap-1.5 text-xs font-semibold disabled:opacity-50"
             >
               <Printer className="w-3.5 h-3.5" />
               <span>প্রিন্ট Z-Report</span>

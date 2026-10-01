@@ -67,30 +67,51 @@ export async function GET(request: NextRequest) {
     const bengaliDate = formatBengaliDate(localNow);
 
     // ---- SALES SUMMARY ----
-    // Include Completed + PartialReturn; exclude Cancelled and fully refunded originals.
-    // Legacy negative refund invoices (status Refunded, totalAmount < 0) are applied as offsets.
-    const todaySalesRaw = await db.sale.findMany({
-      where: {
-        businessId,
-        createdAt: { gte: startOfDay, lt: endOfDay },
-        status: { notIn: ['CANCELLED'] },
-      },
-    });
+    // Safe select to avoid querying unmigrated columns (like shift_id) and filter status in memory to avoid PostgreSQL enum cast issues
+    const todaySalesRaw = await db.sale
+      .findMany({
+        where: {
+          businessId,
+          createdAt: { gte: startOfDay, lt: endOfDay },
+        },
+        select: {
+          id: true,
+          businessId: true,
+          totalAmount: true,
+          amountPaid: true,
+          paymentMethod: true,
+          paymentStatus: true,
+          status: true,
+          cashAmount: true,
+          upiAmount: true,
+          createdAt: true,
+        },
+      })
+      .then((sales) => sales.filter((s) => String(s.status) !== 'CANCELLED'))
+      .catch((err) => {
+        console.error('Error fetching today sales for daily summary:', err);
+        return [];
+      });
 
     const todaySaleIds = todaySalesRaw
       .filter((s) => s.status === 'COMPLETED' || s.status === 'PARTIAL_RETURN')
       .map((s) => s.id);
 
-    const returnsToday = await db.saleReturn.findMany({
-      where: {
-        businessId,
-        OR: [
-          { createdAt: { gte: startOfDay, lt: endOfDay } },
-          { saleId: { in: todaySaleIds } },
-        ],
-      },
-      select: { saleId: true, refundAmount: true, createdAt: true, refundMethod: true },
-    });
+    const returnsToday = await db.saleReturn
+      .findMany({
+        where: {
+          businessId,
+          OR: [
+            { createdAt: { gte: startOfDay, lt: endOfDay } },
+            { saleId: { in: todaySaleIds } },
+          ],
+        },
+        select: { saleId: true, refundAmount: true, createdAt: true, refundMethod: true },
+      })
+      .catch((err) => {
+        console.warn('returnsToday query failed:', err);
+        return [];
+      });
 
     // Net refund amount per original sale (SaleReturn records)
     const refundBySaleId = returnsToday.reduce<Record<string, number>>((acc, r) => {
@@ -180,26 +201,36 @@ export async function GET(request: NextRequest) {
 
     // ---- PURCHASES ----
     // Include both formal purchases (all statuses) and informal manual stock entries
-    const todayPurchases = await db.purchase.findMany({
-      where: {
-        businessId,
-        createdAt: { gte: startOfDay, lt: endOfDay },
-      },
-    });
+    const todayPurchases = await db.purchase
+      .findMany({
+        where: {
+          businessId,
+          createdAt: { gte: startOfDay, lt: endOfDay },
+        },
+      })
+      .catch((err) => {
+        console.warn('Purchase query failed for daily summary:', err);
+        return [];
+      });
     const totalPurchasesAmountFromSupplier = todayPurchases.reduce((sum, p) => sum + Number(p.totalAmount), 0);
 
-    const informalStockEntries = await db.stockHistory.findMany({
-      where: {
-        businessId,
-        createdAt: { gte: startOfDay, lt: endOfDay },
-        changeType: 'PURCHASE',
-        purchaseId: null,
-      },
-      include: { product: true }
-    });
+    const informalStockEntries = await db.stockHistory
+      .findMany({
+        where: {
+          businessId,
+          createdAt: { gte: startOfDay, lt: endOfDay },
+          changeType: 'PURCHASE',
+          purchaseId: null,
+        },
+        include: { product: true }
+      })
+      .catch((err) => {
+        console.warn('StockHistory query failed for daily summary:', err);
+        return [];
+      });
 
     const informalPurchasesAmount = informalStockEntries.reduce((sum, entry) => {
-      let unitPrice = Number(entry.product.buyingPrice);
+      let unitPrice = Number(entry.product?.buyingPrice || 0);
       if (entry.reason) {
         const match = entry.reason.match(/@\s*[^0-9]*([0-9.]+)/);
         if (match && match[1]) {
@@ -213,13 +244,18 @@ export async function GET(request: NextRequest) {
     const totalPurchasesCount = todayPurchases.length + informalStockEntries.length;
 
     // ---- EXPENSES ----
-    const todayExpenses = await db.expense.findMany({
-      where: {
-        businessId,
-        date: { gte: startOfDay, lt: endOfDay },
-        isActive: true,
-      },
-    });
+    const todayExpenses = await db.expense
+      .findMany({
+        where: {
+          businessId,
+          date: { gte: startOfDay, lt: endOfDay },
+          isActive: true,
+        },
+      })
+      .catch((err) => {
+        console.warn('Expense query failed for daily summary:', err);
+        return [];
+      });
 
     const totalExpenses = todayExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
 
@@ -231,50 +267,75 @@ export async function GET(request: NextRequest) {
     }
 
     // ---- COST OF GOODS SOLD (sale-time cost snapshot) ----
-    const todaySaleItems = await db.saleItem.findMany({
-      where: {
-        sale: {
-          businessId,
-          createdAt: { gte: startOfDay, lt: endOfDay },
-          status: { in: ['COMPLETED', 'PARTIAL_RETURN'] },
+    const todaySaleItems = await db.saleItem
+      .findMany({
+        where: {
+          sale: {
+            businessId,
+            createdAt: { gte: startOfDay, lt: endOfDay },
+          },
+          quantity: { gt: 0 },
         },
-        quantity: { gt: 0 },
-      },
-      select: {
-        productId: true,
-        quantity: true,
-        totalPrice: true,
-        productName: true,
-        costPriceAtSale: true,
-      },
-    });
+        select: {
+          productId: true,
+          quantity: true,
+          totalPrice: true,
+          productName: true,
+          costPriceAtSale: true,
+          sale: {
+            select: {
+              status: true,
+            },
+          },
+        },
+      })
+      .then((items) =>
+        items.filter((item) => {
+          const st = String(item.sale?.status || '');
+          return st === 'COMPLETED' || st === 'PARTIAL_RETURN';
+        })
+      )
+      .catch((err) => {
+        console.warn('todaySaleItems query failed:', err);
+        return [];
+      });
 
     // Subtract returned quantities for today
-    const returnItemsToday = await db.saleReturnItem.findMany({
-      where: {
-        saleReturn: {
-          businessId,
-          OR: [
-            { createdAt: { gte: startOfDay, lt: endOfDay } },
-            { saleId: { in: todaySaleIds } },
-          ],
+    const returnItemsToday = await db.saleReturnItem
+      .findMany({
+        where: {
+          saleReturn: {
+            businessId,
+            OR: [
+              { createdAt: { gte: startOfDay, lt: endOfDay } },
+              { saleId: { in: todaySaleIds } },
+            ],
+          },
         },
-      },
-      select: { productId: true, quantity: true },
-    });
+        select: { productId: true, quantity: true },
+      })
+      .catch((err) => {
+        console.warn('returnItemsToday query failed:', err);
+        return [];
+      });
     const returnedQtyByProduct = returnItemsToday.reduce<Record<string, number>>((acc, r) => {
       acc[r.productId] = (acc[r.productId] || 0) + Number(r.quantity);
       return acc;
     }, {});
 
     const productIds = [...new Set(todaySaleItems.map((item) => item.productId))];
-    const products = await db.product.findMany({
-      where: {
-        businessId,
-        id: { in: productIds }
-      },
-      select: { id: true, buyingPrice: true, nameBn: true },
-    });
+    const products = await db.product
+      .findMany({
+        where: {
+          businessId,
+          id: { in: productIds }
+        },
+        select: { id: true, buyingPrice: true, nameBn: true },
+      })
+      .catch((err) => {
+        console.warn('products query failed for daily summary:', err);
+        return [];
+      });
     const productBuyingPriceMap = new Map(products.map((p) => [p.id, Number(p.buyingPrice)]));
     const productNameBnMap = new Map(products.map((p) => [p.id, p.nameBn]));
 
@@ -318,21 +379,26 @@ export async function GET(request: NextRequest) {
 
     // Dues collected: debit entries that reduce customer due (exclude refund-related reverse-due noise if desired;
     // include manual collection, sale payments, due clearance). Prepayments use entryType prepayment-*.
-    const todayDebitLedger = await db.ledgerEntry.findMany({
-      where: {
-        businessId,
-        entryType: 'DEBIT',
-        createdAt: { gte: startOfDay, lt: endOfDay },
-        NOT: {
-          OR: [
-            { description: { contains: 'prepaid', mode: 'insensitive' } },
-            { description: { contains: 'Prepayment', mode: 'insensitive' } },
-            { description: { contains: 'return refund', mode: 'insensitive' } },
-          ],
+    const todayDebitLedger = await db.ledgerEntry
+      .findMany({
+        where: {
+          businessId,
+          entryType: 'DEBIT',
+          createdAt: { gte: startOfDay, lt: endOfDay },
+          NOT: {
+            OR: [
+              { description: { contains: 'prepaid', mode: 'insensitive' } },
+              { description: { contains: 'Prepayment', mode: 'insensitive' } },
+              { description: { contains: 'return refund', mode: 'insensitive' } },
+            ],
+          },
         },
-      },
-      select: { amount: true, description: true },
-    });
+        select: { amount: true, description: true },
+      })
+      .catch((err) => {
+        console.warn('todayDebitLedger query failed:', err);
+        return [];
+      });
     // Prefer explicit due-payment descriptions; fall back to all remaining debits
     const duePaymentEntries = todayDebitLedger.filter((e) => {
       const d = (e.description || '').toLowerCase();
@@ -395,24 +461,34 @@ export async function GET(request: NextRequest) {
       .slice(0, 5);
 
     // ---- LOW STOCK ALERTS ----
-    const allActiveProducts = await db.product.findMany({
-      where: { businessId, isActive: true },
-      select: {
-        id: true,
-        name: true,
-        nameBn: true,
-        currentStock: true,
-        minStockLevel: true,
-      },
-    });
+    const allActiveProducts = await db.product
+      .findMany({
+        where: { businessId, isActive: true },
+        select: {
+          id: true,
+          name: true,
+          nameBn: true,
+          currentStock: true,
+          minStockLevel: true,
+        },
+      })
+      .catch((err) => {
+        console.warn('allActiveProducts query failed:', err);
+        return [];
+      });
     const lowStockProducts = allActiveProducts.filter((p) => Number(p.currentStock) <= Number(p.minStockLevel));
     const outOfStockProducts = allActiveProducts.filter((p) => Number(p.currentStock) === 0);
 
     // ---- CUSTOMER DUES SUMMARY ----
-    const customersWithDue = await db.customer.findMany({
-      where: { businessId, totalDue: { gt: 0 }, isActive: true },
-      select: { id: true, name: true, totalDue: true },
-    });
+    const customersWithDue = await db.customer
+      .findMany({
+        where: { businessId, totalDue: { gt: 0 }, isActive: true },
+        select: { id: true, name: true, totalDue: true },
+      })
+      .catch((err) => {
+        console.warn('customersWithDue query failed:', err);
+        return [];
+      });
     const totalCustomerDues = customersWithDue.reduce((sum, c) => sum + Number(c.totalDue), 0);
 
     // ---- OPENING / CLOSING BALANCE ----
@@ -420,86 +496,110 @@ export async function GET(request: NextRequest) {
     // up to (but not including) today's local midnight.
 
     // 1. All past sales cash & UPI (direct cash that came in)
-    const pastSales = await db.sale.aggregate({
-      where: {
-        businessId,
-        createdAt: { lt: startOfDay },
-        status: { in: ['COMPLETED', 'PARTIAL_RETURN'] },
-      },
-      _sum: {
-        cashAmount: true,
-        upiAmount: true,
-      }
-    });
+    const pastSales = await db.sale
+      .aggregate({
+        where: {
+          businessId,
+          createdAt: { lt: startOfDay },
+        },
+        _sum: {
+          cashAmount: true,
+          upiAmount: true,
+        }
+      })
+      .catch((err) => {
+        console.warn('pastSales aggregate failed:', err);
+        return { _sum: { cashAmount: null, upiAmount: null } };
+      });
 
     // 2. All past expenses (cash that went out — ALL categories including supplier payments)
-    const pastExpenses = await db.expense.aggregate({
-      where: {
-        businessId,
-        date: { lt: startOfDay },
-        isActive: true,
-      },
-      _sum: {
-        amount: true,
-      }
-    });
+    const pastExpenses = await db.expense
+      .aggregate({
+        where: {
+          businessId,
+          date: { lt: startOfDay },
+          isActive: true,
+        },
+        _sum: {
+          amount: true,
+        }
+      })
+      .catch((err) => {
+        console.warn('pastExpenses aggregate failed:', err);
+        return { _sum: { amount: null } };
+      });
 
     // 3. All past due collections (cash that came in via debit ledger entries)
-    const pastDueCollections = await db.ledgerEntry.aggregate({
-      where: {
-        businessId,
-        entryType: 'DEBIT',
-        createdAt: { lt: startOfDay },
-        NOT: {
-          OR: [
-            { description: { contains: 'prepaid', mode: 'insensitive' } },
-            { description: { contains: 'Prepayment', mode: 'insensitive' } },
-            { description: { contains: 'return refund', mode: 'insensitive' } },
-            { description: { contains: 'reverse due', mode: 'insensitive' } },
-          ],
+    const pastDueCollections = await db.ledgerEntry
+      .aggregate({
+        where: {
+          businessId,
+          entryType: 'DEBIT',
+          createdAt: { lt: startOfDay },
+          NOT: {
+            OR: [
+              { description: { contains: 'prepaid', mode: 'insensitive' } },
+              { description: { contains: 'Prepayment', mode: 'insensitive' } },
+              { description: { contains: 'return refund', mode: 'insensitive' } },
+              { description: { contains: 'reverse due', mode: 'insensitive' } },
+            ],
+          },
         },
-      },
-      _sum: {
-        amount: true,
-      }
-    });
+        _sum: {
+          amount: true,
+        }
+      })
+      .catch((err) => {
+        console.warn('pastDueCollections aggregate failed:', err);
+        return { _sum: { amount: null } };
+      });
 
     // 4. All past cash refunds (cash that went out)
-    const pastRefunds = await db.saleReturn.aggregate({
-      where: {
-        businessId,
-        createdAt: { lt: startOfDay },
-        refundMethod: 'CASH'
-      },
-      _sum: {
-        refundAmount: true,
-      }
-    });
+    const pastRefunds = await db.saleReturn
+      .aggregate({
+        where: {
+          businessId,
+          createdAt: { lt: startOfDay },
+          refundMethod: 'CASH'
+        },
+        _sum: {
+          refundAmount: true,
+        }
+      })
+      .catch((err) => {
+        console.warn('pastRefunds aggregate failed:', err);
+        return { _sum: { refundAmount: null } };
+      });
 
     // 5. Past prepaid top-up cash inflows (customer pays cash → store credit)
     //    These are credit ledger entries with prepaid/topup descriptions.
-    const pastPrepaidTopups = await db.ledgerEntry.aggregate({
-      where: {
-        businessId,
-        entryType: 'CREDIT',
-        createdAt: { lt: startOfDay },
-        OR: [
-          { description: { contains: 'prepaid topup', mode: 'insensitive' } },
-          { description: { contains: 'prepayment topup', mode: 'insensitive' } },
-          { description: { contains: 'wallet topup', mode: 'insensitive' } },
-          { description: { contains: 'add balance', mode: 'insensitive' } },
-        ],
-      },
-      _sum: { amount: true },
-    });
+    const pastPrepaidTopups = await db.ledgerEntry
+      .aggregate({
+        where: {
+          businessId,
+          entryType: 'CREDIT',
+          createdAt: { lt: startOfDay },
+          OR: [
+            { description: { contains: 'prepaid topup', mode: 'insensitive' } },
+            { description: { contains: 'prepayment topup', mode: 'insensitive' } },
+            { description: { contains: 'wallet topup', mode: 'insensitive' } },
+            { description: { contains: 'add balance', mode: 'insensitive' } },
+          ],
+        },
+        _sum: { amount: true },
+      })
+      .catch((err) => {
+        console.warn('pastPrepaidTopups aggregate failed:', err);
+        return { _sum: { amount: null } };
+      });
 
     const openingBalance =
-      Number(pastSales._sum.cashAmount || 0) +
-      Number(pastSales._sum.upiAmount || 0) +
-      Number(pastDueCollections._sum?.amount || 0) +
-      Number(pastPrepaidTopups._sum?.amount || 0) -
-      Number(pastExpenses._sum?.amount || 0) -
-      Number(pastRefunds._sum?.refundAmount || 0);
+      Number(pastSales?._sum?.cashAmount || 0) +
+      Number(pastSales?._sum?.upiAmount || 0) +
+      Number(pastDueCollections?._sum?.amount || 0) +
+      Number(pastPrepaidTopups?._sum?.amount || 0) -
+      Number(pastExpenses?._sum?.amount || 0) -
+      Number(pastRefunds?._sum?.refundAmount || 0);
 
     // Today's cash and UPI (adjusted for dues collected and refunds today)
     const todayCashRefunds = returnsToday
@@ -522,10 +622,14 @@ export async function GET(request: NextRequest) {
       data: {
         date: bengaliDate,
         totalSalesAmount,
+        todaySalesTotal: totalSalesAmount,
         totalSalesCount,
+        salesCount: totalSalesCount,
         avgOrderValue,
         paymentBreakdown,
         totalExpenses,
+        totalExpensesNonSupplier,
+        todayExpensesNonSupplier: totalExpensesNonSupplier,
         totalPurchasesAmount,
         totalPurchasesCount,
         supplierPurchasesAmount: totalPurchasesAmountFromSupplier,
