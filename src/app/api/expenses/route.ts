@@ -76,16 +76,32 @@ export async function GET(request: NextRequest) {
       };
     }
 
-    const [total, expenses] = await Promise.all([
-      prisma.expense.count({ where }),
-      prisma.expense.findMany({
-        where,
-        orderBy: { date: "desc" },
-        include: { supplier: { select: { id: true, name: true, nameEn: true } } },
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-      }),
-    ]);
+    let total = 0;
+    let expenses: any[] = [];
+
+    try {
+      [total, expenses] = await Promise.all([
+        prisma.expense.count({ where }),
+        prisma.expense.findMany({
+          where,
+          orderBy: { date: "desc" },
+          include: { supplier: { select: { id: true, name: true, nameEn: true } } },
+          skip: (page - 1) * pageSize,
+          take: pageSize,
+        }),
+      ]);
+    } catch (e: any) {
+      console.warn('[expenses] Query with supplier relation failed, falling back:', e?.message);
+      [total, expenses] = await Promise.all([
+        prisma.expense.count({ where }),
+        prisma.expense.findMany({
+          where,
+          orderBy: { date: "desc" },
+          skip: (page - 1) * pageSize,
+          take: pageSize,
+        }),
+      ]);
+    }
 
     const data = expenses.map(e => ({
       ...e,

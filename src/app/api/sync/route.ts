@@ -374,36 +374,92 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
     }
 
     // CREATE PHASE: sale rows use blended cost (owned @ WAC, shortage @ 0)
-    const sale = await tx.sale.create({
-      data: {
-        id: saleData.id,
-        businessId,
-        invoiceNumber: saleData.invoiceNumber as string,
-        userId: saleData.userId || null,
-        customerId: saleData.customerId || null,
-        subtotal: saleData.subtotal || 0,
-        discount: saleData.discount || 0,
-        tax: saleData.tax || 0,
-        totalAmount: saleData.totalAmount || 0,
-        amountPaid: saleData.amountPaid || 0,
-        paymentMethod: (saleData.paymentMethod ? (saleData.paymentMethod as string).toUpperCase() : "CASH") as any,
-        paymentStatus: (saleData.paymentStatus ? (saleData.paymentStatus as string).toUpperCase() : "PAID") as any,
-        status: (saleData.status ? (saleData.status as string).toUpperCase() : "COMPLETED") as any,
-        notes: saleData.notes || null,
-        offlineSynced: true,
-        items: {
-          create: saleData.items.map((item) => ({
-            productId: item.productId,
-            productName: item.productName,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            costPriceAtSale: costPriceForProduct(plansByProductId, item.productId, 0),
-            totalPrice: item.totalPrice,
-          })),
+    let sale: any;
+    try {
+      sale = await tx.sale.create({
+        data: {
+          id: saleData.id,
+          businessId,
+          invoiceNumber: saleData.invoiceNumber as string,
+          userId: saleData.userId || null,
+          customerId: saleData.customerId || null,
+          subtotal: saleData.subtotal || 0,
+          discount: saleData.discount || 0,
+          tax: saleData.tax || 0,
+          totalAmount: saleData.totalAmount || 0,
+          amountPaid: saleData.amountPaid || 0,
+          paymentMethod: (saleData.paymentMethod ? (saleData.paymentMethod as string).toUpperCase() : "CASH") as any,
+          paymentStatus: (saleData.paymentStatus ? (saleData.paymentStatus as string).toUpperCase() : "PAID") as any,
+          status: (saleData.status ? (saleData.status as string).toUpperCase() : "COMPLETED") as any,
+          notes: saleData.notes || null,
+          offlineSynced: true,
+          items: {
+            create: saleData.items.map((item) => ({
+              productId: item.productId,
+              productName: item.productName,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              costPriceAtSale: costPriceForProduct(plansByProductId, item.productId, 0),
+              totalPrice: item.totalPrice,
+            })),
+          },
         },
-      },
-      include: { items: true },
-    });
+        include: { items: true },
+      });
+    } catch (createErr: any) {
+      if (
+        createErr?.message?.includes('SaleStatus') ||
+        createErr?.message?.includes('shift_id') ||
+        createErr?.code === '42704' ||
+        createErr?.code === '42703'
+      ) {
+        console.warn('[sync] Prisma sale.create failed due to schema mismatch, falling back to raw query:', createErr.message);
+        const saleId = saleData.id || uuidv4();
+        const pMethod = (saleData.paymentMethod ? String(saleData.paymentMethod).toUpperCase() : 'CASH');
+        const pStatus = (saleData.paymentStatus ? String(saleData.paymentStatus).toUpperCase() : 'PAID');
+        const sStatus = (saleData.status ? String(saleData.status).toUpperCase() : 'COMPLETED');
+
+        await tx.$executeRaw`
+          INSERT INTO "sales" (
+            "id", "business_id", "invoice_number", "user_id", "customer_id",
+            "subtotal", "discount", "tax", "total_amount", "amount_paid",
+            "payment_method", "payment_status", "status", "notes", "offline_synced",
+            "created_at", "updated_at"
+          ) VALUES (
+            ${saleId}, ${businessId}, ${saleData.invoiceNumber}, ${saleData.userId || null}, ${saleData.customerId || null},
+            ${saleData.subtotal || 0}, ${saleData.discount || 0}, ${saleData.tax || 0}, ${saleData.totalAmount || 0}, ${saleData.amountPaid || 0},
+            ${pMethod}::"PaymentMethod", ${pStatus}::"PaymentStatus", ${sStatus}, ${saleData.notes || null}, true,
+            NOW(), NOW()
+          )
+        `;
+
+        for (const item of saleData.items) {
+          const itemId = uuidv4();
+          const costPrice = costPriceForProduct(plansByProductId, item.productId, 0);
+          await tx.$executeRaw`
+            INSERT INTO "sale_items" (
+              "id", "sale_id", "product_id", "product_name", "quantity",
+              "unit_price", "cost_price_at_sale", "total_price", "discount", "tax_rate"
+            ) VALUES (
+              ${itemId}, ${saleId}, ${item.productId}, ${item.productName}, ${item.quantity},
+              ${item.unitPrice}, ${costPrice}, ${item.totalPrice}, 0, 0
+            )
+          `;
+        }
+
+        sale = {
+          id: saleId,
+          businessId,
+          invoiceNumber: saleData.invoiceNumber,
+          userId: saleData.userId,
+          customerId: saleData.customerId,
+          totalAmount: saleData.totalAmount,
+          items: saleData.items,
+        };
+      } else {
+        throw createErr;
+      }
+    }
 
     await applySaleStockPlans(tx, {
       saleId: sale.id,

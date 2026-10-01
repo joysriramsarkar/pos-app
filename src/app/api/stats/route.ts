@@ -44,26 +44,51 @@ export async function GET(request: NextRequest) {
 
     // Run ALL independent queries concurrently to prevent worker CPU/execution timeouts
     // Run queries sequentially or in small batches to prevent Edge Worker memory exhaustion (128MB limit)
-    // 1. Today's sales
-    const todaySales = await db.sale.findMany({
-      where: {
-        businessId,
-        createdAt: { gte: startOfDay, lt: endOfDay },
-        status: { in: ['COMPLETED', 'PARTIAL_RETURN'] },
-      },
-      include: {
-        customer: { select: { id: true, name: true } },
-      },
-    }).catch(() => []);
+    // 1. Today's sales (explicit select to avoid shift_id, in-memory filter to avoid SaleStatus enum cast)
+    const todaySales = await db.sale
+      .findMany({
+        where: {
+          businessId,
+          createdAt: { gte: startOfDay, lt: endOfDay },
+        },
+        select: {
+          id: true,
+          totalAmount: true,
+          amountPaid: true,
+          cashAmount: true,
+          upiAmount: true,
+          paymentMethod: true,
+          status: true,
+          createdAt: true,
+          customer: { select: { id: true, name: true } },
+        },
+      })
+      .then((sales) =>
+        sales.filter((s) => {
+          const st = String(s.status);
+          return st === 'COMPLETED' || st === 'PARTIAL_RETURN';
+        })
+      )
+      .catch((err) => {
+        console.warn('[stats] todaySales error:', err);
+        return [];
+      });
 
     // 2. Yesterday's sales
-    const yesterdaySales = await db.sale.findMany({
-      where: {
-        businessId,
-        createdAt: { gte: yesterdayStart, lt: startOfDay },
-        status: 'COMPLETED',
-      },
-    }).catch(() => []);
+    const yesterdaySales = await db.sale
+      .findMany({
+        where: {
+          businessId,
+          createdAt: { gte: yesterdayStart, lt: startOfDay },
+        },
+        select: {
+          id: true,
+          totalAmount: true,
+          status: true,
+        },
+      })
+      .then((sales) => sales.filter((s) => String(s.status) === 'COMPLETED'))
+      .catch(() => []);
 
     // 3. Yesterday's expenses
     const yesterdayExpenses = await db.expense.findMany({
@@ -101,23 +126,36 @@ export async function GET(request: NextRequest) {
       LIMIT 20
     `.catch(() => []);
 
-    // 6. Recent transactions
-    const recentSales = await db.sale.findMany({
-      where: { businessId },
-      take: 10,
-      orderBy: { createdAt: 'desc' },
-      include: {
-        customer: { select: { id: true, name: true } },
-        user: { select: { id: true, name: true, username: true } },
-        items: {
-          select: {
-            productName: true,
-            quantity: true,
-            totalPrice: true,
+    // 6. Recent transactions (explicit select to avoid shift_id)
+    const recentSales = await db.sale
+      .findMany({
+        where: { businessId },
+        take: 10,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          invoiceNumber: true,
+          totalAmount: true,
+          amountPaid: true,
+          paymentMethod: true,
+          paymentStatus: true,
+          status: true,
+          createdAt: true,
+          customer: { select: { id: true, name: true } },
+          user: { select: { id: true, name: true, username: true } },
+          items: {
+            select: {
+              productName: true,
+              quantity: true,
+              totalPrice: true,
+            },
           },
         },
-      },
-    }).catch(() => []);
+      })
+      .catch((err) => {
+        console.warn('[stats] recentSales error:', err);
+        return [];
+      });
 
     // 7. Today's expenses
     const todayExpenses = await db.expense.findMany({
