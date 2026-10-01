@@ -70,7 +70,10 @@ export async function GET() {
   try {
     const shift = await getCurrentShift(ctx.business.id);
     return NextResponse.json({ success: true, data: shift });
-  } catch (err) {
+  } catch (err: any) {
+    if (err?.code === 'P2021' || err?.message?.includes('does not exist')) {
+      return NextResponse.json({ success: true, data: null });
+    }
     console.error('[shifts] GET error:', err);
     return NextResponse.json(
       domainError(ERROR_CODES.INTERNAL_ERROR, 'Failed to get shift'),

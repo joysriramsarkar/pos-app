@@ -255,31 +255,35 @@ async function getSalesTrendAlert(
 }
 
 async function getOpenShiftAlert(businessId: string): Promise<DashboardAlert | null> {
-  const openShift = await db.cashRegisterShift.findFirst({
-    where: { businessId, isActive: true },
-    orderBy: { openedAt: 'desc' },
-  });
+  try {
+    const openShift = await db.cashRegisterShift.findFirst({
+      where: { businessId, isActive: true },
+      orderBy: { openedAt: 'desc' },
+    });
 
-  if (!openShift) return null;
+    if (!openShift) return null;
 
-  const hours = Math.floor(
-    (Date.now() - new Date(openShift.openedAt).getTime()) / 3600000
-  );
+    const hours = Math.floor(
+      (Date.now() - new Date(openShift.openedAt).getTime()) / 3600000
+    );
 
-  if (hours < 12) return null; // Only alert after 12 hours
+    if (hours < 12) return null; // Only alert after 12 hours
 
-  return {
-    id: 'long-shift',
-    type: 'SHIFT_OPEN',
-    severity: 'warning',
-    title: `Shift open for ${hours} hours`,
-    titleBn: `${hours} ঘণ্টা ধরে shift খোলা`,
-    message: `Cash register shift has been open since ${new Date(openShift.openedAt).toLocaleTimeString()}`,
-    messageBn: `Cash register shift ${new Date(openShift.openedAt).toLocaleTimeString('bn-BD')} থেকে খোলা আছে`,
-    actionLabel: 'Close Shift',
-    actionLabelBn: 'Shift বন্ধ করুন',
-    actionUrl: '/pos?page=dashboard',
-  };
+    return {
+      id: 'long-shift',
+      type: 'SHIFT_OPEN',
+      severity: 'warning',
+      title: `Shift open for ${hours} hours`,
+      titleBn: `${hours} ঘণ্টা ধরে shift খোলা`,
+      message: `Cash register shift has been open since ${new Date(openShift.openedAt).toLocaleTimeString()}`,
+      messageBn: `Cash register shift ${new Date(openShift.openedAt).toLocaleTimeString('bn-BD')} থেকে খোলা আছে`,
+      actionLabel: 'Close Shift',
+      actionLabelBn: 'Shift বন্ধ করুন',
+      actionUrl: '/pos?page=dashboard',
+    };
+  } catch {
+    return null;
+  }
 }
 
 // ============================================================================

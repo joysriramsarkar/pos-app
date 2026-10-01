@@ -283,8 +283,9 @@ export function POSDashboard() {
     fetch('/api/shifts?status=OPEN')
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (data?.shift) {
-          setActiveShift(data.shift);
+        const shiftObj = data?.data || data?.shift;
+        if (shiftObj) {
+          setActiveShift(shiftObj);
         }
       })
       .catch(() => {});

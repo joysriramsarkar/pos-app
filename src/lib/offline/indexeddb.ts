@@ -205,8 +205,11 @@ export function closeAllDatabases(): void {
 }
 
 async function getStore(storeName: string, mode: IDBTransactionMode = 'readonly', businessId?: string): Promise<IDBObjectStore> {
-  // Resolve tenant: explicit arg → active tenant → error
-  const tenantId = businessId ?? activeTenantBusinessId;
+  // Resolve tenant: explicit arg → active tenant → stored session → error
+  const tenantId =
+    businessId ??
+    activeTenantBusinessId ??
+    (typeof window !== 'undefined' ? readStoredSessionUser()?.businessId : null);
   if (!tenantId) {
     throw new Error('[IndexedDB] businessId is required — call setActiveTenant(businessId) after login');
   }

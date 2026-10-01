@@ -1,9 +1,12 @@
 import { useEffect } from 'react';
 import { useCustomersStore } from '@/stores/pos-store';
-import { CustomersDB } from '@/lib/offline/indexeddb';
+import { CustomersDB, setActiveTenant } from '@/lib/offline/indexeddb';
 
 export function usePosCustomers(_activeUser?: any) {
   useEffect(() => {
+    if (_activeUser?.businessId) {
+      setActiveTenant(_activeUser.businessId);
+    }
     const loadCustomers = async () => {
       const { setCustomers, setLoading: setCustomersLoading } = useCustomersStore.getState();
       setCustomersLoading(true);
