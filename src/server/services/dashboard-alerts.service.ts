@@ -97,14 +97,6 @@ export async function getDashboardAlerts(businessId: string): Promise<DashboardA
 // ============================================================================
 
 async function getLowStockAlert(businessId: string): Promise<DashboardAlert | null> {
-  const count = await db.product.count({
-    where: {
-      businessId,
-      isActive: true,
-      // currentStock <= minStockLevel using raw comparison
-    },
-  });
-
   // Use raw query for comparison of two decimal columns
   const result = await db.$queryRaw<[{ count: bigint }]>`
     SELECT COUNT(*) as count
@@ -361,15 +353,12 @@ export async function getTodaySummary(businessId: string): Promise<TodaySummary>
     }
   }
 
-  // For sales without payment records (legacy), use cashAmount/upiAmount fields
-  if (salesResult.some((s) => s.payments.length === 0)) {
-    totalCash = 0;
-    totalUPI = 0;
-    for (const sale of salesResult) {
-      if (sale.payments.length === 0) {
-        totalCash += Number((sale as any).cashAmount ?? 0);
-        totalUPI += Number((sale as any).upiAmount ?? 0);
-      }
+  // For legacy sales without payment records, fall back to cashAmount/upiAmount fields
+  // (do NOT reset totals — only add the missing amounts for payment-record-less sales)
+  for (const sale of salesResult) {
+    if (sale.payments.length === 0) {
+      totalCash += Number((sale as any).cashAmount ?? 0);
+      totalUPI += Number((sale as any).upiAmount ?? 0);
     }
   }
 

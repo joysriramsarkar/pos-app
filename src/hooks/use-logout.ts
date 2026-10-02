@@ -23,12 +23,15 @@ export function useLogout() {
 
     // Clear IndexedDB
     try {
-      const databases = await window.indexedDB.databases();
-      databases.forEach((db) => {
-        if (db.name) {
-          window.indexedDB.deleteDatabase(db.name);
-        }
-      });
+      // indexedDB.databases() is not available on all Android WebViews
+      if (typeof window.indexedDB?.databases === 'function') {
+        const databases = await window.indexedDB.databases();
+        databases.forEach((db) => {
+          if (db.name) {
+            window.indexedDB.deleteDatabase(db.name);
+          }
+        });
+      }
     } catch (error) {
       console.error("Error clearing IndexedDB:", error);
     }

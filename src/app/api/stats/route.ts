@@ -194,7 +194,7 @@ export async function GET(request: NextRequest) {
       where: {
         businessId,
         createdAt: { gte: day7Start, lt: endOfDay },
-        status: 'COMPLETED',
+        status: { in: ['COMPLETED', 'PARTIAL_RETURN'] },
       },
       select: { totalAmount: true, createdAt: true },
     }).catch(() => []);

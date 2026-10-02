@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand colours matching the app's indigo-900 palette (#1E1B4B) -->
+    <color name="colorPrimary">#1E1B4B</color>
+    <color name="colorPrimaryDark">#14123A</color>
+    <color name="colorAccent">#6366F1</color>
+</resources>

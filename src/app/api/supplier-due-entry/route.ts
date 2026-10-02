@@ -26,24 +26,14 @@ function calculateSupplierBalances(supplier: {
     basePurchases += Number(p.totalAmount);
   }
 
-  let extraPurchases = 0;
   let totalPaid = 0;
 
   for (const e of supplier.expenses) {
     const amount = Number(e.amount);
     totalPaid += amount;
-
-    const notes = e.notes || '';
-    if (notes.startsWith('Paid supplier:')) {
-      // manual payment
-    } else if (notes.startsWith('Paid for purchase order:') || notes.startsWith('Paid for direct purchase:')) {
-      // PO payment
-    } else {
-      extraPurchases += amount;
-    }
   }
 
-  const totalPurchases = Math.round(basePurchases + extraPurchases);
+  const totalPurchases = Math.round(basePurchases);
   const totalPaidRounded = Math.round(totalPaid);
   const totalDue = totalPurchases - totalPaidRounded;
 

@@ -10,13 +10,14 @@ export function SplashScreenRemover() {
       // Ignored if running in browser
     });
 
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
     const splash = document.getElementById('splash-screen');
     if (splash) {
       splash.style.opacity = '0';
-      const timer = setTimeout(() => {
+      timer = setTimeout(() => {
         splash.remove();
       }, 300);
-      return () => clearTimeout(timer);
     }
 
     if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined') {
@@ -28,6 +29,10 @@ export function SplashScreenRemover() {
         });
       }
     }
+
+    return () => {
+      if (timer !== undefined) clearTimeout(timer);
+    };
   }, []);
 
   return null;

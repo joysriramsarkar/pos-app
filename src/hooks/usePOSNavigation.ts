@@ -66,35 +66,41 @@ export function usePOSNavigation(options: UsePOSNavigationOptions = {}) {
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
 
-    const backButtonHandler = CapacitorApp.addListener('backButton', () => {
-      if (moreMenuOpen) {
-        setMoreMenuOpen(false);
-        return;
-      }
-      if (mobileCartOpen) {
-        setMobileCartOpen(false);
-        return;
-      }
+    let handle: { remove: () => Promise<void> } | null = null;
 
-      const decision = resolveBackNavigation({
-        currentPage,
-        stack: navStackRef.current,
-        hasOpenOverlay: false,
-      });
-
-      if (decision.kind === 'navigate' && decision.page) {
-        const stack = navStackRef.current;
-        if (stack.length > 1) {
-          stack.pop();
+    const register = async () => {
+      handle = await CapacitorApp.addListener('backButton', () => {
+        if (moreMenuOpen) {
+          setMoreMenuOpen(false);
+          return;
         }
-        setCurrentPage(decision.page);
-      } else if (decision.kind === 'exit' && onExitApp) {
-        onExitApp();
-      }
-    });
+        if (mobileCartOpen) {
+          setMobileCartOpen(false);
+          return;
+        }
+
+        const decision = resolveBackNavigation({
+          currentPage,
+          stack: navStackRef.current,
+          hasOpenOverlay: false,
+        });
+
+        if (decision.kind === 'navigate' && decision.page) {
+          const stack = navStackRef.current;
+          if (stack.length > 1) {
+            stack.pop();
+          }
+          setCurrentPage(decision.page);
+        } else if (decision.kind === 'exit' && onExitApp) {
+          onExitApp();
+        }
+      });
+    };
+
+    register().catch(() => {});
 
     return () => {
-      backButtonHandler.then((handle) => handle.remove()).catch(() => {});
+      handle?.remove().catch(() => {});
     };
   }, [currentPage, moreMenuOpen, mobileCartOpen, onExitApp]);
 
