@@ -195,22 +195,39 @@ export async function GET(request: NextRequest) {
         id: true,
         customerId: true,
         totalAmount: true,
-        items: {
-          select: {
-            productId: true,
-            quantity: true,
-            costPriceAtSale: true,
-          },
-        },
       },
     });
 
-    const productIds = [...new Set(sales.flatMap((s) => s.items.map((i) => i.productId)))];
-    const products = await prisma.product.findMany({
+    const saleItems = await prisma.saleItem.findMany({
+      where: {
+        sale: {
+          businessId,
+          createdAt: { gte: startDate, lte: endDate },
+          status: { in: ['COMPLETED', 'PARTIAL_RETURN'] },
+          customerId: { not: null },
+        },
+        quantity: { gt: 0 },
+      },
+      select: {
+        saleId: true,
+        productId: true,
+        quantity: true,
+        costPriceAtSale: true,
+      },
+    });
+
+    const productIds = [...new Set(saleItems.map((i) => i.productId))];
+    const products = productIds.length > 0 ? await prisma.product.findMany({
       where: { businessId, id: { in: productIds } },
       select: { id: true, buyingPrice: true },
-    });
+    }) : [];
     const liveCostMap = new Map(products.map((p) => [p.id, toMoneyNumber(p.buyingPrice)]));
+
+    const saleCostMap = new Map<string, number>();
+    for (const item of saleItems) {
+      const itemCost = resolveUnitCost(item.productId, item.costPriceAtSale, liveCostMap) * Number(item.quantity);
+      saleCostMap.set(item.saleId, (saleCostMap.get(item.saleId) || 0) + itemCost);
+    }
 
     type CustAgg = {
       totalSpent: number;
@@ -224,10 +241,7 @@ export async function GET(request: NextRequest) {
       const cid = sale.customerId!;
       const prev = aggMap.get(cid) || { totalSpent: 0, cost: 0, profit: 0, orderCount: 0 };
       const rev = toMoneyNumber(sale.totalAmount);
-      let cost = 0;
-      for (const item of sale.items) {
-        cost += resolveUnitCost(item.productId, item.costPriceAtSale, liveCostMap) * Number(item.quantity);
-      }
+      const cost = saleCostMap.get(sale.id) || 0;
       prev.totalSpent += rev;
       prev.cost += cost;
       prev.profit += rev - cost;

@@ -76,6 +76,7 @@ export async function GET(request: NextRequest) {
         quantity: { gt: 0 },
       },
       select: {
+        saleId: true,
         productId: true,
         quantity: true,
         totalPrice: true,
@@ -84,10 +85,10 @@ export async function GET(request: NextRequest) {
     });
 
     const productIds = [...new Set(saleItems.map((i) => i.productId))];
-    const products = await prisma.product.findMany({
+    const products = productIds.length > 0 ? await prisma.product.findMany({
       where: { businessId, id: { in: productIds } },
       select: { id: true, buyingPrice: true },
-    });
+    }) : [];
     const liveCostMap = new Map(products.map((p) => [p.id, Number(p.buyingPrice)]));
 
     const unitCost = (productId: string, snap: unknown) => {
@@ -95,16 +96,22 @@ export async function GET(request: NextRequest) {
       return s > 0 ? s : (liveCostMap.get(productId) || 0);
     };
 
+    const costBySaleId = new Map<string, number>();
     let totalRevenue = 0;
     let totalCost = 0;
     for (const i of saleItems) {
       const qty = Number(i.quantity);
-      totalRevenue += toMoneyNumber(i.totalPrice);
-      totalCost += unitCost(i.productId, i.costPriceAtSale) * qty;
+      const rev = toMoneyNumber(i.totalPrice);
+      const itemCost = unitCost(i.productId, i.costPriceAtSale) * qty;
+      totalRevenue += rev;
+      totalCost += itemCost;
+      if (i.saleId) {
+        costBySaleId.set(i.saleId, (costBySaleId.get(i.saleId) || 0) + itemCost);
+      }
     }
     const totalProfit = totalRevenue - totalCost;
 
-    // Sales rows for payment breakdown + charts
+    // Sales rows for payment breakdown + charts (no nested items query for speed & memory)
     const sales = await prisma.sale.findMany({
       where: saleWhere,
       select: {
@@ -116,9 +123,6 @@ export async function GET(request: NextRequest) {
         cashAmount: true,
         upiAmount: true,
         status: true,
-        items: {
-          select: { productId: true, quantity: true, costPriceAtSale: true, totalPrice: true },
-        },
       },
     });
 
@@ -169,10 +173,7 @@ export async function GET(request: NextRequest) {
       for (const sale of sales) {
         const hour = toZonedTime(sale.createdAt, TZ).getHours();
         const rev = Number(sale.totalAmount);
-        const cost = sale.items.reduce(
-          (s, i) => s + unitCost(i.productId, i.costPriceAtSale) * Number(i.quantity),
-          0,
-        );
+        const cost = costBySaleId.get(sale.id) || 0;
         chartData[hour].revenue += rev;
         chartData[hour].profit += rev - cost;
         chartData[hour].count += 1;
@@ -194,10 +195,7 @@ export async function GET(request: NextRequest) {
         const day = salesByDay.get(key);
         if (day) {
           const rev = Number(sale.totalAmount);
-          const cost = sale.items.reduce(
-            (s, i) => s + unitCost(i.productId, i.costPriceAtSale) * Number(i.quantity),
-            0,
-          );
+          const cost = costBySaleId.get(sale.id) || 0;
           day.revenue += rev;
           day.profit += rev - cost;
           day.count += 1;
