@@ -72,11 +72,14 @@ export function planSaleStockUsage(input: {
 
 /**
  * Lock products in sorted id order (deadlock-safe) and build stock plans.
+ * @param rejectOnShortage - When true (default), throws if any product has insufficient stock.
+ *   Set to false only for explicit oversell scenarios (e.g., admin override, sync fallback).
  */
 export async function lockAndPlanSaleStock(
   tx: Prisma.TransactionClient,
   items: Array<{ productId: string; quantity: number; productName?: string }>,
   businessId?: string,
+  rejectOnShortage = true,
 ): Promise<{
   deductions: StockDeduction[];
   plansByProductId: Map<string, SaleStockPlan>;
@@ -131,6 +134,14 @@ export async function lockAndPlanSaleStock(
       wacUnitCost: toMoneyNumber(row.buying_price),
     });
 
+    // Bug 7 fix: By default, reject sales that would create phantom/ghost stock.
+    // Phantom stock = selling items you don't physically have.
+    if (rejectOnShortage && plan.shortageQty > 0) {
+      throw new Error(
+        `Insufficient stock for "${plan.productName}": available ${plan.stockBefore < 0 ? 0 : plan.stockBefore}, requested ${plan.requiredQty}`
+      );
+    }
+
     plansByProductId.set(d.productId, plan);
 
     if (plan.shortageQty > 0 || plan.stockBefore < 0) {
@@ -147,6 +158,7 @@ export async function lockAndPlanSaleStock(
 
   return { deductions, plansByProductId, autoAdjusted };
 }
+
 
 /**
  * Apply stock deductions + history after sale row exists.

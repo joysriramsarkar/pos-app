@@ -143,6 +143,10 @@ export const useCartStore = create<CartState & CartActions>()(
           return;
         }
 
+        // Bug 6 fix: enforce stock limit in the cart.
+        // availableStock is set from product.currentStock at scan time.
+        const availableStock = product.currentStock;
+
         useProductUsageStore.getState().recordUsage(product.id);
         
         const tab = get().getActiveTab();
@@ -154,7 +158,11 @@ export const useCartStore = create<CartState & CartActions>()(
         if (existingItemIndex >= 0) {
           const updatedItems = [...currentItems];
           const existingItem = updatedItems[existingItemIndex];
-          const newQuantity = new Decimal(existingItem.quantity).plus(new Decimal(actualQuantity)).toNumber();
+          const rawNewQty = new Decimal(existingItem.quantity).plus(new Decimal(actualQuantity)).toNumber();
+          // Cap at available stock (0 means unlisted / untracked — allow)
+          const newQuantity = availableStock > 0
+            ? Math.min(rawNewQty, availableStock)
+            : rawNewQty;
 
           updatedItems[existingItemIndex] = {
             ...existingItem,
@@ -163,14 +171,18 @@ export const useCartStore = create<CartState & CartActions>()(
           };
           get()._updateActiveTab({ items: updatedItems });
         } else {
+          // Cap initial quantity at available stock
+          const cappedQty = availableStock > 0
+            ? Math.min(actualQuantity, availableStock)
+            : actualQuantity;
           const newItem: CartItem = {
             id: uuidv4(),
             productId: product.id,
             productName: product.name,
             barcode: product.barcode || undefined,
-            quantity: actualQuantity,
+            quantity: cappedQty,
             unitPrice: product.sellingPrice,
-            totalPrice: multiplyMoney(actualQuantity, product.sellingPrice).toNumber(),
+            totalPrice: multiplyMoney(cappedQty, product.sellingPrice).toNumber(),
             unit: product.unit,
             availableStock: product.currentStock,
           };
@@ -196,9 +208,14 @@ export const useCartStore = create<CartState & CartActions>()(
         const currentTab = get().getActiveTab();
         const newItems = currentTab.items.map((item) => {
           if (item.id === itemId) {
-            const newTotalPrice = multiplyMoney(quantity, item.unitPrice).toNumber();
+            // Bug 6 fix: cap at availableStock if we know it (0 = untracked, allow)
+            const maxQty = (item.availableStock && item.availableStock > 0)
+              ? item.availableStock
+              : quantity;
+            const safeQty = Math.min(quantity, maxQty);
+            const newTotalPrice = multiplyMoney(safeQty, item.unitPrice).toNumber();
             const newDiscount = Math.min(item.discount || 0, newTotalPrice);
-            return { ...item, quantity, totalPrice: newTotalPrice, discount: newDiscount };
+            return { ...item, quantity: safeQty, totalPrice: newTotalPrice, discount: newDiscount };
           }
           return item;
         });
@@ -211,9 +228,15 @@ export const useCartStore = create<CartState & CartActions>()(
 
       setItemDiscount: (itemId: string, discount: number) => {
         const currentTab = get().getActiveTab();
-        const newItems = currentTab.items.map((item) =>
-          item.id === itemId ? { ...item, discount } : item
-        );
+        const newItems = currentTab.items.map((item) => {
+          if (item.id !== itemId) return item;
+          // Clamp discount to [0, lineTotal] — prevent negative prices or discounts > total
+          const safeDiscount = Math.min(
+            Math.max(0, discount),
+            toMoneyNumber(new Decimal(item.totalPrice))
+          );
+          return { ...item, discount: safeDiscount };
+        });
         const newDiscount = newItems.reduce((sum, item) => sum + (item.discount || 0), 0);
         get()._updateActiveTab({
           items: newItems,
@@ -259,8 +282,9 @@ export const useCartStore = create<CartState & CartActions>()(
       getTotal: () => {
         const subtotal = get().getSubtotal();
         const { discount, tax } = get().getActiveTab();
-        const rawTotal = new Decimal(subtotal).minus(new Decimal(discount)).plus(new Decimal(tax)).toNumber();
-        return Math.round(rawTotal);
+        // Do NOT round here — preserve decimal precision (e.g. kg/litre pricing).
+        // Rounding is done only at payment UI layer when needed.
+        return toMoneyNumber(new Decimal(subtotal).minus(new Decimal(discount)).plus(new Decimal(tax)));
       },
 
       getItemCount: () => {
@@ -552,7 +576,8 @@ export const useCustomersStore = create<CustomersState & CustomersActions>((set,
     set((state) => ({
       customers: state.customers.map((c) =>
         c.id === id
-          ? { ...c, totalDue: toMoneyNumber(new Decimal(c.totalDue).plus(amount)) }
+          // Guard against negative due in local cache (same as prepaidBalance guard)
+          ? { ...c, totalDue: Math.max(0, toMoneyNumber(new Decimal(c.totalDue).plus(amount))) }
           : c
       ),
     }));

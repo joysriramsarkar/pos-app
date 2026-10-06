@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
@@ -320,6 +320,7 @@ export function POSDashboard() {
 
   const customers = useCustomersStore((state) => state.customers);
   const updateCustomerDue = useCustomersStore((state) => state.updateCustomerDue);
+  const updateCustomerPrepaid = useCustomersStore((state) => state.updateCustomerPrepaid);
 
   const { toast } = useToast();
 
@@ -657,28 +658,12 @@ export function POSDashboard() {
       createdAt: new Date(),
     };
 
-    // Prepare prepayment queue item if applicable
-    const prepaymentQueueItem = (paymentData.changeAsPrepayment && paymentData.changeAsPrepayment > 0 && paymentData.customerId) 
-      ? {
-          id: uuidv4(),
-          entityType: 'Prepayment',
-          entityId: uuidv4(),
-          action: 'create',
-          payload: JSON.stringify({ customerId: paymentData.customerId, amount: paymentData.changeAsPrepayment }),
-          synced: false,
-          retryCount: 0,
-          createdAt: new Date(),
-        } as SyncQueueItem
-      : null;
-
-    // ✅ FIX: Atomize transaction - save sale and prepayment together
+    // ✅ Bug 2 FIX: Do NOT create a separate prepayment:create queue item for changeAsPrepayment.
+    // The sale sync payload already includes changeAsPrepayment and syncSale() credits it to
+    // prepaidBalance inside the same DB transaction. A duplicate prepayment:create would cause
+    // double-credit (₹100 change → +₹200 prepaid balance).
     try {
       await saveSaleWithSyncQueue(sale, syncQueueItem);
-      
-      // Only save prepayment if main sale succeeded
-      if (prepaymentQueueItem) {
-        await SyncQueueDB.add(prepaymentQueueItem);
-      }
     } catch (error) {
       console.error('Failed to save sale with sync queue:', error);
       throw error;
@@ -701,6 +686,15 @@ export function POSDashboard() {
         updateCustomerDue(paymentData.customerId, -debtRepay);
         CustomersDB.updateDue(paymentData.customerId, -debtRepay).catch(console.error);
       }
+      // Bug 5 fix: immediately update local prepaid cache so subsequent offline sales
+      // see the correct available balance instead of a stale snapshot.
+      const prepaidUsed = paymentData.prepaidAmountUsed || 0;
+      const changeAsPrepay = paymentData.changeAsPrepayment || 0;
+      const netPrepaidChange = changeAsPrepay - prepaidUsed;
+      if (netPrepaidChange !== 0) {
+        updateCustomerPrepaid(paymentData.customerId, netPrepaidChange);
+        CustomersDB.updatePrepaid(paymentData.customerId, netPrepaidChange).catch(console.error);
+      }
     }
 
     setCurrentSale(sale);
@@ -716,36 +710,82 @@ export function POSDashboard() {
     useSalesStore.setState({ sales: [sale, ...useSalesStore.getState().sales] });
     
     return sale; // Return sale so handleCheckoutComplete can use it
-  }, [cartItems, activeUser, updateProductStock, updateCustomerDue, setCurrentSale, setCompletedCheckoutSale, clearCart]);
+  }, [cartItems, activeUser, updateProductStock, updateCustomerDue, updateCustomerPrepaid, setCurrentSale, setCompletedCheckoutSale, clearCart]);
 
   const handleCheckoutComplete = useCallback(async (paymentData: PaymentData) => {
     const tabId = activeTabId;
     setTabProcessing(tabId, true);
 
     try {
-      // ১. সব অবস্থাতেই প্রথমে লোকাল ডাটাবেস (IndexedDB) ও UI সাথে সাথে আপডেট করুন (Zero Latency)
+      // ১. সব অবস্থায় প্রথমে লোকাল IndexedDB ও UI আপডেট করো (Zero Latency UX)
       const sale = await processOfflineSale(paymentData);
-      
-      // Try to save sale to server database if online
-      // ✅ CRITICAL FIX: Remove direct /api/sales call to prevent race conditions & duplicate syncs
-      // Queue is already created in processOfflineSale - use background sync only
-      
-      // ২. ইউজারকে সাথে সাথে সাকসেস স্ক্রিন দেখিয়ে দিন, যাতে সে পরবর্তী বিলিং শুরু করতে পারে
-      toast({ title: 'সফল', description: 'বিলিং সম্পন্ন হয়েছে।', duration: 1500 });
 
-      // ৩. ব্যাকগ্রাউন্ডে ডাটাবেস সিঙ্ক ট্রিগার করুন (নেটওয়ার্ক থাকলে সিঙ্ক হবে, না থাকলে কিউতে জমা থাকবে)
       if (isOnline) {
-        getSyncWorker().then(worker => worker.startSync()).catch(console.error);
+        // Bug 1 Fix: Online হলে সাথে সাথে server-এ sync করো।
+        // processOfflineSale() ইতিমধ্যে sync queue-এ item add করেছে।
+        // সেই একই idempotency key দিয়ে সরাসরি /api/sync POST করো।
+        try {
+          const allPending = await SyncQueueDB.getUnsynced();
+          const saleQueueItem = allPending.find(
+            (item) => item.entityType === 'Sale' && (() => {
+              try { return JSON.parse(item.payload).id === sale.id; }
+              catch { return false; }
+            })()
+          );
+
+          if (saleQueueItem) {
+            const res = await fetch('/api/sync', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-Idempotency-Key': saleQueueItem.id,
+              },
+              body: JSON.stringify({
+                idempotencyKey: saleQueueItem.id,
+                actionType: 'sale:create',
+                payload: JSON.parse(saleQueueItem.payload),
+              }),
+            });
+
+            if (res.ok) {
+              await SyncQueueDB.markSynced(saleQueueItem.id);
+              toast({ title: '✓ বিলিং নিশ্চিত', description: 'সার্ভারে সংরক্ষিত হয়েছে।', duration: 2000 });
+            } else {
+              const errData = await res.json().catch(() => ({}));
+              const errMsg = errData?.error || `Server error (${res.status})`;
+              // Definitive business error (4xx) — show prominently
+              if (res.status >= 400 && res.status < 500 && res.status !== 429 && res.status !== 408) {
+                toast({
+                  title: 'সার্ভার বিলিং গ্রহণ করেনি',
+                  description: errMsg,
+                  variant: 'destructive',
+                  duration: 6000,
+                });
+              } else {
+                // Transient — background sync will retry
+                toast({ title: 'বিলিং সংরক্ষিত', description: 'সিঙ্ক পুনরায় হবে।', duration: 2000 });
+                getSyncWorker().then(worker => worker.startSync()).catch(console.error);
+              }
+            }
+          } else {
+            toast({ title: 'সফল', description: 'বিলিং সম্পন্ন হয়েছে।', duration: 1500 });
+            getSyncWorker().then(worker => worker.startSync()).catch(console.error);
+          }
+        } catch (syncErr) {
+          console.warn('[Checkout] Inline server sync failed, queued for background sync:', syncErr);
+          toast({ title: 'বিলিং সংরক্ষিত', description: 'নেটওয়ার্ক পুনরুদ্ধারে সিঙ্ক হবে।', duration: 2000 });
+        }
+      } else {
+        // Offline — queue-এ আছে, পরে sync হবে
+        toast({ title: 'বিলিং সংরক্ষিত', description: 'অনলাইন হলে সার্ভারে সিঙ্ক হবে।', duration: 1500 });
       }
     } catch (error) {
       console.error('Checkout failed:', error);
-      
       setCompletedCheckoutSale(null);
       setCheckoutOpen(false);
-      
       toast({
         title: 'চেকআউট ব্যর্থ হয়েছে',
-        description: error instanceof Error ? error.message : 'ত্রুটি হয়েছে',
+        description: error instanceof Error ? error.message : 'ত্রুটি হয়েছে',
         variant: 'destructive',
       });
     } finally {

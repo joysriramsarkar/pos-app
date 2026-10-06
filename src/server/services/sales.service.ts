@@ -96,21 +96,20 @@ export function calculateItemTotal(
 // DISCOUNT LIMIT CHECK (Role-based approval)
 // ============================================================================
 
-export const DISCOUNT_LIMITS: Record<string, number> = {
-  CASHIER: 10,  // Max 10%
-  MANAGER: 20,  // Max 20%
-  ADMIN:   100, // Unlimited
-  OWNER:   100, // Unlimited
-  VIEWER:  0,   // Cannot create sales
-};
+// Canonical discount limits live in permissions-helpers.ts (ROLE_DISCOUNT_LIMITS).
+// Import and re-export here so callers don't need a second source.
+export { ROLE_DISCOUNT_LIMITS as DISCOUNT_LIMITS } from '@/lib/permissions-helpers';
+import { ROLE_DISCOUNT_LIMITS } from '@/lib/permissions-helpers';
 
 export function checkDiscountLimit(
   discountPercent: number,
   role: string
 ): boolean {
-  const limit = DISCOUNT_LIMITS[role] ?? 0;
+  const limit = ROLE_DISCOUNT_LIMITS[role as keyof typeof ROLE_DISCOUNT_LIMITS] ?? 0;
   return discountPercent <= limit;
 }
+
+
 
 // ============================================================================
 // CORE CREATE SALE SERVICE

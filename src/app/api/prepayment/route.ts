@@ -6,11 +6,15 @@ import { db } from '@/lib/db';
 import { requireAuth } from '@/lib/api-middleware';
 import { requireBusinessContext, checkPermission } from '@/lib/tenant';
 import { addMoney, toMoneyNumber } from '@/lib/money';
+import { logAudit } from '@/lib/audit';
 
 const prepaymentSchema = z.object({
   customerId: z.string().cuid(),
   amount: z.coerce.number().positive().transform((value) => toMoneyNumber(value)),
 });
+
+const getIp = (req: NextRequest) =>
+  req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || undefined;
 
 export async function POST(req: NextRequest) {
   try {
@@ -34,9 +38,26 @@ export async function POST(req: NextRequest) {
 
     const { customerId, amount } = validation.data;
 
+    // Bug 11 fix: idempotency — deduplicate on X-Idempotency-Key so a network
+    // retry doesn't credit the customer twice.
+    const idempotencyKey = req.headers.get('X-Idempotency-Key');
+    const referenceId = idempotencyKey
+      ? `PREPAY-${idempotencyKey}`
+      : `PREPAY-${Date.now()}-${customerId.slice(-6)}`;
+
+    if (idempotencyKey) {
+      const existing = await db.ledgerEntry.findFirst({
+        where: { businessId, referenceId },
+      });
+      if (existing) {
+        const customer = await db.customer.findUnique({ where: { id: customerId } });
+        return NextResponse.json({ success: true, data: customer, idempotent: true });
+      }
+    }
+
     const updatedCustomer = await db.$transaction(async (tx) => {
       const customerRaw = await tx.$queryRaw<any[]>`
-        SELECT id, "total_due" as "totalDue", "prepaid_balance" as "prepaidBalance"
+        SELECT id, name, "total_due" as "totalDue", "prepaid_balance" as "prepaidBalance"
         FROM customers
         WHERE id = ${customerId} AND business_id = ${businessId}
         FOR UPDATE
@@ -51,24 +72,34 @@ export async function POST(req: NextRequest) {
 
       const updated = await tx.customer.update({
         where: { id: customerId },
-        data: {
-          prepaidBalance: newPrepaidBalance,
-        },
+        data: { prepaidBalance: newPrepaidBalance },
       });
 
       await tx.ledgerEntry.create({
         data: {
           businessId,
-          customerId: customerId,
+          customerId,
           entryType: 'PREPAYMENT_ADDED',
-          amount: amount,
+          amount,
           balanceAfter: customer.totalDue,
+          // Bug 11: stable referenceId for idempotency dedup
+          referenceId,
           description: 'Prepayment added',
-          referenceId: `PREPAY-${Date.now()}`,
         },
       });
 
       return updated;
+    });
+
+    // Bug 13 fix: audit log was missing for prepayment additions
+    await logAudit({
+      userId: ctx.user.id,
+      businessId,
+      action: 'PREPAYMENT_ADDED',
+      entityType: 'Customer',
+      entityId: customerId,
+      details: { amount, referenceId },
+      ipAddress: getIp(req),
     });
 
     return NextResponse.json({ success: true, data: updatedCustomer });
@@ -79,3 +110,4 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: false, error: errorMessage }, { status: statusCode });
   }
 }
+

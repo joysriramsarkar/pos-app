@@ -300,13 +300,24 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
     if (!saleData.invoiceNumber) {
       throw new Error("Invoice number is required for sync");
     }
-    // Check if sale already exists (prevent duplicates)
+    // Bug 17 fix: idempotency is handled via X-Idempotency-Key / syncQueue above.
+    // If we reach here and an invoice with this number already exists it is a genuine
+    // collision between two different sales — treat it as a CONFLICT, not a silent replay.
     const existing = await tx.sale.findFirst({
       where: { businessId, invoiceNumber: saleData.invoiceNumber },
     });
 
     if (existing) {
-      return existing;
+      // Allow exact same sale id (true idempotent replay from a retried sync key that
+      // slipped past the syncQueue check, e.g. a race between two concurrent requests).
+      if (saleData.id && existing.id === saleData.id) {
+        return existing;
+      }
+      // Different sale — real invoice number collision. Surface it so the cashier can
+      // investigate rather than silently losing the second sale.
+      throw new Error(
+        `CONFLICT: Invoice number ${saleData.invoiceNumber} already exists for a different sale. Please re-sync or manually assign a new invoice number.`
+      );
     }
 
     // Create sale with items
@@ -319,10 +330,14 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
     }
 
     // 1. Lock products + plan stock (FOR UPDATE, auto-adjust, blended COGS)
+    // Bug 7 note: rejectOnShortage=false here because the sale ALREADY HAPPENED offline —
+    // the customer physically received the goods. Blocking sync retroactively would corrupt
+    // the ledger. The shortage is recorded in autoAdjusted for transparency.
     const { plansByProductId, autoAdjusted } = await lockAndPlanSaleStock(
       tx,
       saleData.items,
       businessId,
+      false, // allow shortage — don't reject past offline sales
     );
 
     // 2. Validate customer exists if specified
@@ -373,6 +388,11 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
       throw new Error("Received amount does not cover sale payment, prepaid change, and due clearance");
     }
 
+    // Bug 3 fix: determine payment method and preserve cash/UPI breakdown
+    const pMethodRaw = saleData.paymentMethod ? String(saleData.paymentMethod).toUpperCase() : 'CASH';
+    const cashAmt = (saleData as any).cashAmount ?? null;
+    const upiAmt = (saleData as any).upiAmount ?? null;
+
     // CREATE PHASE: sale rows use blended cost (owned @ WAC, shortage @ 0)
     let sale: any;
     try {
@@ -388,9 +408,12 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
           tax: saleData.tax || 0,
           totalAmount: saleData.totalAmount || 0,
           amountPaid: saleData.amountPaid || 0,
-          paymentMethod: (saleData.paymentMethod ? (saleData.paymentMethod as string).toUpperCase() : "CASH") as any,
-          paymentStatus: (saleData.paymentStatus ? (saleData.paymentStatus as string).toUpperCase() : "PAID") as any,
-          status: (saleData.status ? (saleData.status as string).toUpperCase() : "COMPLETED") as any,
+          // Bug 3: preserve split payment breakdown for reconciliation reports
+          cashAmount: cashAmt,
+          upiAmount: upiAmt,
+          paymentMethod: pMethodRaw as any,
+          paymentStatus: (saleData.paymentStatus ? (saleData.paymentStatus as string).toUpperCase() : 'PAID') as any,
+          status: (saleData.status ? (saleData.status as string).toUpperCase() : 'COMPLETED') as any,
           notes: saleData.notes || null,
           offlineSynced: true,
           items: {
@@ -600,6 +623,12 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
              if (prepaidBalanceIncrement.gt(0) || prepaidBalanceDecrement.gt(0)) {
                const newPrepaidBalance = currentPrepaidBalance.plus(prepaidBalanceIncrement).minus(prepaidBalanceDecrement);
                dataUpdate.prepaidBalance = newPrepaidBalance.gt(0) ? newPrepaidBalance : new Decimal(0);
+             }
+             // Bug 4 fix: totalPaid was not incremented during offline sync.
+             // createSale() does { increment: paid } — match that behaviour here.
+             const externalPaid = amountPaid.minus(prepaidToUse);
+             if (externalPaid.gt(0)) {
+               dataUpdate.totalPaid = { increment: externalPaid.toNumber() };
              }
 
              await tx.customer.update({

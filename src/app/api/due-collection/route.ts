@@ -96,6 +96,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Bug 12 fix: idempotency — if the same X-Idempotency-Key is already recorded in
+    // the ledger, return the previous result instead of double-collecting.
+    const idempotencyKey = request.headers.get('X-Idempotency-Key');
+    if (idempotencyKey) {
+      const existing = await db.ledgerEntry.findFirst({
+        where: { businessId, referenceId: `DUE-COLLECT-${idempotencyKey}` },
+      });
+      if (existing) {
+        const customer = await db.customer.findUnique({ where: { id: customerId } });
+        return NextResponse.json({
+          success: true,
+          data: { customer, collectedAmount: Number(existing.amount), remainingDue: Number(existing.balanceAfter) },
+          idempotent: true,
+        });
+      }
+    }
+    const referenceId = idempotencyKey ? `DUE-COLLECT-${idempotencyKey}` : `DUE-COLLECT-${Date.now()}-${customerId.slice(-6)}`;
+
     const collectAmount = toMoneyDecimal(amount);
 
     const updated = await db.$transaction(async (tx) => {
@@ -142,6 +160,9 @@ export async function POST(request: NextRequest) {
           entryType: 'DEBIT',
           amount: collectAmount,
           balanceAfter: newDueAmount,
+          // Bug 13 fix: always record a referenceId so this ledger entry can be
+          // traced back and de-duplicated on retry.
+          referenceId,
           description: notes || `Manual due collection (${paymentMethod || 'Cash'})`,
         },
       });
