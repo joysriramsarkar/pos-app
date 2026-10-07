@@ -105,26 +105,35 @@ export async function GET(request: NextRequest) {
       select: { totalDue: true },
     }).catch(() => []);
 
-    // 5. Low stock products
-    const lowStockProducts = await db.$queryRaw<{
-      id: string;
-      name: string;
-      nameBn: string | null;
-      currentStock: number;
-      minStockLevel: number;
-      soldLast7: number;
-    }[]>`
-      SELECT id, name, name_bn as "nameBn",
-             CAST(current_stock AS FLOAT) as "currentStock",
-             CAST(min_stock_level AS FLOAT) as "minStockLevel",
-             0 as "soldLast7"
-      FROM products
-      WHERE business_id = ${businessId}
-        AND is_active = true
-        AND current_stock <= min_stock_level
-      ORDER BY current_stock ASC
-      LIMIT 20
-    `.catch(() => []);
+    // 5. Low stock products & count
+    const [lowStockCount, lowStockProducts] = await Promise.all([
+      db.$queryRaw<Array<{ count: bigint }>>`
+        SELECT count(*) as count
+        FROM products
+        WHERE business_id = ${businessId}
+          AND is_active = true
+          AND current_stock <= min_stock_level
+      `.then((r) => Number(r[0]?.count ?? 0)).catch(() => 0),
+      db.$queryRaw<{
+        id: string;
+        name: string;
+        nameBn: string | null;
+        currentStock: number;
+        minStockLevel: number;
+        soldLast7: number;
+      }[]>`
+        SELECT id, name, name_bn as "nameBn",
+               CAST(current_stock AS FLOAT) as "currentStock",
+               CAST(min_stock_level AS FLOAT) as "minStockLevel",
+               0 as "soldLast7"
+        FROM products
+        WHERE business_id = ${businessId}
+          AND is_active = true
+          AND current_stock <= min_stock_level
+        ORDER BY current_stock ASC
+        LIMIT 20
+      `.catch(() => []),
+    ]);
 
     // 6. Recent transactions (explicit select to avoid shift_id)
     const recentSales = await db.sale
@@ -347,6 +356,7 @@ export async function GET(request: NextRequest) {
           paymentBreakdown,
           reconciliation,
           last7DaysSales,
+          lowStockCount,
           lowStockProducts,
           recentTransactions,
         },

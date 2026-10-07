@@ -297,6 +297,7 @@ async function handlePost(request: NextRequest, ctx: RouteContext & { tenant: Te
           tx,
           validatedItems,
           businessId,
+          false, // allow auto-adjust shortage for loose goods / untracked inventory
         );
 
         const saleCreateData: Prisma.SaleCreateInput = {
