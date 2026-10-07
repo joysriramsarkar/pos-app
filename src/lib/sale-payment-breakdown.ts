@@ -88,7 +88,8 @@ export function breakdownSalePayment(sale: SalePaymentFields): SalePaymentBreakd
 export function aggregateSalePayments(sales: SalePaymentFields[]) {
   return sales.reduce(
     (acc, sale) => {
-      if (sale.status === "Cancelled") return acc;
+      const status = (sale.status || "").toUpperCase();
+      if (status === "CANCELLED" || status === "REFUNDED") return acc;
       const b = breakdownSalePayment(sale);
       acc.cash += b.cash;
       acc.upi += b.upi;

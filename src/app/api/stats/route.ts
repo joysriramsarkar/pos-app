@@ -192,11 +192,32 @@ export async function GET(request: NextRequest) {
         quantity: { gt: 0 },
       },
       select: {
+        id: true,
         productId: true,
         quantity: true,
         costPriceAtSale: true,
       },
     }).catch(() => []);
+
+    // Items returned today — their cost must be removed from COGS, otherwise a
+    // partial return keeps the original cost in profit while refunds reduce revenue.
+    const todayReturnedItems = await db.saleReturnItem.findMany({
+      where: {
+        saleReturn: {
+          businessId,
+          createdAt: { gte: startOfDay, lt: endOfDay },
+        },
+      },
+      select: { saleItemId: true, quantity: true },
+    }).catch(() => []);
+
+    const returnedQtyBySaleItemId = new Map<string, number>();
+    for (const r of todayReturnedItems) {
+      returnedQtyBySaleItemId.set(
+        r.saleItemId,
+        (returnedQtyBySaleItemId.get(r.saleItemId) || 0) + Number(r.quantity || 0),
+      );
+    }
 
     // 11. Week 7 sales
     const week7Sales = await db.sale.findMany({
@@ -284,21 +305,16 @@ export async function GET(request: NextRequest) {
       expectedCashAfterExpenses: todayCashTotal - todayExpensesTotal,
     };
 
-    // COGS calculation
-    const productIds = [...new Set(todaySaleItems.map(item => item.productId))];
-    let productBuyingPriceMap = new Map<string, number>();
-    if (productIds.length > 0) {
-      const prods = await db.product.findMany({
-        where: { businessId, id: { in: productIds } },
-        select: { id: true, buyingPrice: true },
-      }).catch(() => []);
-      productBuyingPriceMap = new Map(prods.map(p => [p.id, Number(p.buyingPrice || 0)]));
-    }
-
+    // COGS calculation — historical snapshot only, net of today's returns.
     const costOfGoodsSold = todaySaleItems.reduce((sum, item) => {
       const snap = Number(item.costPriceAtSale);
-      const unitCost = snap > 0 ? snap : (productBuyingPriceMap.get(item.productId) ?? 0);
-      return sum + (unitCost * Number(item.quantity));
+      const unitCost = snap > 0 ? snap : 0;
+      const returnedQty = Math.min(
+        returnedQtyBySaleItemId.get(item.id) || 0,
+        Number(item.quantity),
+      );
+      const netQty = Number(item.quantity) - returnedQty;
+      return sum + unitCost * netQty;
     }, 0);
 
     const todayExpensesNonSupplier = todayExpenses

@@ -1,4 +1,5 @@
 import { format } from 'date-fns';
+import { buildCSV } from '@/lib/export-utils';
 import type { PaymentSummary } from './types';
 
 export function downloadPaymentsCsv(filteredSales: any[], summary: PaymentSummary) {
@@ -19,7 +20,7 @@ export function downloadPaymentsCsv(filteredSales: any[], summary: PaymentSummar
     ['Total', '', '', '', '', '', summary.total.toFixed(2), ''],
   ];
 
-  const csv = rows.map((r: any[]) => r.map((v: any) => `"${v}"`).join(',')).join('\n');
+  const csv = buildCSV(rows);
   const blob = new Blob([csv], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

@@ -1,4 +1,5 @@
 import { format } from 'date-fns';
+import { buildCSV } from '@/lib/export-utils';
 import type { CustomerStats } from './types';
 
 export function computeCustomerStats(customers: any[]): CustomerStats {
@@ -57,7 +58,7 @@ export function downloadCustomersCsv(filteredCustomers: any[]) {
     ]),
   ];
 
-  const csv = rows.map((r: any[]) => r.map((v: any) => `"${v}"`).join(',')).join('\n');
+  const csv = buildCSV(rows);
   const blob = new Blob([csv], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

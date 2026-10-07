@@ -5,7 +5,7 @@ import { format, eachDayOfInterval, eachMonthOfInterval, parseISO } from "date-f
 import { toZonedTime } from "date-fns-tz";
 import { requireAuth } from "@/lib/api-middleware";
 import { requireBusinessContext, checkPermission } from "@/lib/tenant";
-import { reportSaleStatusFilter } from "@/lib/report-filters";
+import { reportSaleStatusFilter, normalizePaymentMethodKey } from "@/lib/report-filters";
 import { aggregateSalePayments, breakdownSalePayment } from "@/lib/sale-payment-breakdown";
 import { toMoneyNumber } from "@/lib/money";
 
@@ -84,32 +84,25 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    const productIds = [...new Set(saleItems.map((i) => i.productId))];
-    const products = productIds.length > 0 ? await prisma.product.findMany({
-      where: { businessId, id: { in: productIds } },
-      select: { id: true, buyingPrice: true },
-    }) : [];
-    const liveCostMap = new Map(products.map((p) => [p.id, Number(p.buyingPrice)]));
-
-    const unitCost = (productId: string, snap: unknown) => {
+    // Historical cost uses ONLY the snapshot captured at sale time. Falling back
+    // to the product's *current* buying price silently rewrote historical profit
+    // (e.g. a January sale re-costed at March's price). A missing/zero snapshot
+    // is treated as missing, not estimated.
+    const unitCost = (_productId: string, snap: unknown) => {
       const s = Number(snap);
-      return s > 0 ? s : (liveCostMap.get(productId) || 0);
+      return s > 0 ? s : 0;
     };
 
     const costBySaleId = new Map<string, number>();
-    let totalRevenue = 0;
     let totalCost = 0;
     for (const i of saleItems) {
       const qty = Number(i.quantity);
-      const rev = toMoneyNumber(i.totalPrice);
       const itemCost = unitCost(i.productId, i.costPriceAtSale) * qty;
-      totalRevenue += rev;
       totalCost += itemCost;
       if (i.saleId) {
         costBySaleId.set(i.saleId, (costBySaleId.get(i.saleId) || 0) + itemCost);
       }
     }
-    const totalProfit = totalRevenue - totalCost;
 
     // Sales rows for payment breakdown + charts (no nested items query for speed & memory)
     const sales = await prisma.sale.findMany({
@@ -128,6 +121,12 @@ export async function GET(request: NextRequest) {
 
     const salesCount = sales.length;
 
+    // Revenue is the invoice total (net of order-level discounts and tax), NOT
+    // the gross sum of line items. Using item totals here made the summary
+    // disagree with the chart, and overstated profit when a discount was applied.
+    const totalRevenue = sales.reduce((sum, s) => sum + Number(s.totalAmount), 0);
+    const totalProfit = totalRevenue - totalCost;
+
     // Payment: drawer cash/UPI + due created (consistent with dashboard stats)
     const payAgg = aggregateSalePayments(sales);
     const paymentBreakdown: Record<string, number> = {
@@ -137,28 +136,25 @@ export async function GET(request: NextRequest) {
       Due: 0,
       Prepaid: 0,
     };
-    
+
     for (const s of sales) {
-      const method = s.paymentMethod || "Cash";
+      const method = normalizePaymentMethodKey(s.paymentMethod);
       paymentBreakdown[method] = (paymentBreakdown[method] || 0) + Number(s.totalAmount);
     }
 
-    // Previous period revenue (line items)
+    // Previous period revenue (invoice totals, consistent with current period)
     const periodMs = endDate.getTime() - startDate.getTime();
     const prevEnd = new Date(startDate.getTime() - 1);
     const prevStart = new Date(prevEnd.getTime() - periodMs);
-    const prevItems = await prisma.saleItem.findMany({
+    const prevSales = await prisma.sale.findMany({
       where: {
-        sale: {
-          businessId,
-          createdAt: { gte: prevStart, lte: prevEnd },
-          status: reportSaleStatusFilter,
-        },
-        quantity: { gt: 0 },
+        businessId,
+        createdAt: { gte: prevStart, lte: prevEnd },
+        status: reportSaleStatusFilter,
       },
-      select: { totalPrice: true },
+      select: { totalAmount: true },
     });
-    const previousPeriodRevenue = prevItems.reduce((s, i) => s + toMoneyNumber(i.totalPrice), 0);
+    const previousPeriodRevenue = prevSales.reduce((s, sale) => s + Number(sale.totalAmount), 0);
 
     let chartData: { date: string; revenue: number; profit: number; count: number }[];
 

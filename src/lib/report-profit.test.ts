@@ -10,11 +10,12 @@ import {
 } from "./report-profit";
 
 describe("report-profit helpers", () => {
-  it("prefers cost snapshot over live buying price", () => {
-    const live = new Map([["p1", 80]]);
-    expect(resolveUnitCost("p1", 50, live)).toBe(50);
-    expect(resolveUnitCost("p1", 0, live)).toBe(80);
-    expect(resolveUnitCost("missing", 0, live)).toBe(0);
+  it("uses only the historical cost snapshot (no live-price fallback)", () => {
+    expect(resolveUnitCost(50)).toBe(50);
+    // Missing snapshot is treated as missing, never estimated from live price.
+    expect(resolveUnitCost(0)).toBe(0);
+    expect(resolveUnitCost(null)).toBe(0);
+    expect(resolveUnitCost(undefined)).toBe(0);
   });
 
   it("aggregates line profit and margin", () => {

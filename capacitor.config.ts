@@ -9,6 +9,9 @@ const config: CapacitorConfig = {
     cleartext: false
   },
   plugins: {
+    FirebaseAuthentication: {
+      providers: ["google.com"],
+    },
     StatusBar: {
       overlayWebView: false
     },

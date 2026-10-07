@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
 
     const unitCost = (item: (typeof saleItemsWithSale)[0]) => {
       const snap = Number(item.costPriceAtSale);
-      return snap > 0 ? snap : Number(item.product?.buyingPrice || 0);
+      return snap > 0 ? snap : 0;
     };
 
     if (useSubCategory) {

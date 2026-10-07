@@ -6,6 +6,7 @@ import {
   Tooltip as RechartsTooltip, Legend,
 } from 'recharts';
 import { format } from 'date-fns';
+import { buildCSV } from '@/lib/export-utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -89,7 +90,7 @@ export function ExpensesTabContent({
       ]),
       ['', '', '', 'Total', total],
     ];
-    const csv = rows.map((r: any[]) => r.map((v: any) => `"${v}"`).join(',')).join('\n');
+    const csv = buildCSV(rows);
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

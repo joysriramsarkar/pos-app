@@ -12,10 +12,9 @@ import {
 describe('/api/reports/profit domain logic', () => {
   it('order-level profit = invoice revenue − item costs', () => {
     const revenue = 500;
-    const live = new Map([['a', 40], ['b', 10]]);
     const cost =
-      resolveUnitCost('a', 50, live) * 2 +
-      resolveUnitCost('b', 0, live) * 5;
+      resolveUnitCost(50) * 2 +
+      resolveUnitCost(10) * 5;
     // 50*2 + 10*5 = 150
     expect(cost).toBe(150);
     expect(revenue - cost).toBe(350);

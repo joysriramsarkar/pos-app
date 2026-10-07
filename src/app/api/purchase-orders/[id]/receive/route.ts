@@ -9,7 +9,20 @@ import { toUnitPriceNumber } from '@/lib/money';
 
 const getIp = (req: NextRequest) => req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || undefined;
 
-// POST /api/purchase-orders/[id]/receive - Mark order as received and update stock
+class ReceiveError extends Error {
+  status: number;
+  constructor(message: string, status = 400) {
+    super(message);
+    this.status = status;
+  }
+}
+
+// POST /api/purchase-orders/[id]/receive - Receive (a portion of) a purchase order
+//
+// IMPORTANT: receiving is CUMULATIVE. `receivedQty` on each item is the amount
+// received so far, and each request may only receive the REMAINING quantity.
+// This prevents the double-add bug where re-opening the dialog and submitting
+// the full ordered quantity added stock twice.
 export async function POST(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
@@ -44,152 +57,176 @@ export async function POST(
       );
     }
 
-    const order = await db.purchase.findFirst({
-      where: { id, businessId },
-      include: {
-        items: {
-          include: {
-            product: { select: { id: true, name: true, nameBn: true, unit: true, currentStock: true, buyingPrice: true } },
-          },
-        },
-        supplier: true,
-      },
-    });
-
-    if (!order) {
-      return NextResponse.json(
-        { success: false, error: 'ক্রয় অর্ডার খুঁজে পাওয়া যায়নি' },
-        { status: 404 }
-      );
-    }
-
-    if (order.deliveryStatus === 'RECEIVED' || order.deliveryStatus === 'CANCELLED') {
-      return NextResponse.json(
-        { success: false, error: 'শুধুমাত্র পেন্ডিং বা অর্ডার করা বা আংশিক প্রাপ্ত অর্ডার প্রাপ্ত করা যাবে' },
-        { status: 400 }
-      );
-    }
-
-    // Validate received quantities
-    for (const receivedItem of receivedItems) {
-      const orderItem = order.items.find((i) => i.id === receivedItem.id);
-      if (!orderItem) {
-        return NextResponse.json(
-          { success: false, error: 'অর্ডার আইটেম খুঁজে পাওয়া যায়নি' },
-          { status: 400 }
-        );
+    // Validate split payment before touching the DB.
+    const normalizedMethod = paymentMethod ? paymentMethod.toUpperCase() : undefined;
+    if (normalizedMethod === 'MIXED') {
+      const cash = Number(cashAmount || 0);
+      const upi = Number(upiAmount || 0);
+      const declaredPaid = amountPaid !== undefined ? Math.round(amountPaid) : cash + upi;
+      if (cash < 0 || upi < 0) {
+        return NextResponse.json({ success: false, error: 'নগদ/ইউপিআই পরিমাণ ঋণাত্মক হতে পারে না' }, { status: 400 });
       }
-      if (receivedItem.receivedQty < 0 || receivedItem.receivedQty > Number(orderItem.quantity)) {
+      if (cash + upi !== declaredPaid) {
         return NextResponse.json(
-          { success: false, error: `প্রাপ্ত পরিমাণ সঠিক নয়: ${orderItem.productName}` },
+          { success: false, error: 'Mixed পেমেন্টে নগদ + ইউপিআই = মোট পরিশোধিত হতে হবে' },
           { status: 400 }
         );
       }
     }
 
-    // Determine delivery status
-    let allFullyReceived = true;
-    for (const item of order.items) {
-      const receivedItem = receivedItems.find((ri) => ri.id === item.id);
-      const qty = receivedItem ? receivedItem.receivedQty : 0;
-      if (qty < Number(item.quantity)) {
-        allFullyReceived = false;
-      }
-    }
-    const nextDeliveryStatus: any = allFullyReceived ? 'RECEIVED' : 'PARTIALLY_RECEIVED';
-
-    // Update stock and create stock entries in a transaction
     const result: any = await db.$transaction(async (tx) => {
-      // Update each order item and update product stock
-      for (const receivedItem of receivedItems) {
-        const orderItem = order.items.find((i) => i.id === receivedItem.id);
-        if (!orderItem) continue;
+      // Lock the purchase row first to serialize concurrent receives.
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM purchases WHERE id = ${id} AND business_id = ${businessId} FOR UPDATE
+      `;
+      if (!locked[0]) {
+        throw new ReceiveError('ক্রয় অর্ডার খুঁজে পাওয়া যায়নি', 404);
+      }
 
-        const qty = receivedItem.receivedQty;
-        if (qty <= 0) continue;
+      const order = await tx.purchase.findFirst({
+        where: { id, businessId },
+        include: {
+          items: {
+            include: {
+              product: { select: { id: true, name: true, nameBn: true, unit: true, currentStock: true, buyingPrice: true } },
+            },
+          },
+          supplier: true,
+        },
+      });
 
-        // Update receivedQty and totalPrice (receivedQty * buyingPrice)
+      if (!order) {
+        throw new ReceiveError('ক্রয় অর্ডার খুঁজে পাওয়া যায়নি', 404);
+      }
+
+      if (order.deliveryStatus === 'RECEIVED' || order.deliveryStatus === 'CANCELLED') {
+        throw new ReceiveError('শুধুমাত্র পেন্ডিং বা অর্ডার করা বা আংশিক প্রাপ্ত অর্ডার প্রাপ্ত করা যাবে', 400);
+      }
+
+      const receivedByItemId = new Map(receivedItems.map((r) => [r.id, Number(r.receivedQty)]));
+
+      let receivedTotalAmount = 0;
+
+      for (const orderItem of order.items) {
+        const requested = receivedByItemId.get(orderItem.id) ?? 0;
+        if (!Number.isFinite(requested) || requested < 0) {
+          throw new ReceiveError(`প্রাপ্ত পরিমাণ সঠিক নয়: ${orderItem.productName}`, 400);
+        }
+        if (requested === 0) continue;
+
+        const alreadyReceived = Number(orderItem.receivedQty) || 0;
+        const orderedQty = Number(orderItem.quantity) || 0;
+        const remaining = orderedQty - alreadyReceived;
+
+        // Cumulative guard: cannot receive more than what is still outstanding.
+        if (requested > remaining) {
+          throw new ReceiveError(
+            `প্রাপ্ত পরিমাণ অর্ডারের বাকি পরিমাণের (${remaining}) চেয়ে বেশি হতে পারে না: ${orderItem.productName}`,
+            400,
+          );
+        }
+
         const unitPrice = Number(orderItem.buyingPrice);
+        const cumulativeReceived = alreadyReceived + requested;
+
         await tx.purchaseItem.update({
-          where: { id: receivedItem.id },
+          where: { id: orderItem.id },
           data: {
-            receivedQty: qty,
-            totalPrice: qty * unitPrice
+            receivedQty: cumulativeReceived,
+            totalPrice: cumulativeReceived * unitPrice,
           },
         });
 
-        // Update product stock and calculate WAC conditionally
-        if (updateStock) {
-          const product = await tx.product.findUnique({
-            where: { id: orderItem.productId },
-          });
+        receivedTotalAmount += requested * unitPrice;
 
-          const updateData: any = {
-            currentStock: { increment: qty },
+        // Only add the newly received delta to stock (never the cumulative amount).
+        if (updateStock) {
+          const productRaw = await tx.$queryRaw<Array<{ id: string; currentStock: unknown; buyingPrice: unknown }>>`
+            SELECT id, "current_stock" as "currentStock", "buying_price" as "buyingPrice"
+            FROM products
+            WHERE id = ${orderItem.productId} AND business_id = ${businessId}
+            FOR UPDATE
+          `;
+          if (!productRaw[0]) {
+            throw new ReceiveError(`পণ্য খুঁজে পাওয়া যায়নি: ${orderItem.productName}`, 404);
+          }
+
+          const currentStock = Number(productRaw[0].currentStock) || 0;
+          const currentPrice = productRaw[0].buyingPrice !== null && productRaw[0].buyingPrice !== undefined
+            ? Number(productRaw[0].buyingPrice)
+            : unitPrice;
+
+          const updateData: Record<string, unknown> = {
+            currentStock: { increment: requested },
             updatedAt: new Date(),
           };
 
           if (unitPrice > 0) {
-            const currentStock = Number(product?.currentStock) || 0;
-            const newStock = currentStock + qty;
+            const newStock = currentStock + requested;
             if (newStock > 0) {
-              const currentPrice = product?.buyingPrice !== null && product?.buyingPrice !== undefined
-                ? Number(product.buyingPrice)
-                : unitPrice;
-              const wac = ((currentStock * currentPrice) + (qty * unitPrice)) / newStock;
+              const wac = ((currentStock * currentPrice) + (requested * unitPrice)) / newStock;
               updateData.buyingPrice = toUnitPriceNumber(wac);
             } else {
               updateData.buyingPrice = toUnitPriceNumber(unitPrice);
             }
           }
 
-          await tx.product.update({
-            where: { id: orderItem.productId },
-            data: updateData,
-          });
+          await tx.product.update({ where: { id: orderItem.productId }, data: updateData });
 
-          // Create stock entry history
           await tx.stockHistory.create({
             data: {
               businessId,
               productId: orderItem.productId,
               changeType: 'PURCHASE',
-              quantity: qty,
+              quantity: requested,
               reason: `Purchase Order Received: ${order.invoiceNumber}`,
               referenceId: order.id,
               purchaseId: order.id,
-              createdAt: order.createdAt,
+              createdAt: new Date(),
             },
           });
         }
       }
 
-      // Calculate receivedTotalAmount
-      let receivedTotalAmount = 0;
-      for (const receivedItem of receivedItems) {
-        const orderItem = order.items.find((i) => i.id === receivedItem.id);
-        if (orderItem) {
-          receivedTotalAmount += receivedItem.receivedQty * Number(orderItem.buyingPrice);
-        }
+      // Recompute cumulative state from the (now updated) items.
+      const refreshedItems = await tx.purchaseItem.findMany({
+        where: { purchaseId: id },
+        select: { quantity: true, receivedQty: true, buyingPrice: true },
+      });
+
+      const cumulativeTotal = refreshedItems.reduce(
+        (sum, item) => sum + (Number(item.receivedQty) || 0) * Number(item.buyingPrice),
+        0,
+      );
+      const roundedTotal = Math.round(cumulativeTotal);
+      const allFullyReceived = refreshedItems.every(
+        (item) => (Number(item.receivedQty) || 0) >= (Number(item.quantity) || 0),
+      );
+      const nextDeliveryStatus: any = allFullyReceived ? 'RECEIVED' : 'PARTIALLY_RECEIVED';
+
+      // Payment applied in THIS request, accumulated onto existing paidAmount.
+      const thisPayment = amountPaid !== undefined ? Math.round(amountPaid) : Math.round(receivedTotalAmount);
+      if (thisPayment < 0) {
+        throw new ReceiveError('পরিশোধিত পরিমাণ সঠিক নয়', 400);
       }
-      const roundedTotal = Math.round(receivedTotalAmount);
-      const actualAmountPaid = amountPaid !== undefined ? Math.round(amountPaid) : roundedTotal;
+      const previousPaid = Number(order.paidAmount) || 0;
+      const newPaidAmount = Math.min(previousPaid + thisPayment, roundedTotal);
+
       let paymentStatus: any = 'PAID';
-      if (actualAmountPaid === 0) {
+      if (newPaidAmount === 0) {
         paymentStatus = 'PENDING';
-      } else if (actualAmountPaid < roundedTotal) {
+      } else if (newPaidAmount < roundedTotal) {
         paymentStatus = 'PARTIAL';
       }
 
-      // Update purchase status to received (Paid) and set totalAmount based on received quantities
       const updatedOrder = await tx.purchase.update({
         where: { id },
         data: {
           paymentStatus,
           deliveryStatus: nextDeliveryStatus,
           totalAmount: roundedTotal,
-          paidAmount: actualAmountPaid,
-          paymentMethod: (paymentMethod ? paymentMethod.toUpperCase() : order.paymentMethod) as any
+          paidAmount: newPaidAmount,
+          paymentMethod: (paymentMethod ? paymentMethod.toUpperCase() : order.paymentMethod) as any,
         },
         include: {
           supplier: true,
@@ -201,16 +238,17 @@ export async function POST(
         },
       });
 
-      // Create Expense record for payment if actualAmountPaid > 0
-      if (actualAmountPaid > 0) {
+      // Expense only for the amount actually paid in this request.
+      const appliedPayment = Math.min(Math.max(thisPayment, 0), Math.max(roundedTotal - previousPaid, 0));
+      if (appliedPayment > 0) {
         let expenseNotes = `Paid for purchase order: ${order.invoiceNumber}${paymentMethod ? ` (Method: ${paymentMethod})` : ''}`;
-        if (paymentMethod === 'Mixed' && (cashAmount !== undefined || upiAmount !== undefined)) {
+        if (normalizedMethod === 'MIXED' && (cashAmount !== undefined || upiAmount !== undefined)) {
           expenseNotes += ` [নগদ: ${cashAmount || 0}, ইউপিআই: ${upiAmount || 0}]`;
         }
         await tx.expense.create({
           data: {
             businessId,
-            amount: actualAmountPaid,
+            amount: appliedPayment,
             category: 'Supplier Payment',
             notes: expenseNotes,
             date: new Date(),
@@ -242,7 +280,8 @@ export async function POST(
       id: result.id,
       orderNumber: result.invoiceNumber,
       supplierId: result.supplierId,
-      status: 'প্রাপ্ত',
+      status: result.deliveryStatus === 'RECEIVED' ? 'প্রাপ্ত' : 'আংশিক প্রাপ্ত',
+      deliveryStatus: result.deliveryStatus,
       totalAmount: Number(result.totalAmount),
       paidAmount: Number(result.paidAmount || 0),
       paymentMethod: result.paymentMethod || 'Cash',
@@ -276,9 +315,12 @@ export async function POST(
     return NextResponse.json({
       success: true,
       data: mappedOrder,
-      message: 'অর্ডার প্রাপ্ত হয়েছে',
+      message: result.deliveryStatus === 'RECEIVED' ? 'অর্ডার প্রাপ্ত হয়েছে' : 'আংশিকভাবে প্রাপ্ত হয়েছে',
     });
   } catch (error) {
+    if (error instanceof ReceiveError) {
+      return NextResponse.json({ success: false, error: error.message }, { status: error.status });
+    }
     console.error('ক্রয় অর্ডার প্রাপ্ত ত্রুটি:', error);
     return NextResponse.json(
       { success: false, error: 'ক্রয় অর্ডার প্রাপ্ত করতে ত্রুটি হয়েছে' },

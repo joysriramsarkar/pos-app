@@ -336,16 +336,17 @@ export async function GET(request: NextRequest) {
         console.warn('products query failed for daily summary:', err);
         return [];
       });
-    const productBuyingPriceMap = new Map(products.map((p) => [p.id, Number(p.buyingPrice)]));
     const productNameBnMap = new Map(products.map((p) => [p.id, p.nameBn]));
 
-    // Weighted average unit cost per product from snapshots (for return net-out)
+    // Weighted average unit cost per product from historical snapshots only
+    // (for return net-out). Missing snapshots are treated as missing, not
+    // re-estimated from the product's current buying price.
     const costAggByProduct = todaySaleItems.reduce<
       Record<string, { qty: number; cost: number }>
     >((acc, item) => {
       const qty = Number(item.quantity);
       const snap = Number(item.costPriceAtSale);
-      const unit = snap > 0 ? snap : (productBuyingPriceMap.get(item.productId) ?? 0);
+      const unit = snap > 0 ? snap : 0;
       const prev = acc[item.productId] || { qty: 0, cost: 0 };
       prev.qty += qty;
       prev.cost += unit * qty;

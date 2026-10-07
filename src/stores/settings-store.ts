@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import { createScopedStorage } from '@/lib/tenant-scope';
 
 export interface AppSettings {
   // Store Profile
@@ -152,7 +153,7 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: 'onuron-pos-settings',
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => createScopedStorage('onuron-pos-settings')),
       partialize: (state) => ({
         settings: state.settings,
       }),

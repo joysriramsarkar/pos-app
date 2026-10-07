@@ -64,19 +64,19 @@ export async function requireAuth(request: NextRequest): Promise<AuthResult> {
       try {
         const originUrl = new URL(origin);
         const originHost = originUrl.host;
+        const normalizedOrigin = originUrl.origin;
 
-        // Same-origin check: matches host or forwarded host (Cloudflare proxy / Vercel)
+        // Same-origin check: exact host match only (no wildcard suffixes).
+        // `endsWith(".onuron.org")` would have accepted attacker-controlled
+        // domains such as `pos.onuron.org.attacker.com`.
         const isSameOrigin =
-          originHost === rawHost ||
-          originHost === forwardedHost ||
-          originHost.endsWith(".onuron.org") ||
-          originHost.endsWith(".vercel.app");
+          originHost === rawHost || originHost === forwardedHost;
 
-        // Mobile Capacitor / Ionic or explicitly configured origins
+        // Mobile Capacitor / Ionic or explicitly configured exact origins.
         const isAllowedOrigin =
           isSameOrigin ||
+          allAllowedOrigins.includes(normalizedOrigin) ||
           allAllowedOrigins.includes(origin) ||
-          allAllowedOrigins.some((ao) => origin.startsWith(ao)) ||
           origin.startsWith("capacitor://") ||
           origin.startsWith("ionic://") ||
           originUrl.hostname === "localhost" ||

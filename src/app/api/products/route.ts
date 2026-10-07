@@ -133,23 +133,41 @@ export async function POST(request: NextRequest) {
     const validatedData = result.data;
     const categoryName = String(validatedData.category).trim();
 
-    const product = await db.product.create({
-      data: {
-        businessId, // CRITICAL: tenant scope
-        barcode: validatedData.barcode ? String(validatedData.barcode).trim() : null,
-        name: String(validatedData.name).trim(),
-        nameBn: validatedData.nameBn ? String(validatedData.nameBn).trim() : null,
-        category: categoryName,
-        subCategory: validatedData.subCategory
-          ? String(validatedData.subCategory).trim()
-          : null,
-        buyingPrice: validatedData.buyingPrice,
-        sellingPrice: validatedData.sellingPrice,
-        unit: validatedData.unit,
-        currentStock: validatedData.currentStock,
-        minStockLevel: validatedData.minStockLevel,
-        isActive: validatedData.isActive,
-      },
+    const product = await db.$transaction(async (tx) => {
+      const created = await tx.product.create({
+        data: {
+          businessId, // CRITICAL: tenant scope
+          barcode: validatedData.barcode ? String(validatedData.barcode).trim() : null,
+          name: String(validatedData.name).trim(),
+          nameBn: validatedData.nameBn ? String(validatedData.nameBn).trim() : null,
+          category: categoryName,
+          subCategory: validatedData.subCategory
+            ? String(validatedData.subCategory).trim()
+            : null,
+          buyingPrice: validatedData.buyingPrice,
+          sellingPrice: validatedData.sellingPrice,
+          unit: validatedData.unit,
+          currentStock: validatedData.currentStock,
+          minStockLevel: validatedData.minStockLevel,
+          isActive: validatedData.isActive,
+        },
+      });
+
+      // Opening stock must be auditable — otherwise current stock has no history.
+      if (Number(validatedData.currentStock) > 0) {
+        await tx.stockHistory.create({
+          data: {
+            businessId,
+            productId: created.id,
+            changeType: 'OPENING',
+            quantity: Number(validatedData.currentStock),
+            reason: 'Opening stock on product creation',
+            referenceId: created.id,
+          },
+        });
+      }
+
+      return created;
     });
 
     // Upsert category in business scope
@@ -231,39 +249,83 @@ export async function PUT(request: NextRequest) {
     const categoryName =
       validatedData.category !== undefined ? String(validatedData.category).trim() : undefined;
 
+    // Only treat currentStock as a change when the client actually sent the
+    // field. ProductInputSchema defaults it to 0, so an omitted field must NOT
+    // zero out stock.
+    const stockProvided = Object.prototype.hasOwnProperty.call(
+      body as Record<string, unknown>,
+      'currentStock',
+    );
+
     // IDOR protection: update only if product belongs to this business
-    const product = await db.product.update({
-      where: { id: productId, businessId }, // businessId ensures IDOR protection
-      data: {
-        barcode:
-          validatedData.barcode !== undefined
-            ? validatedData.barcode
-              ? String(validatedData.barcode).trim()
-              : null
-            : undefined,
-        name:
-          validatedData.name !== undefined ? String(validatedData.name).trim() : undefined,
-        nameBn:
-          validatedData.nameBn !== undefined
-            ? validatedData.nameBn
-              ? String(validatedData.nameBn).trim()
-              : null
-            : undefined,
-        category: categoryName,
-        subCategory:
-          validatedData.subCategory !== undefined
-            ? validatedData.subCategory
-              ? String(validatedData.subCategory).trim()
-              : null
-            : undefined,
-        buyingPrice: validatedData.buyingPrice,
-        sellingPrice: validatedData.sellingPrice,
-        unit: validatedData.unit,
-        currentStock: validatedData.currentStock,
-        minStockLevel: validatedData.minStockLevel,
-        isActive: validatedData.isActive,
-        updatedAt: new Date(),
-      },
+    const product = await db.$transaction(async (tx) => {
+      const existing = await tx.product.findFirst({
+        where: { id: productId, businessId },
+        select: { id: true, currentStock: true },
+      });
+      if (!existing) {
+        throw Object.assign(new Error('Product not found'), { status: 404 });
+      }
+
+      const updated = await tx.product.update({
+        where: { id: productId, businessId }, // businessId ensures IDOR protection
+        data: {
+          barcode:
+            validatedData.barcode !== undefined
+              ? validatedData.barcode
+                ? String(validatedData.barcode).trim()
+                : null
+              : undefined,
+          name:
+            validatedData.name !== undefined ? String(validatedData.name).trim() : undefined,
+          nameBn:
+            validatedData.nameBn !== undefined
+              ? validatedData.nameBn
+                ? String(validatedData.nameBn).trim()
+                : null
+              : undefined,
+          category: categoryName,
+          subCategory:
+            validatedData.subCategory !== undefined
+              ? validatedData.subCategory
+                ? String(validatedData.subCategory).trim()
+                : null
+              : undefined,
+          buyingPrice: validatedData.buyingPrice,
+          sellingPrice: validatedData.sellingPrice,
+          unit: validatedData.unit,
+          minStockLevel: validatedData.minStockLevel,
+          isActive: validatedData.isActive,
+          updatedAt: new Date(),
+        },
+      });
+
+      // Stock is not a generic editable field: every change writes an audit trail
+      // (ADJUSTMENT) so the inventory ledger stays consistent.
+      if (stockProvided) {
+        const newStock = Number(validatedData.currentStock);
+        const previousStock = Number(existing.currentStock);
+        const delta = newStock - previousStock;
+        if (Number.isFinite(delta) && delta !== 0) {
+          const adjusted = await tx.product.update({
+            where: { id: productId, businessId },
+            data: { currentStock: { increment: delta }, updatedAt: new Date() },
+          });
+          await tx.stockHistory.create({
+            data: {
+              businessId,
+              productId,
+              changeType: 'ADJUSTMENT',
+              quantity: delta,
+              reason: `Manual stock adjustment via product edit (${previousStock} → ${newStock})`,
+              referenceId: productId,
+            },
+          });
+          return adjusted;
+        }
+      }
+
+      return updated;
     });
 
     if (categoryName) {
@@ -292,7 +354,10 @@ export async function PUT(request: NextRequest) {
   } catch (error: unknown) {
     console.error('Error updating product:', error);
     // If product not found in this business, return 404 (not 403) to avoid info leak
-    if (error instanceof Error && error.message.includes('Record to update not found')) {
+    if (
+      (error as { status?: number })?.status === 404 ||
+      (error instanceof Error && error.message.includes('Record to update not found'))
+    ) {
       return NextResponse.json(
         { success: false, error: 'Product not found' },
         { status: 404 },

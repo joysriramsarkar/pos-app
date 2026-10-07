@@ -74,3 +74,30 @@ export function paymentMethodLabelEn(method: string): string {
       return method || "Other";
   }
 }
+
+/**
+ * Map the DB PaymentMethod enum (CASH/UPI/MIXED/CREDIT/PREPAID/CARD/BANK) to the
+ * canonical display keys used across the report UI. Report code used to seed
+ * "Cash"/"UPI" keys but index them with raw enum values, producing duplicate,
+ * inconsistent keys inside the same breakdown object.
+ */
+export function normalizePaymentMethodKey(method: string | null | undefined): string {
+  switch ((method || "").trim().toUpperCase()) {
+    case "CASH":
+      return "Cash";
+    case "UPI":
+      return "UPI";
+    case "MIXED":
+      return "Mixed";
+    case "CREDIT":
+      return "Due";
+    case "PREPAID":
+      return "Prepaid";
+    case "CARD":
+      return "Card";
+    case "BANK":
+      return "Bank";
+    default:
+      return method || "Other";
+  }
+}

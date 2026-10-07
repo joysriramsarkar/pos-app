@@ -1,4 +1,5 @@
 import { format } from 'date-fns';
+import { buildCSV } from '@/lib/export-utils';
 import type { GroupBy } from './types';
 
 export const profitColor = (n: number) =>
@@ -47,7 +48,7 @@ export function downloadProfitCsv(groupBy: GroupBy, filteredRows: any[]) {
     ]);
   }
 
-  const csv = [header, ...body].map((row) => row.map((v) => `"${v}"`).join(',')).join('\n');
+  const csv = buildCSV([header, ...body]);
   const blob = new Blob([csv], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

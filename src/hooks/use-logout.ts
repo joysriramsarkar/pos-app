@@ -42,6 +42,20 @@ export function useLogout() {
     // We manually navigate with window.location.replace so navigation stays
     // inside the WebView.
     await signOut({ redirect: false });
+
+    // Also sign out of the native Firebase/Google session, otherwise the next
+    // native Google sign-in may silently reuse the previous account instead of
+    // showing the account picker.
+    try {
+      const { Capacitor } = await import("@capacitor/core");
+      if (Capacitor.isNativePlatform()) {
+        const { FirebaseAuthentication } = await import("@capacitor-firebase/authentication");
+        await FirebaseAuthentication.signOut();
+      }
+    } catch {
+      // Native plugin unavailable (web) — nothing to do.
+    }
+
     window.location.replace("/login");
   };
 

@@ -64,13 +64,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     let totalCost = 0;
     const days = Number(sp.get('days') || 30);
     const isYearly = days === 365;
-    const fallbackCost = Number(product.buyingPrice);
 
     for (const item of saleItems) {
       const date = item.createdAt;
       const qty = Number(item.quantity);
       const revenue = Number(Number(item.totalPrice));
-      const unitCost = Number(item.costPriceAtSale) > 0 ? Number(item.costPriceAtSale) : fallbackCost;
+      // Historical snapshot only — do not re-cost old sales with the live price.
+      const unitCost = Number(item.costPriceAtSale) > 0 ? Number(item.costPriceAtSale) : 0;
       const profit = revenue - unitCost * qty;
       totalCost += unitCost * qty;
 

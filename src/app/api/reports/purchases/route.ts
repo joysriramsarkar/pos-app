@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch all purchase orders in this range
-    const purchases = await prisma.purchase.findMany({
+    const allPurchases = await prisma.purchase.findMany({
       where: {
         businessId,
         createdAt: { gte: startDate, lte: endDate },
@@ -76,6 +76,13 @@ export async function GET(request: NextRequest) {
       },
       orderBy: { createdAt: "desc" },
     });
+
+    // Manual supplier-due entries are accounting adjustments (created by
+    // /api/supplier-due-entry) and have no stock items. They must NOT be counted
+    // as purchases in purchase statistics.
+    const purchases = allPurchases.filter(
+      (p) => !(p.invoiceNumber ?? "").startsWith("SUP-DUE-"),
+    );
 
     // Fetch Supplier Payments in this range (to calculate payments done)
     const paymentExpenses = await prisma.expense.findMany({

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { buildCSV } from '@/lib/export-utils';
 import { useDebouncedSearch } from '@/hooks/use-debounced-search';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -108,7 +109,7 @@ export function DuesReport({ onBack, onNavigate }: DuesReportProps) {
       ['Total Outstanding', '', stats.totalDue.toFixed(2), '', '', '']
     ];
     
-    const csv = rows.map((r: any[]) => r.map((v: any) => `"${v}"`).join(',')).join('\n');
+    const csv = buildCSV(rows);
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

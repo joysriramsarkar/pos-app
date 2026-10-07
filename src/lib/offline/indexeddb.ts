@@ -340,6 +340,38 @@ async function clearStore(storeName: string): Promise<void> {
   });
 }
 
+/**
+ * Atomic read-modify-write inside a single IndexedDB transaction.
+ *
+ * IndexedDB serialises readwrite transactions on the same store, so doing the
+ * read and the write in ONE transaction prevents lost updates when two tabs
+ * (or the sync worker and the UI) mutate the same record concurrently.
+ * A separate get() then put() would allow both callers to read the same stale
+ * value and overwrite each other.
+ */
+async function mutateStore<T>(
+  storeName: string,
+  key: string,
+  mutator: (current: T | undefined) => T | undefined,
+): Promise<void> {
+  const db = await initDatabase();
+  const transaction = db.transaction(storeName, 'readwrite');
+  const store = transaction.objectStore(storeName);
+
+  return new Promise((resolve, reject) => {
+    const request = store.get(key);
+    request.onsuccess = () => {
+      const current = request.result as T | undefined;
+      const next = mutator(current);
+      if (next !== undefined) store.put(next);
+    };
+    request.onerror = () => reject(request.error);
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+    transaction.onabort = () => reject(new Error('mutateStore transaction aborted'));
+  });
+}
+
 // ============================================================================
 // PRODUCTS OPERATIONS
 // ============================================================================
@@ -419,11 +451,13 @@ export const ProductsDB = {
   },
 
   async updateStock(productId: string, quantityChange: number): Promise<void> {
-    const product = await this.getById(productId);
-    if (product) {
-      product.currentStock = Math.max(0, Number(product.currentStock) + quantityChange);
-      await putToStore(STORES.PRODUCTS, product);
-    }
+    await mutateStore<Product>(STORES.PRODUCTS, productId, (product) => {
+      if (!product) return undefined;
+      return {
+        ...product,
+        currentStock: Math.max(0, Number(product.currentStock) + quantityChange),
+      };
+    });
   },
 };
 
@@ -485,19 +519,26 @@ export const CustomersDB = {
   },
 
   async updateDue(customerId: string, amountChange: number): Promise<void> {
-    const customer = await this.getById(customerId);
-    if (customer) {
-      customer.totalDue = toMoneyNumber(new Decimal(customer.totalDue).plus(amountChange));
-      await putToStore(STORES.CUSTOMERS, customer);
-    }
+    await mutateStore<Customer>(STORES.CUSTOMERS, customerId, (customer) => {
+      if (!customer) return undefined;
+      return {
+        ...customer,
+        totalDue: toMoneyNumber(new Decimal(customer.totalDue).plus(amountChange)),
+      };
+    });
   },
 
   async updatePrepaid(customerId: string, amountChange: number): Promise<void> {
-    const customer = await this.getById(customerId);
-    if (customer) {
-      customer.prepaidBalance = Math.max(0, toMoneyNumber(new Decimal(customer.prepaidBalance).plus(amountChange)));
-      await putToStore(STORES.CUSTOMERS, customer);
-    }
+    await mutateStore<Customer>(STORES.CUSTOMERS, customerId, (customer) => {
+      if (!customer) return undefined;
+      return {
+        ...customer,
+        prepaidBalance: Math.max(
+          0,
+          toMoneyNumber(new Decimal(customer.prepaidBalance).plus(amountChange)),
+        ),
+      };
+    });
   },
 
   async clear(): Promise<void> {
@@ -622,6 +663,10 @@ export const SalesDB = {
     }
   },
 
+  async delete(id: string): Promise<void> {
+    await deleteFromStore(STORES.SALES, id);
+  },
+
   async clear(): Promise<void> {
     return clearStore(STORES.SALES);
   },
@@ -661,10 +706,11 @@ export const SyncQueueDB = {
     }
   },
 
-  async markFailed(id: string, error?: string): Promise<void> {
+  async markFailed(id: string, error?: string, permanent = false): Promise<void> {
     const item = await getFromStore<SyncQueueItem>(STORES.SYNC_QUEUE, id);
     if (item) {
       item.failed = true;
+      item.permanent = permanent;
       if (error) item.error = error;
       await putToStore(STORES.SYNC_QUEUE, item);
     }
@@ -675,6 +721,11 @@ export const SyncQueueDB = {
     return all.filter((i) => i.failed);
   },
 
+  /**
+   * Re-queue failed items for another sync attempt.
+   * Permanent (dead-letter) failures are NOT reset — retrying a validation or
+   * permission error would never succeed and only spams the server.
+   */
   async resetFailed(): Promise<number> {
     try {
       const db = await initDatabase();
@@ -686,6 +737,7 @@ export const SyncQueueDB = {
           const items = request.result as SyncQueueItem[];
           let count = 0;
           for (const item of items) {
+            if (item.permanent) continue;
             if (item.failed || (!item.synced && item.retryCount >= 5)) {
               item.failed = false;
               item.retryCount = 0;

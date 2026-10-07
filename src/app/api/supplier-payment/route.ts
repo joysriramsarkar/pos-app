@@ -7,6 +7,11 @@ import { requireAuth } from '@/lib/api-middleware';
 import { requireBusinessContext, checkPermission } from '@/lib/tenant';
 import { toMoneyNumber } from '@/lib/money';
 import { logAudit } from '@/lib/audit';
+import {
+  reserveIdempotency,
+  finalizeIdempotency,
+  releaseIdempotency,
+} from '@/lib/idempotency';
 
 const supplierPaymentSchema = z.object({
   supplierId: z.string().cuid(),
@@ -84,7 +89,47 @@ export async function POST(request: NextRequest) {
     const { supplierId, amount, paymentMethod, cashAmount, upiAmount, notes } = validation.data;
     const roundedAmount = Math.round(amount);
 
-    const result = await db.$transaction(async (tx) => {
+    // Mixed-payment consistency: the breakdown must sum to the total paid.
+    const normalizedMethod = (paymentMethod || 'CASH').toUpperCase();
+    if (normalizedMethod === 'MIXED') {
+      const cash = Number(cashAmount || 0);
+      const upi = Number(upiAmount || 0);
+      if (cash < 0 || upi < 0) {
+        return NextResponse.json({ success: false, error: 'নগদ/ইউপিআই পরিমাণ ঋণাত্মক হতে পারে না' }, { status: 400 });
+      }
+      if (Math.round(cash + upi) !== roundedAmount) {
+        return NextResponse.json(
+          { success: false, error: 'Mixed পেমেন্টে নগদ + ইউপিআই = মোট পরিশোধিত হতে হবে' },
+          { status: 400 },
+        );
+      }
+    }
+
+    // DB-level idempotency: retrying this request must not double-pay.
+    const idempotencyKey = request.headers.get('X-Idempotency-Key');
+    let claim: Awaited<ReturnType<typeof reserveIdempotency>> | null = null;
+    if (idempotencyKey) {
+      claim = await reserveIdempotency(businessId, 'supplier:payment', idempotencyKey);
+      if (claim.status === 'replay') {
+        return NextResponse.json({ success: true, data: claim.result, idempotent: true });
+      }
+      if (claim.status === 'in_progress') {
+        return NextResponse.json(
+          { success: false, error: 'একই অনুরোধ প্রক্রিয়াধীন আছে (duplicate request in progress)' },
+          { status: 409 },
+        );
+      }
+    }
+
+    let result: Record<string, unknown>;
+    try {
+      result = await db.$transaction(async (tx) => {
+      // Lock the supplier row to serialise concurrent payments for this supplier.
+      const lockRows = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM suppliers WHERE id = ${supplierId} AND business_id = ${businessId} FOR UPDATE
+      `;
+      if (!lockRows[0]) throw new Error('Supplier not found');
+
       // Load supplier with all unpaid/partial POs for this business
       const supplier = await tx.supplier.findFirst({
         where: { id: supplierId, businessId },
@@ -188,7 +233,17 @@ export async function POST(request: NextRequest) {
         totalPaid,
         totalDue,
       };
-    });
+      });
+    } catch (txError) {
+      if (claim && claim.status === 'claimed') {
+        await releaseIdempotency(claim.idempotencyKey).catch(() => {});
+      }
+      throw txError;
+    }
+
+    if (claim && claim.status === 'claimed') {
+      await finalizeIdempotency(claim.idempotencyKey, result).catch(() => {});
+    }
 
     return NextResponse.json({ success: true, data: result });
   } catch (error: unknown) {

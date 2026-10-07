@@ -712,6 +712,49 @@ export function POSDashboard() {
     return sale; // Return sale so handleCheckoutComplete can use it
   }, [cartItems, activeUser, updateProductStock, updateCustomerDue, updateCustomerPrepaid, setCurrentSale, setCompletedCheckoutSale, clearCart]);
 
+  // Roll back the optimistic local effects when the server permanently rejects
+  // an offline/queued sale (validation or permission error). Without this the
+  // local stock, customer due/prepaid and sales list would keep a phantom sale.
+  const rollbackRejectedSale = useCallback(async (sale: Sale, paymentData: PaymentData) => {
+    try {
+      for (const item of sale.items) {
+        const qty = Number(item.quantity ?? 0);
+        if (qty <= 0) continue;
+        updateProductStock(item.productId, qty);
+        ProductsDB.updateStock(item.productId, qty).catch(() => {});
+      }
+
+      if (paymentData.customerId) {
+        const dueAmount = toMoneyNumber(paymentData.total ?? 0) - toMoneyNumber(paymentData.amountPaid ?? 0);
+        const debtRepay = paymentData.debtRepaymentAmount || 0;
+        if (dueAmount > 0) {
+          updateCustomerDue(paymentData.customerId, -dueAmount);
+          CustomersDB.updateDue(paymentData.customerId, -dueAmount).catch(() => {});
+        }
+        if (debtRepay > 0) {
+          updateCustomerDue(paymentData.customerId, debtRepay);
+          CustomersDB.updateDue(paymentData.customerId, debtRepay).catch(() => {});
+        }
+        const netPrepaidChange =
+          (paymentData.changeAsPrepayment || 0) - (paymentData.prepaidAmountUsed || 0);
+        if (netPrepaidChange !== 0) {
+          updateCustomerPrepaid(paymentData.customerId, -netPrepaidChange);
+          CustomersDB.updatePrepaid(paymentData.customerId, -netPrepaidChange).catch(() => {});
+        }
+      }
+
+      // Remove the rejected sale from UI + IndexedDB.
+      useSalesStore.setState({
+        sales: useSalesStore.getState().sales.filter((s) => s.id !== sale.id),
+      });
+      await SalesDB.delete(sale.id).catch(() => {});
+      setCompletedCheckoutSale(null);
+      setCheckoutOpen(false);
+    } catch (rollbackErr) {
+      console.error('[Checkout] Local rollback after server rejection failed:', rollbackErr);
+    }
+  }, [updateProductStock, updateCustomerDue, updateCustomerPrepaid, setCompletedCheckoutSale, setCheckoutOpen]);
+
   const handleCheckoutComplete = useCallback(async (paymentData: PaymentData) => {
     const tabId = activeTabId;
     setTabProcessing(tabId, true);
@@ -755,12 +798,29 @@ export function POSDashboard() {
               const errMsg = errData?.error || `Server error (${res.status})`;
               // Definitive business error (4xx) — show prominently
               if (res.status >= 400 && res.status < 500 && res.status !== 429 && res.status !== 408) {
-                toast({
-                  title: 'সার্ভার বিলিং গ্রহণ করেনি',
-                  description: errMsg,
-                  variant: 'destructive',
-                  duration: 6000,
-                });
+                // Stop background retries — this failure can never succeed.
+                await SyncQueueDB.markFailed(saleQueueItem.id, errMsg, true).catch(() => {});
+
+                if (res.status === 409) {
+                  // Conflict: a sale already exists with this invoice number.
+                  // Do NOT silently roll back — the cashier must investigate.
+                  toast({
+                    title: 'বিল দ্বন্দ্ব (Conflict)',
+                    description: errMsg,
+                    variant: 'destructive',
+                    duration: 10000,
+                  });
+                } else {
+                  // Validation/permission rejection: roll back the local sale so
+                  // stock/due/prepaid on this device match the server.
+                  await rollbackRejectedSale(sale, paymentData);
+                  toast({
+                    title: 'সার্ভার বিলিং প্রত্যাখ্যান করেছে — স্থানীয় পরিবর্তন ফিরিয়ে নেওয়া হয়েছে',
+                    description: errMsg,
+                    variant: 'destructive',
+                    duration: 10000,
+                  });
+                }
               } else {
                 // Transient — background sync will retry
                 toast({ title: 'বিলিং সংরক্ষিত', description: 'সিঙ্ক পুনরায় হবে।', duration: 2000 });
@@ -791,7 +851,7 @@ export function POSDashboard() {
     } finally {
       setTabProcessing(tabId, false);
     }
-  }, [isOnline, processOfflineSale, activeTabId, setTabProcessing, toast, setCompletedCheckoutSale, setCheckoutOpen]);
+  }, [isOnline, processOfflineSale, rollbackRejectedSale, activeTabId, setTabProcessing, toast, setCompletedCheckoutSale, setCheckoutOpen]);
 
 
 

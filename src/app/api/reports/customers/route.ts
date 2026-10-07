@@ -88,8 +88,7 @@ export async function GET(request: NextRequest) {
         let cost = 0;
         for (const item of o.items) {
           const snap = Number(item.costPriceAtSale);
-          const live = Number(item.product?.buyingPrice || 0);
-          const unit = snap > 0 ? snap : live;
+          const unit = snap > 0 ? snap : 0;
           cost += unit * Number(item.quantity);
         }
         totalCost += cost;
@@ -103,8 +102,7 @@ export async function GET(request: NextRequest) {
           const qty = Number(item.quantity);
           const revenue = Number(item.totalPrice);
           const snap = Number(item.costPriceAtSale);
-          const live = Number(item.product?.buyingPrice || 0);
-          const unit = snap > 0 ? snap : live;
+          const unit = snap > 0 ? snap : 0;
           const cost = unit * qty;
           const existing = productMap.get(item.productId) || {
             name: item.productName,
@@ -149,8 +147,7 @@ export async function GET(request: NextRequest) {
         let cost = 0;
         for (const item of o.items) {
           const snap = Number(item.costPriceAtSale);
-          const live = Number(item.product?.buyingPrice || 0);
-          cost += (snap > 0 ? snap : live) * Number(item.quantity);
+          cost += (snap > 0 ? snap : 0) * Number(item.quantity);
         }
         prev.spent += rev;
         prev.profit += rev - cost;
@@ -225,7 +222,7 @@ export async function GET(request: NextRequest) {
 
     const saleCostMap = new Map<string, number>();
     for (const item of saleItems) {
-      const itemCost = resolveUnitCost(item.productId, item.costPriceAtSale, liveCostMap) * Number(item.quantity);
+      const itemCost = resolveUnitCost(item.costPriceAtSale) * Number(item.quantity);
       saleCostMap.set(item.saleId, (saleCostMap.get(item.saleId) || 0) + itemCost);
     }
 

@@ -8,14 +8,19 @@ import { toMoneyNumber } from "@/lib/money";
 
 export type ProfitSort = "profit" | "revenue" | "margin" | "quantity" | "orders";
 
+/**
+ * Resolve the unit cost for a historical sale line.
+ *
+ * Uses ONLY the cost snapshot captured at sale time. We deliberately do NOT fall
+ * back to the product's current buying price: that would silently re-cost old
+ * sales whenever prices changed, making historical profit non-reproducible.
+ * A missing/zero snapshot is treated as missing (0), never estimated.
+ */
 export function resolveUnitCost(
-  productId: string,
   costPriceAtSale: Decimal.Value | null | undefined,
-  liveCostMap: Map<string, number>,
 ): number {
   const snap = toMoneyNumber(costPriceAtSale);
-  if (snap > 0) return snap;
-  return liveCostMap.get(productId) || 0;
+  return snap > 0 ? snap : 0;
 }
 
 export function marginPercent(revenue: number, profit: number): number {

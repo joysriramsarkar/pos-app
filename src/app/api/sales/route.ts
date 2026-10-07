@@ -30,6 +30,7 @@ import { withBusinessContext, type RouteContext, type TenantContext } from "@/li
 import { logAudit } from "@/lib/audit";
 import { toClientError } from "@/lib/api-errors";
 import { enforceRateLimit, salesCreateLimiter } from "@/lib/rate-limit";
+import { checkSalePricingAuthority } from "@/lib/sale-pricing";
 
 const getIp = (req: NextRequest) =>
   req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
@@ -286,6 +287,45 @@ async function handlePost(request: NextRequest, ctx: RouteContext & { tenant: Te
       if (amountPaidValue.lt(totalAmount)) {
         return NextResponse.json({ success: false, error: "Walk-in customers must pay the full amount" }, { status: 400 });
       }
+    }
+
+    // Split-payment consistency: when the client provides a cash/UPI breakdown
+    // for a MIXED sale, the parts must add up to the externally collected amount.
+    const methodUpper = (paymentMethod ? String(paymentMethod).toUpperCase() : "CASH");
+    if (methodUpper === "MIXED" && (validatedData.cashAmount != null || validatedData.upiAmount != null)) {
+      const cash = toMoneyDecimal(validatedData.cashAmount || 0);
+      const upi = toMoneyDecimal(validatedData.upiAmount || 0);
+      if (cash.lt(0) || upi.lt(0)) {
+        return NextResponse.json({ success: false, error: "Cash/UPI amounts cannot be negative" }, { status: 400 });
+      }
+      if (!addMoney(cash, upi).equals(externalPaidAmount)) {
+        return NextResponse.json(
+          { success: false, error: "Mixed payment: cash + UPI must equal the externally paid amount" },
+          { status: 400 },
+        );
+      }
+    }
+
+    // Server-authoritative pricing / discount authorization.
+    const priceRows = await db.product.findMany({
+      where: { businessId, id: { in: validatedItems.map((i) => i.productId) } },
+      select: { id: true, sellingPrice: true },
+    });
+    const sellingPriceByProductId = new Map(
+      priceRows.map((p) => [p.id, Number(p.sellingPrice)]),
+    );
+    const pricingCheck = checkSalePricingAuthority(
+      validatedItems.map((item) => ({
+        productId: item.productId,
+        quantity: Number(item.quantity),
+        totalPrice: Number(item.totalPrice),
+      })),
+      discountAmount.toNumber(),
+      sellingPriceByProductId,
+      ctx.tenant.role,
+    );
+    if (!pricingCheck.ok) {
+      return NextResponse.json({ success: false, error: pricingCheck.message }, { status: 403 });
     }
 
     const invoiceNumber = await generateServerInvoiceNumber();

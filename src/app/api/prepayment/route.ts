@@ -7,6 +7,11 @@ import { requireAuth } from '@/lib/api-middleware';
 import { requireBusinessContext, checkPermission } from '@/lib/tenant';
 import { addMoney, toMoneyNumber } from '@/lib/money';
 import { logAudit } from '@/lib/audit';
+import {
+  reserveIdempotency,
+  finalizeIdempotency,
+  releaseIdempotency,
+} from '@/lib/idempotency';
 
 const prepaymentSchema = z.object({
   customerId: z.string().cuid(),
@@ -38,58 +43,79 @@ export async function POST(req: NextRequest) {
 
     const { customerId, amount } = validation.data;
 
-    // Bug 11 fix: idempotency — deduplicate on X-Idempotency-Key so a network
-    // retry doesn't credit the customer twice.
+    // DB-level idempotency: reserve the key up front. Concurrent retries of the
+    // same HTTP request cannot both credit the customer.
     const idempotencyKey = req.headers.get('X-Idempotency-Key');
+    let claim: Awaited<ReturnType<typeof reserveIdempotency>> | null = null;
+
+    if (idempotencyKey) {
+      claim = await reserveIdempotency(businessId, 'prepayment:add', idempotencyKey);
+      if (claim.status === 'replay') {
+        const cached = (claim.result ?? {}) as { customerId?: string };
+        const customer = cached.customerId
+          ? await db.customer.findFirst({ where: { id: cached.customerId, businessId } })
+          : await db.customer.findFirst({ where: { id: customerId, businessId } });
+        return NextResponse.json({ success: true, data: customer, idempotent: true });
+      }
+      if (claim.status === 'in_progress') {
+        return NextResponse.json(
+          { success: false, error: 'একই অনুরোধ প্রক্রিয়াধীন আছে (duplicate request in progress)' },
+          { status: 409 },
+        );
+      }
+    }
+
     const referenceId = idempotencyKey
       ? `PREPAY-${idempotencyKey}`
       : `PREPAY-${Date.now()}-${customerId.slice(-6)}`;
 
-    if (idempotencyKey) {
-      const existing = await db.ledgerEntry.findFirst({
-        where: { businessId, referenceId },
+    let updatedCustomer: Awaited<ReturnType<typeof db.customer.update>>;
+    try {
+      updatedCustomer = await db.$transaction(async (tx) => {
+        const customerRaw = await tx.$queryRaw<any[]>`
+          SELECT id, name, "total_due" as "totalDue", "prepaid_balance" as "prepaidBalance"
+          FROM customers
+          WHERE id = ${customerId} AND business_id = ${businessId}
+          FOR UPDATE
+        `;
+        const customer = customerRaw[0];
+
+        if (!customer) {
+          throw new Error('Customer not found');
+        }
+
+        const newPrepaidBalance = addMoney(customer.prepaidBalance, amount);
+
+        const updated = await tx.customer.update({
+          where: { id: customerId },
+          data: { prepaidBalance: newPrepaidBalance },
+        });
+
+        await tx.ledgerEntry.create({
+          data: {
+            businessId,
+            customerId,
+            entryType: 'PREPAYMENT_ADDED',
+            amount,
+            balanceAfter: customer.totalDue,
+            // stable referenceId for idempotency dedup
+            referenceId,
+            description: 'Prepayment added',
+          },
+        });
+
+        return updated;
       });
-      if (existing) {
-        const customer = await db.customer.findUnique({ where: { id: customerId } });
-        return NextResponse.json({ success: true, data: customer, idempotent: true });
+    } catch (txError) {
+      if (claim && claim.status === 'claimed') {
+        await releaseIdempotency(claim.idempotencyKey).catch(() => {});
       }
+      throw txError;
     }
 
-    const updatedCustomer = await db.$transaction(async (tx) => {
-      const customerRaw = await tx.$queryRaw<any[]>`
-        SELECT id, name, "total_due" as "totalDue", "prepaid_balance" as "prepaidBalance"
-        FROM customers
-        WHERE id = ${customerId} AND business_id = ${businessId}
-        FOR UPDATE
-      `;
-      const customer = customerRaw[0];
-
-      if (!customer) {
-        throw new Error('Customer not found');
-      }
-
-      const newPrepaidBalance = addMoney(customer.prepaidBalance, amount);
-
-      const updated = await tx.customer.update({
-        where: { id: customerId },
-        data: { prepaidBalance: newPrepaidBalance },
-      });
-
-      await tx.ledgerEntry.create({
-        data: {
-          businessId,
-          customerId,
-          entryType: 'PREPAYMENT_ADDED',
-          amount,
-          balanceAfter: customer.totalDue,
-          // Bug 11: stable referenceId for idempotency dedup
-          referenceId,
-          description: 'Prepayment added',
-        },
-      });
-
-      return updated;
-    });
+    if (claim && claim.status === 'claimed') {
+      await finalizeIdempotency(claim.idempotencyKey, { customerId }).catch(() => {});
+    }
 
     // Bug 13 fix: audit log was missing for prepayment additions
     await logAudit({

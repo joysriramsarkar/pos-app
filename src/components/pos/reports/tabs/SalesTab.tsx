@@ -10,6 +10,7 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/
 import { Skeleton } from '@/components/ui/skeleton';
 import { BarChart2, Download, ExternalLink, Lightbulb } from 'lucide-react';
 import { format } from 'date-fns';
+import { buildCSV } from '@/lib/export-utils';
 import { useTranslations } from 'next-intl';
 import { useNumberFormat } from '@/hooks/use-number-format';
 import { ComposedVolumeChart, MarginGauge } from '@/components/pos/report-charts';
@@ -92,7 +93,7 @@ export function SalesTab({
       header,
       ...salesData.map((d) => [d.date, d.revenue.toFixed(2), d.profit.toFixed(2), d.count]),
     ];
-    const csv = rows.map((r) => r.join(',')).join('\n');
+    const csv = buildCSV(rows);
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

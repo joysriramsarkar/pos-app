@@ -19,7 +19,7 @@ import {
   lockAndPlanSaleStock,
 } from '@/lib/sale-stock';
 import { logAudit } from '@/lib/audit';
-
+import { checkSalePricingAuthority } from '@/lib/sale-pricing';
 const getIp = (req: NextRequest) => req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || undefined;
 
 const ProductSyncPayloadSchema = z.union([
@@ -32,6 +32,9 @@ const ProductSyncPayloadSchema = z.union([
 
 import { requireAuth } from "@/lib/api-middleware";
 import { requireBusinessContext } from "@/lib/tenant";
+
+/** Thrown for business-rule/validation failures — surfaced as HTTP 4xx. */
+class SyncRejection extends Error {}
 
 // GET /api/sync - Get pending sync items or sync status
 export async function GET(request: NextRequest) {
@@ -140,16 +143,16 @@ export async function POST(request: NextRequest) {
         case "sale:create": {
           const saleResult = SaleInputSchema.safeParse(payload);
           if (!saleResult.success)
-            throw new Error(
+            throw new SyncRejection(
               "Invalid Sale payload: " + saleResult.error.message,
             );
-          operationResult = await syncSale(tx, saleResult.data, "create", businessId);
+          operationResult = await syncSale(tx, saleResult.data, "create", businessId, ctx.role);
           break;
         }
         case "customer:create": {
           const customerResult = CustomerInputSchema.safeParse(payload);
           if (!customerResult.success)
-            throw new Error(
+            throw new SyncRejection(
               "Invalid Customer payload: " + customerResult.error.message,
             );
           operationResult = await syncCustomer(
@@ -163,7 +166,7 @@ export async function POST(request: NextRequest) {
         case "customer:update": {
           const customerResult = CustomerInputSchema.safeParse(payload);
           if (!customerResult.success)
-            throw new Error(
+            throw new SyncRejection(
               "Invalid Customer payload: " + customerResult.error.message,
             );
           operationResult = await syncCustomer(
@@ -177,7 +180,7 @@ export async function POST(request: NextRequest) {
         case "product:stock:update": {
           const productResult = ProductSyncPayloadSchema.safeParse(payload);
           if (!productResult.success)
-            throw new Error(
+            throw new SyncRejection(
               "Invalid Product payload: " + productResult.error.message,
             );
           operationResult = await syncProduct(tx, productResult.data, "update", businessId);
@@ -186,7 +189,7 @@ export async function POST(request: NextRequest) {
         case "product:create": {
           const productResult = ProductInputSchema.safeParse(payload);
           if (!productResult.success)
-            throw new Error(
+            throw new SyncRejection(
               "Invalid Product payload: " + productResult.error.message,
             );
           operationResult = await syncProduct(tx, productResult.data, "create", businessId);
@@ -195,7 +198,7 @@ export async function POST(request: NextRequest) {
         case "product:update": {
           const productResult = ProductInputSchema.safeParse(payload);
           if (!productResult.success)
-            throw new Error(
+            throw new SyncRejection(
               "Invalid Product payload: " + productResult.error.message,
             );
           operationResult = await syncProduct(tx, productResult.data, "update", businessId);
@@ -208,7 +211,7 @@ export async function POST(request: NextRequest) {
           });
           const prepaymentResult = prepaymentSchema.safeParse(payload);
           if (!prepaymentResult.success)
-            throw new Error(
+            throw new SyncRejection(
               "Invalid Prepayment payload: " + prepaymentResult.error.message,
             );
 
@@ -216,7 +219,7 @@ export async function POST(request: NextRequest) {
           break;
         }
         default:
-          throw new Error(`Unknown action type: ${actionType}`);
+          throw new SyncRejection(`Unknown action type: ${actionType}`);
       }
 
       // Extract entity ID from payload or result if available
@@ -284,6 +287,13 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: unknown) {
     console.error("Error syncing data:", error);
+    if (error instanceof SyncRejection) {
+      const status = error.message.startsWith("CONFLICT:") ? 409 : 400;
+      return NextResponse.json(
+        { success: false, error: error.message },
+        { status },
+      );
+    }
     return NextResponse.json(
       {
         success: false,
@@ -294,11 +304,11 @@ export async function POST(request: NextRequest) {
   }
 }
 // Sync sale from offline
-async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof SaleInputSchema>, action: string, businessId: string) {
+async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof SaleInputSchema>, action: string, businessId: string, role: string) {
   if (action === 'create') {
 
     if (!saleData.invoiceNumber) {
-      throw new Error("Invoice number is required for sync");
+      throw new SyncRejection("Invoice number is required for sync");
     }
     // Bug 17 fix: idempotency is handled via X-Idempotency-Key / syncQueue above.
     // If we reach here and an invoice with this number already exists it is a genuine
@@ -315,7 +325,7 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
       }
       // Different sale — real invoice number collision. Surface it so the cashier can
       // investigate rather than silently losing the second sale.
-      throw new Error(
+      throw new SyncRejection(
         `CONFLICT: Invoice number ${saleData.invoiceNumber} already exists for a different sale. Please re-sync or manually assign a new invoice number.`
       );
     }
@@ -326,7 +336,7 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
 
     const itemTotalMismatch = findSaleItemTotalMismatch(saleData.items);
     if (itemTotalMismatch) {
-      throw new Error(itemTotalMismatch);
+      throw new SyncRejection(itemTotalMismatch);
     }
 
     // 1. Lock products + plan stock (FOR UPDATE, auto-adjust, blended COGS)
@@ -347,7 +357,7 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
       });
 
       if (!customer) {
-        throw new Error(
+        throw new SyncRejection(
           `Customer ${saleData.customerId} not found during sync validation`,
         );
       }
@@ -355,11 +365,11 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
 
     // 3. Validate basic sale data
     if (!saleData.items || saleData.items.length === 0) {
-      throw new Error("Sale must have at least one item");
+      throw new SyncRejection("Sale must have at least one item");
     }
 
     if ((saleData.totalAmount || 0) < 0) {
-      throw new Error("Total amount cannot be negative");
+      throw new SyncRejection("Total amount cannot be negative");
     }
     const totalAmount = toMoneyDecimal(saleData.totalAmount || 0);
     const amountReceived = toMoneyDecimal(saleData.amountReceived || 0);
@@ -370,28 +380,62 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
     const externalPaidAmount = subtractMoney(amountPaid, prepaidToUse);
 
     if (amountPaid.gt(totalAmount)) {
-      throw new Error(`Amount paid (${amountPaid.toString()}) cannot exceed sale total (${totalAmount.toString()})`);
+      throw new SyncRejection(`Amount paid (${amountPaid.toString()}) cannot exceed sale total (${totalAmount.toString()})`);
     }
 
     if (prepaidToUse.gt(amountPaid)) {
-      throw new Error("Prepaid amount cannot exceed total amount paid");
+      throw new SyncRejection("Prepaid amount cannot exceed total amount paid");
     }
 
     if (!saleData.customerId && (prepaidToUse.gt(0) || changeAsPrepayment.gt(0))) {
-      throw new Error("Prepaid balance can only be used with a selected customer");
+      throw new SyncRejection("Prepaid balance can only be used with a selected customer");
     }
 
     if (
       (changeAsPrepayment.gt(0) || debtRepaymentAmount.gt(0)) &&
       amountReceived.lt(addMoney(externalPaidAmount, addMoney(changeAsPrepayment, debtRepaymentAmount)))
     ) {
-      throw new Error("Received amount does not cover sale payment, prepaid change, and due clearance");
+      throw new SyncRejection("Received amount does not cover sale payment, prepaid change, and due clearance");
     }
 
     // Bug 3 fix: determine payment method and preserve cash/UPI breakdown
     const pMethodRaw = saleData.paymentMethod ? String(saleData.paymentMethod).toUpperCase() : 'CASH';
     const cashAmt = (saleData as any).cashAmount ?? null;
     const upiAmt = (saleData as any).upiAmount ?? null;
+
+    // Split-payment consistency for MIXED sales.
+    if (pMethodRaw === 'MIXED' && (cashAmt != null || upiAmt != null)) {
+      const cash = toMoneyDecimal(cashAmt || 0);
+      const upi = toMoneyDecimal(upiAmt || 0);
+      if (cash.lt(0) || upi.lt(0)) {
+        throw new SyncRejection('Cash/UPI amounts cannot be negative');
+      }
+      if (!addMoney(cash, upi).equals(externalPaidAmount)) {
+        throw new SyncRejection('Mixed payment: cash + UPI must equal the externally paid amount');
+      }
+    }
+
+    // Server-authoritative pricing / discount authorization.
+    const priceRows = await tx.product.findMany({
+      where: { businessId, id: { in: saleData.items.map((i) => i.productId) } },
+      select: { id: true, sellingPrice: true },
+    });
+    const sellingPriceByProductId = new Map(
+      priceRows.map((p) => [p.id, Number(p.sellingPrice)]),
+    );
+    const pricingCheck = checkSalePricingAuthority(
+      saleData.items.map((item) => ({
+        productId: item.productId,
+        quantity: Number(item.quantity),
+        totalPrice: Number(item.totalPrice),
+      })),
+      Number(saleData.discount || 0),
+      sellingPriceByProductId,
+      role,
+    );
+    if (!pricingCheck.ok) {
+      throw new SyncRejection(pricingCheck.message);
+    }
 
     // CREATE PHASE: sale rows use blended cost (owned @ WAC, shortage @ 0)
     let sale: any;
@@ -446,11 +490,13 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
           INSERT INTO "sales" (
             "id", "business_id", "invoice_number", "user_id", "customer_id",
             "subtotal", "discount", "tax", "total_amount", "amount_paid",
+            "cash_amount", "upi_amount",
             "payment_method", "payment_status", "status", "notes", "offline_synced",
             "created_at", "updated_at"
           ) VALUES (
             ${saleId}, ${businessId}, ${saleData.invoiceNumber}, ${saleData.userId || null}, ${saleData.customerId || null},
             ${saleData.subtotal || 0}, ${saleData.discount || 0}, ${saleData.tax || 0}, ${saleData.totalAmount || 0}, ${saleData.amountPaid || 0},
+            ${cashAmt}, ${upiAmt},
             ${pMethod}::"PaymentMethod", ${pStatus}::"PaymentStatus", ${sStatus}, ${saleData.notes || null}, true,
             NOW(), NOW()
           )
@@ -519,12 +565,12 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
         const currentPrepaidBalance = toMoneyDecimal(customer.prepaidBalance);
 
         if (debtRepaymentAmount.gt(currentTotalDue)) {
-          throw new Error(`Debt repayment amount (${debtRepaymentAmount.toString()}) cannot exceed current total due (${currentTotalDue.toString()})`);
+          throw new SyncRejection(`Debt repayment amount (${debtRepaymentAmount.toString()}) cannot exceed current total due (${currentTotalDue.toString()})`);
         }
 
         if (prepaidToUse.gt(0)) {
             if (currentPrepaidBalance.lt(prepaidToUse)) {
-              throw new Error(`Insufficient prepaid balance. Available: ${currentPrepaidBalance}, Tried to use: ${prepaidToUse}`);
+              throw new SyncRejection(`Insufficient prepaid balance. Available: ${currentPrepaidBalance}, Tried to use: ${prepaidToUse}`);
             }
             await tx.ledgerEntry.create({
               data: {
@@ -679,7 +725,7 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
       return sale;
     }
 
-    throw new Error(`Unknown action: ${action}`);
+    throw new SyncRejection(`Unknown action: ${action}`);
 }
 
 // Sync prepayment from offline
@@ -693,7 +739,7 @@ async function syncPrepayment(tx: Prisma.TransactionClient, prepaymentData: { cu
   const customer = customerRaw[0];
 
   if (!customer) {
-    throw new Error(`Customer ${prepaymentData.customerId} not found during sync validation`);
+    throw new SyncRejection(`Customer ${prepaymentData.customerId} not found during sync validation`);
   }
 
   const updatedCustomer = await tx.customer.update({
@@ -749,7 +795,7 @@ async function syncCustomer(tx: Prisma.TransactionClient, customerData: z.infer<
 
   if (action === "update") {
     if (!customerData.id) {
-      throw new Error("Customer ID is required for update");
+      throw new SyncRejection("Customer ID is required for update");
     }
 
     await tx.customer.updateMany({
@@ -768,7 +814,7 @@ async function syncCustomer(tx: Prisma.TransactionClient, customerData: z.infer<
     });
   }
 
-  throw new Error(`Unknown action: ${action}`);
+  throw new SyncRejection(`Unknown action: ${action}`);
 }
 
 // Sync product updates (primarily stock changes) from offline
@@ -802,7 +848,7 @@ async function syncProduct(tx: Prisma.TransactionClient, productData: z.infer<ty
         }
       }
 
-      return tx.product.create({
+      const created = await tx.product.create({
         data: {
           id,
           businessId,
@@ -818,9 +864,24 @@ async function syncProduct(tx: Prisma.TransactionClient, productData: z.infer<ty
           isActive,
         },
       });
+
+      if (Number(currentStock) > 0) {
+        await tx.stockHistory.create({
+          data: {
+            businessId,
+            productId: created.id,
+            changeType: 'OPENING',
+            quantity: Number(currentStock),
+            reason: 'Opening stock on offline product creation',
+            referenceId: created.id,
+          },
+        });
+      }
+
+      return created;
     }
 
-    throw new Error("Invalid product data for create action");
+    throw new SyncRejection("Invalid product data for create action");
   } else if (action === "update") {
     if ("productId" in productData && "quantityChange" in productData) {
       const { productId, quantityChange } = productData;
@@ -830,7 +891,7 @@ async function syncProduct(tx: Prisma.TransactionClient, productData: z.infer<ty
         SELECT id FROM products WHERE id = ${productId} AND business_id = ${businessId} FOR UPDATE
       `;
       if (!locked[0]) {
-        throw new Error(`Product ${productId} not found during stock sync`);
+        throw new SyncRejection(`Product ${productId} not found during stock sync`);
       }
 
       let updated;
@@ -887,12 +948,16 @@ async function syncProduct(tx: Prisma.TransactionClient, productData: z.infer<ty
       } = productData as { id: string, barcode?: string, name: string, nameBn?: string, category: string, buyingPrice: number, sellingPrice: number, unit: string, currentStock: number, minStockLevel: number, isActive: boolean };
 
       if (!id) {
-        throw new Error("Product ID is required for update sync");
+        throw new SyncRejection("Product ID is required for update sync");
       }
 
       const existing = await tx.product.findFirst({ where: { id, businessId } });
       if (existing) {
-        return tx.product.update({
+        const previousStock = Number(existing.currentStock);
+        const newStock = Number(currentStock);
+        const delta = Number.isFinite(newStock) ? newStock - previousStock : 0;
+
+        const result = await tx.product.update({
           where: { id },
           data: {
             barcode: barcode || null,
@@ -902,14 +967,30 @@ async function syncProduct(tx: Prisma.TransactionClient, productData: z.infer<ty
             buyingPrice,
             sellingPrice,
             unit,
-            currentStock,
+            currentStock: newStock,
             minStockLevel,
             isActive,
           },
         });
+
+        // Keep the inventory audit trail consistent when an offline edit changes stock.
+        if (delta !== 0) {
+          await tx.stockHistory.create({
+            data: {
+              businessId,
+              productId: id,
+              changeType: 'ADJUSTMENT',
+              quantity: delta,
+              reason: `Offline product edit stock adjustment (${previousStock} → ${newStock})`,
+              referenceId: id,
+            },
+          });
+        }
+
+        return result;
       }
 
-      return tx.product.create({
+      const created = await tx.product.create({
         data: {
           id,
           businessId,
@@ -925,12 +1006,27 @@ async function syncProduct(tx: Prisma.TransactionClient, productData: z.infer<ty
           isActive,
         },
       });
+
+      if (Number(currentStock) > 0) {
+        await tx.stockHistory.create({
+          data: {
+            businessId,
+            productId: created.id,
+            changeType: 'OPENING',
+            quantity: Number(currentStock),
+            reason: 'Opening stock on offline product creation',
+            referenceId: created.id,
+          },
+        });
+      }
+
+      return created;
     }
 
-    throw new Error("Invalid product data payload");
+    throw new SyncRejection("Invalid product data payload");
   }
 
-  throw new Error(`Unknown action: ${action}`);
+  throw new SyncRejection(`Unknown action: ${action}`);
 }
 
 // PUT /api/sync - Mark sync item as complete

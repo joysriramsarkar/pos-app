@@ -135,7 +135,7 @@ export async function GET(request: NextRequest) {
       let cost = 0;
       for (const item of sale.items) {
         const qty = Number(item.quantity);
-        cost += resolveUnitCost(item.productId, item.costPriceAtSale, liveCostMap) * qty;
+        cost += resolveUnitCost(item.costPriceAtSale) * qty;
       }
       totalRevenue += rev;
       totalCost += cost;
@@ -159,7 +159,7 @@ export async function GET(request: NextRequest) {
         for (const item of sale.items) {
           const qty = Number(item.quantity);
           quantity += qty;
-          cost += resolveUnitCost(item.productId, item.costPriceAtSale, liveCostMap) * qty;
+          cost += resolveUnitCost(item.costPriceAtSale) * qty;
         }
         const profit = revenue - cost;
         return {
@@ -208,7 +208,7 @@ export async function GET(request: NextRequest) {
         for (const item of sale.items) {
           const qty = Number(item.quantity);
           const revenue = toMoneyNumber(item.totalPrice);
-          const unitCost = resolveUnitCost(item.productId, item.costPriceAtSale, liveCostMap);
+          const unitCost = resolveUnitCost(item.costPriceAtSale);
           const agg = byProduct.get(item.productId) || emptyProfitAgg();
           addLineProfit(agg, { revenue, unitCost, quantity: qty, saleId: sale.id });
           byProduct.set(item.productId, agg);
@@ -288,7 +288,7 @@ export async function GET(request: NextRequest) {
       for (const item of sale.items) {
         const q = Number(item.quantity);
         qty += q;
-        cost += resolveUnitCost(item.productId, item.costPriceAtSale, liveCostMap) * q;
+        cost += resolveUnitCost(item.costPriceAtSale) * q;
       }
       entry.agg.revenue += rev;
       entry.agg.cost += cost;

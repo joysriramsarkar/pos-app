@@ -29,7 +29,7 @@ import {
   type ConfirmationResult,
 } from "firebase/auth";
 import { Lock, Phone, RefreshCw, KeyRound, ArrowLeft, ShieldCheck, Languages } from "lucide-react";
-import { signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, auth as firebaseAuth } from "@/lib/firebase";
+import { signInWithPopup, getRedirectResult, GoogleAuthProvider, auth as firebaseAuth } from "@/lib/firebase";
 
 export default function LoginForm() {
   const t = useTranslations("Login");
@@ -152,12 +152,6 @@ export default function LoginForm() {
     setGoogleLoading(true);
     setGoogleError("");
 
-    if (!firebaseAuth) {
-      setGoogleError("Firebase লোড হয়নি। ইন্টারনেট সংযোগ চেক করুন।");
-      setGoogleLoading(false);
-      return;
-    }
-
     try {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: "select_account" });
@@ -172,14 +166,50 @@ export default function LoginForm() {
       }
 
       if (isNative) {
-        // On native WebView: use redirect flow.
-        // getRedirectResult() is called on next mount via useEffect below.
-        await signInWithRedirect(firebaseAuth, provider);
-        // Execution stops here; page will reload and useEffect handles the result.
+        // Native Google account picker via the device's own Google account —
+        // no external browser / WebView redirect. The plugin signs in to the
+        // native Firebase SDK, then we forward the Firebase ID token to NextAuth
+        // (the server verifies its signature, as with OTP).
+        const { FirebaseAuthentication } = await import(
+          "@capacitor-firebase/authentication"
+        );
+
+        // The Android SDK resolves the Google web client id automatically from
+        // google-services.json (`default_web_client_id`), so no browser is
+        // opened — the device's own Google account picker is shown.
+        await FirebaseAuthentication.signInWithGoogle();
+
+        const { token } = await FirebaseAuthentication.getIdToken();
+        if (!token) {
+          setGoogleError("Google অ্যাকাউন্ট থেকে ID টোকেন পাওয়া যায়নি।");
+          setGoogleLoading(false);
+          return;
+        }
+
+        const signInResult = await signIn("credentials", {
+          idToken: token,
+          redirect: false,
+        });
+
+        if (signInResult?.error) {
+          setGoogleError(signInResult.error);
+        } else {
+          toast({
+            title: "✅ Google লগইন সফল!",
+            description: "ড্যাশবোর্ডে প্রবেশ করা হচ্ছে...",
+          });
+          window.location.replace("/");
+        }
         return;
       }
 
       // Web: use popup flow
+      if (!firebaseAuth) {
+        setGoogleError("Firebase লোড হয়নি। ইন্টারনেট সংযোগ চেক করুন।");
+        setGoogleLoading(false);
+        return;
+      }
+
       const result = await signInWithPopup(firebaseAuth, provider);
       const email = result.user.email;
 
@@ -189,9 +219,12 @@ export default function LoginForm() {
         return;
       }
 
+      // Send the Firebase ID token — the server verifies its signature and
+      // derives the email from the verified claims (never trust the client).
+      const idToken = await result.user.getIdToken();
+
       const signInResult = await signIn("credentials", {
-        isGoogleVerified: "true",
-        googleEmail: email,
+        idToken,
         redirect: false,
       });
 
@@ -231,9 +264,9 @@ export default function LoginForm() {
           return;
         }
         setGoogleLoading(true);
+        const idToken = await result.user.getIdToken();
         const signInResult = await signIn("credentials", {
-          isGoogleVerified: "true",
-          googleEmail: email,
+          idToken,
           redirect: false,
         });
         if (signInResult?.error) {
@@ -379,14 +412,14 @@ export default function LoginForm() {
 
     try {
       // Confirm with Firebase
-      await confirmationResultRef.current.confirm(otpCode);
+      const credential = await confirmationResultRef.current.confirm(otpCode);
 
-      const formattedPhone = getFormattedPhone();
+      // Obtain the Firebase ID token; the server verifies it cryptographically.
+      const idToken = await credential.user.getIdToken();
 
-      // Sign in to application session with OTP flag
+      // Sign in to application session with the verified Firebase token
       const result = await signIn("credentials", {
-        username: formattedPhone,
-        isOtpVerified: "true",
+        idToken,
         redirect: false,
       });
 

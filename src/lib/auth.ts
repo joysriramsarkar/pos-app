@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { ipLoginLimiter, usernameLoginLimiter, checkLocalRateLimit } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
+import { verifyFirebaseIdToken, type VerifiedFirebaseToken } from "@/lib/firebase-verify";
 
 function sanitizeLogInput(input: unknown): string {
   if (typeof input !== "string") return String(input);
@@ -17,20 +18,48 @@ export const authOptions: NextAuthOptions = {
       credentials: {
         username: { label: "Username or Phone", type: "text" },
         password: { label: "Password", type: "password" },
-        isOtpVerified: { label: "isOtpVerified", type: "text" },
-        isGoogleVerified: { label: "isGoogleVerified", type: "text" },
-        googleEmail: { label: "googleEmail", type: "text" },
+        // Firebase ID token from Phone-OTP or Google sign-in. The token is
+        // cryptographically verified below — the client can no longer simply
+        // assert that a verification happened.
+        idToken: { label: "Firebase ID Token", type: "text" },
       },
       async authorize(credentials, req) {
-        const isOtp = credentials?.isOtpVerified === "true";
-        const isGoogle = credentials?.isGoogleVerified === "true";
-        console.log("[NextAuth] authorize called with username:", sanitizeLogInput(credentials?.username), "isOtp:", isOtp, "isGoogle:", isGoogle);
+        // --- Server-side verification of Firebase identity ---
+        // Determine login method from the VERIFIED token claims, never from
+        // client-supplied booleans.
+        let verifiedToken: VerifiedFirebaseToken | null = null;
+        if (credentials?.idToken) {
+          try {
+            verifiedToken = await verifyFirebaseIdToken(credentials.idToken);
+          } catch (err) {
+            console.warn(
+              "[NextAuth] Firebase ID token verification failed:",
+              sanitizeLogInput(err instanceof Error ? err.message : String(err)),
+            );
+            // Invalid proof — reject the attempt instead of falling through
+            // to a weaker path (e.g. password login with attacker input).
+            return null;
+          }
+        }
 
-        // --- Google Sign-in fast path ---
+        const isOtp = Boolean(verifiedToken?.phoneNumber);
+        const isGoogle = !isOtp && Boolean(verifiedToken?.email);
+        const loginIdentifier = isOtp
+          ? verifiedToken!.phoneNumber!
+          : credentials?.username;
+
+        console.log(
+          "[NextAuth] authorize called with username:",
+          sanitizeLogInput(loginIdentifier),
+          "isOtp:", isOtp,
+          "isGoogle:", isGoogle,
+        );
+
+        // --- Google Sign-in fast path (token-verified email) ---
         if (isGoogle) {
-          const googleEmail = credentials?.googleEmail?.trim()?.toLowerCase();
-          if (!googleEmail) {
-            console.log("[NextAuth] Google login missing email");
+          const googleEmail = verifiedToken!.email!.trim().toLowerCase();
+          if (!verifiedToken!.emailVerified) {
+            console.log("[NextAuth] Google login rejected: email not verified");
             return null;
           }
 
@@ -67,15 +96,18 @@ export const authOptions: NextAuthOptions = {
         }
         // --- End Google fast path ---
 
-        if (!credentials?.username) {
+        if (!loginIdentifier) {
           console.log("[NextAuth] missing username / phone");
           return null;
         }
 
-        if (!isOtp && !credentials?.password) {
+        if (!isOtp && !isGoogle && !credentials?.password) {
           console.log("[NextAuth] missing password for password login");
           return null;
         }
+
+        const identifier = loginIdentifier;
+        const passwordInput = credentials?.password;
 
         let ip = "127.0.0.1";
         try {
@@ -106,21 +138,21 @@ export const authOptions: NextAuthOptions = {
 
         // Rate limit by username/phone
         if (usernameLoginLimiter) {
-          const { success } = await usernameLoginLimiter.limit(credentials.username);
+          const { success } = await usernameLoginLimiter.limit(identifier);
           if (!success) {
-            console.log("[NextAuth] rate limit exceeded for username:", sanitizeLogInput(credentials.username));
+            console.log("[NextAuth] rate limit exceeded for username:", sanitizeLogInput(identifier));
             throw new Error("Too many login attempts for this account. Please try again in a minute.");
           }
         } else {
-          const { success } = await checkLocalRateLimit(`login:username:${credentials.username}`, 5, 60000);
+          const { success } = await checkLocalRateLimit(`login:username:${identifier}`, 5, 60000);
           if (!success) {
-            console.log("[NextAuth] rate limit exceeded (local) for username:", sanitizeLogInput(credentials.username));
+            console.log("[NextAuth] rate limit exceeded (local) for username:", sanitizeLogInput(identifier));
             throw new Error("Too many login attempts for this account. Please try again in a minute.");
           }
         }
 
         // Normalize phone number search
-        const cleanInput = credentials.username.trim();
+        const cleanInput = identifier.trim();
         const digitsOnly = cleanInput.replace(/\D/g, "");
         const last10Digits = digitsOnly.slice(-10);
 
@@ -175,13 +207,13 @@ export const authOptions: NextAuthOptions = {
             // Offload 12-round bcrypt to PostgreSQL pgcrypto to avoid Cloudflare Worker CPU limit (50ms)
             const normHash = (user.passwordHash || '').replace(/^\$2b\$/, '$2a$');
             const pgCheck = await db.$queryRaw<{ matches: boolean }[]>`
-              SELECT (crypt(${credentials.password!}, ${normHash}) = ${normHash}) AS "matches"
+              SELECT (crypt(${passwordInput!}, ${normHash}) = ${normHash}) AS "matches"
             `;
             isPasswordValid = Boolean(pgCheck?.[0]?.matches);
           } catch {
             // Fallback to JS bcrypt.compare
             isPasswordValid = await bcrypt.compare(
-              credentials.password!,
+              passwordInput!,
               user.passwordHash
             );
           }
@@ -320,10 +352,18 @@ export const authOptions: NextAuthOptions = {
   pages: {
     signIn: "/login",
   },
-  secret: process.env.NEXTAUTH_SECRET || "2ne9ID5IkSJcykq9lkQrUsY6A2RuUPY/xnhxFOFvlFM=",
+  secret: process.env.NEXTAUTH_SECRET,
   debug: process.env.NODE_ENV === 'development',
 };
 
-if (!authOptions.secret && process.env.NEXT_PHASE !== 'phase-production-build' && process.env.NODE_ENV !== 'test') {
-  throw new Error("NEXTAUTH_SECRET is not defined. Please set it in your environment variables.");
+// SECURITY: never fall back to a hardcoded secret. A missing NEXTAUTH_SECRET in
+// production means all JWTs would be signed with a publicly known value.
+if (
+  !process.env.NEXTAUTH_SECRET &&
+  process.env.NODE_ENV === 'production' &&
+  process.env.NEXT_PHASE !== 'phase-production-build'
+) {
+  throw new Error(
+    "NEXTAUTH_SECRET is not defined. Refusing to start with an insecure default secret. Please set NEXTAUTH_SECRET in your environment variables.",
+  );
 }

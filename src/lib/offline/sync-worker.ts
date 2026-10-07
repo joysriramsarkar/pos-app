@@ -13,6 +13,24 @@ export interface SyncResult {
   error?: string;
 }
 
+/** Error carrying the HTTP status so the worker can classify retryability. */
+class SyncHttpError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
+/**
+ * HTTP statuses that indicate a permanent failure — retrying will never succeed
+ * without user intervention (validation error, forbidden, not found, conflict).
+ * Network errors, 408 and 429 are transient and should be retried.
+ */
+function isPermanentStatus(status: number): boolean {
+  return status >= 400 && status < 500 && status !== 408 && status !== 429;
+}
+
 /**
  * SYNC WORKER: Processes offline sync items in background
  * - Runs on network reconnection
@@ -45,15 +63,7 @@ export class OfflineSyncWorker {
       if (options?.retryFailed) {
         await SyncQueueDB.resetFailed();
       }
-      let pendingItems = await SyncQueueDB.getUnsynced();
-      if (pendingItems.length === 0) {
-        const failedItems = await SyncQueueDB.getFailed();
-        if (failedItems.length > 0) {
-          console.log(`[SyncWorker] Auto-recovering ${failedItems.length} previously failed items...`);
-          await SyncQueueDB.resetFailed();
-          pendingItems = await SyncQueueDB.getUnsynced();
-        }
-      }
+      const pendingItems = await SyncQueueDB.getUnsynced();
       console.log('[SyncWorker] Pending items found:', pendingItems.length);
 
       if (pendingItems.length === 0) {
@@ -191,7 +201,8 @@ export class OfflineSyncWorker {
 
             if (!response.ok) {
               const text = await response.text();
-              throw new Error(
+              throw new SyncHttpError(
+                response.status,
                 `HTTP ${response.status}: ${response.statusText} ${text}`,
               );
             }
@@ -222,11 +233,19 @@ export class OfflineSyncWorker {
               result.reason instanceof Error
                 ? result.reason.message
                 : String(result.reason);
-            const newRetryCount = item.retryCount + 1;
-            if (newRetryCount >= 5) {
-              await SyncQueueDB.markFailed(item.id, errorMsg);
+            const status =
+              result.reason instanceof SyncHttpError ? result.reason.status : 0;
+
+            if (isPermanentStatus(status)) {
+              // Dead-letter: validation / permission / conflict — do not retry.
+              await SyncQueueDB.markFailed(item.id, errorMsg, true);
             } else {
-              await SyncQueueDB.incrementRetry(item.id, errorMsg);
+              const newRetryCount = item.retryCount + 1;
+              if (newRetryCount >= 5) {
+                await SyncQueueDB.markFailed(item.id, errorMsg, false);
+              } else {
+                await SyncQueueDB.incrementRetry(item.id, errorMsg);
+              }
             }
             failureCount++;
           }

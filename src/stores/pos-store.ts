@@ -9,6 +9,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { convertBengaliToEnglishNumerals, normalizeSearchText } from '@/lib/utils';
 import Decimal from 'decimal.js';
 import { multiplyMoney, toMoneyNumber } from '@/lib/money';
+import { createScopedStorage } from '@/lib/tenant-scope';
 
 // ============================================================================
 // CART STORE
@@ -293,7 +294,7 @@ export const useCartStore = create<CartState & CartActions>()(
     }),
     {
       name: 'onuron-pos-cart-v2',
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => createScopedStorage('onuron-pos-cart-v2')),
       skipHydration: true,
       partialize: (state) => ({
         tabs: state.tabs,
@@ -747,7 +748,7 @@ export const useQuantityUsageStore = create<QuantityUsageState & QuantityUsageAc
     }),
     {
       name: 'onuron-pos-quantity-usage',
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => createScopedStorage('onuron-pos-quantity-usage')),
     }
   )
 );
@@ -821,7 +822,7 @@ export const useProductUsageStore = create<ProductUsageState & ProductUsageActio
     }),
     {
       name: 'onuron-pos-product-usage',
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => createScopedStorage('onuron-pos-product-usage')),
       partialize: (state) => ({
         // We persist usage and lastFetched. The topSales is also persisted for offline support.
         usage: state.usage,

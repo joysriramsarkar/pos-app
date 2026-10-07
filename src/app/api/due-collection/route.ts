@@ -6,6 +6,11 @@ import { requireAuth } from '@/lib/api-middleware';
 import { requireBusinessContext, checkPermission } from '@/lib/tenant';
 import { toMoneyDecimal, toMoneyNumber } from '@/lib/money';
 import { logAudit } from '@/lib/audit';
+import {
+  reserveIdempotency,
+  finalizeIdempotency,
+  releaseIdempotency,
+} from '@/lib/idempotency';
 
 // GET /api/due-collection - List customers with totalDue > 0
 export async function GET(request: NextRequest) {
@@ -96,85 +101,118 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Bug 12 fix: idempotency — if the same X-Idempotency-Key is already recorded in
-    // the ledger, return the previous result instead of double-collecting.
+    // DB-level idempotency. The previous ledger-lookup check was racy: two
+    // concurrent requests with the same key could both pass it and double-collect.
     const idempotencyKey = request.headers.get('X-Idempotency-Key');
+    let claim: Awaited<ReturnType<typeof reserveIdempotency>> | null = null;
+
     if (idempotencyKey) {
-      const existing = await db.ledgerEntry.findFirst({
-        where: { businessId, referenceId: `DUE-COLLECT-${idempotencyKey}` },
-      });
-      if (existing) {
-        const customer = await db.customer.findUnique({ where: { id: customerId } });
+      claim = await reserveIdempotency(businessId, 'due:collect', idempotencyKey);
+      if (claim.status === 'replay') {
+        const cached = (claim.result ?? {}) as {
+          collectedAmount?: number;
+          remainingDue?: number;
+        };
+        const customer = await db.customer.findFirst({ where: { id: customerId, businessId } });
         return NextResponse.json({
           success: true,
-          data: { customer, collectedAmount: Number(existing.amount), remainingDue: Number(existing.balanceAfter) },
+          data: {
+            customer,
+            collectedAmount: cached.collectedAmount ?? 0,
+            remainingDue: cached.remainingDue ?? Number(customer?.totalDue ?? 0),
+          },
           idempotent: true,
         });
+      }
+      if (claim.status === 'in_progress') {
+        return NextResponse.json(
+          { success: false, error: 'একই অনুরোধ প্রক্রিয়াধীন আছে (duplicate request in progress)' },
+          { status: 409 },
+        );
       }
     }
     const referenceId = idempotencyKey ? `DUE-COLLECT-${idempotencyKey}` : `DUE-COLLECT-${Date.now()}-${customerId.slice(-6)}`;
 
     const collectAmount = toMoneyDecimal(amount);
 
-    const updated = await db.$transaction(async (tx) => {
-      const customerRaw = await tx.$queryRaw<
-        Array<{ id: string; name: string; totalDue: unknown; totalPaid: unknown }>
-      >`
-        SELECT id, name, "total_due" as "totalDue", "total_paid" as "totalPaid"
-        FROM customers
-        WHERE id = ${customerId} AND business_id = ${businessId}
-        FOR UPDATE
-      `;
-      const customer = customerRaw[0];
+    let updated: {
+      updatedCustomer: Awaited<ReturnType<typeof db.customer.update>>;
+      collectedAmount: number;
+      remainingDue: number;
+      previousDue: number;
+      customerName: string;
+    };
+    try {
+      updated = await db.$transaction(async (tx) => {
+        const customerRaw = await tx.$queryRaw<
+          Array<{ id: string; name: string; totalDue: unknown; totalPaid: unknown }>
+        >`
+          SELECT id, name, "total_due" as "totalDue", "total_paid" as "totalPaid"
+          FROM customers
+          WHERE id = ${customerId} AND business_id = ${businessId}
+          FOR UPDATE
+        `;
+        const customer = customerRaw[0];
 
-      if (!customer) {
-        throw Object.assign(new Error('ক্রেতা খুঁজে পাওয়া যায়নি'), { status: 404 });
-      }
+        if (!customer) {
+          throw Object.assign(new Error('ক্রেতা খুঁজে পাওয়া যায়নি'), { status: 404 });
+        }
 
-      const currentDue = toMoneyDecimal(Number(customer.totalDue));
-      if (currentDue.lt(collectAmount)) {
-        throw Object.assign(
-          new Error('আদায়ের পরিমাণ বকেয়া থেকে বেশি হতে পারে না'),
-          { status: 400 },
+        const currentDue = toMoneyDecimal(Number(customer.totalDue));
+        if (currentDue.lt(collectAmount)) {
+          throw Object.assign(
+            new Error('আদায়ের পরিমাণ বকেয়া থেকে বেশি হতে পারে না'),
+            { status: 400 },
+          );
+        }
+
+        const newDueAmount = toMoneyDecimal(currentDue.minus(collectAmount));
+        const newTotalPaid = toMoneyDecimal(
+          toMoneyDecimal(Number(customer.totalPaid)).plus(collectAmount),
         );
+
+        const updatedCustomer = await tx.customer.update({
+          where: { id: customerId },
+          data: {
+            totalDue: newDueAmount,
+            totalPaid: newTotalPaid,
+            updatedAt: new Date(),
+          },
+        });
+
+        await tx.ledgerEntry.create({
+          data: {
+            businessId,
+            customerId,
+            entryType: 'DEBIT',
+            amount: collectAmount,
+            balanceAfter: newDueAmount,
+            referenceId,
+            description: notes || `Manual due collection (${paymentMethod || 'Cash'})`,
+          },
+        });
+
+        return {
+          updatedCustomer,
+          collectedAmount: collectAmount.toNumber(),
+          remainingDue: newDueAmount.toNumber(),
+          previousDue: currentDue.toNumber(),
+          customerName: customer.name,
+        };
+      });
+    } catch (txError) {
+      if (claim && claim.status === 'claimed') {
+        await releaseIdempotency(claim.idempotencyKey).catch(() => {});
       }
+      throw txError;
+    }
 
-      const newDueAmount = toMoneyDecimal(currentDue.minus(collectAmount));
-      const newTotalPaid = toMoneyDecimal(
-        toMoneyDecimal(Number(customer.totalPaid)).plus(collectAmount),
-      );
-
-      const updatedCustomer = await tx.customer.update({
-        where: { id: customerId },
-        data: {
-          totalDue: newDueAmount,
-          totalPaid: newTotalPaid,
-          updatedAt: new Date(),
-        },
-      });
-
-      await tx.ledgerEntry.create({
-        data: {
-          businessId,
-          customerId,
-          entryType: 'DEBIT',
-          amount: collectAmount,
-          balanceAfter: newDueAmount,
-          // Bug 13 fix: always record a referenceId so this ledger entry can be
-          // traced back and de-duplicated on retry.
-          referenceId,
-          description: notes || `Manual due collection (${paymentMethod || 'Cash'})`,
-        },
-      });
-
-      return {
-        updatedCustomer,
-        collectedAmount: collectAmount.toNumber(),
-        remainingDue: newDueAmount.toNumber(),
-        previousDue: currentDue.toNumber(),
-        customerName: customer.name,
-      };
-    });
+    if (claim && claim.status === 'claimed') {
+      await finalizeIdempotency(claim.idempotencyKey, {
+        collectedAmount: updated.collectedAmount,
+        remainingDue: updated.remainingDue,
+      }).catch(() => {});
+    }
 
     await logAudit({
       userId: ctx.user.id,

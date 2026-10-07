@@ -404,13 +404,18 @@ export default function PurchaseOrderManagement() {
 
   const openReceiveDialog = (order: PurchaseOrder) => {
     setReceiveItems(
-      order.items.map((item) => ({
-        id: item.id,
-        receivedQty: item.quantity,
-        maxQty: item.quantity,
-        productName: item.product?.nameBn || item.product?.name || item.productId,
-        unit: item.product?.unit || 'piece',
-      }))
+      order.items.map((item) => {
+        const alreadyReceived = parseFloat(item.receivedQty as unknown as string) || 0;
+        const ordered = parseFloat(item.quantity as unknown as string) || 0;
+        const remaining = Math.max(0, ordered - alreadyReceived);
+        return {
+          id: item.id,
+          receivedQty: remaining,
+          maxQty: remaining,
+          productName: item.product?.nameBn || item.product?.name || item.productId,
+          unit: item.product?.unit || 'piece',
+        };
+      })
     );
     setReceiveAmountPaid('');
     setReceivePaymentMethod('Cash');

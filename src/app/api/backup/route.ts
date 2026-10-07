@@ -35,6 +35,15 @@ export async function GET(request: NextRequest) {
       purchaseItems,
       businessSettings,
       memberships,
+      payments,
+      saleReturns,
+      saleReturnItems,
+      expenses,
+      supplierLedgerEntries,
+      cashRegisterShifts,
+      dailyManualRecords,
+      productPopularity,
+      auditLogs,
     ] = await Promise.all([
       db.product.findMany({ where: { businessId } }),
       db.category.findMany({ where: { businessId } }),
@@ -64,11 +73,20 @@ export async function GET(request: NextRequest) {
           },
         },
       }),
+      db.payment.findMany({ where: { businessId } }),
+      db.saleReturn.findMany({ where: { businessId } }),
+      db.saleReturnItem.findMany({ where: { saleReturn: { businessId } } }),
+      db.expense.findMany({ where: { businessId } }),
+      db.supplierLedgerEntry.findMany({ where: { businessId } }),
+      db.cashRegisterShift.findMany({ where: { businessId } }),
+      db.dailyManualRecord.findMany({ where: { businessId } }),
+      db.productPopularity.findMany({ where: { businessId } }),
+      db.auditLog.findMany({ where: { businessId } }),
     ]);
 
     const backupData = {
       timestamp: new Date().toISOString(),
-      version: "2.0-multi-tenant",
+      version: "2.1-multi-tenant",
       business: {
         id: ctx.business.id,
         name: ctx.business.name,
@@ -87,6 +105,15 @@ export async function GET(request: NextRequest) {
         purchaseItems,
         businessSettings,
         memberships,
+        payments,
+        saleReturns,
+        saleReturnItems,
+        expenses,
+        supplierLedgerEntries,
+        cashRegisterShifts,
+        dailyManualRecords,
+        productPopularity,
+        auditLogs,
       },
     };
 
@@ -158,15 +185,33 @@ export async function POST(request: NextRequest) {
       purchases = [],
       purchaseItems = [],
       businessSettings = [],
+      payments = [],
+      saleReturns = [],
+      saleReturnItems = [],
+      expenses = [],
+      supplierLedgerEntries = [],
+      cashRegisterShifts = [],
+      dailyManualRecords = [],
+      productPopularity = [],
+      auditLogs = [],
     } = backupData.data;
 
     // Transactionally clear this business's data and restore
     await db.$transaction(async (tx) => {
-      // Clear tenant records in dependency order
+      // Clear tenant records in dependency order (children first)
+      await tx.saleReturnItem.deleteMany({ where: { saleReturn: { businessId } } });
+      await tx.saleReturn.deleteMany({ where: { businessId } });
+      await tx.payment.deleteMany({ where: { businessId } });
       await tx.saleItem.deleteMany({ where: { sale: { businessId } } });
       await tx.purchaseItem.deleteMany({ where: { purchase: { businessId } } });
       await tx.stockHistory.deleteMany({ where: { businessId } });
       await tx.ledgerEntry.deleteMany({ where: { businessId } });
+      await tx.supplierLedgerEntry.deleteMany({ where: { businessId } });
+      await tx.expense.deleteMany({ where: { businessId } });
+      await tx.cashRegisterShift.deleteMany({ where: { businessId } });
+      await tx.dailyManualRecord.deleteMany({ where: { businessId } });
+      await tx.productPopularity.deleteMany({ where: { businessId } });
+      await tx.auditLog.deleteMany({ where: { businessId } });
       await tx.sale.deleteMany({ where: { businessId } });
       await tx.purchase.deleteMany({ where: { businessId } });
       await tx.product.deleteMany({ where: { businessId } });
@@ -175,7 +220,7 @@ export async function POST(request: NextRequest) {
       await tx.supplier.deleteMany({ where: { businessId } });
       await tx.businessSetting.deleteMany({ where: { businessId } });
 
-      // Restore data with businessId enforcement
+      // Restore data with businessId enforcement (parents before children)
       if (businessSettings.length > 0) {
         await tx.businessSetting.createMany({
           data: businessSettings.map((s: Record<string, unknown>) => ({ ...s, businessId })),
@@ -217,9 +262,52 @@ export async function POST(request: NextRequest) {
       if (saleItems.length > 0) {
         await tx.saleItem.createMany({ data: saleItems });
       }
+      if (payments.length > 0) {
+        await tx.payment.createMany({
+          data: payments.map((p: Record<string, unknown>) => ({ ...p, businessId })),
+        });
+      }
+      if (saleReturns.length > 0) {
+        await tx.saleReturn.createMany({
+          data: saleReturns.map((r: Record<string, unknown>) => ({ ...r, businessId })),
+        });
+      }
+      if (saleReturnItems.length > 0) {
+        await tx.saleReturnItem.createMany({ data: saleReturnItems });
+      }
       if (ledgerEntries.length > 0) {
         await tx.ledgerEntry.createMany({
           data: ledgerEntries.map((l: Record<string, unknown>) => ({ ...l, businessId })),
+        });
+      }
+      if (supplierLedgerEntries.length > 0) {
+        await tx.supplierLedgerEntry.createMany({
+          data: supplierLedgerEntries.map((l: Record<string, unknown>) => ({ ...l, businessId })),
+        });
+      }
+      if (expenses.length > 0) {
+        await tx.expense.createMany({
+          data: expenses.map((e: Record<string, unknown>) => ({ ...e, businessId })),
+        });
+      }
+      if (cashRegisterShifts.length > 0) {
+        await tx.cashRegisterShift.createMany({
+          data: cashRegisterShifts.map((s: Record<string, unknown>) => ({ ...s, businessId })),
+        });
+      }
+      if (dailyManualRecords.length > 0) {
+        await tx.dailyManualRecord.createMany({
+          data: dailyManualRecords.map((d: Record<string, unknown>) => ({ ...d, businessId })),
+        });
+      }
+      if (productPopularity.length > 0) {
+        await tx.productPopularity.createMany({
+          data: productPopularity.map((p: Record<string, unknown>) => ({ ...p, businessId })),
+        });
+      }
+      if (auditLogs.length > 0) {
+        await tx.auditLog.createMany({
+          data: auditLogs.map((l: Record<string, unknown>) => ({ ...l, businessId })),
         });
       }
       if (stockHistory.length > 0) {

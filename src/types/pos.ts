@@ -158,6 +158,8 @@ export interface SyncQueueItem {
   synced: boolean;
   syncedAt?: Date;
   failed?: boolean;
+  /** True when the failure is non-retryable (e.g. validation/permission error). */
+  permanent?: boolean;
   retryCount: number;
   error?: string;
   createdAt: Date;

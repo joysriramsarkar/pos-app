@@ -1,4 +1,5 @@
 import { format } from 'date-fns';
+import { buildCSV } from '@/lib/export-utils';
 import type { ChartRow } from './types';
 
 export function parseDateSafe(dateStr: string | Date | null | undefined): Date {
@@ -28,7 +29,7 @@ export function downloadSalesCsv(
     ['Total', totalRevenue.toFixed(2), totalProfit.toFixed(2), totalCount],
   ];
 
-  const csv = rows.map((r: any[]) => r.map((v: any) => `"${v}"`).join(',')).join('\n');
+  const csv = buildCSV(rows);
   const blob = new Blob([csv], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

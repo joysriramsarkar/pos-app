@@ -2,6 +2,13 @@ import { withAuth } from "next-auth/middleware";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+// SECURITY: never sign/verify session JWTs with a hardcoded secret.
+if (!process.env.NEXTAUTH_SECRET && process.env.NODE_ENV === "production") {
+  throw new Error(
+    "NEXTAUTH_SECRET is not defined. Refusing to run middleware with an insecure default secret.",
+  );
+}
+
 const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? "http://localhost:3000")
   .split(",")
   .map((o) => o.trim());
@@ -119,7 +126,7 @@ export const proxy = withAuth(
   },
   {
     pages: { signIn: "/login" },
-    secret: process.env.NEXTAUTH_SECRET || "2ne9ID5IkSJcykq9lkQrUsY6A2RuUPY/xnhxFOFvlFM=",
+    secret: process.env.NEXTAUTH_SECRET,
   }
 );
 

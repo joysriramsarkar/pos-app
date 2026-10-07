@@ -367,9 +367,16 @@ export async function exportProductsCSV(businessId: string): Promise<string> {
     Number(p.minStockLevel).toFixed(0),
   ]);
 
+  // Neutralise CSV formula injection (cells starting with = + - @ tab/CR).
+  const sanitize = (v: unknown): string => {
+    const str = String(v);
+    if (/^-?\d+(\.\d+)?$/.test(str)) return str;
+    return /^[=+\-@\t\r]/.test(str) ? `'${str}` : str;
+  };
+
   const csvLines = [
-    headers.join(','),
-    ...rows.map((row) => row.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')),
+    headers.map(sanitize).join(','),
+    ...rows.map((row) => row.map((v) => `"${sanitize(v).replace(/"/g, '""')}"`).join(',')),
   ];
 
   return '\uFEFF' + csvLines.join('\r\n'); // BOM for Excel compatibility
