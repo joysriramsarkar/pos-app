@@ -84,7 +84,7 @@
     "pg-cloudflare": "^1.4.0",
     "postgres": "^3.4.8",
     "react": "^19.0.0",
-    "react-day-picker": "^9.14.0",
+    "react-day-picker": "^10.0.2",
     "react-dom": "^19.0.0",
     "react-hook-form": "^7.77.0",
     "react-resizable-panels": "^4.14.1",
