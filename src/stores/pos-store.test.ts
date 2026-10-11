@@ -324,6 +324,14 @@ describe('useSyncStore', () => {
     expect(useSyncStore.getState().syncErrors).toEqual(['Network failed']);
   });
 
+  it('addSyncError keeps only the last 50 errors', () => {
+    for (let i = 0; i < 60; i++) useSyncStore.getState().addSyncError(`err${i}`);
+    const errors = useSyncStore.getState().syncErrors;
+    expect(errors).toHaveLength(50);
+    expect(errors[0]).toBe('err10');
+    expect(errors[49]).toBe('err59');
+  });
+
   it('clearSyncErrors empties errors', () => {
     useSyncStore.getState().addSyncError('err1');
     useSyncStore.getState().clearSyncErrors();

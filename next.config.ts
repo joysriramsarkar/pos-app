@@ -1,13 +1,15 @@
 import type { NextConfig } from "next";
 import bundleAnalyzer from "@next/bundle-analyzer";
 
-// C6: ALLOWED_ORIGINS must be set in production at runtime (not build time)
-// Check is done in src/lib/env.ts at server startup, not here.
-const rawOrigins = process.env.ALLOWED_ORIGINS;
-
-const allowedOrigins = (rawOrigins ?? "http://localhost:3000")
+// C6/M1: build-time config must not carry tenant/security origins.
+// ALLOWED_ORIGINS is enforced at runtime (proxy.ts + api-middleware.ts +
+// env.ts fail-fast) — parsing it here was dead config, now removed.
+// M2: no hardcoded developer LAN IPs in the repo. Dev origins come from
+// DEV_ORIGINS env (comma-separated); default is localhost-only.
+const devOrigins = (process.env.DEV_ORIGINS ?? "http://localhost:3000")
   .split(",")
-  .map((o) => o.trim());
+  .map((o) => o.trim())
+  .filter(Boolean);
 
 const withBundleAnalyzer = bundleAnalyzer({
   enabled: process.env.BUNDLE_ANALYZE === "true",
@@ -17,7 +19,7 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   // standalone output — Docker build-এর জন্য; opennextjs-cloudflare নিজে bundle করে
   output: 'standalone',
-  allowedDevOrigins: ["192.168.1.11"],
+  allowedDevOrigins: devOrigins,
   // Prisma/pg Node.js resolution চাই — Cloudflare Worker-এও nodejs_compat flag দিয়ে চলে
   serverExternalPackages: [
     "@prisma/client",

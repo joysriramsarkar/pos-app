@@ -112,7 +112,19 @@ export async function initDatabase(businessId?: string): Promise<IDBDatabase> {
       // Clean up instance map entry when the DB connection is closed
       db.onclose = () => dbInstances.delete(tenantId);
 
+      // Audit §12: another tab just upgraded the schema — close promptly so
+      // their upgrade isn't blocked, and drop our stale handle.
+      db.onversionchange = () => {
+        db.close();
+        dbInstances.delete(tenantId);
+      };
+
       resolve(db);
+    };
+
+    // Another tab holds an old connection — don't hang forever.
+    request.onblocked = () => {
+      console.warn("[IndexedDB] open blocked by another tab; close other tabs or reload");
     };
 
     request.onupgradeneeded = (event) => {
@@ -672,6 +684,21 @@ export const SalesDB = {
   },
 };
 
+/**
+ * OFF-002/H15: pure lease decision — unit-tested without IndexedDB.
+ * A (different) owner may claim only when the item is unleased or expired.
+ */
+export function canClaimLease(
+  item: Pick<SyncQueueItem, "synced" | "failed" | "leaseOwner" | "leaseExpiresAt"> | undefined | null,
+  owner: string,
+  now = Date.now(),
+): boolean {
+  if (!item || item.synced || item.failed) return false;
+  if (!item.leaseOwner || item.leaseOwner === owner) return true;
+  const exp = item.leaseExpiresAt ? new Date(item.leaseExpiresAt).getTime() : 0;
+  return exp <= now;
+}
+
 // ============================================================================
 // SYNC QUEUE OPERATIONS
 // ============================================================================
@@ -755,13 +782,26 @@ export const SyncQueueDB = {
     }
   },
 
+  // OFF-002: single readwrite transaction — get + put atomically so two
+  // tabs/workers cannot lose each other's retry increments.
   async incrementRetry(id: string, error?: string): Promise<void> {
-    const item = await getFromStore<SyncQueueItem>(STORES.SYNC_QUEUE, id);
-    if (item) {
-      item.retryCount += 1;
-      if (error) item.error = error;
-      await putToStore(STORES.SYNC_QUEUE, item);
-    }
+    const db = await initDatabase();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(STORES.SYNC_QUEUE, 'readwrite');
+      const store = transaction.objectStore(STORES.SYNC_QUEUE);
+      const request = store.get(id);
+      request.onsuccess = () => {
+        const item = request.result as SyncQueueItem | undefined;
+        if (item) {
+          item.retryCount += 1;
+          item.updatedAt = new Date();
+          if (error) item.error = error;
+          store.put(item);
+        }
+      };
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    });
   },
 
   async delete(id: string): Promise<void> {
@@ -770,6 +810,55 @@ export const SyncQueueDB = {
 
   async clear(): Promise<void> {
     return clearStore(STORES.SYNC_QUEUE);
+  },
+
+  /**
+   * OFF-002/H15: claim a queue item for processing with a time-bound lease.
+   * Single readwrite transaction: only claims when unleased, expired, or
+   * already owned by this worker. Returns true when the lease was acquired.
+   * Server-side idempotency stays the final authority; the lease only avoids
+   * duplicate local work across tabs.
+   */
+  async claimLease(id: string, owner: string, ttlMs = 30_000): Promise<boolean> {
+    const db = await initDatabase();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(STORES.SYNC_QUEUE, 'readwrite');
+      const store = transaction.objectStore(STORES.SYNC_QUEUE);
+      let claimed = false;
+      const request = store.get(id);
+      request.onsuccess = () => {
+        const item = request.result as SyncQueueItem | undefined;
+        if (item && canClaimLease(item, owner)) {
+          item.leaseOwner = owner;
+          item.leaseExpiresAt = new Date(Date.now() + ttlMs);
+          item.updatedAt = new Date();
+          store.put(item);
+          claimed = true;
+        }
+      };
+      transaction.oncomplete = () => resolve(claimed);
+      transaction.onerror = () => reject(transaction.error);
+    });
+  },
+
+  /** Release a lease held by `owner` (no-op when owned by someone else). */
+  async releaseLease(id: string, owner: string): Promise<void> {
+    const db = await initDatabase();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(STORES.SYNC_QUEUE, 'readwrite');
+      const store = transaction.objectStore(STORES.SYNC_QUEUE);
+      const request = store.get(id);
+      request.onsuccess = () => {
+        const item = request.result as SyncQueueItem | undefined;
+        if (item && item.leaseOwner === owner) {
+          delete item.leaseOwner;
+          delete item.leaseExpiresAt;
+          store.put(item);
+        }
+      };
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    });
   },
 };
 

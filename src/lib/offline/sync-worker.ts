@@ -28,7 +28,16 @@ class SyncHttpError extends Error {
  * Network errors, 408 and 429 are transient and should be retried.
  */
 function isPermanentStatus(status: number): boolean {
-  return status >= 400 && status < 500 && status !== 408 && status !== 429;
+  // MP-32: 409 is NOT blanket-permanent. INPROGRESS (concurrent claim) is
+  // transient and must be retried; only VERSION_CONFLICT/CONFLICT is permanent.
+  // The fetch handler below reclassifies 409 by body code; this stays
+  // conservative so unknown 409s retry rather than dead-letter a real sale.
+  return status >= 400 && status < 500 && status !== 408 && status !== 429 && status !== 409;
+}
+
+function isFinancialEntity(entityType: string): boolean {
+  const t = (entityType || '').toLowerCase();
+  return t.includes('sale') || t.includes('payment') || t.includes('prepayment') || t.includes('due') || t.includes('stock') || t.includes('ledger') || t.includes('return') || t.includes('refund');
 }
 
 /**
@@ -45,7 +54,23 @@ export class OfflineSyncWorker {
    * Safe to call multiple times (only runs once at a time)
    */
   async startSync(options?: { retryFailed?: boolean }): Promise<void> {
-    console.log('[SyncWorker] startSync requested. isRunning:', this.isRunning);
+    // MP-32/H15: cross-tab mutual exclusion via Web Locks (fallback: in-memory).
+    const locks = (navigator as unknown as { locks?: { request: (name: string, opts: unknown, fn: (lock: unknown) => Promise<void>) => Promise<void> } }).locks;
+    if (locks) {
+      let acquired = false;
+      await locks.request('pos-sync', { ifAvailable: true }, async (lock) => {
+        if (!lock) return;
+        acquired = true;
+        await this.runQueue(options);
+      });
+      if (!acquired) console.log('[SyncWorker] another tab holds the sync lock; skipping run');
+      return;
+    }
+    await this.runQueue(options);
+  }
+
+  private async runQueue(options?: { retryFailed?: boolean }): Promise<void> {
+    console.log('[SyncWorker] runQueue requested. isRunning:', this.isRunning);
     if (this.isRunning) {
       return;
     }
@@ -115,9 +140,11 @@ export class OfflineSyncWorker {
       // Pre-process for Last-Write-Wins (LWW)
       for (const item of pendingItems) {
         try {
+          if (isFinancialEntity(item.entityType)) continue;
           const payload = JSON.parse(item.payload);
           if (payload.id && payload.updatedAt) {
              const time = new Date(payload.updatedAt).getTime();
+             if (!Number.isFinite(time)) continue;
              const key = `${item.entityType}_${payload.id}`;
              if (!latestVersions.has(key) || time > latestVersions.get(key)!) {
                  latestVersions.set(key, time);
@@ -135,13 +162,15 @@ export class OfflineSyncWorker {
 
         let isStale = false;
         try {
-          const payload = JSON.parse(item.payload);
-          if (payload.id && payload.updatedAt) {
-             const time = new Date(payload.updatedAt).getTime();
-             const key = `${item.entityType}_${payload.id}`;
-             if (latestVersions.has(key) && time < latestVersions.get(key)!) {
-                isStale = true;
-             }
+          if (!isFinancialEntity(item.entityType)) {
+            const payload = JSON.parse(item.payload);
+            if (payload.id && payload.updatedAt) {
+               const time = new Date(payload.updatedAt).getTime();
+               const key = `${item.entityType}_${payload.id}`;
+               if (latestVersions.has(key) && Number.isFinite(time) && time < latestVersions.get(key)!) {
+                  isStale = true;
+               }
+            }
           }
         } catch(e) {}
 
@@ -166,12 +195,49 @@ export class OfflineSyncWorker {
       if (currentBatch.length > 0) batches.push(currentBatch);
 
       let sessionExpired = false;
+      // MP-30: entity IDs whose item already failed in THIS run. Later items
+      // touching them are HELD (left pending for the next run) — never
+      // attempted against a missing dependency and dead-lettered.
+      const blockedIds = new Set<string>();
+      const idsOf = (item: (typeof pendingItems)[0]): Set<string> => {
+        try {
+          const payload = JSON.parse(item.payload) as Record<string, unknown>;
+          const ids = new Set<string>();
+          if (typeof payload.id === "string") ids.add(payload.id);
+          if (typeof payload.customerId === "string") ids.add(payload.customerId);
+          if (typeof payload.productId === "string") ids.add(payload.productId);
+          if (Array.isArray(payload.items)) {
+            for (const i of payload.items as { productId?: string }[]) {
+              if (i?.productId) ids.add(i.productId);
+            }
+          }
+          return ids;
+        } catch {
+          return new Set();
+        }
+      };
 
       for (const batch of batches) {
         if (sessionExpired) break;
 
+        // Hold dependents of already-failed items (no retry-count cost).
+        const held: typeof batch = [];
+        const runnable = batch.filter((item) => {
+          const ids = idsOf(item);
+          for (const id of ids) {
+            if (blockedIds.has(id)) {
+              held.push(item);
+              return false;
+            }
+          }
+          return true;
+        });
+        if (held.length > 0) {
+          console.log(`[SyncWorker] holding ${held.length} dependent item(s) for next run`);
+        }
+
         const results = await Promise.allSettled(
-          batch.map(async (item) => {
+          runnable.map(async (item) => {
             const actionType = this.mapQueueItemToActionType(item);
             if (!actionType) {
               throw new Error(
@@ -201,12 +267,38 @@ export class OfflineSyncWorker {
 
             if (!response.ok) {
               const text = await response.text();
+              let code = "";
+              try {
+                const parsed = JSON.parse(text);
+                code = parsed?.code ?? "";
+              } catch {}
+              // MP-32: INPROGRESS (same key being processed) is transient.
+              if (response.status === 409 && code === "INPROGRESS") {
+                const t = new SyncHttpError(429, "INPROGRESS: same request is being processed; retry");
+                throw t;
+              }
+              // MP-32: real invoice/version CONFLICT is permanent — dead-letter it.
+              if (response.status === 409) {
+                throw new SyncHttpError(
+                  409,
+                  `HTTP 409: ${text.slice(0, 300)}`,
+                );
+              }
               throw new SyncHttpError(
                 response.status,
-                `HTTP ${response.status}: ${response.statusText} ${text}`,
+                `HTTP ${response.status}: ${response.statusText} ${text.slice(0, 300)}`,
               );
             }
 
+            // MP-28: success requires JSON + body.success. A 307-redirect to
+            // /login returns 200 text/html — that must NEVER mark items synced.
+            const contentType = response.headers.get("content-type") ?? "";
+            if (!contentType.includes("application/json")) {
+              throw new SyncHttpError(
+                response.status,
+                `Unexpected content-type ${contentType}; refusing to mark synced`,
+              );
+            }
             const result = await response.json();
             if (!result.success) {
               throw new Error(result.error || "Sync API returned failure");
@@ -217,8 +309,8 @@ export class OfflineSyncWorker {
           }),
         );
 
-        for (let i = 0; i < batch.length; i++) {
-          const item = batch[i];
+        for (let i = 0; i < runnable.length; i++) {
+          const item = runnable[i];
           const result = results[i];
 
           if (result.status === "fulfilled") {
@@ -236,7 +328,11 @@ export class OfflineSyncWorker {
             const status =
               result.reason instanceof SyncHttpError ? result.reason.status : 0;
 
-            if (isPermanentStatus(status)) {
+            // MP-30: this item failed — hold its dependents in later batches.
+            for (const id of idsOf(item)) blockedIds.add(id);
+
+            const isConflict409 = status === 409;
+            if (isPermanentStatus(status) || isConflict409) {
               // Dead-letter: validation / permission / conflict — do not retry.
               await SyncQueueDB.markFailed(item.id, errorMsg, true);
             } else {

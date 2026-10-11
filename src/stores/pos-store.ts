@@ -633,7 +633,10 @@ export const useSyncStore = create<SyncState & SyncActions>((set) => ({
   setSyncing: (syncing) => set({ isSyncing: syncing }),
   setLastSyncTime: (time) => set({ lastSyncTime: time }),
   setPendingCount: (count) => set({ pendingCount: count }),
-  addSyncError: (error) => set((state) => ({ syncErrors: [...state.syncErrors, error] })),
+  // Audit §12: bounded to the last 50 — long offline shifts must not grow
+  // this array (and its persisted footprint) without limit.
+  addSyncError: (error) =>
+    set((state) => ({ syncErrors: [...state.syncErrors, error].slice(-50) })),
   clearSyncErrors: () => set({ syncErrors: [] }),
   reset: () => set({
     isOnline: true,

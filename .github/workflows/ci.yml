@@ -7,7 +7,7 @@ on:
     branches: [main, dev, test]
 
 jobs:
-  ci:
+  static:
     name: Lint · Typecheck · Test
     runs-on: ubuntu-latest
 
@@ -34,11 +34,81 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate --config prisma.config.ts
 
+      - name: Prisma validate
+        run: npx prisma validate --config prisma.config.ts
+
       - name: Lint
         run: npm run lint
 
-      - name: Typecheck
+      - name: Typecheck (app)
         run: npm run typecheck
 
+      - name: Typecheck (tests)
+        run: npm run typecheck:test
+
       - name: Test
-        run: npm test
+        run: npm test -- --coverage
+
+  build-node:
+    name: Production build (node)
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://dummy:dummy@localhost:5432/dummy' }}
+      DIRECT_URL: ${{ secrets.DIRECT_URL || 'postgresql://dummy:dummy@localhost:5432/dummy' }}
+      NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET || 'ci-test-secret-at-least-32-characters-long' }}
+      NEXTAUTH_URL: "http://localhost:3000"
+      ALLOWED_ORIGINS: "http://localhost:3000"
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run db:generate
+      - run: npm run build
+
+  integration:
+    name: Integration (PostgreSQL 16)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: pos
+          POSTGRES_PASSWORD: pos
+          POSTGRES_DB: pos_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U pos"
+          --health-interval 5s --health-timeout 5s --health-retries 5
+    env:
+      DATABASE_URL: postgresql://pos:pos@localhost:5432/pos_test?schema=public
+      DIRECT_URL: postgresql://pos:pos@localhost:5432/pos_test?schema=public
+      NEXTAUTH_SECRET: ci-test-secret-at-least-32-characters-long
+      NEXTAUTH_URL: "http://localhost:3000"
+      ALLOWED_ORIGINS: "http://localhost:3000"
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run db:generate
+      - name: Apply migrations
+        run: npx prisma migrate deploy --config prisma.config.ts
+      - name: Integration tests (disposable DB only)
+        run: INTEGRATION_DB=1 npm test -- --run src/lib/db.integration.test.ts src/lib/money.test.ts
+      - name: Backup restore drill (seed → export → validate → wipe → restore → reconcile)
+        run: npx tsx scripts/restore-drill.ts
+
+  docker:
+    name: Docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build .

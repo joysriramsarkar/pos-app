@@ -16,7 +16,11 @@ Lakhan Bhandar POS — current offline stack (as implemented in this repo).
 
 ## Data stores (IndexedDB)
 
-Database: `lakhan-bhandar-pos` (see `DB_VERSION` in `indexeddb.ts`).
+Database: `pos-db-${businessId}` per tenant (see `getDBName`/`DB_VERSION = 3` in `indexeddb.ts`).
+Legacy names (`lakhan-bhandar-pos`, `onuron-pos-db`) are NOT opened by current
+code — if a device still has one, its queue is not read; treat the device as
+fresh and let it re-sync from the server after login. H14: do not silently
+merge legacy stores.
 
 | Store | Purpose |
 |-------|---------|
