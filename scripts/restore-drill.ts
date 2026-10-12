@@ -7,8 +7,8 @@
  *
  * Round-trips the financial core (products, customers, sales+items, payments,
  * ledger, stock history, settings) through the same shape GET /api/backup
- * emits, validates with validateBackup(), wipes via cascade, restores with
- * createMany, then reconciles counts + totals + ledger fold. Exit non-zero
+ * emits, validates with validateBackup(), wipes in dependency order, restores
+ * with createMany, then reconciles counts + totals + ledger fold. Exit non-zero
  * on any mismatch.
  */
 import "dotenv/config";
@@ -71,7 +71,14 @@ async function main() {
   for (const i of v.issues) console.log(`${i.severity.toUpperCase()} [${i.check}] ${i.detail}`);
   check("backup validates BACKUP-OK", v.ok);
 
-  // ---- 4. wipe (cascade) ----
+  // ---- 4. wipe (children before parents — sale_items→products is ON DELETE
+  //      RESTRICT, so deleting the business cannot cascade through it) ----
+  await db.sale.deleteMany({ where: { businessId: b } }); // cascades sale_items + payments
+  await db.stockHistory.deleteMany({ where: { businessId: b } });
+  await db.ledgerEntry.deleteMany({ where: { businessId: b } });
+  await db.product.deleteMany({ where: { businessId: b } });
+  await db.customer.deleteMany({ where: { businessId: b } });
+  await db.businessSetting.deleteMany({ where: { businessId: b } });
   await db.business.delete({ where: { id: b } });
   check("wipe leaves no products", (await db.product.count({ where: { businessId: b } })) === 0);
 
@@ -124,7 +131,13 @@ async function main() {
   const cur = await db.businessSetting.findFirst({ where: { businessId: b2, key: "currency_symbol" } });
   check("currency symbol intact (৳)", cur?.value === "৳");
 
-  // ---- 7. cleanup ----
+  // ---- 7. cleanup (same dependency order as the wipe) ----
+  await db.sale.deleteMany({ where: { businessId: b2 } });
+  await db.stockHistory.deleteMany({ where: { businessId: b2 } });
+  await db.ledgerEntry.deleteMany({ where: { businessId: b2 } });
+  await db.product.deleteMany({ where: { businessId: b2 } });
+  await db.customer.deleteMany({ where: { businessId: b2 } });
+  await db.businessSetting.deleteMany({ where: { businessId: b2 } });
   await db.business.delete({ where: { id: b2 } });
   check("cleanup complete", (await db.product.count({ where: { businessId: b2 } })) === 0);
   console.log(failures === 0 ? "DRILL-OK" : "DRILL-FAILED");
