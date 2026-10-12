@@ -14,6 +14,7 @@ import {
   type PartyType,
   normalizeAndValidatePhone,
 } from './parties-utils';
+import { newIdempotencyKey } from "@/lib/idempotency-key";
 import {
   EMPTY_PARTY_FORM,
   type PartyFormState,
@@ -444,7 +445,8 @@ export function usePartiesManagement(refreshKey?: number) {
     try {
       const response = await fetch('/api/supplier-payment', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        // MP-32: stable key per submission — timeout retry never double-pays.
+        headers: { 'Content-Type': 'application/json', 'X-Idempotency-Key': newIdempotencyKey() },
         body: JSON.stringify({
           supplierId: selectedSupplier.id,
           amount,
@@ -604,7 +606,8 @@ export function usePartiesManagement(refreshKey?: number) {
     try {
       const response = await fetch('/api/prepayment/withdraw', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        // MP-32: stable key per submission — timeout retry never double-withdraws.
+        headers: { 'Content-Type': 'application/json', 'X-Idempotency-Key': newIdempotencyKey() },
         body: JSON.stringify({ customerId: selectedCustomer.id, amount }),
       });
       if (!response.ok) {
@@ -727,7 +730,8 @@ export function usePartiesManagement(refreshKey?: number) {
     try {
       const response = await fetch('/api/due-collection', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        // MP-32: stable key per submission — timeout retry never double-collects.
+        headers: { 'Content-Type': 'application/json', 'X-Idempotency-Key': newIdempotencyKey() },
         body: JSON.stringify({
           customerId: selectedCustomer.id,
           amount: paidAmount,
@@ -767,7 +771,8 @@ export function usePartiesManagement(refreshKey?: number) {
     try {
       const response = await fetch('/api/prepayment', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        // MP-32: stable key per submission — timeout retry never double-credits.
+        headers: { 'Content-Type': 'application/json', 'X-Idempotency-Key': newIdempotencyKey() },
         body: JSON.stringify({
           customerId: selectedCustomer.id,
           amount: amount,

@@ -59,7 +59,8 @@ export interface ShiftSummary {
  * Only one shift can be open per business at a time.
  */
 export async function openShift(input: OpenShiftInput): Promise<CashRegisterShift> {
-  return db.$transaction(async (tx) => {
+  try {
+    return await db.$transaction(async (tx) => {
     // Check no shift is already open
     const existingOpen = await tx.cashRegisterShift.findFirst({
       where: { businessId: input.businessId, isActive: true },
@@ -105,7 +106,25 @@ export async function openShift(input: OpenShiftInput): Promise<CashRegisterShif
     });
 
     return shift;
-  });
+    });
+  } catch (e) {
+    // MP-18/DB-005: concurrent opens race past the check above and collide on
+    // @@unique([businessId, shiftNumber]) or the partial open-shift index.
+    // A P2002 here MEANS a shift just opened — report it, never 500.
+    if (typeof e === "object" && e !== null && (e as { code?: string }).code === "P2002") {
+      const open = await db.cashRegisterShift.findFirst({
+        where: { businessId: input.businessId, isActive: true },
+        orderBy: { openedAt: "desc" },
+      });
+      throw new DomainError(
+        ERROR_CODES.SHIFT_ALREADY_OPEN,
+        "A shift was just opened by another device. Refresh and continue with the open shift.",
+        409,
+        { shiftId: open?.id, openedAt: open?.openedAt }
+      );
+    }
+    throw e;
+  }
 }
 
 // ============================================================================

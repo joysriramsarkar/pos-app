@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, mock } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { generateInvoiceNumber, generateServerInvoiceNumber } from './invoice';
 
 describe('Invoice Number Generators', () => {

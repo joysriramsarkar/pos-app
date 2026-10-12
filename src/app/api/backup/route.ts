@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireAuth } from "@/lib/api-middleware";
 import { requireBusinessContext } from "@/lib/tenant";
@@ -9,7 +10,7 @@ export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (!authResult.authorized) return authResult.response;
 
-  const ctx = await requireBusinessContext();
+  const ctx = await requireBusinessContext(authResult.session);
   if (ctx instanceof NextResponse) return ctx;
 
   if (ctx.role !== "OWNER" && ctx.role !== "ADMIN") {
@@ -123,7 +124,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         error: "Failed to create backup",
-        message: error instanceof Error ? error.message : "Unknown error",
+        // MP-35: no internal details to clients.
       },
       { status: 500 },
     );
@@ -134,7 +135,7 @@ export async function POST(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (!authResult.authorized) return authResult.response;
 
-  const ctx = await requireBusinessContext();
+  const ctx = await requireBusinessContext(authResult.session);
   if (ctx instanceof NextResponse) return ctx;
 
   if (ctx.role !== "OWNER") {
@@ -147,9 +148,17 @@ export async function POST(request: NextRequest) {
   const businessId = ctx.business.id;
 
   try {
+    // MP-33: 10MB size cap before parsing (huge backups OOM Workers).
+    const raw = await request.text();
+    if (raw.length > 10 * 1024 * 1024) {
+      return NextResponse.json(
+        { error: "Backup file too large (max 10MB)" },
+        { status: 413 },
+      );
+    }
     let backupData;
     try {
-      backupData = await request.json();
+      backupData = JSON.parse(raw);
     } catch {
       return NextResponse.json(
         { error: "Invalid JSON backup file" },
@@ -157,7 +166,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!backupData || !backupData.data) {
+    const BackupSchema = z.object({
+      version: z.string().optional(),
+      data: z.object({}).passthrough(),
+    });
+    const parsed = BackupSchema.safeParse(backupData);
+    if (!parsed.success || !backupData || !backupData.data) {
       return NextResponse.json(
         { error: "Invalid backup format" },
         { status: 400 },
@@ -323,10 +337,10 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: unknown) {
     console.error("Error restoring backup:", error);
+    // MP-35/SEC-003: generic message only — Prisma details stay server-side.
     return NextResponse.json(
       {
         error: "Failed to restore database",
-        message: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 500 },
     );

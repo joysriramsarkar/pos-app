@@ -2,5 +2,8 @@
   "crons": [{
     "path": "/api/cron/update-popularity",
     "schedule": "0 2 * * *"
+  }, {
+    "path": "/api/cron/purge-sync",
+    "schedule": "30 2 * * *"
   }]
 }

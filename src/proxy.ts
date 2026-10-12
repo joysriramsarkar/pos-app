@@ -1,4 +1,5 @@
 import { withAuth } from "next-auth/middleware";
+import { getToken } from "next-auth/jwt";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
@@ -28,11 +29,14 @@ function applyCors(request: NextRequest, response: NextResponse): NextResponse {
 }
 
 // C2 + H5: Rate limiter — Redis (Upstash) if configured, else in-memory fallback
+// NOTE: in-memory fallback is single-process only; production MUST configure
+// Upstash (MP-35/C8). See MASTERPLAN MP-35.
 const RATE_LIMIT_RULES: Record<string, { max: number; windowMs: number }> = {
   "/api/auth/callback/credentials": { max: 10, windowMs: 60_000 },
   "/api/auth/signin":               { max: 10, windowMs: 60_000 },
   "/api/auth/change-password":      { max: 5,  windowMs: 60_000 },
   "/api/auth":                      { max: 5,  windowMs: 60_000 },
+  "/api/sync":                      { max: 120, windowMs: 60_000 },
 };
 
 // --- Redis path (Upstash) ---
@@ -104,9 +108,58 @@ export const proxy = withAuth(
         return applyCors(request, new NextResponse(null, { status: 204 }));
       }
 
+      // MP-28: API routes must return JSON 401 — never a 307 redirect to /login.
+      // withAuth would 307-redirect unauthenticated API calls to /login, whose
+      // 200 text/html makes res.ok true on the client. The client then wrongly
+      // marks offline sales as "saved on server" while the server got nothing.
+      // NOTE: `authorized` below is forced true so this handler ALWAYS runs;
+      // all auth decisions happen here (withAuth never short-circuits us).
+      if (pathname.startsWith("/api/")) {
+        let token: unknown = null;
+        try {
+          token = await getToken({
+            req: request as any,
+            secret: process.env.NEXTAUTH_SECRET,
+          });
+        } catch (e) {
+          console.error("[proxy] getToken failed; treating as unauthenticated:", e);
+          token = null;
+        }
+        if (!token) {
+          return applyCors(
+            request,
+            NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+          );
+        }
+      } else {
+        // Pages: unauthenticated users go to /login (public pages excluded).
+        const isPublicPage = ["/login", "/register", "/privacy-policy", "/account-deletion", "/terms", "/contact"]
+          .some((p) => pathname === p || pathname.startsWith(p + "/"));
+        if (!isPublicPage) {
+          let token: unknown = null;
+          try {
+            token = await getToken({
+              req: request as any,
+              secret: process.env.NEXTAUTH_SECRET,
+            });
+          } catch {
+            token = null;
+          }
+          if (!token) {
+            const url = request.nextUrl.clone();
+            url.pathname = "/login";
+            url.searchParams.set("callbackUrl", request.nextUrl.pathname);
+            return applyCors(request, NextResponse.redirect(url));
+          }
+        }
+      }
+
+      // MP-35: trusted client IP — prefer Cloudflare, then x-real-ip,
+      // then the leftmost XFF entry. Never blindly trust arbitrary XFF.
+      const cfIp = request.headers.get("cf-connecting-ip")?.trim();
       const rawRealIp = request.headers.get("x-real-ip")?.trim();
       const rawForwardedFor = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-      const ip = rawRealIp || rawForwardedFor || "unknown";
+      const ip = cfIp || rawRealIp || rawForwardedFor || "unknown";
 
       if (await isRateLimited(ip, pathname)) {
         return applyCors(
@@ -125,6 +178,12 @@ export const proxy = withAuth(
     }
   },
   {
+    // MP-28: always run the handler — auth decisions happen inside it
+    // (401 JSON for /api/*, redirect for pages). withAuth must never
+    // short-circuit an API call into a 307 redirect.
+    callbacks: {
+      authorized: () => true,
+    },
     pages: { signIn: "/login" },
     secret: process.env.NEXTAUTH_SECRET,
   }

@@ -47,7 +47,7 @@ jobs:
         run: npm run typecheck:test
 
       - name: Test
-        run: npm test -- --coverage
+        run: npm test
 
   build-node:
     name: Production build (node)

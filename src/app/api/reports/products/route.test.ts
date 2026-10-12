@@ -1,4 +1,4 @@
-import { describe, expect, it, mock } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 // Test the business logic of the product report calculation directly
 // without importing the route (which has force-dynamic and complex deps)

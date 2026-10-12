@@ -790,14 +790,30 @@ export function POSDashboard() {
               }),
             });
 
-            if (res.ok) {
-              await SyncQueueDB.markSynced(saleQueueItem.id);
-              toast({ title: '✓ বিলিং নিশ্চিত', description: 'সার্ভারে সংরক্ষিত হয়েছে।', duration: 2000 });
+            // MP-28: success requires HTTP ok + JSON content-type + body.success.
+            // A 307-redirect to /login returns 200 text/html — that must NEVER
+            // mark the sale synced (it would be lost: queue cleared, server empty).
+            const contentType = res.headers.get('content-type') ?? '';
+            if (res.ok && contentType.includes('application/json')) {
+              const body = await res.json().catch(() => null);
+              if (body?.success) {
+                await SyncQueueDB.markSynced(saleQueueItem.id);
+                toast({ title: '✓ বিলিং নিশ্চিত', description: 'সার্ভারে সংরক্ষিত হয়েছে।', duration: 2000 });
+              } else {
+                const errMsg = body?.error || `Server error (${res.status})`;
+                await SyncQueueDB.incrementRetry(saleQueueItem.id, errMsg).catch(() => {});
+                toast({ title: 'সিঙ্ক বাকি', description: 'বিক্রি ডিভাইসে সংরক্ষিত; সংযোগ ফিরলে আবার পাঠানো হবে।', duration: 5000 });
+              }
             } else {
               const errData = await res.json().catch(() => ({}));
               const errMsg = errData?.error || `Server error (${res.status})`;
-              // Definitive business error (4xx) — show prominently
-              if (res.status >= 400 && res.status < 500 && res.status !== 429 && res.status !== 408) {
+              // MP-32: INPROGRESS means another request is processing the same
+              // key — transient, NOT a conflict. Retry via background worker.
+              if (res.status === 409 && (errData as { code?: string })?.code === "INPROGRESS") {
+                await SyncQueueDB.incrementRetry(saleQueueItem.id, errMsg).catch(() => {});
+                toast({ title: 'সিঙ্ক বাকি', description: 'একই অনুরোধ প্রক্রিয়াধীন; শীঘ্রই আবার চেষ্টা হবে।', duration: 5000 });
+                getSyncWorker().then(worker => worker.startSync()).catch(console.error);
+              } else if (res.status >= 400 && res.status < 500 && res.status !== 429 && res.status !== 408) {
                 // Stop background retries — this failure can never succeed.
                 await SyncQueueDB.markFailed(saleQueueItem.id, errMsg, true).catch(() => {});
 

@@ -11,6 +11,7 @@ import { requireBusinessContext, checkPermission } from '@/lib/tenant';
 import { multiplyMoney, toMoneyNumber, toUnitPriceNumber } from '@/lib/money';
 import { logAudit } from '@/lib/audit';
 import Decimal from 'decimal.js';
+import { toClientError } from '@/lib/api-errors';
 
 // POST /api/stock-entry - Create stock entry (purchase)
 export async function POST(request: NextRequest) {
@@ -201,7 +202,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to create stock entry',
+        error: toClientError(error, 'Failed to create stock entry').message,
       },
       { status: 500 },
     );

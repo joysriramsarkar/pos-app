@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
@@ -7,7 +8,9 @@ export const dynamic = "force-dynamic";
  * Health check — public and intentionally minimal.
  * Uptime monitors only need status + timestamp. Detailed diagnostics (counts,
  * routing mode, connection strings, stack traces) are exposed only when a
- * non-empty HEALTH_DETAILS_TOKEN is configured AND the caller presents it.
+ * non-empty HEALTH_DETAILS_TOKEN is configured AND the caller presents it
+ * via the x-health-token HEADER (MP-39/H4: query-param tokens leak into
+ * URL logs, browser history and proxy analytics — never accept ?token=).
  */
 export async function GET(request: NextRequest) {
   const headers = {
@@ -24,11 +27,9 @@ export async function GET(request: NextRequest) {
   }
 
   const detailToken = process.env.HEALTH_DETAILS_TOKEN;
-  const presentedToken =
-    request.headers.get("x-health-token") ||
-    request.nextUrl.searchParams.get("token");
-
-  if (detailToken && presentedToken === detailToken) {
+  // H4: header-only + constant-time compare.
+  const presentedToken = request.headers.get("x-health-token") || "";
+  if (detailToken && presentedToken && tokensEqual(presentedToken, detailToken)) {
     return buildDetailedResponse(headers);
   }
 
@@ -39,6 +40,14 @@ export async function GET(request: NextRequest) {
     },
     { status: dbOk ? 200 : 503, headers },
   );
+}
+
+function tokensEqual(a: string, b: string): boolean {
+  if (a.length === 0 || b.length === 0) return false;
+  // Hash first so timingSafeEqual works for different-length secrets.
+  const ha = createHash("sha256").update(a).digest();
+  const hb = createHash("sha256").update(b).digest();
+  return timingSafeEqual(ha, hb);
 }
 
 /**
@@ -59,10 +68,10 @@ async function buildDetailedResponse(headers: Record<string, string>) {
     cfEnv?.PREFER_DIRECT_DB === "true" || process.env.PREFER_DIRECT_DB === "true";
 
   try {
-    const [rawTest, businessCount, productCount, userCount, saleCount, txTest] =
+    const [dbNow, businessCount, productCount, userCount, saleCount, txTest] =
       await Promise.all([
-        db.$queryRaw<{ now: string; current_database: string }[]>`SELECT NOW() as now, current_database()`.catch(
-          (e: Error) => [{ now: "error: " + e.message, current_database: "error" }],
+        db.$queryRaw<{ now: string }[]>`SELECT NOW() as now`.catch(
+          () => [{ now: "unavailable" }],
         ),
         db.business.count().catch(() => -1),
         db.product.count().catch(() => -1),
@@ -86,7 +95,7 @@ async function buildDetailedResponse(headers: Record<string, string>) {
           preferDirect,
           activeMode: hasHyperdrive && !preferDirect ? "hyperdrive" : "direct",
         },
-        dbInfo: rawTest?.[0] ?? null,
+        dbInfo: dbNow?.[0] ?? null,
         counts: {
           businesses: businessCount,
           products: productCount,
@@ -98,12 +107,12 @@ async function buildDetailedResponse(headers: Record<string, string>) {
       { status: 200, headers },
     );
   } catch (error: unknown) {
+    console.error("[health] detailed diagnostics failed:", error);
     return Response.json(
       {
         status: "error",
         database: "failed",
         error: "database_unavailable",
-        details: error instanceof Error ? error.message : String(error),
         timestamp: new Date().toISOString(),
       },
       { status: 503, headers },

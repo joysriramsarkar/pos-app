@@ -223,7 +223,7 @@ export async function GET(request: NextRequest) {
   } catch (error: unknown) {
     console.error("Failed to fetch purchases report:", error);
     return NextResponse.json(
-      { success: false, error: "Failed to fetch purchases report", details: error instanceof Error ? error.message : "Unknown error" },
+      { success: false, error: "Failed to fetch purchases report" },
       { status: 500 }
     );
   }

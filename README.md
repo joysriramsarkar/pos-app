@@ -85,11 +85,11 @@
 
 ### Installation
 
-**Package manager:** npm (`package-lock.json`).
+**Package manager:** npm (`package-lock.json`) — the single canonical manager (MP-02).
 
 **1. Clone & install dependencies**
 ```bash
-pnpm install
+npm ci
 ```
 
 **2. Environment variables**
@@ -107,20 +107,21 @@ Edit `.env` with your database and secrets. Required keys are documented in `.en
 | `NEXTAUTH_SECRET` | yes | ≥ 32 chars (`openssl rand -base64 32`) |
 | `NEXTAUTH_URL` | yes | e.g. `http://localhost:3000` |
 | `ALLOWED_ORIGINS` | prod | Comma-separated CORS/CSRF origins |
-| `SEED_ADMIN_PASSWORD` | optional | Stable password for `pnpm db:seed` |
+| `SEED_ADMIN_PASSWORD` | optional | Stable password for `npm run db:seed` (≥12 chars; seed never resets it on rerun) |
 
 > `NEXTAUTH_SECRET` should be a strong random string, at least 32 characters long.
 
 **3. Database setup**
 ```bash
-pnpm db:push
-pnpm db:generate
-pnpm db:seed
+npm run db:generate
+npm run db:seed
 ```
+
+> Production uses `prisma migrate deploy` (never `db push`). See MASTERPLAN.md MP-02/MP-36.
 
 **4. Start dev server**
 ```bash
-pnpm dev
+npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
@@ -129,7 +130,7 @@ If `SEED_ADMIN_PASSWORD` is set, the admin user will be seeded with:
 - username: `admin`
 - password: the value of `SEED_ADMIN_PASSWORD`
 
-If `SEED_ADMIN_PASSWORD` is not set, the seed script generates a random one-time password and prints it during `pnpm db:seed`.
+If `SEED_ADMIN_PASSWORD` is not set, the seed script generates a random one-time password and prints it during `npm run db:seed`.
 
 ---
 

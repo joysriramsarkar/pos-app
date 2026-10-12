@@ -7,6 +7,7 @@ import { requireAuth } from '@/lib/api-middleware';
 import { requireBusinessContext, checkPermission } from '@/lib/tenant';
 import { addMoney, toMoneyNumber } from '@/lib/money';
 import { logAudit } from '@/lib/audit';
+import { toClientError } from '@/lib/api-errors';
 
 const dueEntrySchema = z.object({
   customerId: z.string().cuid(),
@@ -102,8 +103,10 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: unknown) {
     console.error('Error adding manual due:', error);
-    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
-    const statusCode = errorMessage === 'Customer not found' ? 404 : 500;
-    return NextResponse.json({ success: false, error: errorMessage }, { status: statusCode });
+    if (error instanceof Error && error.message === 'Customer not found') {
+      return NextResponse.json({ success: false, error: error.message }, { status: 404 });
+    }
+    const { message, status } = toClientError(error, 'An unknown error occurred');
+    return NextResponse.json({ success: false, error: message }, { status });
   }
 }

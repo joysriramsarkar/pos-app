@@ -182,8 +182,15 @@ export async function POST(request: NextRequest) {
 
     let finalNotes = notes || '';
     if (totalGstAmount > 0) {
-      const currencyRow = await db.setting.findUnique({ where: { key: 'currency_symbol' } });
-      const currencySymbol = currencyRow?.value || '₹';
+      // MP-25: tenant-scoped symbol first (a ৳ business must not print ₹),
+      // legacy global row as fallback, never a hardcoded default.
+      const tenantCurrency = await db.businessSetting.findUnique({
+        where: { businessId_key: { businessId, key: 'currency_symbol' } },
+      }).catch(() => null);
+      const legacyCurrency = tenantCurrency
+        ? null
+        : await db.setting.findUnique({ where: { key: 'currency_symbol' } }).catch(() => null);
+      const currencySymbol = tenantCurrency?.value || legacyCurrency?.value || '';
       const gstNote = `মোট জিএসটি: ${currencySymbol}${totalGstAmount.toFixed(2)}`;
       finalNotes = finalNotes ? `${finalNotes}\n${gstNote}` : gstNote;
     }

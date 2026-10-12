@@ -33,7 +33,7 @@ describe('safeJsonFetch', () => {
       status: 200,
       json: () => Promise.resolve(mockData),
     };
-    (global.fetch as ReturnType<typeof mock>).mockResolvedValue(mockResponse);
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(mockResponse);
 
     const result = await safeJsonFetch('https://api.example.com/data');
 
@@ -52,7 +52,7 @@ describe('safeJsonFetch', () => {
       status: 400,
       json: () => Promise.resolve(mockErrorData),
     };
-    (global.fetch as ReturnType<typeof mock>).mockResolvedValue(mockResponse);
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(mockResponse);
 
     const result = await safeJsonFetch('https://api.example.com/data');
 
@@ -71,7 +71,7 @@ describe('safeJsonFetch', () => {
       status: 404,
       json: () => Promise.resolve(mockErrorData),
     };
-    (global.fetch as ReturnType<typeof mock>).mockResolvedValue(mockResponse);
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(mockResponse);
 
     const result = await safeJsonFetch('https://api.example.com/data');
 
@@ -90,7 +90,7 @@ describe('safeJsonFetch', () => {
       statusText: 'Internal Server Error',
       json: () => Promise.reject(new Error('Unexpected token < in JSON at position 0')),
     };
-    (global.fetch as ReturnType<typeof mock>).mockResolvedValue(mockResponse);
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(mockResponse);
 
     const result = await safeJsonFetch('https://api.example.com/data');
 
@@ -108,7 +108,7 @@ describe('safeJsonFetch', () => {
       status: 200,
       json: () => Promise.reject(new Error('Unexpected token < in JSON at position 0')),
     };
-    (global.fetch as ReturnType<typeof mock>).mockResolvedValue(mockResponse);
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(mockResponse);
 
     const result = await safeJsonFetch('https://api.example.com/data');
 
@@ -122,7 +122,7 @@ describe('safeJsonFetch', () => {
 
   it('should handle network errors (fetch throws an Error instance)', async () => {
     const networkError = new Error('Failed to fetch');
-    (global.fetch as ReturnType<typeof mock>).mockRejectedValue(networkError);
+    (global.fetch as ReturnType<typeof vi.fn>).mockRejectedValue(networkError);
 
     const result = await safeJsonFetch('https://api.example.com/data');
 
@@ -135,7 +135,7 @@ describe('safeJsonFetch', () => {
   });
 
   it('should handle network errors (fetch throws a non-Error)', async () => {
-    (global.fetch as ReturnType<typeof mock>).mockRejectedValue('String error');
+    (global.fetch as ReturnType<typeof vi.fn>).mockRejectedValue('String error');
 
     const result = await safeJsonFetch('https://api.example.com/data');
 

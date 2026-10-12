@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/api-middleware";
 import { requireBusinessContext, checkPermission } from "@/lib/tenant";
 import { logAudit } from "@/lib/audit";
+import { toClientError } from "@/lib/api-errors";
 import {
   mapRefundMethod,
   processSaleReturn,
@@ -117,8 +118,12 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: unknown) {
     console.error("Refund error:", error);
-    const message = error instanceof Error ? error.message : "রিফান্ড প্রক্রিয়া করতে ত্রুটি হয়েছে";
-    const status = (error as { status?: number })?.status || 500;
-    return NextResponse.json({ success: false, error: message }, { status });
+    const status = (error as { status?: number })?.status;
+    if (status && status !== 500) {
+      const message = error instanceof Error ? error.message : "রিফান্ড প্রক্রিয়া করতে ত্রুটি হয়েছে";
+      return NextResponse.json({ success: false, error: message }, { status });
+    }
+    const { message, status: safe } = toClientError(error, "রিফান্ড প্রক্রিয়া করতে ত্রুটি হয়েছে");
+    return NextResponse.json({ success: false, error: message }, { status: safe });
   }
 }

@@ -10,7 +10,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Invalid JSON body' }, { status: 400 });
     }
 
+    // MP-38: bound inputs on this public, unauthenticated route.
+    const lens = (v: unknown) => (typeof v === "string" ? v.length : 0);
     const { fullName, identifier, businessName, role, deletionType, reason, confirmed } = body || {};
+    if (
+      lens(fullName) > 200 || lens(identifier) > 200 || lens(businessName) > 200 ||
+      lens(role) > 50 || lens(deletionType) > 50 || lens(reason) > 2000
+    ) {
+      return NextResponse.json(
+        { success: false, error: 'Input too long.' },
+        { status: 400 }
+      );
+    }
 
     if (!identifier || !confirmed) {
       return NextResponse.json(
@@ -21,7 +32,7 @@ export async function POST(request: NextRequest) {
 
     const referenceId = `DEL-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
 
-    // Try logging this deletion request in audit_logs if available
+    // MP-38: the audit write IS the record. If it fails, do NOT claim success.
     try {
       await db.auditLog.create({
         data: {
@@ -37,12 +48,16 @@ export async function POST(request: NextRequest) {
             reason: reason || 'None provided',
             requestedAt: new Date().toISOString(),
           },
-          ipAddress: request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown',
+          ipAddress: request.headers.get('cf-connecting-ip')?.trim() || request.headers.get('x-real-ip')?.trim() || request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown',
           userAgent: request.headers.get('user-agent') || 'unknown',
         },
       });
     } catch (dbErr) {
-      console.warn('[Account Deletion Request] Audit log write skipped or db unavailable:', dbErr);
+      console.error('[Account Deletion Request] Audit log write failed:', dbErr);
+      return NextResponse.json(
+        { success: false, error: 'Could not record the request right now. Please try again later.' },
+        { status: 503 }
+      );
     }
 
     return NextResponse.json({

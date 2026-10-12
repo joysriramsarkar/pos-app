@@ -1,7 +1,17 @@
 import { convertEnglishToBengaliNumerals } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settings-store';
+import { businessTimeParts, DEFAULT_BUSINESS_TIMEZONE } from '@/lib/business-time';
 
 export type ReceiptLanguage = 'bn' | 'en' | 'both';
+
+/** Optional receipt context: pass the active business timezone (MP-25/H12). */
+export interface ReceiptFormatOptions {
+  timezone?: string | null;
+}
+
+function receiptTimezone(opts?: ReceiptFormatOptions): string {
+  return opts?.timezone || DEFAULT_BUSINESS_TIMEZONE;
+}
 
 export type ReceiptLabels = {
   invoice: string;
@@ -190,7 +200,7 @@ export function translateUnit(unit: string | undefined | null, lang: ReceiptLang
   const entry = UNIT_LABELS[key];
   if (!entry) return unit; // Return as-is if unknown
   if (lang === 'en') return entry.en;
-  if (lang === 'both') return `${entry.bn}`;
+  if (lang === 'both') return `${entry.bn} / ${entry.en}`;
   return entry.bn; // default bn
 }
 
@@ -212,8 +222,10 @@ export function formatReceiptNumber(
 export function formatReceiptMoney(
   amount: number | string | null | undefined,
   lang: ReceiptLanguage = getReceiptLanguage(),
+  opts?: { symbol?: string },
 ): string {
-  const symbol = useSettingsStore.getState().settings.currency_symbol || '₹';
+  // MP-25: currency symbol is explicit — never silently fall back to ₹.
+  const symbol = opts?.symbol ?? useSettingsStore.getState().settings.currency_symbol ?? "";
   const num = typeof amount === 'string' ? parseFloat(amount) : Number(amount);
   const final = amount === null || amount === undefined || isNaN(num) ? 0 : num;
   const isNegative = final < 0;
@@ -231,63 +243,83 @@ const BN_DAYS = ['রবিবার', 'সোমবার', 'মঙ্গলব
 export function formatReceiptDate(
   date: Date | string | number,
   lang: ReceiptLanguage = getReceiptLanguage(),
+  opts?: ReceiptFormatOptions,
 ): string {
   const d = new Date(date);
   if (isNaN(d.getTime())) return '-';
+  // MP-25/H12: business timezone, not device/server local time.
+  const p = businessTimeParts(d, receiptTimezone(opts));
 
   if (lang === 'en') {
-    return d.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const dd = String(p.day).padStart(2, '0');
+    const mm = String(p.month).padStart(2, '0');
+    return `${dd}/${mm}/${p.year}`;
   }
 
   // Bengali (or both): full Bengali date
   const toBn = (n: number) => convertEnglishToBengaliNumerals(String(n));
-  const day = BN_DAYS[d.getDay()];
-  return `${toBn(d.getDate())} ${BN_MONTHS[d.getMonth()]} ${toBn(d.getFullYear())}, ${day}`;
+  const day = BN_DAYS[p.weekdaySun0];
+  return `${toBn(p.day)} ${BN_MONTHS[p.month - 1]} ${toBn(p.year)}, ${day}`;
 }
 
 export function formatReceiptTime(
   date: Date | string | number,
   lang: ReceiptLanguage = getReceiptLanguage(),
+  opts?: ReceiptFormatOptions,
 ): string {
   const d = new Date(date);
   if (isNaN(d.getTime())) return '-';
+  // MP-25/H12: business timezone, not device/server local time.
+  const p = businessTimeParts(d, receiptTimezone(opts));
 
   if (lang === 'en') {
-    return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+    const h12 = p.hour24 % 12 || 12;
+    const hh = String(h12).padStart(2, '0');
+    const mm = String(p.minute).padStart(2, '0');
+    const period = p.hour24 >= 12 ? 'PM' : 'AM';
+    return `${hh}:${mm} ${period}`;
   }
 
-  const hours = d.getHours();
-  const minutes = convertEnglishToBengaliNumerals(String(d.getMinutes()).padStart(2, '0'));
-  const period = hours >= 12 ? 'পিএম' : 'এএম';
-  const h12 = convertEnglishToBengaliNumerals(String(hours % 12 || 12));
+  const minutes = convertEnglishToBengaliNumerals(String(p.minute).padStart(2, '0'));
+  const period = p.hour24 >= 12 ? 'পিএম' : 'এএম';
+  const h12 = convertEnglishToBengaliNumerals(String(p.hour24 % 12 || 12));
   return `${h12}:${minutes} ${period}`;
 }
 
 export function formatReceiptDateTime(
   date: Date | string | number,
   lang: ReceiptLanguage = getReceiptLanguage(),
+  opts?: ReceiptFormatOptions,
 ): string {
-  return `${formatReceiptDate(date, lang)} ${formatReceiptTime(date, lang)}`;
+  return `${formatReceiptDate(date, lang, opts)} ${formatReceiptTime(date, lang, opts)}`;
 }
 
-/** Map stored payment method values to receipt-facing labels */
+/** Map stored payment method values to receipt-facing labels (MP-25: full enum). */
 export function formatReceiptPaymentMethod(
   method: string,
   lang: ReceiptLanguage = getReceiptLanguage(),
 ): string {
   const map: Record<string, { en: string; bn: string }> = {
+    CASH: { en: 'Cash', bn: 'নগদ' },
     Cash: { en: 'Cash', bn: 'নগদ' },
     নগদ: { en: 'Cash', bn: 'নগদ' },
     UPI: { en: 'UPI', bn: 'ইউপিআই' },
     ইউপিআই: { en: 'UPI', bn: 'ইউপিআই' },
+    CARD: { en: 'Card', bn: 'কার্ড' },
+    BANK: { en: 'Bank', bn: 'ব্যাংক' },
+    CREDIT: { en: 'Credit', bn: 'বাকি' },
+    MIXED: { en: 'Mixed', bn: 'মিশ্র' },
     Mixed: { en: 'Mixed', bn: 'মিশ্র' },
     মিশ্র: { en: 'Mixed', bn: 'মিশ্র' },
+    DUE: { en: 'Due', bn: 'বাকি' },
     Due: { en: 'Due', bn: 'বাকি' },
     বাকি: { en: 'Due', bn: 'বাকি' },
+    PREPAID: { en: 'Prepaid', bn: 'প্রিপেইড' },
     Prepaid: { en: 'Prepaid', bn: 'প্রিপেইড' },
     প্রিপেইড: { en: 'Prepaid', bn: 'প্রিপেইড' },
   };
-  const entry = map[method];
+  const normalized = method?.trim().toUpperCase();
+  const entry = map[method] ?? map[normalized];
   if (!entry) return method;
   if (lang === 'en') return entry.en;
   if (lang === 'both') return dual(entry.en, entry.bn);

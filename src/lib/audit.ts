@@ -1,4 +1,5 @@
 import { db } from './db';
+import type { Prisma } from '@prisma/client';
 
 /**
  * Type-safe audit action constants.
@@ -61,9 +62,15 @@ type CreateAuditLogParams = {
   userAgent?: string;
 };
 
-export async function logAudit(params: CreateAuditLogParams) {
+export async function logAudit(
+  params: CreateAuditLogParams,
+  client?: Prisma.TransactionClient | typeof db
+) {
+  // MP-22: financial callers pass their transaction client so audit commits
+  // atomically with the sale. Best-effort telemetry callers omit it.
+  const writer = client ?? db;
   try {
-    await db.auditLog.create({
+    await writer.auditLog.create({
       data: {
         businessId: params.businessId,
         userId: params.userId,
@@ -76,6 +83,9 @@ export async function logAudit(params: CreateAuditLogParams) {
       },
     });
   } catch (error) {
+    // Inside a transaction the error MUST propagate so the sale rolls back
+    // (MP-22). Outside, keep best-effort telemetry behavior.
+    if (client) throw error;
     console.error('Failed to write audit log:', error);
   }
 }

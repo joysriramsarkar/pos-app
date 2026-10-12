@@ -7,10 +7,11 @@ import { requireBusinessContext, checkPermission } from '@/lib/tenant';
 import { toMoneyDecimal, toMoneyNumber } from '@/lib/money';
 import { logAudit } from '@/lib/audit';
 import {
-  reserveIdempotency,
-  finalizeIdempotency,
-  releaseIdempotency,
+  claimIdempotencyTx,
+  finalizeIdempotencyTx,
+  IdempotencyInProgress,
 } from '@/lib/idempotency';
+import { toClientError } from '@/lib/api-errors';
 
 // GET /api/due-collection - List customers with totalDue > 0
 export async function GET(request: NextRequest) {
@@ -101,36 +102,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // DB-level idempotency. The previous ledger-lookup check was racy: two
-    // concurrent requests with the same key could both pass it and double-collect.
+    // MP-32: idempotency INSIDE the business transaction — claim, collect and
+    // finalize commit atomically. The old reserve-outside/finalize-outside
+    // pattern could strand an "in_progress" claim (server crash) or swallow
+    // a finalize failure after money moved (double-collect on retry).
     const idempotencyKey = request.headers.get('X-Idempotency-Key');
-    let claim: Awaited<ReturnType<typeof reserveIdempotency>> | null = null;
 
-    if (idempotencyKey) {
-      claim = await reserveIdempotency(businessId, 'due:collect', idempotencyKey);
-      if (claim.status === 'replay') {
-        const cached = (claim.result ?? {}) as {
-          collectedAmount?: number;
-          remainingDue?: number;
-        };
-        const customer = await db.customer.findFirst({ where: { id: customerId, businessId } });
-        return NextResponse.json({
-          success: true,
-          data: {
-            customer,
-            collectedAmount: cached.collectedAmount ?? 0,
-            remainingDue: cached.remainingDue ?? Number(customer?.totalDue ?? 0),
-          },
-          idempotent: true,
-        });
-      }
-      if (claim.status === 'in_progress') {
-        return NextResponse.json(
-          { success: false, error: 'একই অনুরোধ প্রক্রিয়াধীন আছে (duplicate request in progress)' },
-          { status: 409 },
-        );
-      }
-    }
     const referenceId = idempotencyKey ? `DUE-COLLECT-${idempotencyKey}` : `DUE-COLLECT-${Date.now()}-${customerId.slice(-6)}`;
 
     const collectAmount = toMoneyDecimal(amount);
@@ -143,7 +120,12 @@ export async function POST(request: NextRequest) {
       customerName: string;
     };
     try {
-      updated = await db.$transaction(async (tx) => {
+      const outcome = await db.$transaction(async (tx) => {
+        const claim = await claimIdempotencyTx<{ collectedAmount: number; remainingDue: number }>(
+          tx, businessId, 'due:collect', idempotencyKey,
+        );
+        if (claim.replay) return { replay: claim.result } as const;
+
         const customerRaw = await tx.$queryRaw<
           Array<{ id: string; name: string; totalDue: unknown; totalPaid: unknown }>
         >`
@@ -172,7 +154,7 @@ export async function POST(request: NextRequest) {
         );
 
         const updatedCustomer = await tx.customer.update({
-          where: { id: customerId },
+          where: { id: customerId, businessId },
           data: {
             totalDue: newDueAmount,
             totalPaid: newTotalPaid,
@@ -192,26 +174,47 @@ export async function POST(request: NextRequest) {
           },
         });
 
-        return {
+        const payload = {
           updatedCustomer,
           collectedAmount: collectAmount.toNumber(),
           remainingDue: newDueAmount.toNumber(),
           previousDue: currentDue.toNumber(),
           customerName: customer.name,
         };
+        if (claim.claim) {
+          await finalizeIdempotencyTx(tx, claim.claim, {
+            collectedAmount: payload.collectedAmount,
+            remainingDue: payload.remainingDue,
+          });
+        }
+        return { data: payload } as const;
       });
+
+      if ("replay" in outcome) {
+        const cached = (outcome.replay ?? {}) as {
+          collectedAmount?: number;
+          remainingDue?: number;
+        };
+        const customer = await db.customer.findFirst({ where: { id: customerId, businessId } });
+        return NextResponse.json({
+          success: true,
+          data: {
+            customer,
+            collectedAmount: cached.collectedAmount ?? 0,
+            remainingDue: cached.remainingDue ?? Number(customer?.totalDue ?? 0),
+          },
+          idempotent: true,
+        });
+      }
+      updated = outcome.data;
     } catch (txError) {
-      if (claim && claim.status === 'claimed') {
-        await releaseIdempotency(claim.idempotencyKey).catch(() => {});
+      if (txError instanceof IdempotencyInProgress) {
+        return NextResponse.json(
+          { success: false, code: "INPROGRESS", error: 'একই অনুরোধ প্রক্রিয়াধীন আছে (duplicate request in progress)' },
+          { status: 409, headers: { "Retry-After": "5" } },
+        );
       }
       throw txError;
-    }
-
-    if (claim && claim.status === 'claimed') {
-      await finalizeIdempotency(claim.idempotencyKey, {
-        collectedAmount: updated.collectedAmount,
-        remainingDue: updated.remainingDue,
-      }).catch(() => {});
     }
 
     await logAudit({
@@ -244,14 +247,17 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: unknown) {
     console.error('বকেয়া আদায় করতে ত্রুটি:', error);
-    const message = error instanceof Error ? error.message : 'বকেয়া আদায় করতে ত্রুটি হয়েছে';
     const status = (error as { status?: number })?.status;
+    // Coded business errors (404/400 with curated Bengali messages) pass through;
+    // anything else becomes generic (MP-35 — never Prisma internals).
     if (status === 404 || status === 400) {
+      const message = error instanceof Error ? error.message : 'বকেয়া আদায় করতে ত্রুটি হয়েছে';
       return NextResponse.json({ success: false, error: message }, { status });
     }
+    const { message, status: safeStatus } = toClientError(error, 'বকেয়া আদায় করতে ত্রুটি হয়েছে');
     return NextResponse.json(
       { success: false, error: message },
-      { status: 500 },
+      { status: safeStatus },
     );
   }
 }

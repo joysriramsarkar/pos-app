@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import ZAI from 'z-ai-web-dev-sdk';
 import { requireAuth } from '@/lib/api-middleware';
 import { requireBusinessContext } from '@/lib/tenant';
+import { toClientError } from '@/lib/api-errors';
 
 export async function POST(request: NextRequest) {
   const authResult = await requireAuth(request);
@@ -68,11 +69,11 @@ ${JSON.stringify(reportData, null, 2)}
 
     return NextResponse.json({ success: true, advice });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'AI পরামর্শ আনা যাচ্ছে না';
     console.error('AI Advisor error:', error);
+    const { message, status } = toClientError(error, 'AI পরামর্শ আনা যাচ্ছে না');
     return NextResponse.json(
       { success: false, error: message },
-      { status: 500 },
+      { status },
     );
   }
 }

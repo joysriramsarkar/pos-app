@@ -259,7 +259,7 @@ export async function GET(request: NextRequest) {
   } catch (error: unknown) {
     console.error("Failed to fetch sales report:", error);
     return NextResponse.json(
-      { error: "Failed to fetch sales report", details: error instanceof Error ? error.message : "Unknown error" },
+      { error: "Failed to fetch sales report" },
       { status: 500, headers: jsonHeaders },
     );
   }

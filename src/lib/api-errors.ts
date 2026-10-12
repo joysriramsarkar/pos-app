@@ -81,6 +81,15 @@ export function toClientError(
   fallbackMessage = "Request failed",
   fallbackStatus = 500,
 ): { message: string; status: number } {
+  // Prisma known-request errors carry a stable code (never trust message text).
+  const code = (error as { code?: string })?.code;
+  if (code === "P2002") {
+    return { message: "Record already exists", status: 409 };
+  }
+  if (code === "P2025") {
+    return { message: "Record not found", status: 404 };
+  }
+
   if (!(error instanceof Error)) {
     return { message: fallbackMessage, status: fallbackStatus };
   }

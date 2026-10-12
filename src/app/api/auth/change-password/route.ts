@@ -58,6 +58,8 @@ export async function POST(request: NextRequest) {
       data: {
         passwordHash: hashedPassword,
         requiresPasswordChange: false,
+        // MP-07: revoke all other sessions (lost/stolen devices, shared POS).
+        sessionVersion: { increment: 1 },
       }
     });
 

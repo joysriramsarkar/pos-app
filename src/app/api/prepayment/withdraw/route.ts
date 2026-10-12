@@ -8,10 +8,11 @@ import { requireAuth } from '@/lib/api-middleware';
 import { requireBusinessContext, checkPermission } from '@/lib/tenant';
 import { toMoneyNumber } from '@/lib/money';
 import {
-  reserveIdempotency,
-  finalizeIdempotency,
-  releaseIdempotency,
+  claimIdempotencyTx,
+  finalizeIdempotencyTx,
+  IdempotencyInProgress,
 } from '@/lib/idempotency';
+import { toClientError } from '@/lib/api-errors';
 
 const withdrawSchema = z.object({
   customerId: z.string().cuid(),
@@ -41,23 +42,10 @@ export async function POST(req: NextRequest) {
 
     const { customerId, amount } = validation.data;
 
-    // DB-level idempotency: a retried HTTP request must not withdraw twice.
+    // MP-32: idempotency INSIDE the business transaction — claim, mutate and
+    // finalize commit atomically. A crash/rollback can never strand an
+    // "in_progress" claim, and finalize is never swallowed.
     const idempotencyKey = req.headers.get('X-Idempotency-Key');
-    let claim: Awaited<ReturnType<typeof reserveIdempotency>> | null = null;
-
-    if (idempotencyKey) {
-      claim = await reserveIdempotency(businessId, 'prepayment:withdraw', idempotencyKey);
-      if (claim.status === 'replay') {
-        const customer = await db.customer.findFirst({ where: { id: customerId, businessId } });
-        return NextResponse.json({ success: true, data: customer, idempotent: true });
-      }
-      if (claim.status === 'in_progress') {
-        return NextResponse.json(
-          { success: false, error: 'একই অনুরোধ প্রক্রিয়াধীন আছে (duplicate request in progress)' },
-          { status: 409 },
-        );
-      }
-    }
 
     const referenceId = idempotencyKey
       ? `WITHDRAW-${idempotencyKey}`
@@ -65,7 +53,12 @@ export async function POST(req: NextRequest) {
 
     let updated: Awaited<ReturnType<typeof db.customer.update>>;
     try {
-      updated = await db.$transaction(async (tx) => {
+      const outcome = await db.$transaction(async (tx) => {
+        const claim = await claimIdempotencyTx<{ customerId: string }>(
+          tx, businessId, 'prepayment:withdraw', idempotencyKey,
+        );
+        if (claim.replay) return { replay: claim.result } as const;
+
         const customerRaw = await tx.$queryRaw<
           Array<{ id: string; totalDue: unknown; prepaidBalance: unknown }>
         >`
@@ -101,23 +94,38 @@ export async function POST(req: NextRequest) {
           },
         });
 
-        return result;
+        if (claim.claim) {
+          await finalizeIdempotencyTx(tx, claim.claim, { customerId });
+        }
+        return { data: result } as const;
       });
+
+      if ("replay" in outcome) {
+        const customer = await db.customer.findFirst({ where: { id: customerId, businessId } });
+        return NextResponse.json({ success: true, data: customer, idempotent: true });
+      }
+      updated = outcome.data;
     } catch (txError) {
-      if (claim && claim.status === 'claimed') {
-        await releaseIdempotency(claim.idempotencyKey).catch(() => {});
+      if (txError instanceof IdempotencyInProgress) {
+        return NextResponse.json(
+          { success: false, code: "INPROGRESS", error: 'একই অনুরোধ প্রক্রিয়াধীন আছে (duplicate request in progress)' },
+          { status: 409, headers: { "Retry-After": "5" } },
+        );
       }
       throw txError;
     }
 
-    if (claim && claim.status === 'claimed') {
-      await finalizeIdempotency(claim.idempotencyKey, { customerId }).catch(() => {});
-    }
-
     return NextResponse.json({ success: true, data: updated });
   } catch (error: unknown) {
-    const msg = error instanceof Error ? error.message : 'Unknown error';
-    const status = msg === 'Customer not found' ? 404 : msg === 'Insufficient prepaid balance' ? 400 : 500;
-    return NextResponse.json({ success: false, error: msg }, { status });
+    // MP-35: known business errors keep their message+status; everything else
+    // becomes a generic 500 (never Prisma internals).
+    if (error instanceof Error && error.message === 'Customer not found') {
+      return NextResponse.json({ success: false, error: error.message }, { status: 404 });
+    }
+    if (error instanceof Error && error.message === 'Insufficient prepaid balance') {
+      return NextResponse.json({ success: false, error: error.message }, { status: 400 });
+    }
+    const { message, status } = toClientError(error, 'Failed to process withdrawal');
+    return NextResponse.json({ success: false, error: message }, { status });
   }
 }

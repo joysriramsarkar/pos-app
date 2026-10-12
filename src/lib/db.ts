@@ -76,7 +76,13 @@ export function getConnectionString(): string {
     return envUrl
   }
 
-  return 'postgresql://dummy:dummy@localhost:5432/dummy'
+  // MP-34: dummy URL only for tests — never silently in production/dev server.
+  if (process.env.NODE_ENV === "test" || process.env.VITEST) {
+    return 'postgresql://dummy:dummy@localhost:5432/dummy'
+  }
+  throw new Error(
+    "[db] DATABASE_URL is not set and no Hyperdrive binding is available. Refusing to use a dummy connection string outside tests."
+  )
 }
 
 function getPrismaClientClass(): typeof PrismaClient {
@@ -143,9 +149,44 @@ function createPrismaClient(connectionString: string): PrismaClient {
   })
 }
 
+function getNodePrismaClient(): PrismaClient {
+  if (!globalForPrisma.prisma) {
+    globalForPrisma.prisma = createPrismaClient(getConnectionString())
+  }
+  return globalForPrisma.prisma
+}
+
+/**
+ * Reset cached clients. Disconnects the old pool first so pool sockets
+ * do not leak (MP-04). Only resets on specific transport error codes —
+ * never on plain query timeouts or message-substring matches.
+ */
+export async function resetPrismaClient(): Promise<void> {
+  const cfCtx = getCloudflareContextSafe()
+  if (cfCtx?.ctx && typeof cfCtx.ctx === 'object') {
+    const old = requestClients.get(cfCtx.ctx)
+    requestClients.delete(cfCtx.ctx)
+    if (old) await old.$disconnect().catch(() => {})
+    return
+  }
+  const old = globalForPrisma.prisma
+  globalForPrisma.prisma = undefined
+  if (old) await old.$disconnect().catch(() => {})
+}
+
+function isTransportError(err: any): boolean {
+  const code = err?.code as string | undefined
+  return (
+    code === 'ECONNRESET' ||
+    code === 'EPIPE' ||
+    code === '57P01' || // admin_shutdown
+    code === '57P02' || // crash_shutdown
+    code === '08006' // connection_failure
+  )
+}
+
 function getPrismaClient(): PrismaClient {
   const cfCtx = getCloudflareContextSafe()
-
   // In Cloudflare Workers:
   // Key the client by request ExecutionContext (ctx) to ensure connections belong exclusively to this request.
   if (cfCtx?.ctx && typeof cfCtx.ctx === 'object') {
@@ -163,19 +204,8 @@ function getPrismaClient(): PrismaClient {
     return createPrismaClient(connStr)
   }
 
-  // In Node.js / Vercel / local development:
-  if (globalForPrisma.prisma) {
-    return globalForPrisma.prisma
-  }
-
-  const connStr = getConnectionString()
-  const client = createPrismaClient(connStr)
-
-  if (process.env.NODE_ENV !== 'production') {
-    globalForPrisma.prisma = client
-  }
-
-  return client
+  // MP-04: Node singleton in ALL environments (dev, test, production).
+  return getNodePrismaClient()
 }
 
 /**
@@ -193,31 +223,17 @@ export const db: PrismaClient = new Proxy({} as PrismaClient, {
           const res = value.apply(client, args)
           if (res && typeof res.catch === 'function') {
             return res.catch((err: any) => {
-              if (
-                err?.message?.includes('timeout') ||
-                err?.message?.includes('Connection') ||
-                err?.message?.includes('closed') ||
-                err?.code === 'ECONNRESET' ||
-                err?.code === 'EPIPE'
-              ) {
-                console.warn('[PrismaClient] Connection error detected:', err.message)
-                const cfCtx = getCloudflareContextSafe()
-                if (cfCtx?.ctx && typeof cfCtx.ctx === 'object') {
-                  requestClients.delete(cfCtx.ctx)
-                } else {
-                  globalForPrisma.prisma = undefined
-                }
+              if (isTransportError(err)) {
+                console.warn('[PrismaClient] Transport error detected:', err?.code ?? err?.message)
+                void resetPrismaClient()
               }
               throw err
             })
           }
           return res
         } catch (syncErr: any) {
-          const cfCtx = getCloudflareContextSafe()
-          if (cfCtx?.ctx && typeof cfCtx.ctx === 'object') {
-            requestClients.delete(cfCtx.ctx)
-          } else {
-            globalForPrisma.prisma = undefined
+          if (isTransportError(syncErr)) {
+            void resetPrismaClient()
           }
           throw syncErr
         }

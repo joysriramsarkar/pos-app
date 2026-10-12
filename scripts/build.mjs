@@ -17,15 +17,11 @@ function patchOpenNextForWindows() {
 }
 
 const isVercel = process.env.VERCEL === '1';
-const isCloudflare = Boolean(
-  process.env.BUILD_TARGET === 'cloudflare' ||
-  process.env.CF_PAGES === '1' ||
-  process.env.CLOUDFLARE_BUILD === '1' ||
-  process.env.WORKERS_CI === '1' ||
-  (!isVercel && process.platform === 'linux' && !process.env.DOCKER_BUILD)
-);
+// MP-03: explicit build target only — never infer Cloudflare from platform.
+const target = process.env.BUILD_TARGET ?? 'node';
+const isCloudflare = target === 'cloudflare';
 
-console.log(`[Build] Environment: isVercel=${isVercel}, isCloudflare=${isCloudflare}, platform=${process.platform}`);
+console.log(`[Build] Environment: target=${target}, isVercel=${isVercel}, isCloudflare=${isCloudflare}, platform=${process.platform}`);
 
 // Step 1: Prisma Client generation
 console.log('[Build] Step 1: Generating Prisma client...');

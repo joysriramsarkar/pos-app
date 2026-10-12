@@ -1,7 +1,9 @@
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
+import { createHash } from "crypto";
 import { db } from "@/lib/db";
+import { normalizePhoneToE164 } from "@/lib/phone";
 import { ipLoginLimiter, usernameLoginLimiter, checkLocalRateLimit } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
 import { verifyFirebaseIdToken, type VerifiedFirebaseToken } from "@/lib/firebase-verify";
@@ -9,6 +11,19 @@ import { verifyFirebaseIdToken, type VerifiedFirebaseToken } from "@/lib/firebas
 function sanitizeLogInput(input: unknown): string {
   if (typeof input !== "string") return String(input);
   return input.replace(/[\r\n\t]/g, "_");
+}
+
+/** MP-10: never log raw identifiers in production — log a short hash instead. */
+export function identityFingerprint(identifier: string): string {
+  return createHash("sha256").update(identifier).digest("hex").slice(0, 12);
+}
+
+function logIdentifier(label: string, identifier: unknown) {
+  if (process.env.NODE_ENV === "production") {
+    console.log(label, identityFingerprint(String(identifier ?? "")));
+  } else {
+    console.log(label, sanitizeLogInput(identifier));
+  }
 }
 
 export const authOptions: NextAuthOptions = {
@@ -50,7 +65,9 @@ export const authOptions: NextAuthOptions = {
 
         console.log(
           "[NextAuth] authorize called with username:",
-          sanitizeLogInput(loginIdentifier),
+          process.env.NODE_ENV === "production"
+            ? identityFingerprint(String(loginIdentifier ?? ""))
+            : sanitizeLogInput(loginIdentifier),
           "isOtp:", isOtp,
           "isGoogle:", isGoogle,
         );
@@ -77,12 +94,12 @@ export const authOptions: NextAuthOptions = {
           });
 
           if (!user || !user.isActive) {
-            console.log("[NextAuth] Google user not found or inactive:", sanitizeLogInput(googleEmail));
+            console.log("[NextAuth] Google user not found or inactive");
             throw new Error("এই Google অ্যাকাউন্ট দিয়ে কোনো POS অ্যাকাউন্ট পাওয়া যায়নি। প্রথমে নিবন্ধন করুন। (No account found with this Google email)");
           }
 
           const primaryMembership = user.memberships[0];
-          console.log("[NextAuth] Google login successful:", sanitizeLogInput(user.username));
+          logIdentifier("[NextAuth] Google login successful:", user.username);
           return {
             id: user.id,
             name: user.name,
@@ -91,7 +108,8 @@ export const authOptions: NextAuthOptions = {
             role: primaryMembership?.role as "OWNER" | "ADMIN" | "MANAGER" | "CASHIER" | "VIEWER" | undefined,
             businessId: primaryMembership?.business?.id,
             businessName: primaryMembership?.business?.name,
-            requiresPasswordChange: false,
+            requiresPasswordChange: user.requiresPasswordChange ?? false,
+            sessionVersion: user.sessionVersion ?? 0,
           };
         }
         // --- End Google fast path ---
@@ -125,13 +143,13 @@ export const authOptions: NextAuthOptions = {
         if (ipLoginLimiter) {
           const { success } = await ipLoginLimiter.limit(ip);
           if (!success) {
-            console.log("[NextAuth] rate limit exceeded for IP:", sanitizeLogInput(ip));
+            console.log("[NextAuth] rate limit exceeded for IP:", identityFingerprint(ip));
             throw new Error("Too many login attempts from this IP. Please try again in a minute.");
           }
         } else {
           const { success } = await checkLocalRateLimit(`login:ip:${ip}`, 10, 60000);
           if (!success) {
-            console.log("[NextAuth] rate limit exceeded (local) for IP:", sanitizeLogInput(ip));
+            console.log("[NextAuth] rate limit exceeded (local) for IP:", identityFingerprint(ip));
             throw new Error("Too many login attempts. Please try again in a minute.");
           }
         }
@@ -140,43 +158,46 @@ export const authOptions: NextAuthOptions = {
         if (usernameLoginLimiter) {
           const { success } = await usernameLoginLimiter.limit(identifier);
           if (!success) {
-            console.log("[NextAuth] rate limit exceeded for username:", sanitizeLogInput(identifier));
+            console.log("[NextAuth] rate limit exceeded for username:", identityFingerprint(identifier));
             throw new Error("Too many login attempts for this account. Please try again in a minute.");
           }
         } else {
           const { success } = await checkLocalRateLimit(`login:username:${identifier}`, 5, 60000);
           if (!success) {
-            console.log("[NextAuth] rate limit exceeded (local) for username:", sanitizeLogInput(identifier));
+            console.log("[NextAuth] rate limit exceeded (local) for username:", identityFingerprint(identifier));
             throw new Error("Too many login attempts for this account. Please try again in a minute.");
           }
         }
 
-        // Normalize phone number search
+        // MP-05: exact identity lookup only — never contains/last-10-digits.
+        // Phone numbers are resolved to canonical form; a non-canonical
+        // input simply matches nothing (closed) instead of the wrong account.
         const cleanInput = identifier.trim();
-        const digitsOnly = cleanInput.replace(/\D/g, "");
-        const last10Digits = digitsOnly.slice(-10);
+        const canonicalPhone = normalizePhoneToE164(cleanInput);
+        const orConditions: Array<Record<string, unknown>> = [
+          { email: cleanInput.toLowerCase() },
+          { username: cleanInput },
+          { username: cleanInput.toLowerCase() },
+          { phone: cleanInput },
+        ];
+        if (canonicalPhone && canonicalPhone !== cleanInput) {
+          orConditions.push({ phone: canonicalPhone });
+        }
 
         // Find user by username OR phone (multi-tenant: one global identity)
         const user = await db.user.findFirst({
           where: {
-            OR: [
-              { email: cleanInput.toLowerCase() },
-              { username: cleanInput },
-              { username: cleanInput.toLowerCase() },
-              { phone: cleanInput },
-              ...(last10Digits.length >= 10 ? [
-                { phone: { contains: last10Digits } }
-              ] : []),
-            ],
+            OR: orConditions as any,
           },
           include: {
             memberships: {
-              where: { isActive: true },
+              where: { isActive: true, business: { isActive: true } },
               include: {
                 business: {
                   select: { id: true, name: true, isActive: true },
                 },
               },
+              orderBy: { createdAt: "asc" },
               take: 1,
             },
           },
@@ -220,20 +241,25 @@ export const authOptions: NextAuthOptions = {
 
           if (!isPasswordValid) {
             console.log("[NextAuth] invalid password");
-            const newFailedAttempts = user.failedLoginAttempts + 1;
-            const updates: { failedLoginAttempts: number; lockedUntil?: Date } = { failedLoginAttempts: newFailedAttempts };
-            if (newFailedAttempts >= 5) {
-              updates.lockedUntil = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
-            }
-            await db.user.update({
+            // MP-09: atomic increment — concurrent brute-force cannot lose counts.
+            const updated = await db.user.update({
               where: { id: user.id },
-              data: updates
+              data: {
+                failedLoginAttempts: { increment: 1 },
+              },
+              select: { failedLoginAttempts: true },
             });
+            if (updated.failedLoginAttempts >= 5) {
+              await db.user.update({
+                where: { id: user.id },
+                data: { lockedUntil: new Date(Date.now() + 15 * 60 * 1000) },
+              });
+            }
             return null;
           }
         }
 
-        console.log("[NextAuth] login successful for user:", sanitizeLogInput(user.username));
+        console.log("[NextAuth] login successful for user:", identityFingerprint(user.username));
         if (user.failedLoginAttempts > 0 || user.lockedUntil) {
           await db.user.update({
             where: { id: user.id },
@@ -269,14 +295,17 @@ export const authOptions: NextAuthOptions = {
           role: role as "OWNER" | "ADMIN" | "MANAGER" | "CASHIER" | "VIEWER" | undefined,
           businessId: businessId,
           businessName: businessName,
-          requiresPasswordChange: false,
+          requiresPasswordChange: user.requiresPasswordChange ?? false,
+          sessionVersion: user.sessionVersion ?? 0,
         };
       }
     })
   ],
   session: {
     strategy: "jwt",
-    maxAge: 10 * 365 * 24 * 60 * 60, // 10 years for persistent login
+    // MP-07: 7-day session (was 10 years). Shared POS devices must not stay
+    // signed in for a decade if a cookie/device is lost or stolen.
+    maxAge: 7 * 24 * 60 * 60,
   },
   callbacks: {
     async jwt({ token, user, trigger, session: updateSession }) {
@@ -291,6 +320,7 @@ export const authOptions: NextAuthOptions = {
           businessId?: string;
           businessName?: string;
           requiresPasswordChange?: boolean;
+          sessionVersion?: number;
         };
         token.id = u.id;
         token.name = u.name;
@@ -299,7 +329,8 @@ export const authOptions: NextAuthOptions = {
         token.email = u.email ?? undefined;
         token.businessId = u.businessId;
         token.businessName = u.businessName;
-        token.requiresPasswordChange = false;
+        token.requiresPasswordChange = u.requiresPasswordChange ?? false;
+        token.sessionVersion = u.sessionVersion ?? 0;
       }
 
       // Business switch: client can only REQUEST a businessId change.
@@ -344,7 +375,8 @@ export const authOptions: NextAuthOptions = {
         session.user.email = (token.email as string) || session.user.email;
         session.user.businessId = token.businessId as string;
         session.user.businessName = token.businessName as string;
-        session.user.requiresPasswordChange = false;
+        session.user.requiresPasswordChange = Boolean(token.requiresPasswordChange);
+        session.user.sessionVersion = (token.sessionVersion as number) ?? 0;
       }
       return session;
     }

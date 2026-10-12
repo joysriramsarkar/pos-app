@@ -21,9 +21,16 @@ async function main() {
 
     console.log("✅ Default business seeded:", defaultBusiness.name, `(${defaultBusiness.id})`);
 
-    // 2. Seed Admin user
-    const seedPassword = process.env.SEED_ADMIN_PASSWORD ?? randomBytes(16).toString("hex");
-    if (!process.env.SEED_ADMIN_PASSWORD) {
+    // 2. Seed Admin user (MP-01: empty-string guard + no rerun reset)
+    const configuredPassword = process.env.SEED_ADMIN_PASSWORD?.trim();
+
+    if (configuredPassword && configuredPassword.length < 12) {
+      throw new Error("SEED_ADMIN_PASSWORD must be at least 12 characters");
+    }
+
+    const generatedPassword = randomBytes(24).toString("base64url");
+    const seedPassword = configuredPassword || generatedPassword;
+    if (!configuredPassword) {
       console.log(`⚠️  SEED_ADMIN_PASSWORD not set. Generated one-time password: ${seedPassword}`);
       console.log("   Set SEED_ADMIN_PASSWORD in .env to use a fixed password.");
     }
@@ -33,14 +40,12 @@ async function main() {
       where: { username: "admin" },
       update: {
         name: "Administrator",
-        passwordHash: hashedPassword,
-        requiresPasswordChange: false,
       },
       create: {
         username: "admin",
         passwordHash: hashedPassword,
         name: "Administrator",
-        requiresPasswordChange: false,
+        requiresPasswordChange: !configuredPassword,
       },
     });
 

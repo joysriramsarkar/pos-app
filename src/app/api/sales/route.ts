@@ -31,6 +31,7 @@ import { logAudit } from "@/lib/audit";
 import { toClientError } from "@/lib/api-errors";
 import { enforceRateLimit, salesCreateLimiter } from "@/lib/rate-limit";
 import { checkSalePricingAuthority } from "@/lib/sale-pricing";
+import { computeSaleTotals, SaleValidationError } from "@/domain/sales/sale-totals";
 
 const getIp = (req: NextRequest) =>
   req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
@@ -196,9 +197,8 @@ async function handleGet(request: NextRequest, ctx: RouteContext & { tenant: Ten
     });
   } catch (error: unknown) {
     console.error("Error fetching sales:", error);
-    const details = error instanceof Error ? error.message : String(error);
     return NextResponse.json(
-      { success: false, error: "Failed to fetch sales", details },
+      { success: false, error: "Failed to fetch sales" },
       { status: 500 },
     );
   }
@@ -246,65 +246,43 @@ async function handlePost(request: NextRequest, ctx: RouteContext & { tenant: Te
     const validatedData = result.data;
     const { items: validatedItems, customerId, paymentMethod, notes } = validatedData;
 
-    const itemTotalMismatch = findSaleItemTotalMismatch(validatedItems);
-    if (itemTotalMismatch) {
-      return NextResponse.json({ success: false, error: itemTotalMismatch }, { status: 400 });
-    }
-
-    const subtotal = addMoney(...validatedItems.map((item) => item.totalPrice));
-    const discountAmount = toMoneyDecimal(validatedData.discount);
-    const taxAmount = toMoneyDecimal(validatedData.tax);
-    const totalAmount = addMoney(subtractMoney(subtotal, discountAmount), taxAmount);
-    const amountReceived = toMoneyDecimal(validatedData.amountReceived || 0);
-    const amountPaidValue = toMoneyDecimal(validatedData.amountPaid);
-    const prepaidToUse = toMoneyDecimal(validatedData.prepaidAmountUsed || 0);
-    const changeAsPrepayment = toMoneyDecimal(validatedData.changeAsPrepayment || 0);
-    const debtRepaymentAmount = toMoneyDecimal(validatedData.debtRepaymentAmount || 0);
-    const externalPaidAmount = subtractMoney(amountPaidValue, prepaidToUse);
-
-    if (amountPaidValue.gt(totalAmount)) {
-      return NextResponse.json({ success: false, error: "Amount paid cannot exceed sale total" }, { status: 400 });
-    }
-    if (prepaidToUse.gt(amountPaidValue)) {
-      return NextResponse.json({ success: false, error: "Prepaid amount cannot exceed total amount paid" }, { status: 400 });
-    }
-    if (!customerId && (prepaidToUse.gt(0) || changeAsPrepayment.gt(0))) {
-      return NextResponse.json({ success: false, error: "Prepaid balance can only be used with a selected customer" }, { status: 400 });
-    }
-    if (
-      (changeAsPrepayment.gt(0) || debtRepaymentAmount.gt(0)) &&
-      amountReceived.lt(addMoney(externalPaidAmount, addMoney(changeAsPrepayment, debtRepaymentAmount)))
-    ) {
-      return NextResponse.json({ success: false, error: "Received amount does not cover sale payment, prepaid change, and due clearance" }, { status: 400 });
-    }
-
-    let paymentStatus: any = "PAID";
-    if (customerId) {
-      if (amountPaidValue.isZero()) paymentStatus = "DUE";
-      else if (amountPaidValue.lt(totalAmount)) paymentStatus = "PARTIAL";
-    } else {
-      // Walk-in customers must pay full amount
-      if (amountPaidValue.lt(totalAmount)) {
-        return NextResponse.json({ success: false, error: "Walk-in customers must pay the full amount" }, { status: 400 });
+    // MP-21: canonical totals core shared with /api/sync (identical math + messages).
+    let totals;
+    try {
+      totals = computeSaleTotals({
+        items: validatedItems,
+        discount: validatedData.discount,
+        tax: validatedData.tax,
+        amountPaid: validatedData.amountPaid,
+        amountReceived: validatedData.amountReceived,
+        prepaidAmountUsed: validatedData.prepaidAmountUsed,
+        changeAsPrepayment: validatedData.changeAsPrepayment,
+        debtRepaymentAmount: validatedData.debtRepaymentAmount,
+        customerId,
+        paymentMethod,
+        cashAmount: validatedData.cashAmount,
+        upiAmount: validatedData.upiAmount,
+      });
+    } catch (e) {
+      if (e instanceof SaleValidationError) {
+        return NextResponse.json({ success: false, error: e.message }, { status: 400 });
       }
+      throw e;
     }
-
-    // Split-payment consistency: when the client provides a cash/UPI breakdown
-    // for a MIXED sale, the parts must add up to the externally collected amount.
-    const methodUpper = (paymentMethod ? String(paymentMethod).toUpperCase() : "CASH");
-    if (methodUpper === "MIXED" && (validatedData.cashAmount != null || validatedData.upiAmount != null)) {
-      const cash = toMoneyDecimal(validatedData.cashAmount || 0);
-      const upi = toMoneyDecimal(validatedData.upiAmount || 0);
-      if (cash.lt(0) || upi.lt(0)) {
-        return NextResponse.json({ success: false, error: "Cash/UPI amounts cannot be negative" }, { status: 400 });
-      }
-      if (!addMoney(cash, upi).equals(externalPaidAmount)) {
-        return NextResponse.json(
-          { success: false, error: "Mixed payment: cash + UPI must equal the externally paid amount" },
-          { status: 400 },
-        );
-      }
-    }
+    const {
+      subtotal,
+      discountAmount,
+      taxAmount,
+      totalAmount,
+      amountReceived,
+      amountPaidValue,
+      prepaidToUse,
+      changeAsPrepayment,
+      debtRepaymentAmount,
+      externalPaidAmount,
+      paymentStatus: computedPaymentStatus,
+    } = totals;
+    const paymentStatus: any = computedPaymentStatus;
 
     // Server-authoritative pricing / discount authorization.
     const priceRows = await db.product.findMany({
@@ -328,9 +306,32 @@ async function handlePost(request: NextRequest, ctx: RouteContext & { tenant: Te
       return NextResponse.json({ success: false, error: pricingCheck.message }, { status: 403 });
     }
 
-    const invoiceNumber = await generateServerInvoiceNumber();
+    // MP-39/H1: invoice numbers are UUID-based (collision ~impossible), but the
+    // unique(businessId, invoiceNumber) constraint is the final authority.
+    // On the freak P2002, regenerate once and retry (bounded — never a loop).
+    let invoiceNumber = await generateServerInvoiceNumber();
+    let saleResult: Awaited<ReturnType<typeof runSaleTransaction>> | undefined;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        saleResult = await runSaleTransaction(invoiceNumber);
+        break;
+      } catch (e) {
+        const code = (e as { code?: string })?.code;
+        const target = (e as { meta?: { target?: unknown } })?.meta?.target;
+        const isInvoiceCollision =
+          code === "P2002" && Array.isArray(target) && target.includes("invoiceNumber");
+        if (isInvoiceCollision && attempt === 0) {
+          console.warn("[sales] invoice collision, regenerating once");
+          invoiceNumber = await generateServerInvoiceNumber();
+          continue;
+        }
+        throw e;
+      }
+    }
+    if (!saleResult) throw new Error("Sale transaction failed");
 
-    const saleResult = await db.$transaction(
+    async function runSaleTransaction(txInvoiceNumber: string) {
+      return db.$transaction(
       async (tx) => {
         // Lock products first (sorted FOR UPDATE), plan auto-adjust + blended COGS
         const { plansByProductId, autoAdjusted } = await lockAndPlanSaleStock(
@@ -517,8 +518,8 @@ async function handlePost(request: NextRequest, ctx: RouteContext & { tenant: Te
               dataUpdate.prepaidBalance = newPrepaidBalance.gt(0) ? newPrepaidBalance : new Decimal(0);
             }
 
-            await tx.customer.update({
-              where: { id: customerId },
+            await tx.customer.updateMany({
+              where: { id: customerId, businessId },
               data: dataUpdate,
             });
           }
@@ -536,7 +537,8 @@ async function handlePost(request: NextRequest, ctx: RouteContext & { tenant: Te
         };
       },
       { timeout: 60000, maxWait: 10000 },
-    );
+      );
+      }
 
     const { sale, autoAdjusted } = saleResult;
 

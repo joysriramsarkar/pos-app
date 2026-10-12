@@ -144,6 +144,8 @@ model Business {
   dailyRecords     DailyManualRecord[]
   productPopularity ProductPopularity[]
   cashRegisterShifts CashRegisterShift[]
+  payments         Payment[]
+  taxCategories    TaxCategory[]
 
   @@map("businesses")
 }
@@ -203,11 +205,11 @@ model Product {
   nameBn        String?  @map("name_bn") // Bengali name
   category      String   @default("General")
   subCategory   String?  @default("") @map("sub_category") // sub-category for grouping products
-  buyingPrice   Decimal  @default(0) @map("buying_price")
-  sellingPrice  Decimal  @default(0) @map("selling_price")
+  buyingPrice   Decimal @db.Decimal(19, 2)  @default(0) @map("buying_price")
+  sellingPrice  Decimal @db.Decimal(19, 2)  @default(0) @map("selling_price")
   unit          String   @default("piece") // piece, kg, gram, liter, packet
-  currentStock  Decimal  @default(0) @map("current_stock")
-  minStockLevel Decimal  @default(5) @map("min_stock_level")
+  currentStock  Decimal @db.Decimal(19, 6)  @default(0) @map("current_stock")
+  minStockLevel Decimal @db.Decimal(19, 6)  @default(5) @map("min_stock_level")
   isActive      Boolean  @default(true) @map("is_active") // Soft delete
   imageUrl      String?  @map("image_url")
   createdAt     DateTime @default(now()) @map("created_at")
@@ -219,6 +221,7 @@ model Product {
   purchaseItems     PurchaseItem[]
   stockHistory      StockHistory[]
   productPopularity ProductPopularity[]
+  saleReturnItems   SaleReturnItem[]
 
   @@unique([businessId, barcode]) // tenant-scoped barcode uniqueness
   @@index([businessId])
@@ -252,7 +255,7 @@ model StockHistory {
   businessId   String          @map("business_id")
   productId    String          @map("product_id")
   changeType   StockChangeType // PURCHASE, SALE, ADJUSTMENT, RETURN, etc.
-  quantity     Decimal // Positive for addition, negative for deduction
+  quantity     Decimal @db.Decimal(19, 6) // Positive for addition, negative for deduction
   reason       String?
   referenceId  String?     @map("reference_id") // Sale ID, Purchase ID, or Return ID
   saleId       String?     @map("sale_id")
@@ -283,7 +286,7 @@ model ProductPopularity {
 
   monthlySalesCount Int      @default(0) @map("monthly_sales_count")
   weeklySalesCount  Int      @default(0) @map("weekly_sales_count")
-  totalRevenue      Decimal  @default(0) @db.Decimal(10, 2) @map("total_revenue")
+  totalRevenue      Decimal  @default(0) @db.Decimal(19, 2) @map("total_revenue")
 
   periodStart       DateTime @map("period_start")
   periodEnd         DateTime @map("period_end")
@@ -308,9 +311,9 @@ model Customer {
   nameEn         String?  @map("name_en")
   phone          String?
   address        String?
-  totalDue       Decimal  @default(0) @map("total_due") // Running total of outstanding balance (owes store)
-  totalPaid      Decimal  @default(0) @map("total_paid") // Total amount paid historically
-  prepaidBalance Decimal  @default(0) @map("prepaid_balance") // Prepaid/credit balance (store owes customer)
+  totalDue       Decimal @db.Decimal(19, 2)  @default(0) @map("total_due") // Running total of outstanding balance (owes store)
+  totalPaid      Decimal @db.Decimal(19, 2)  @default(0) @map("total_paid") // Total amount paid historically
+  prepaidBalance Decimal @db.Decimal(19, 2)  @default(0) @map("prepaid_balance") // Prepaid/credit balance (store owes customer)
   notes          String?
   isActive       Boolean  @default(true) @map("is_active")
   createdAt      DateTime @default(now()) @map("created_at")
@@ -332,8 +335,8 @@ model LedgerEntry {
   businessId   String           @map("business_id")
   customerId   String           @map("customer_id")
   entryType    LedgerEntryType // CREDIT (customer owes more), DEBIT (customer paid)
-  amount       Decimal
-  balanceAfter Decimal          @map("balance_after") // Balance after this transaction
+  amount       Decimal @db.Decimal(19, 2)
+  balanceAfter Decimal @db.Decimal(19, 2)          @map("balance_after") // Balance after this transaction
   description  String?
   referenceId  String?          @map("reference_id") // Sale ID or Payment ID
   createdAt    DateTime         @default(now()) @map("created_at")
@@ -360,17 +363,17 @@ model Sale {
   customerId    String?       @map("customer_id")
   userId        String?       @map("user_id") // Track which user created this sale
   shiftId       String?       @map("shift_id") // Cash register shift
-  subtotal      Decimal       @default(0)
-  discount      Decimal       @default(0)
+  subtotal      Decimal @db.Decimal(19, 2)       @default(0)
+  discount      Decimal @db.Decimal(19, 2)       @default(0)
   discountType  DiscountType  @default(FIXED) @map("discount_type")
-  tax           Decimal       @default(0)
-  totalAmount   Decimal       @default(0) @map("total_amount")
-  amountPaid    Decimal       @default(0) @map("amount_paid")
+  tax           Decimal @db.Decimal(19, 2)       @default(0)
+  totalAmount   Decimal @db.Decimal(19, 2)       @default(0) @map("total_amount")
+  amountPaid    Decimal @db.Decimal(19, 2)       @default(0) @map("amount_paid")
   paymentMethod PaymentMethod @default(CASH) @map("payment_method")
   paymentStatus PaymentStatus @default(PAID) @map("payment_status")
   status        SaleStatus    @default(COMPLETED)
-  cashAmount    Decimal?      @map("cash_amount")
-  upiAmount     Decimal?      @map("upi_amount")
+  cashAmount    Decimal? @db.Decimal(19, 2)      @map("cash_amount")
+  upiAmount     Decimal? @db.Decimal(19, 2)      @map("upi_amount")
   notes         String?
   offlineSynced Boolean       @default(true) @map("offline_synced") // For offline-first
   createdAt     DateTime      @default(now()) @map("created_at")
@@ -401,14 +404,14 @@ model SaleItem {
   saleId          String       @map("sale_id")
   productId       String       @map("product_id")
   productName     String       @map("product_name") // Snapshot at time of sale
-  quantity        Decimal
-  unitPrice       Decimal      @map("unit_price") // Selling price at time of sale
-  costPriceAtSale Decimal      @default(0) @map("cost_price_at_sale") // WAC/cost snapshot for historical profit
-  discount        Decimal      @default(0) // Per-item discount amount
+  quantity        Decimal @db.Decimal(19, 6)
+  unitPrice       Decimal @db.Decimal(19, 6)      @map("unit_price") // Selling price at time of sale
+  costPriceAtSale Decimal @db.Decimal(19, 6)      @default(0) @map("cost_price_at_sale") // WAC/cost snapshot for historical profit
+  discount        Decimal @db.Decimal(19, 2)      @default(0) // Per-item discount amount
   discountType    DiscountType @default(FIXED) @map("discount_type")
-  totalPrice      Decimal      @map("total_price") // After item-level discount
-  taxRate         Decimal      @default(0) @map("tax_rate") // Tax rate applied
-  taxAmount       Decimal      @default(0) @map("tax_amount")
+  totalPrice      Decimal @db.Decimal(19, 2)      @map("total_price") // After item-level discount
+  taxRate         Decimal @db.Decimal(7, 4)      @default(0) @map("tax_rate") // Tax rate applied
+  taxAmount       Decimal @db.Decimal(19, 2)      @default(0) @map("tax_amount")
   createdAt       DateTime     @default(now()) @map("created_at")
 
   sale        Sale             @relation(fields: [saleId], references: [id], onDelete: Cascade)
@@ -426,12 +429,13 @@ model Payment {
   saleId        String        @map("sale_id")
   businessId    String        @map("business_id")
   method        PaymentMethod
-  amount        Decimal
+  amount        Decimal @db.Decimal(19, 2)
   referenceNo   String?       @map("reference_no") // UPI transaction ID, card ref, etc.
   notes         String?
   createdAt     DateTime      @default(now()) @map("created_at")
 
   sale     Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
   @@index([saleId])
   @@index([businessId])
@@ -448,7 +452,7 @@ model SaleReturn {
   businessId   String       @map("business_id")
   saleId       String       @map("sale_id")
   userId       String?      @map("user_id")
-  refundAmount Decimal      @map("refund_amount")
+  refundAmount Decimal @db.Decimal(19, 2)      @map("refund_amount")
   refundMethod RefundMethod @default(CASH) @map("refund_method")
   reason       String?
   createdAt    DateTime     @default(now()) @map("created_at")
@@ -471,16 +475,18 @@ model SaleReturnItem {
   saleItemId   String   @map("sale_item_id")
   productId    String   @map("product_id")
   productName  String   @map("product_name")
-  quantity     Decimal
-  unitPrice    Decimal  @map("unit_price")
-  totalPrice   Decimal  @map("total_price")
+  quantity     Decimal @db.Decimal(19, 6)
+  unitPrice    Decimal @db.Decimal(19, 6)  @map("unit_price")
+  totalPrice   Decimal @db.Decimal(19, 2)  @map("total_price")
   createdAt    DateTime @default(now()) @map("created_at")
 
   saleReturn SaleReturn @relation(fields: [saleReturnId], references: [id], onDelete: Cascade)
   saleItem   SaleItem   @relation(fields: [saleItemId], references: [id])
+  product    Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@index([saleReturnId])
   @@index([saleItemId])
+  @@index([productId])
   @@map("sale_return_items")
 }
 
@@ -498,8 +504,8 @@ model Supplier {
   email      String?
   gstNumber  String?  @map("gst_number")
   notes      String?
-  totalDue   Decimal  @default(0) @map("total_due") // Amount owed to supplier
-  totalPaid  Decimal  @default(0) @map("total_paid") // Total paid historically
+  totalDue   Decimal @db.Decimal(19, 2)  @default(0) @map("total_due") // Amount owed to supplier
+  totalPaid  Decimal @db.Decimal(19, 2)  @default(0) @map("total_paid") // Total paid historically
   isActive   Boolean  @default(true) @map("is_active")
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
@@ -519,8 +525,8 @@ model SupplierLedgerEntry {
   businessId   String             @map("business_id")
   supplierId   String             @map("supplier_id")
   entryType    SupplierLedgerType
-  amount       Decimal
-  balanceAfter Decimal            @map("balance_after")
+  amount       Decimal @db.Decimal(19, 2)
+  balanceAfter Decimal @db.Decimal(19, 2)            @map("balance_after")
   description  String?
   referenceId  String?            @map("reference_id") // Purchase ID or Payment ID
   createdAt    DateTime           @default(now()) @map("created_at")
@@ -539,8 +545,8 @@ model Purchase {
   businessId     String                 @map("business_id")
   supplierId     String?                @map("supplier_id")
   invoiceNumber  String?                @map("invoice_number")
-  totalAmount    Decimal                @default(0) @map("total_amount")
-  paidAmount     Decimal                @default(0) @map("paid_amount")
+  totalAmount    Decimal @db.Decimal(19, 2)                @default(0) @map("total_amount")
+  paidAmount     Decimal @db.Decimal(19, 2)                @default(0) @map("paid_amount")
   paymentStatus  PurchasePaymentStatus  @default(PENDING) @map("payment_status")
   deliveryStatus PurchaseDeliveryStatus @default(PENDING) @map("delivery_status")
   notes          String?
@@ -565,10 +571,10 @@ model PurchaseItem {
   purchaseId  String   @map("purchase_id")
   productId   String   @map("product_id")
   productName String   @map("product_name")
-  quantity    Decimal
-  receivedQty Decimal  @default(0) @map("received_qty")
-  buyingPrice Decimal  @map("buying_price")
-  totalPrice  Decimal  @map("total_price")
+  quantity    Decimal @db.Decimal(19, 6)
+  receivedQty Decimal @db.Decimal(19, 6)  @default(0) @map("received_qty")
+  buyingPrice Decimal @db.Decimal(19, 6)  @map("buying_price")
+  totalPrice  Decimal @db.Decimal(19, 2)  @map("total_price")
   createdAt   DateTime @default(now()) @map("created_at")
 
   purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
@@ -603,6 +609,7 @@ model SyncQueue {
 
   @@index([businessId])
   @@index([synced])
+  @@index([businessId, synced])
   @@index([idempotencyKey])
   @@index([entityType])
   @@map("sync_queue")
@@ -613,6 +620,9 @@ model SyncQueue {
 // ============================================================================
 
 model Setting {
+  // DEPRECATED (MP-14 follow-up): global fallback only. All tenant reads must
+  // prefer BusinessSetting(businessId, key); do NOT add new global keys.
+  // Table drop is a later major (production rows still serve as defaults).
   id          String   @id @default(cuid())
   key         String   @unique
   value       String
@@ -637,6 +647,9 @@ model User {
   requiresPasswordChange Boolean   @default(false) @map("requires_password_change")
   failedLoginAttempts    Int       @default(0) @map("failed_login_attempts")
   lockedUntil            DateTime? @map("locked_until")
+  // MP-07: bumped on password change / "logout all devices"; JWTs carrying an
+  // older version are rejected in requireBusinessContext().
+  sessionVersion         Int       @default(0) @map("session_version")
   createdAt              DateTime  @default(now()) @map("created_at")
   updatedAt              DateTime  @updatedAt @map("updated_at")
 
@@ -687,7 +700,7 @@ model RolePermission {
 model Expense {
   id            String               @id @default(cuid())
   businessId    String               @map("business_id")
-  amount        Decimal
+  amount        Decimal @db.Decimal(19, 2)
   category      String
   notes         String?
   paymentMethod ExpensePaymentMethod @default(CASH) @map("payment_method")
@@ -745,9 +758,9 @@ model DailyManualRecord {
   id         String   @id @default(cuid())
   businessId String   @map("business_id")
   date       String   // "yyyy-MM-dd"
-  sales      Decimal  @default(0)
-  expenses   Decimal  @default(0)
-  profit     Decimal  @default(0)
+  sales      Decimal @db.Decimal(19, 2)  @default(0)
+  expenses   Decimal @db.Decimal(19, 2)  @default(0)
+  profit     Decimal @db.Decimal(19, 2)  @default(0)
   notes      String?
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
@@ -770,13 +783,13 @@ model CashRegisterShift {
   shiftNumber    Int       @map("shift_number") // Auto-increment per business
   openedAt       DateTime  @default(now()) @map("opened_at")
   closedAt       DateTime? @map("closed_at")
-  openingCash    Decimal   @default(0) @map("opening_cash")
-  closingCash    Decimal?  @map("closing_cash") // Actual cash counted at end
-  expectedCash   Decimal?  @map("expected_cash") // Calculated expected cash
-  cashDifference Decimal?  @map("cash_difference") // closingCash - expectedCash
-  totalSales     Decimal   @default(0) @map("total_sales")
-  totalExpenses  Decimal   @default(0) @map("total_expenses")
-  totalRefunds   Decimal   @default(0) @map("total_refunds")
+  openingCash    Decimal @db.Decimal(19, 2)   @default(0) @map("opening_cash")
+  closingCash    Decimal? @db.Decimal(19, 2)  @map("closing_cash") // Actual cash counted at end
+  expectedCash   Decimal? @db.Decimal(19, 2)  @map("expected_cash") // Calculated expected cash
+  cashDifference Decimal? @db.Decimal(19, 2)  @map("cash_difference") // closingCash - expectedCash
+  totalSales     Decimal @db.Decimal(19, 2)   @default(0) @map("total_sales")
+  totalExpenses  Decimal @db.Decimal(19, 2)   @default(0) @map("total_expenses")
+  totalRefunds   Decimal @db.Decimal(19, 2)   @default(0) @map("total_refunds")
   notes          String?
   isActive       Boolean   @default(true) @map("is_active") // true = shift is open
 
@@ -785,6 +798,9 @@ model CashRegisterShift {
   sales    Sale[]
 
   @@unique([businessId, shiftNumber])
+  // NOTE (MP-18): one-open-shift-per-user enforced by partial unique index
+  // one_open_shift_per_user_business in migration 20261011_hardening
+  // (Prisma cannot express partial indexes).
   @@index([businessId])
   @@index([businessId, userId])
   @@index([businessId, isActive])
@@ -799,13 +815,15 @@ model TaxCategory {
   id         String   @id @default(cuid())
   businessId String   @map("business_id")
   name       String   // e.g., "GST 5%", "GST 12%", "GST 18%", "Exempt"
-  rate       Decimal  // Percentage (e.g., 5, 12, 18, 0)
-  cgst       Decimal  @default(0) // CGST component
-  sgst       Decimal  @default(0) // SGST component
-  igst       Decimal  @default(0) // IGST (interstate)
+  rate       Decimal @db.Decimal(7, 4)  // Percentage (e.g., 5, 12, 18, 0)
+  cgst       Decimal @db.Decimal(7, 4)  @default(0) // CGST component
+  sgst       Decimal @db.Decimal(7, 4)  @default(0) // SGST component
+  igst       Decimal @db.Decimal(7, 4)  @default(0) // IGST (interstate)
   isDefault  Boolean  @default(false) @map("is_default")
   isActive   Boolean  @default(true) @map("is_active")
   createdAt  DateTime @default(now()) @map("created_at")
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
   @@unique([businessId, name])
   @@index([businessId])

@@ -24,16 +24,20 @@ const {
   mockUpdate: vi.fn(() => Promise.resolve({})),
 }));
 
-vi.mock('next/server', () => ({
-  NextResponse: {
-    json: (body: any, init?: any) => {
-      return new Response(JSON.stringify(body), {
-        status: init?.status || 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
+vi.mock('next/server', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('next/server')>();
+  return {
+    ...actual,
+    NextResponse: {
+      json: (body: any, init?: any) => {
+        return new Response(JSON.stringify(body), {
+          status: init?.status || 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      },
     },
-  },
-}));
+  };
+});
 
 vi.mock('next-auth', () => ({
   getServerSession: mockGetServerSession,
@@ -59,6 +63,7 @@ vi.mock('../[...nextauth]/route', () => ({
 }));
 
 import { POST } from './route';
+import { NextRequest } from "next/server";
 
 describe('POST /api/auth/change-password', () => {
   beforeEach(() => {
@@ -75,7 +80,7 @@ describe('POST /api/auth/change-password', () => {
   });
 
   it('should return 200 on successful password change', async () => {
-    const req = new Request('http://localhost:3000/api/auth/change-password', {
+    const req = new NextRequest('http://localhost:3000/api/auth/change-password', {
       method: 'POST',
       body: JSON.stringify({ currentPassword: TEST_CURRENT, newPassword: TEST_NEW }),
     });
@@ -90,7 +95,7 @@ describe('POST /api/auth/change-password', () => {
   it('should return 401 if not authorized', async () => {
     mockGetServerSession.mockResolvedValueOnce(null as any);
 
-    const req = new Request('http://localhost:3000/api/auth/change-password', {
+    const req = new NextRequest('http://localhost:3000/api/auth/change-password', {
       method: 'POST',
       body: JSON.stringify({ currentPassword: TEST_CURRENT, newPassword: TEST_NEW }),
     });
@@ -102,7 +107,7 @@ describe('POST /api/auth/change-password', () => {
   });
 
   it('should return 400 on invalid JSON body', async () => {
-    const req = new Request('http://localhost:3000/api/auth/change-password', {
+    const req = new NextRequest('http://localhost:3000/api/auth/change-password', {
       method: 'POST',
       body: 'invalid json',
     });
@@ -114,7 +119,7 @@ describe('POST /api/auth/change-password', () => {
   });
 
   it('should return 400 on missing required fields', async () => {
-    const req = new Request('http://localhost:3000/api/auth/change-password', {
+    const req = new NextRequest('http://localhost:3000/api/auth/change-password', {
       method: 'POST',
       body: JSON.stringify({ currentPassword: TEST_CURRENT }),
     });
@@ -128,7 +133,7 @@ describe('POST /api/auth/change-password', () => {
   it('should return 404 if user not found', async () => {
     mockFindUnique.mockResolvedValueOnce(null as any);
 
-    const req = new Request('http://localhost:3000/api/auth/change-password', {
+    const req = new NextRequest('http://localhost:3000/api/auth/change-password', {
       method: 'POST',
       body: JSON.stringify({ currentPassword: TEST_CURRENT, newPassword: TEST_NEW }),
     });
@@ -142,7 +147,7 @@ describe('POST /api/auth/change-password', () => {
   it('should return 400 on incorrect current password', async () => {
     mockCompare.mockResolvedValueOnce(false);
 
-    const req = new Request('http://localhost:3000/api/auth/change-password', {
+    const req = new NextRequest('http://localhost:3000/api/auth/change-password', {
       method: 'POST',
       body: JSON.stringify({ currentPassword: TEST_WRONG, newPassword: TEST_NEW }),
     });
@@ -157,7 +162,7 @@ describe('POST /api/auth/change-password', () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     mockFindUnique.mockRejectedValueOnce(new Error('DB Error'));
 
-    const req = new Request('http://localhost:3000/api/auth/change-password', {
+    const req = new NextRequest('http://localhost:3000/api/auth/change-password', {
       method: 'POST',
       body: JSON.stringify({ currentPassword: TEST_CURRENT, newPassword: TEST_NEW }),
     });
@@ -173,7 +178,7 @@ describe('POST /api/auth/change-password', () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     mockUpdate.mockRejectedValueOnce(new Error('Update DB Error'));
 
-    const req = new Request('http://localhost:3000/api/auth/change-password', {
+    const req = new NextRequest('http://localhost:3000/api/auth/change-password', {
       method: 'POST',
       body: JSON.stringify({ currentPassword: TEST_CURRENT, newPassword: TEST_NEW }),
     });

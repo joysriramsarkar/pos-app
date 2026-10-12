@@ -3,9 +3,15 @@ import { db } from '@/lib/db';
 import { Prisma } from '@prisma/client';
 
 export async function GET(request: NextRequest) {
-  // Vercel Cron Authorization
+  // MP-37: fail-closed. Without CRON_SECRET anyone can trigger expensive
+  // aggregation; misconfigured deploys must 500, not run open.
+  const expected = process.env.CRON_SECRET;
+  if (!expected) {
+    console.error("[cron] CRON_SECRET is not set — refusing to run");
+    return NextResponse.json({ error: "Cron is not configured" }, { status: 500 });
+  }
   const authHeader = request.headers.get('authorization');
-  if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (authHeader !== `Bearer ${expected}`) {
     return new Response('Unauthorized', { status: 401 });
   }
 

@@ -11,6 +11,7 @@ import type { DueCustomer, ViewState, PayMethod, SortMode } from './types';
 import { SuccessView } from './SuccessView';
 import { CollectionForm } from './CollectionForm';
 import { CustomerList } from './CustomerList';
+import { newIdempotencyKey } from "@/lib/idempotency-key";
 
 export function DueCollection() {
   const t = useTranslations('DueCollection');
@@ -166,7 +167,8 @@ export function DueCollection() {
 
       const res = await fetch('/api/due-collection', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json; charset=utf-8' },
+        // MP-32: stable key per submission — timeout retry never double-collects.
+        headers: { 'Content-Type': 'application/json; charset=utf-8', 'X-Idempotency-Key': newIdempotencyKey() },
         body: JSON.stringify({
           customerId: selectedCustomer.id,
           amount,

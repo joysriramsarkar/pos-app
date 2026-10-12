@@ -37,21 +37,29 @@ type AuthResult =
  * Middleware to check if request is authorized (has valid session)
  */
 export async function requireAuth(request: NextRequest): Promise<AuthResult> {
-  // CSRF Protection Check for state-changing methods
+  // CSRF Protection Check for state-changing methods (MP-35: exact allow-list).
+  // Production allows ONLY same-origin + explicitly configured ALLOWED_ORIGINS.
+  // Wildcard capacitor://, ionic://, localhost bypasses apply in development only.
   if (["POST", "PUT", "DELETE", "PATCH"].includes(request.method)) {
     const origin = request.headers.get("origin");
     const rawHost = request.headers.get("host");
     const forwardedHost = request.headers.get("x-forwarded-host");
     const secFetchSite = request.headers.get("sec-fetch-site");
+    const isProd = process.env.NODE_ENV === "production";
 
-    const defaultAllowedOrigins = [
-      "https://pos.onuron.org",
-      "https://lakhanb.vercel.app",
-      "http://localhost:3000",
-      "http://localhost",
-      "https://localhost",
-      "capacitor://localhost",
-    ];
+    const defaultAllowedOrigins = isProd
+      ? [
+          "https://pos.onuron.org",
+          "https://lakhanb.vercel.app",
+        ]
+      : [
+          "https://pos.onuron.org",
+          "https://lakhanb.vercel.app",
+          "http://localhost:3000",
+          "http://localhost",
+          "https://localhost",
+          "capacitor://localhost",
+        ];
 
     const envOrigins = (process.env.ALLOWED_ORIGINS ?? "")
       .split(",")
@@ -73,14 +81,19 @@ export async function requireAuth(request: NextRequest): Promise<AuthResult> {
           originHost === rawHost || originHost === forwardedHost;
 
         // Mobile Capacitor / Ionic or explicitly configured exact origins.
+        // MP-35: no wildcard scheme bypass in production. Capacitor production
+        // loads the remote HTTPS URL, so its origin must be allow-listed explicitly.
+        const isDevOrigin =
+          !isProd &&
+          (origin.startsWith("capacitor://") ||
+            origin.startsWith("ionic://") ||
+            originUrl.hostname === "localhost" ||
+            originUrl.hostname === "127.0.0.1");
         const isAllowedOrigin =
           isSameOrigin ||
           allAllowedOrigins.includes(normalizedOrigin) ||
           allAllowedOrigins.includes(origin) ||
-          origin.startsWith("capacitor://") ||
-          origin.startsWith("ionic://") ||
-          originUrl.hostname === "localhost" ||
-          originUrl.hostname === "127.0.0.1";
+          isDevOrigin;
 
         if (!isAllowedOrigin) {
           console.warn("[CSRF] Blocked origin:", origin, "rawHost:", rawHost, "forwardedHost:", forwardedHost);
@@ -160,8 +173,8 @@ export async function requirePermission(
     return NextResponse.json({ error: "User not found" }, { status: 401 });
   }
 
-  // Use tenant context to check permission
-  const context = await requireBusinessContext();
+  // Use tenant context to check permission (MP-15: reuse session, no second fetch)
+  const context = await requireBusinessContext(session);
   if (context instanceof NextResponse) return context;
 
   const denied = checkPermission(context, permissionCode);
@@ -185,15 +198,17 @@ export async function requireRole(
   allowedRoles: string[],
   existingSession?: Session | null
 ) {
-  if (!existingSession) {
+  let session = existingSession ?? null;
+  if (!session) {
     const authResult = await requireAuth(request);
     if (!authResult.authorized) {
       return authResult.response;
     }
+    session = authResult.session;
   }
 
   // Always resolve role from DB, not from JWT session which may be stale
-  const businessContext = await requireBusinessContext();
+  const businessContext = await requireBusinessContext(session);
   if (businessContext instanceof NextResponse) return businessContext;
 
   if (!allowedRoles.includes(businessContext.role)) {
@@ -277,8 +292,8 @@ export function withBusinessContext(
       return NextResponse.json({ error: "User not found" }, { status: 401 });
     }
 
-    // 2. Resolve business context (server-side, trusted)
-    const businessContext = await requireBusinessContext();
+    // 2. Resolve business context (server-side, trusted; reuse session — MP-15)
+    const businessContext = await requireBusinessContext(session);
     if (businessContext instanceof NextResponse) return businessContext;
 
     // 3. Optional: check required role

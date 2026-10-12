@@ -7,6 +7,7 @@ import { requireAuth } from '@/lib/api-middleware';
 import { requireBusinessContext, checkPermission } from '@/lib/tenant';
 import { toMoneyNumber } from '@/lib/money';
 import { logAudit } from '@/lib/audit';
+import { toClientError } from '@/lib/api-errors';
 
 const supplierDueSchema = z.object({
   supplierId: z.string().cuid(),
@@ -141,8 +142,10 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: unknown) {
     console.error('Error adding manual supplier due:', error);
-    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
-    const statusCode = errorMessage === 'Supplier not found' ? 404 : 500;
-    return NextResponse.json({ success: false, error: errorMessage }, { status: statusCode });
+    if (error instanceof Error && error.message === 'Supplier not found') {
+      return NextResponse.json({ success: false, error: error.message }, { status: 404 });
+    }
+    const { message, status } = toClientError(error, 'An unknown error occurred');
+    return NextResponse.json({ success: false, error: message }, { status });
   }
 }

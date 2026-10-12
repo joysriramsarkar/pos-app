@@ -20,6 +20,7 @@ import {
 } from '@/lib/sale-stock';
 import { logAudit } from '@/lib/audit';
 import { checkSalePricingAuthority } from '@/lib/sale-pricing';
+import { computeSaleTotals, SaleValidationError } from "@/domain/sales/sale-totals";
 const getIp = (req: NextRequest) => req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || undefined;
 
 const ProductSyncPayloadSchema = z.union([
@@ -31,17 +32,35 @@ const ProductSyncPayloadSchema = z.union([
 ]);
 
 import { requireAuth } from "@/lib/api-middleware";
-import { requireBusinessContext } from "@/lib/tenant";
+import { requireBusinessContext, checkPermission } from "@/lib/tenant";
 
 /** Thrown for business-rule/validation failures — surfaced as HTTP 4xx. */
 class SyncRejection extends Error {}
+
+/**
+ * MP-27: per-action permission map. Every sync action mutates business data,
+ * so each one requires an explicit permission — checked BEFORE the transaction.
+ */
+const ACTION_PERMISSION: Record<string, string> = {
+  "sale:create": "sales.create",
+  "product:create": "products.create",
+  "product:update": "products.update",
+  "product:stock:update": "stock.create",
+  "customer:create": "customers.create",
+  "customer:update": "customers.update",
+  "prepayment:create": "due.collect",
+};
+
+function errorId(): string {
+  return Math.random().toString(36).slice(2, 10);
+}
 
 // GET /api/sync - Get pending sync items or sync status
 export async function GET(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (!authResult.authorized) return authResult.response;
 
-  const ctx = await requireBusinessContext();
+  const ctx = await requireBusinessContext(authResult.session);
   if (ctx instanceof NextResponse) return ctx;
 
   const businessId = ctx.business.id;
@@ -93,19 +112,21 @@ export async function POST(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (!authResult.authorized) return authResult.response!;
 
-  const ctx = await requireBusinessContext();
+  const ctx = await requireBusinessContext(authResult.session);
   if (ctx instanceof NextResponse) return ctx;
 
   const businessId = ctx.business.id;
 
   try {
-    const idempotencyKey = request.headers.get("X-Idempotency-Key");
-    if (!idempotencyKey) {
+    const rawKey = request.headers.get("X-Idempotency-Key");
+    const keyCheck = z.string().min(8).max(128).safeParse(rawKey ?? "");
+    if (!keyCheck.success) {
       return NextResponse.json(
-        { success: false, error: "Missing X-Idempotency-Key header" },
+        { success: false, code: "VALIDATION_FAILED", error: "Missing or invalid X-Idempotency-Key header" },
         { status: 400 },
       );
     }
+    const idempotencyKey = keyCheck.data;
 
     const body = await request.json();
     const { actionType, payload, businessId: payloadBusinessId } = body;
@@ -113,15 +134,39 @@ export async function POST(request: NextRequest) {
     // Multi-tenant security: forbid cross-tenant sync queues
     if (payloadBusinessId && payloadBusinessId !== businessId) {
       return NextResponse.json(
-        { success: false, error: "Cross-tenant sync forbidden" },
+        { success: false, code: "PERMISSION_DENIED", error: "Cross-tenant sync forbidden" },
         { status: 403 },
       );
     }
 
     if (!actionType || !payload) {
       return NextResponse.json(
-        { success: false, error: "Missing actionType or payload" },
+        { success: false, code: "VALIDATION_FAILED", error: "Missing actionType or payload" },
         { status: 400 },
+      );
+    }
+
+    // MP-27: enforce per-action permission before touching the database.
+    const required = ACTION_PERMISSION[actionType];
+    if (!required) {
+      return NextResponse.json(
+        { success: false, code: "VALIDATION_FAILED", error: "Unknown action" },
+        { status: 400 },
+      );
+    }
+    const denied = checkPermission(ctx, required);
+    if (denied) return denied;
+
+    // MP-32: distinguish in-progress claims from completed replays.
+    // A concurrent request with the same key is transient (retry), not a conflict.
+    const preExisting = await db.syncQueue.findUnique({
+      where: { idempotencyKey },
+      select: { synced: true },
+    });
+    if (preExisting && !preExisting.synced) {
+      return NextResponse.json(
+        { success: false, code: "INPROGRESS", error: "Same request is already being processed. Retry shortly." },
+        { status: 409, headers: { "Retry-After": "5" } },
       );
     }
 
@@ -262,6 +307,25 @@ export async function POST(request: NextRequest) {
       return { cached: false, data: operationResult };
     });
 
+    // MP-31: best-effort popularity AFTER commit (never inside the sale tx).
+    try {
+      const popItems = (result.data as { __popularityItems?: Array<{ productId: string; quantity: number; totalPrice: number }> })?.__popularityItems;
+      if (actionType === 'sale:create' && popItems?.length && !result.cached) {
+        const now = new Date();
+        const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+        for (const item of popItems) {
+          await db.productPopularity.upsert({
+            where: { productId_periodStart: { productId: item.productId, periodStart } },
+            update: { monthlySalesCount: { increment: item.quantity }, totalRevenue: { increment: item.totalPrice }, periodEnd, updatedAt: new Date() },
+            create: { businessId, productId: item.productId, monthlySalesCount: item.quantity, totalRevenue: item.totalPrice, periodStart, periodEnd },
+          });
+        }
+      }
+    } catch (popError) {
+      console.error('Failed to update product popularity in sync (post-commit):', popError);
+    }
+
     // Log audit for successful offline sale sync
     if (actionType === "sale:create" && result.data && !result.cached) {
       await logAudit({
@@ -286,18 +350,27 @@ export async function POST(request: NextRequest) {
       message: `${actionType} synced successfully`,
     });
   } catch (error: unknown) {
-    console.error("Error syncing data:", error);
+    const rid = errorId();
+    console.error("Error syncing data:", { rid, error });
     if (error instanceof SyncRejection) {
-      const status = error.message.startsWith("CONFLICT:") ? 409 : 400;
+      const isConflict = error.message.startsWith("CONFLICT:");
       return NextResponse.json(
-        { success: false, error: error.message },
-        { status },
+        {
+          success: false,
+          code: isConflict ? "VERSION_CONFLICT" : "VALIDATION_FAILED",
+          error: error.message,
+          requestId: rid,
+        },
+        { status: isConflict ? 409 : 400 },
       );
     }
+    // MP-35/SEC-003: never leak internal/prisma details to the client.
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : "Failed to sync data",
+        code: "INTERNAL_ERROR",
+        error: "Request could not be completed",
+        requestId: rid,
       },
       { status: 500 },
     );
@@ -334,12 +407,8 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
     // already in tx
     // VALIDATION PHASE: Check all prerequisites before creating anything
 
-    const itemTotalMismatch = findSaleItemTotalMismatch(saleData.items);
-    if (itemTotalMismatch) {
-      throw new SyncRejection(itemTotalMismatch);
-    }
-
-    // 1. Lock products + plan stock (FOR UPDATE, auto-adjust, blended COGS)
+    // 1. Lock products + plan stock FIRST (sorted FOR UPDATE, auto-adjust, blended COGS).
+    // Lock ordering is the deadlock guard — validation never precedes locking.
     // Bug 7 note: rejectOnShortage=false here because the sale ALREADY HAPPENED offline —
     // the customer physically received the goods. Blocking sync retroactively would corrupt
     // the ledger. The shortage is recorded in autoAdjusted for transparency.
@@ -363,57 +432,47 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
       }
     }
 
-    // 3. Validate basic sale data
-    if (!saleData.items || saleData.items.length === 0) {
-      throw new SyncRejection("Sale must have at least one item");
-    }
-
-    if ((saleData.totalAmount || 0) < 0) {
-      throw new SyncRejection("Total amount cannot be negative");
-    }
-    const totalAmount = toMoneyDecimal(saleData.totalAmount || 0);
-    const amountReceived = toMoneyDecimal(saleData.amountReceived || 0);
-    const amountPaid = toMoneyDecimal(saleData.amountPaid || 0);
-    const prepaidToUse = toMoneyDecimal(saleData.prepaidAmountUsed || 0);
-    const changeAsPrepayment = toMoneyDecimal(saleData.changeAsPrepayment || 0);
-    const debtRepaymentAmount = toMoneyDecimal(saleData.debtRepaymentAmount || 0);
-    const externalPaidAmount = subtractMoney(amountPaid, prepaidToUse);
-
-    if (amountPaid.gt(totalAmount)) {
-      throw new SyncRejection(`Amount paid (${amountPaid.toString()}) cannot exceed sale total (${totalAmount.toString()})`);
-    }
-
-    if (prepaidToUse.gt(amountPaid)) {
-      throw new SyncRejection("Prepaid amount cannot exceed total amount paid");
-    }
-
-    if (!saleData.customerId && (prepaidToUse.gt(0) || changeAsPrepayment.gt(0))) {
-      throw new SyncRejection("Prepaid balance can only be used with a selected customer");
-    }
-
-    if (
-      (changeAsPrepayment.gt(0) || debtRepaymentAmount.gt(0)) &&
-      amountReceived.lt(addMoney(externalPaidAmount, addMoney(changeAsPrepayment, debtRepaymentAmount)))
-    ) {
-      throw new SyncRejection("Received amount does not cover sale payment, prepaid change, and due clearance");
+    // MP-21: canonical totals core shared with /api/sales (identical math + messages).
+    // Walk-in full-payment is enforced here too (parity): due without a customer
+    // is uncollectible; violations dead-letter with local rollback on device.
+    let totalAmount: Decimal;
+    let amountReceived: Decimal;
+    let amountPaid: Decimal;
+    let prepaidToUse: Decimal;
+    let changeAsPrepayment: Decimal;
+    let debtRepaymentAmount: Decimal;
+    let externalPaidAmount: Decimal;
+    try {
+      const totals = computeSaleTotals({
+        items: saleData.items,
+        discount: saleData.discount,
+        tax: saleData.tax,
+        amountPaid: saleData.amountPaid,
+        amountReceived: saleData.amountReceived,
+        prepaidAmountUsed: saleData.prepaidAmountUsed,
+        changeAsPrepayment: saleData.changeAsPrepayment,
+        debtRepaymentAmount: saleData.debtRepaymentAmount,
+        customerId: saleData.customerId,
+        paymentMethod: saleData.paymentMethod,
+        cashAmount: (saleData as any).cashAmount,
+        upiAmount: (saleData as any).upiAmount,
+      });
+      totalAmount = totals.totalAmount;
+      amountReceived = totals.amountReceived;
+      amountPaid = totals.amountPaidValue;
+      prepaidToUse = totals.prepaidToUse;
+      changeAsPrepayment = totals.changeAsPrepayment;
+      debtRepaymentAmount = totals.debtRepaymentAmount;
+      externalPaidAmount = totals.externalPaidAmount;
+    } catch (e) {
+      if (e instanceof SaleValidationError) throw new SyncRejection(e.message);
+      throw e;
     }
 
     // Bug 3 fix: determine payment method and preserve cash/UPI breakdown
     const pMethodRaw = saleData.paymentMethod ? String(saleData.paymentMethod).toUpperCase() : 'CASH';
     const cashAmt = (saleData as any).cashAmount ?? null;
     const upiAmt = (saleData as any).upiAmount ?? null;
-
-    // Split-payment consistency for MIXED sales.
-    if (pMethodRaw === 'MIXED' && (cashAmt != null || upiAmt != null)) {
-      const cash = toMoneyDecimal(cashAmt || 0);
-      const upi = toMoneyDecimal(upiAmt || 0);
-      if (cash.lt(0) || upi.lt(0)) {
-        throw new SyncRejection('Cash/UPI amounts cannot be negative');
-      }
-      if (!addMoney(cash, upi).equals(externalPaidAmount)) {
-        throw new SyncRejection('Mixed payment: cash + UPI must equal the externally paid amount');
-      }
-    }
 
     // Server-authoritative pricing / discount authorization.
     const priceRows = await tx.product.findMany({
@@ -437,10 +496,12 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
       throw new SyncRejection(pricingCheck.message);
     }
 
-    // CREATE PHASE: sale rows use blended cost (owned @ WAC, shortage @ 0)
-    let sale: any;
-    try {
-      sale = await tx.sale.create({
+    // CREATE PHASE: sale rows use blended cost (owned @ WAC, shortage @ 0).
+    // MP-31: no raw-SQL fallback. If Prisma create fails the transaction
+    // aborts and must stay aborted — running INSERTs afterwards can never
+    // work ("current transaction is aborted") and only hides schema drift.
+    // Fix drift with a migration instead.
+    const sale: any = await tx.sale.create({
         data: {
           id: saleData.id,
           businessId,
@@ -473,62 +534,6 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
         },
         include: { items: true },
       });
-    } catch (createErr: any) {
-      if (
-        createErr?.message?.includes('SaleStatus') ||
-        createErr?.message?.includes('shift_id') ||
-        createErr?.code === '42704' ||
-        createErr?.code === '42703'
-      ) {
-        console.warn('[sync] Prisma sale.create failed due to schema mismatch, falling back to raw query:', createErr.message);
-        const saleId = saleData.id || uuidv4();
-        const pMethod = (saleData.paymentMethod ? String(saleData.paymentMethod).toUpperCase() : 'CASH');
-        const pStatus = (saleData.paymentStatus ? String(saleData.paymentStatus).toUpperCase() : 'PAID');
-        const sStatus = (saleData.status ? String(saleData.status).toUpperCase() : 'COMPLETED');
-
-        await tx.$executeRaw`
-          INSERT INTO "sales" (
-            "id", "business_id", "invoice_number", "user_id", "customer_id",
-            "subtotal", "discount", "tax", "total_amount", "amount_paid",
-            "cash_amount", "upi_amount",
-            "payment_method", "payment_status", "status", "notes", "offline_synced",
-            "created_at", "updated_at"
-          ) VALUES (
-            ${saleId}, ${businessId}, ${saleData.invoiceNumber}, ${saleData.userId || null}, ${saleData.customerId || null},
-            ${saleData.subtotal || 0}, ${saleData.discount || 0}, ${saleData.tax || 0}, ${saleData.totalAmount || 0}, ${saleData.amountPaid || 0},
-            ${cashAmt}, ${upiAmt},
-            ${pMethod}::"PaymentMethod", ${pStatus}::"PaymentStatus", ${sStatus}, ${saleData.notes || null}, true,
-            NOW(), NOW()
-          )
-        `;
-
-        for (const item of saleData.items) {
-          const itemId = uuidv4();
-          const costPrice = costPriceForProduct(plansByProductId, item.productId, 0);
-          await tx.$executeRaw`
-            INSERT INTO "sale_items" (
-              "id", "sale_id", "product_id", "product_name", "quantity",
-              "unit_price", "cost_price_at_sale", "total_price", "discount", "tax_rate"
-            ) VALUES (
-              ${itemId}, ${saleId}, ${item.productId}, ${item.productName}, ${item.quantity},
-              ${item.unitPrice}, ${costPrice}, ${item.totalPrice}, 0, 0
-            )
-          `;
-        }
-
-        sale = {
-          id: saleId,
-          businessId,
-          invoiceNumber: saleData.invoiceNumber,
-          userId: saleData.userId,
-          customerId: saleData.customerId,
-          totalAmount: saleData.totalAmount,
-          items: saleData.items,
-        };
-      } else {
-        throw createErr;
-      }
-    }
 
     await applySaleStockPlans(tx, {
       saleId: sale.id,
@@ -677,50 +682,23 @@ async function syncSale(tx: Prisma.TransactionClient, saleData: z.infer<typeof S
                dataUpdate.totalPaid = { increment: externalPaid.toNumber() };
              }
 
-             await tx.customer.update({
-                where: { id: saleData.customerId },
+             await tx.customer.updateMany({
+                where: { id: saleData.customerId, businessId },
                 data: dataUpdate
              });
           }
         }
       }
 
-      // Update product popularity for synced sale
-      try {
-        const now = new Date();
-        const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
-        const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-        
-        await Promise.all(saleData.items.map(async (item) => {
-          const qty = Number(item.quantity);
-          const revenue = Number(item.totalPrice);
-          
-          await tx.productPopularity.upsert({
-            where: {
-              productId_periodStart: {
-                productId: item.productId,
-                periodStart: periodStart
-              }
-            },
-            update: {
-              monthlySalesCount: { increment: qty },
-              totalRevenue: { increment: revenue },
-              periodEnd: periodEnd,
-              updatedAt: new Date()
-            },
-            create: {
-              businessId,
-              productId: item.productId,
-              monthlySalesCount: qty,
-              totalRevenue: revenue,
-              periodStart: periodStart,
-              periodEnd: periodEnd
-            }
-          });
+      // MP-31: popularity is best-effort analytics — stash items for AFTER commit.
+      // A popularity failure inside the sale transaction would abort the whole
+      // sale in Postgres (a failed statement poisons the tx; catch cannot save it).
+      (sale as { __popularityItems?: Array<{ productId: string; quantity: number; totalPrice: number }> }).__popularityItems =
+        saleData.items.map((item) => ({
+          productId: item.productId,
+          quantity: Number(item.quantity),
+          totalPrice: Number(item.totalPrice),
         }));
-      } catch (popError) {
-        console.error("Failed to update product popularity in sync:", popError);
-      }
 
       return sale;
     }
@@ -957,6 +935,9 @@ async function syncProduct(tx: Prisma.TransactionClient, productData: z.infer<ty
         const newStock = Number(currentStock);
         const delta = Number.isFinite(newStock) ? newStock - previousStock : 0;
 
+        // MP-29: offline product edit must NOT overwrite server stock/cost.
+        // Stock moves only via quantityChange/stock-entry (WAC + history).
+        // A name fix from a stale device must never rewind server stock.
         const result = await tx.product.update({
           where: { id },
           data: {
@@ -964,28 +945,16 @@ async function syncProduct(tx: Prisma.TransactionClient, productData: z.infer<ty
             name,
             nameBn: nameBn || null,
             category,
-            buyingPrice,
             sellingPrice,
             unit,
-            currentStock: newStock,
             minStockLevel,
             isActive,
           },
         });
 
-        // Keep the inventory audit trail consistent when an offline edit changes stock.
-        if (delta !== 0) {
-          await tx.stockHistory.create({
-            data: {
-              businessId,
-              productId: id,
-              changeType: 'ADJUSTMENT',
-              quantity: delta,
-              reason: `Offline product edit stock adjustment (${previousStock} → ${newStock})`,
-              referenceId: id,
-            },
-          });
-        }
+        // MP-29: stock intentionally untouched — no ADJUSTMENT history here.
+        // Stock moves only via quantityChange/stock-entry paths.
+        void previousStock; void newStock; void delta;
 
         return result;
       }
@@ -1034,8 +1003,11 @@ export async function PUT(request: NextRequest) {
   const authResult = await requireAuth(request);
   if (!authResult.authorized) return authResult.response!;
 
-  const ctx = await requireBusinessContext();
+  const ctx = await requireBusinessContext(authResult.session);
   if (ctx instanceof NextResponse) return ctx;
+  // MP-27: marking items synced rewrites sync state — require sales.create.
+  const denied = checkPermission(ctx, 'sales.create');
+  if (denied) return denied;
 
   const businessId = ctx.business.id;
 

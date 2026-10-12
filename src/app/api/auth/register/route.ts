@@ -13,6 +13,7 @@ import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { z } from "zod";
+import { normalizePhoneToE164 } from "@/lib/phone";
 
 const RegisterSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters").max(100),
@@ -81,13 +82,19 @@ const STORE_TYPE_CATEGORIES: Record<string, Array<{ name: string; nameBn: string
 };
 
 function generateSlug(name: string): string {
-  return name
+  const ascii = name
     .toLowerCase()
     .replace(/[^a-z0-9\s-]/g, "")
     .replace(/\s+/g, "-")
     .replace(/-+/g, "-")
     .trim()
     .substring(0, 60);
+  // MP-38: Bengali-only names ("লক্ষ্মণ ভাণ্ডার") produce an empty slug.
+  // Fall back to a random shop slug instead of "" / "-1".
+  if (!ascii || ascii === "-") {
+    return `shop-${Math.random().toString(36).slice(2, 8)}`;
+  }
+  return ascii;
 }
 
 async function ensureUniqueSlug(baseSlug: string): Promise<string> {
@@ -128,7 +135,8 @@ export async function POST(request: NextRequest) {
     } = parsed.data;
 
     const cleanUsername = username.trim().toLowerCase();
-    const cleanPhone = phone?.trim() || null;
+    // MP-05: store canonical phone so exact lookups match (never fuzzy).
+    const cleanPhone = phone?.trim() ? (normalizePhoneToE164(phone.trim()) ?? phone.trim()) : null;
 
     // Check for existing username
     const existingUsername = await db.user.findFirst({
@@ -246,9 +254,16 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     console.error("[register] Error:", error);
-    const details = error instanceof Error ? error.message : String(error);
+    // MP-38/SEC-003: unique-race → 409, never leak Prisma internals.
+    const code = (error as { code?: string })?.code;
+    if (code === "P2002") {
+      return NextResponse.json(
+        { error: "Username, phone, or business already exists" },
+        { status: 409 }
+      );
+    }
     return NextResponse.json(
-      { error: details || "Registration failed. Please try again.", details },
+      { error: "Registration failed. Please try again." },
       { status: 500 }
     );
   }

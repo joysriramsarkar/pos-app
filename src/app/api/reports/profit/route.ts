@@ -341,7 +341,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         error: "Failed to fetch profit report",
-        details: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 500 },
     );

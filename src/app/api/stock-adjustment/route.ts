@@ -6,6 +6,7 @@ import { StockAdjustmentInputSchema } from '@/schemas';
 import { requireAuth } from '@/lib/api-middleware';
 import { requireBusinessContext, checkPermission } from '@/lib/tenant';
 import { logAudit } from '@/lib/audit';
+import { toClientError } from '@/lib/api-errors';
 
 const ADJUSTMENT_LABELS: Record<string, string> = {
   home_consumption: 'বাড়ির খরচ',
@@ -90,7 +91,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: unknown) {
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Failed to adjust stock' },
+      { success: false, error: toClientError(error, 'Failed to adjust stock').message },
       { status: 500 },
     );
   }

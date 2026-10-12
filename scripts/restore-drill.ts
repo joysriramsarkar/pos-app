@@ -16,7 +16,7 @@ import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 import Decimal from "decimal.js";
-import { validateBackup } from "@/lib/backup-validator";
+import { validateBackup } from "../src/lib/backup-validator";
 
 const url = process.env.DATABASE_URL ?? "";
 if (!url || /supabase\.co|neon\./.test(url)) {

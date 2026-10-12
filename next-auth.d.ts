@@ -9,6 +9,7 @@ declare module "next-auth" {
     businessId?: string;
     businessName?: string;
     requiresPasswordChange?: boolean;
+    sessionVersion?: number;
   }
 
   interface Session {
@@ -22,6 +23,7 @@ declare module "next-auth" {
       businessId?: string;
       businessName?: string;
       requiresPasswordChange?: boolean;
+      sessionVersion?: number;
     };
   }
 }
@@ -34,5 +36,6 @@ declare module "next-auth/jwt" {
     businessId?: string;
     businessName?: string;
     requiresPasswordChange?: boolean;
+    sessionVersion?: number;
   }
 }

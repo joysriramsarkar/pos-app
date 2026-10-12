@@ -106,7 +106,7 @@ export async function GET(request: NextRequest) {
     } catch (error: unknown) {
       console.error("Failed to fetch stock report:", error);
       return NextResponse.json(
-        { error: "Failed to fetch stock report", details: error instanceof Error ? error.message : "Unknown error" },
+        { error: "Failed to fetch stock report" },
         { status: 500 }
       );
     }

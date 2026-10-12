@@ -6,6 +6,7 @@ import { requireAuth } from "@/lib/api-middleware";
 import { requireBusinessContext, checkPermission } from "@/lib/tenant";
 import { logAudit } from "@/lib/audit";
 import { ExpenseInputSchema } from "@/schemas";
+import { toClientError } from '@/lib/api-errors';
 
 const getIp = (req: NextRequest) => req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || undefined;
 
@@ -248,9 +249,9 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({ success: true, data: expense });
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : "Failed to update expense";
     console.error("Error updating expense:", error);
-    return NextResponse.json({ success: false, error: errorMessage }, { status: 500 });
+    const { message, status } = toClientError(error, "Failed to update expense");
+    return NextResponse.json({ success: false, error: message }, { status });
   }
 }
 

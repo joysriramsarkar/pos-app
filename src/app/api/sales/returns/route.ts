@@ -6,6 +6,7 @@ import { requireAuth } from "@/lib/api-middleware";
 import { requireBusinessContext, checkPermission } from "@/lib/tenant";
 import { logAudit } from "@/lib/audit";
 import { mapRefundMethod, processSaleReturn } from "@/lib/sale-returns";
+import { toClientError } from '@/lib/api-errors';
 
 const getIp = (req: NextRequest) =>
   req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || undefined;
@@ -136,9 +137,15 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, data: result.saleReturn });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Failed to process return";
-    const status = (error as { status?: number })?.status
-      ?? (message.includes("not found") ? 404 : message.includes("Failed") ? 500 : 400);
+    const raw = error instanceof Error ? error.message : "Failed to process return";
+    const coded = (error as { status?: number })?.status;
+    if (coded === 404 || coded === 400) {
+      return NextResponse.json({ success: false, error: raw }, { status: coded });
+    }
+    if (coded === 409) {
+      return NextResponse.json({ success: false, error: raw }, { status: 409 });
+    }
+    const { message, status } = toClientError(error, "Failed to process return");
     return NextResponse.json({ success: false, error: message }, { status });
   }
 }

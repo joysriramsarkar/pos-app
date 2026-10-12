@@ -8,10 +8,11 @@ import { requireBusinessContext, checkPermission } from '@/lib/tenant';
 import { addMoney, toMoneyNumber } from '@/lib/money';
 import { logAudit } from '@/lib/audit';
 import {
-  reserveIdempotency,
-  finalizeIdempotency,
-  releaseIdempotency,
+  claimIdempotencyTx,
+  finalizeIdempotencyTx,
+  IdempotencyInProgress,
 } from '@/lib/idempotency';
+import { toClientError } from '@/lib/api-errors';
 
 const prepaymentSchema = z.object({
   customerId: z.string().cuid(),
@@ -43,27 +44,9 @@ export async function POST(req: NextRequest) {
 
     const { customerId, amount } = validation.data;
 
-    // DB-level idempotency: reserve the key up front. Concurrent retries of the
-    // same HTTP request cannot both credit the customer.
+    // MP-32: idempotency INSIDE the business transaction (claim + finalize
+    // commit atomically — no stuck claims, no swallowed finalizes).
     const idempotencyKey = req.headers.get('X-Idempotency-Key');
-    let claim: Awaited<ReturnType<typeof reserveIdempotency>> | null = null;
-
-    if (idempotencyKey) {
-      claim = await reserveIdempotency(businessId, 'prepayment:add', idempotencyKey);
-      if (claim.status === 'replay') {
-        const cached = (claim.result ?? {}) as { customerId?: string };
-        const customer = cached.customerId
-          ? await db.customer.findFirst({ where: { id: cached.customerId, businessId } })
-          : await db.customer.findFirst({ where: { id: customerId, businessId } });
-        return NextResponse.json({ success: true, data: customer, idempotent: true });
-      }
-      if (claim.status === 'in_progress') {
-        return NextResponse.json(
-          { success: false, error: 'একই অনুরোধ প্রক্রিয়াধীন আছে (duplicate request in progress)' },
-          { status: 409 },
-        );
-      }
-    }
 
     const referenceId = idempotencyKey
       ? `PREPAY-${idempotencyKey}`
@@ -71,7 +54,12 @@ export async function POST(req: NextRequest) {
 
     let updatedCustomer: Awaited<ReturnType<typeof db.customer.update>>;
     try {
-      updatedCustomer = await db.$transaction(async (tx) => {
+      const outcome = await db.$transaction(async (tx) => {
+        const claim = await claimIdempotencyTx<{ customerId: string }>(
+          tx, businessId, 'prepayment:add', idempotencyKey,
+        );
+        if (claim.replay) return { replay: claim.result } as const;
+
         const customerRaw = await tx.$queryRaw<any[]>`
           SELECT id, name, "total_due" as "totalDue", "prepaid_balance" as "prepaidBalance"
           FROM customers
@@ -87,7 +75,7 @@ export async function POST(req: NextRequest) {
         const newPrepaidBalance = addMoney(customer.prepaidBalance, amount);
 
         const updated = await tx.customer.update({
-          where: { id: customerId },
+          where: { id: customerId, businessId },
           data: { prepaidBalance: newPrepaidBalance },
         });
 
@@ -104,17 +92,28 @@ export async function POST(req: NextRequest) {
           },
         });
 
-        return updated;
+        if (claim.claim) {
+          await finalizeIdempotencyTx(tx, claim.claim, { customerId });
+        }
+        return { data: updated } as const;
       });
+
+      if ("replay" in outcome) {
+        const cached = (outcome.replay ?? {}) as { customerId?: string };
+        const customer = cached.customerId
+          ? await db.customer.findFirst({ where: { id: cached.customerId, businessId } })
+          : await db.customer.findFirst({ where: { id: customerId, businessId } });
+        return NextResponse.json({ success: true, data: customer, idempotent: true });
+      }
+      updatedCustomer = outcome.data;
     } catch (txError) {
-      if (claim && claim.status === 'claimed') {
-        await releaseIdempotency(claim.idempotencyKey).catch(() => {});
+      if (txError instanceof IdempotencyInProgress) {
+        return NextResponse.json(
+          { success: false, code: "INPROGRESS", error: 'একই অনুরোধ প্রক্রিয়াধীন আছে (duplicate request in progress)' },
+          { status: 409, headers: { "Retry-After": "5" } },
+        );
       }
       throw txError;
-    }
-
-    if (claim && claim.status === 'claimed') {
-      await finalizeIdempotency(claim.idempotencyKey, { customerId }).catch(() => {});
     }
 
     // Bug 13 fix: audit log was missing for prepayment additions
@@ -131,9 +130,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, data: updatedCustomer });
   } catch (error: unknown) {
     console.error('Error adding prepayment:', error);
-    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
-    const statusCode = errorMessage === 'Customer not found' ? 404 : 500;
-    return NextResponse.json({ success: false, error: errorMessage }, { status: statusCode });
+    if (error instanceof Error && error.message === 'Customer not found') {
+      return NextResponse.json({ success: false, error: error.message }, { status: 404 });
+    }
+    const { message, status } = toClientError(error, 'Failed to add prepayment');
+    return NextResponse.json({ success: false, error: message }, { status });
   }
 }
 

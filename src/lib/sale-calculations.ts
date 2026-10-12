@@ -1,4 +1,5 @@
 import type { SaleItemInput } from "@/schemas";
+import type Decimal from "decimal.js";
 import { multiplyMoney, toMoneyNumber } from "@/lib/money";
 
 export interface StockDeduction {
@@ -28,7 +29,7 @@ export function findSaleItemTotalMismatch(
   items: Pick<
     SaleItemInput,
     "productId" | "productName" | "quantity" | "unitPrice" | "totalPrice"
-  >[],
+  >[] | { productId: string; productName: string; quantity: Decimal.Value; unitPrice: Decimal.Value; totalPrice: Decimal.Value }[],
 ): string | null {
   for (const item of items) {
     const expectedTotal = multiplyMoney(item.quantity, item.unitPrice).toNumber();

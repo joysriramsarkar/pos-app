@@ -157,7 +157,7 @@ describe("Multi-Tenant Architecture & Isolation Tests", () => {
   describe("2. RBAC & Permission Enforcement within Tenant Context", () => {
     const cashierContext: BusinessContext = {
       user: { id: "u_cashier", username: "cashier1", name: "Cashier 1", isActive: true },
-      business: { id: "biz_1", name: "Shop", slug: "shop", currency: "INR", timezone: "Asia/Kolkata", isActive: true },
+      business: { id: "biz_1", name: "Shop", slug: "shop", currency: "INR", timezone: "Asia/Kolkata", isActive: true, phone: null, address: null },
       membership: { id: "m_1", role: "CASHIER", isActive: true },
       role: "CASHIER",
       permissions: getPermissionsForRole("CASHIER"),
@@ -165,7 +165,7 @@ describe("Multi-Tenant Architecture & Isolation Tests", () => {
 
     const ownerContext: BusinessContext = {
       user: { id: "u_owner", username: "owner1", name: "Owner 1", isActive: true },
-      business: { id: "biz_1", name: "Shop", slug: "shop", currency: "INR", timezone: "Asia/Kolkata", isActive: true },
+      business: { id: "biz_1", name: "Shop", slug: "shop", currency: "INR", timezone: "Asia/Kolkata", isActive: true, phone: null, address: null },
       membership: { id: "m_2", role: "OWNER", isActive: true },
       role: "OWNER",
       permissions: getPermissionsForRole("OWNER"),

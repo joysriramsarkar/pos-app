@@ -8,10 +8,11 @@ import { requireBusinessContext, checkPermission } from '@/lib/tenant';
 import { toMoneyNumber } from '@/lib/money';
 import { logAudit } from '@/lib/audit';
 import {
-  reserveIdempotency,
-  finalizeIdempotency,
-  releaseIdempotency,
+  claimIdempotencyTx,
+  finalizeIdempotencyTx,
+  IdempotencyInProgress,
 } from '@/lib/idempotency';
+import { toClientError } from '@/lib/api-errors';
 
 const supplierPaymentSchema = z.object({
   supplierId: z.string().cuid(),
@@ -105,25 +106,17 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // DB-level idempotency: retrying this request must not double-pay.
+    // MP-32: idempotency INSIDE the business transaction (claim + finalize
+    // commit atomically — no stuck claims, no swallowed finalizes).
     const idempotencyKey = request.headers.get('X-Idempotency-Key');
-    let claim: Awaited<ReturnType<typeof reserveIdempotency>> | null = null;
-    if (idempotencyKey) {
-      claim = await reserveIdempotency(businessId, 'supplier:payment', idempotencyKey);
-      if (claim.status === 'replay') {
-        return NextResponse.json({ success: true, data: claim.result, idempotent: true });
-      }
-      if (claim.status === 'in_progress') {
-        return NextResponse.json(
-          { success: false, error: 'একই অনুরোধ প্রক্রিয়াধীন আছে (duplicate request in progress)' },
-          { status: 409 },
-        );
-      }
-    }
 
     let result: Record<string, unknown>;
     try {
-      result = await db.$transaction(async (tx) => {
+      const outcome = await db.$transaction(async (tx) => {
+        const claim = await claimIdempotencyTx<Record<string, unknown>>(
+          tx, businessId, 'supplier:payment', idempotencyKey,
+        );
+        if (claim.replay) return { replay: claim.result } as const;
       // Lock the supplier row to serialise concurrent payments for this supplier.
       const lockRows = await tx.$queryRaw<Array<{ id: string }>>`
         SELECT id FROM suppliers WHERE id = ${supplierId} AND business_id = ${businessId} FOR UPDATE
@@ -182,8 +175,8 @@ export async function POST(request: NextRequest) {
         const newPaymentStatus: any =
           Math.abs(newPaidAmount - Number(po.totalAmount)) < 0.01 ? 'PAID' : 'PARTIAL';
 
-        await tx.purchase.update({
-          where: { id: po.id },
+        await tx.purchase.updateMany({
+          where: { id: po.id, businessId },
           data: {
             paidAmount: newPaidAmount,
             paymentStatus: newPaymentStatus,
@@ -225,7 +218,7 @@ export async function POST(request: NextRequest) {
         ipAddress: getIp(request),
       });
 
-      return {
+      const payload = {
         ...updatedSupplier,
         purchases: undefined,
         expenses: undefined,
@@ -233,23 +226,33 @@ export async function POST(request: NextRequest) {
         totalPaid,
         totalDue,
       };
+        if (claim.claim) {
+          await finalizeIdempotencyTx(tx, claim.claim, payload);
+        }
+        return { data: payload } as const;
       });
+
+      if ("replay" in outcome) {
+        return NextResponse.json({ success: true, data: outcome.replay, idempotent: true });
+      }
+      result = outcome.data;
     } catch (txError) {
-      if (claim && claim.status === 'claimed') {
-        await releaseIdempotency(claim.idempotencyKey).catch(() => {});
+      if (txError instanceof IdempotencyInProgress) {
+        return NextResponse.json(
+          { success: false, code: "INPROGRESS", error: 'একই অনুরোধ প্রক্রিয়াধীন আছে (duplicate request in progress)' },
+          { status: 409, headers: { "Retry-After": "5" } },
+        );
       }
       throw txError;
-    }
-
-    if (claim && claim.status === 'claimed') {
-      await finalizeIdempotency(claim.idempotencyKey, result).catch(() => {});
     }
 
     return NextResponse.json({ success: true, data: result });
   } catch (error: unknown) {
     console.error('Error recording supplier payment:', error);
-    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
-    const statusCode = errorMessage === 'Supplier not found' ? 404 : 500;
-    return NextResponse.json({ success: false, error: errorMessage }, { status: statusCode });
+    if (error instanceof Error && error.message === 'Supplier not found') {
+      return NextResponse.json({ success: false, error: error.message }, { status: 404 });
+    }
+    const { message, status } = toClientError(error, 'Failed to record supplier payment');
+    return NextResponse.json({ success: false, error: message }, { status });
   }
 }

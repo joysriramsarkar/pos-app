@@ -7,7 +7,6 @@ README.md
 .next
 .git
 .github
-package-lock.json
 yarn.lock
 pnpm-lock.yaml
 bun.lock

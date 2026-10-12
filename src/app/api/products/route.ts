@@ -92,9 +92,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: true, data: products, nextCursor });
   } catch (error: unknown) {
     console.error('Error fetching products:', error);
-    const details = error instanceof Error ? error.message : String(error);
     return NextResponse.json(
-      { success: false, error: 'Failed to fetch products', details },
+      { success: false, error: 'Failed to fetch products' },
       { status: 500 },
     );
   }
@@ -337,11 +336,12 @@ export async function PUT(request: NextRequest) {
     }
 
     await logAudit({
+      businessId,
       userId: ctx.user.id,
       action: 'UPDATE_PRODUCT',
       entityType: 'Product',
       entityId: product.id,
-      details: { name: product.name, changes: validatedData, businessId },
+      details: { name: product.name, changes: validatedData },
       ipAddress: getIp(request),
       userAgent: request.headers.get('user-agent') || undefined,
     });

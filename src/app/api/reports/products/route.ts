@@ -126,7 +126,7 @@ export async function GET(request: NextRequest) {
   } catch (error: unknown) {
     console.error("Failed to fetch product report:", error);
     return NextResponse.json(
-      { error: "Failed to fetch product report", details: (error instanceof Error ? error.message : "Unknown error") },
+      { error: "Failed to fetch product report" },
       { status: 500 },
     );
   }

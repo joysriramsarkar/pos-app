@@ -163,6 +163,11 @@ export interface SyncQueueItem {
   retryCount: number;
   error?: string;
   createdAt: Date;
+  /** Last retry/mutation time (OFF-002 atomic retry bookkeeping). */
+  updatedAt?: Date;
+  // OFF-002/H15 cross-tab lease (optional record fields — no store upgrade needed).
+  leaseOwner?: string;
+  leaseExpiresAt?: Date | number;
 }
 
 // ============================================================================
