@@ -135,6 +135,13 @@ ALTER TABLE "users" ALTER COLUMN "name" SET NOT NULL;
 ALTER TABLE "users" DROP COLUMN IF EXISTS "password";
 ALTER TABLE "users" DROP COLUMN IF EXISTS "role";
 
+-- Repoint role_permissions.role off the legacy UserRole enum BEFORE dropping
+-- the type (fresh-DB replay fix: DROP TYPE must not leave dependent columns —
+-- previously the conversion below ran AFTER the drop and fresh replay died
+-- with 2BP01 "cannot drop type UserRole because other objects depend on it").
+ALTER TABLE "role_permissions" DROP COLUMN IF EXISTS "role";
+ALTER TABLE "role_permissions" ADD COLUMN "role" "BusinessRole" NOT NULL DEFAULT 'CASHIER';
+
 -- Drop legacy UserRole enum if exists
 DROP TYPE IF EXISTS "UserRole";
 
@@ -183,10 +190,6 @@ ALTER TABLE "purchases" ADD COLUMN IF NOT EXISTS "delivery_status" TEXT NOT NULL
 ALTER TABLE "purchases" ADD COLUMN IF NOT EXISTS "paid_amount" DECIMAL(65,30) NOT NULL DEFAULT 0;
 ALTER TABLE "purchases" ADD COLUMN IF NOT EXISTS "payment_method" TEXT NOT NULL DEFAULT 'Cash';
 ALTER TABLE "purchases" ALTER COLUMN "total_amount" SET DATA TYPE DECIMAL(65,30);
-
--- role_permissions
-ALTER TABLE "role_permissions" DROP COLUMN IF EXISTS "role";
-ALTER TABLE "role_permissions" ADD COLUMN "role" "BusinessRole" NOT NULL DEFAULT 'CASHIER';
 
 -- sale_items
 ALTER TABLE "sale_items" ALTER COLUMN "quantity" SET DATA TYPE DECIMAL(65,30);
