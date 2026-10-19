@@ -25,6 +25,7 @@ const CURRENCY_PRESETS = [
 
 export default function BillingTab({ localSettings, handleChange, handleSave, isSaving, hasChanges }: BillingTabProps) {
   const t = useTranslations("Settings");
+  const tb = useTranslations("Billing");
 
   return (
     <Card>
@@ -43,6 +44,7 @@ export default function BillingTab({ localSettings, handleChange, handleSave, is
               value={localSettings.default_discount}
               onChange={(e) => handleChange("default_discount", Number(e.target.value))}
             />
+            <p className="text-xs text-muted-foreground">{tb("default_discount_hint")}</p>
           </div>
           <div className="space-y-2">
             <Label>{t("tax_rate")}</Label>

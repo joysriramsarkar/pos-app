@@ -18,6 +18,7 @@ import { useSettingsStore } from '@/stores/settings-store';
 import { useTranslations } from 'next-intl';
 import { convertBengaliToEnglishNumerals } from '@/lib/utils';
 import { toMoneyNumber } from '@/lib/money';
+import Decimal from 'decimal.js';
 import PrintDialog from '../PrintDialog';
 import { useNumberFormat } from '@/hooks/use-number-format';
 import {
@@ -105,7 +106,9 @@ export function CheckoutDialog({
   // Auto-update amount when remainingTotal changes (usePrepaid toggle)
   const updateAmountFields = useCallback(() => {
     if (paymentMethod === 'Mixed') {
-      setCashReceived(remainingTotal.toString());
+      // Mixed = the cashier types BOTH parts. Pre-filling cash with the full
+      // amount made the UPI part silently drop to 0 on submit.
+      setCashReceived('');
       setUpiReceived('');
       setAmountReceived('');
     } else {
@@ -196,6 +199,7 @@ export function CheckoutDialog({
 
   const handleQuickAmount = useCallback((amount: number) => {
     if (paymentMethod === 'Mixed') {
+      // Fill the cash leg, leave UPI for the cashier to type.
       setCashReceived(amount.toString());
       setUpiReceived('');
     } else {
@@ -204,10 +208,18 @@ export function CheckoutDialog({
     setInputError(null);
   }, [paymentMethod]);
 
+  /** Split the payable amount into two equal legs (cash + UPI). */
+  const handleSplitHalf = useCallback(() => {
+    const half = Math.floor(toMoneyNumber(new Decimal(remainingTotal).div(2)) * 100) / 100;
+    setCashReceived(String(half));
+    setUpiReceived(String(Math.max(0, toMoneyNumber(new Decimal(remainingTotal).minus(new Decimal(half))))));
+    setInputError(null);
+  }, [remainingTotal]);
+
   const handleExactAmount = useCallback(() => {
     if (paymentMethod === 'Mixed') {
       setCashReceived(Math.ceil(remainingTotal).toString());
-      setUpiReceived('');
+      setUpiReceived('0');
     } else {
       setAmountReceived(Math.ceil(remainingTotal).toString());
     }
@@ -215,6 +227,20 @@ export function CheckoutDialog({
   }, [remainingTotal, paymentMethod]);
 
   const handleComplete = useCallback(async () => {
+    if (paymentMethod === 'Mixed') {
+      const cashPart = Number(cashReceived) || 0;
+      const upiPart = Number(upiReceived) || 0;
+      if (cashPart + upiPart < remainingTotal) {
+        setInputError(
+          t('mixed_short', {
+            total: formatPrice(cashPart + upiPart),
+            amount: formatPrice(remainingTotal),
+          }),
+        );
+        return;
+      }
+    }
+
     if (paymentMethod !== 'Due' && parsedAmount < remainingTotal && !customerId) {
       setInputError(t('insufficient_amount', { amount: formatPrice(remainingTotal - parsedAmount) }));
       return;
@@ -408,6 +434,7 @@ export function CheckoutDialog({
               handleUpiChange={handleUpiChange}
               handleAmountChange={handleAmountChange}
               handleQuickAmount={handleQuickAmount}
+              handleSplitHalf={handleSplitHalf}
               isProcessing={isProcessing}
               parsedAmount={parsedAmount}
               change={change}

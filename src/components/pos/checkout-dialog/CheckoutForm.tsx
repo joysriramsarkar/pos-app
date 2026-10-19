@@ -55,6 +55,7 @@ interface CheckoutFormProps {
   handleUpiChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   handleAmountChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   handleQuickAmount: (amount: number) => void;
+  handleSplitHalf: () => void;
   isProcessing: boolean;
   parsedAmount: number;
   change: number;
@@ -96,6 +97,7 @@ export function CheckoutForm({
   handleUpiChange,
   handleAmountChange,
   handleQuickAmount,
+  handleSplitHalf,
   isProcessing,
   parsedAmount,
   change,
@@ -186,43 +188,62 @@ export function CheckoutForm({
             <Label htmlFor="amount-received" className="text-xs sm:text-sm">{t('amount_to_pay')}</Label>
 
             {paymentMethod === 'Mixed' ? (
-              <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
-                <div>
-                  <Label className="text-[10px] sm:text-xs">{t('cash')}</Label>
-                  <div className="relative">
-                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold text-sm">{currencySymbol}</span>
-                    <Input
-                      id="cash-received"
-                      type="text"
-                      inputMode="numeric"
-                      value={cashReceived}
-                      onChange={handleCashChange}
-                      placeholder="0"
-                      className="pl-7 text-lg sm:text-xl h-10 sm:h-12 font-semibold text-right"
-                      disabled={isProcessing}
-                      readOnly
-                      onFocus={e => e.currentTarget.removeAttribute('readonly')}
-                    />
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
+                  <div>
+                    <Label htmlFor="cash-received" className="text-[10px] sm:text-xs">{t('cash')}</Label>
+                    <div className="relative">
+                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold text-sm">{currencySymbol}</span>
+                      <Input
+                        id="cash-received"
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="off"
+                        value={cashReceived}
+                        onChange={handleCashChange}
+                        placeholder="0"
+                        className="pl-7 text-lg sm:text-xl h-10 sm:h-12 font-semibold text-right"
+                        disabled={isProcessing}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="upi-received" className="text-[10px] sm:text-xs">{t('upi')}</Label>
+                    <div className="relative">
+                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold text-sm">{currencySymbol}</span>
+                      <Input
+                        id="upi-received"
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="off"
+                        value={upiReceived}
+                        onChange={handleUpiChange}
+                        placeholder="0"
+                        className="pl-7 text-lg sm:text-xl h-10 sm:h-12 font-semibold text-right"
+                        disabled={isProcessing}
+                      />
+                    </div>
                   </div>
                 </div>
-                <div>
-                  <Label className="text-[10px] sm:text-xs">{t('upi')}</Label>
-                  <div className="relative">
-                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold text-sm">{currencySymbol}</span>
-                    <Input
-                      id="upi-received"
-                      type="text"
-                      inputMode="numeric"
-                      value={upiReceived}
-                      onChange={handleUpiChange}
-                      placeholder="0"
-                      className="pl-7 text-lg sm:text-xl h-10 sm:h-12 font-semibold text-right"
-                      disabled={isProcessing}
-                      readOnly
-                      onFocus={e => e.currentTarget.removeAttribute('readonly')}
-                    />
-                  </div>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[10px] sm:text-xs text-muted-foreground leading-tight">
+                    {t('mixed_split_hint')}
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleSplitHalf}
+                    disabled={isProcessing}
+                    className="shrink-0 h-8 text-xs touch-manipulation"
+                  >
+                    {t('split_half')}
+                  </Button>
                 </div>
+                <p className="text-center text-xs font-medium">
+                  {t('mixed_total')}:{' '}
+                  <span className="font-bold tabular-nums">{formatPrice(parsedAmount)}</span>
+                </p>
               </div>
             ) : (
               <div className="relative">
@@ -231,13 +252,12 @@ export function CheckoutForm({
                   id="amount-received"
                   type="text"
                   inputMode="numeric"
+                  autoComplete="off"
                   value={amountReceived}
                   onChange={handleAmountChange}
                   placeholder="0"
                   className="pl-7 text-lg sm:text-xl h-10 sm:h-12 font-semibold text-right"
                   disabled={isProcessing}
-                  readOnly
-                  onFocus={e => e.currentTarget.removeAttribute('readonly')}
                 />
               </div>
             )}

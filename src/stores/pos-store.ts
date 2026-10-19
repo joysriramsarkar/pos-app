@@ -75,9 +75,8 @@ export const useActiveTab = () => {
   return useCartStore((state) => state.getActiveTab());
 };
 
-const initialTabState: Omit<TabState, 'id' | 'name'> = {
+const initialTabState: Omit<TabState, 'id' | 'name' | 'discount'> = {
   items: [],
-  discount: 0,
   tax: 0,
   customerId: undefined,
   customerName: undefined,
@@ -88,8 +87,36 @@ const initialTabState: Omit<TabState, 'id' | 'name'> = {
   lastScannedBarcode: '',
 };
 
+/**
+ * Default discount % configured in Settings → Billing.
+ * Read lazily so it is picked up after the settings API resolves, and so the
+ * cart store keeps working even if the settings store is not mounted yet.
+ */
+function getDefaultDiscountPercent(): number {
+  try {
+    // Lazy require avoids a hard module cycle (settings-store does not import us,
+    // but tests may load either side first).
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { useSettingsStore } = require('@/stores/settings-store') as {
+      useSettingsStore: { getState: () => { settings: { default_discount?: number } } };
+    };
+    const raw = Number(useSettingsStore.getState().settings.default_discount);
+    if (!Number.isFinite(raw) || raw <= 0) return 0;
+    return Math.min(100, raw);
+  } catch {
+    return 0;
+  }
+}
+
+/** Subtotal -> default discount amount for a brand-new bill. */
+function defaultDiscountFor(subtotal: number): number {
+  const percent = getDefaultDiscountPercent();
+  if (percent <= 0) return 0;
+  return Math.max(0, Math.min(subtotal, toMoneyNumber(new Decimal(subtotal).mul(new Decimal(percent)).div(100))));
+}
+
 const initialCartState: CartState = {
-  tabs: [{ id: 'tab-1', name: 'Bill 1', ...initialTabState }],
+  tabs: [{ id: 'tab-1', name: 'Bill 1', ...initialTabState, discount: 0 }],
   activeTabId: 'tab-1',
   isOfflineMode: false,
   pendingSyncCount: 0,
@@ -109,7 +136,7 @@ export const useCartStore = create<CartState & CartActions>()(
         const newTabId = `tab-${uuidv4()}`;
         const newTabNumber = state.tabs.length + 1;
         return {
-          tabs: [...state.tabs, { id: newTabId, name: `Bill ${newTabNumber}`, ...initialTabState }],
+          tabs: [...state.tabs, { id: newTabId, name: `Bill ${newTabNumber}`, ...initialTabState, discount: 0 }],
           activeTabId: newTabId,
         };
       }),
@@ -188,6 +215,16 @@ export const useCartStore = create<CartState & CartActions>()(
             availableStock: product.currentStock,
           };
           get()._updateActiveTab({ items: [...currentItems, newItem] });
+        }
+
+        // Apply the Settings → Billing "Default Discount %" the first time a
+        // product lands in an empty bill. Skipped once the cashier has already
+        // set a discount (by hand or by a previous default) on this tab.
+        const tabAfter = get().getActiveTab();
+        if (tabAfter.discount === 0) {
+          const subtotal = tabAfter.items.reduce((sum, it) => sum + toMoneyNumber(it.totalPrice), 0);
+          const auto = defaultDiscountFor(subtotal);
+          if (auto > 0) get()._updateActiveTab({ discount: auto });
         }
       },
 
