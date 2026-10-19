@@ -70,10 +70,17 @@ export default function SettingsManagement() {
         // Language switching needs no reload: I18nProvider already reacts to
         // settings.app_language. Reloading here fought with the nav-bar toggle.
       } else {
+        // saveSettings() writes lastError into the store *after* this closure
+        // was created, so reading the subscribed value here would surface a
+        // stale (usually null) message. Read it from the store directly.
+        const reason =
+          useSettingsStore.getState().lastError ||
+          lastError ||
+          t("error");
         toast({
           variant: "destructive",
           title: t("error"),
-          description: lastError || t("error"),
+          description: reason,
         });
       }
     } finally {
