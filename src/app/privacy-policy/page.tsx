@@ -7,11 +7,11 @@ import { Shield, Lock, Eye, Database, Server, Smartphone, Cpu, RefreshCw, Trash2
 export const metadata: Metadata = {
   title: 'Privacy Policy | Onuron POS',
   description:
-    'Comprehensive Privacy Policy for Onuron POS Android application and web services operated by MorphWorks. Learn how your business data, camera permissions, and customer records are protected.',
+    'Comprehensive Privacy Policy for Onuron POS Android application and web services operated by Onuron. Learn how your business data, camera permissions, and customer records are protected.',
   keywords: [
     'Onuron POS Privacy Policy',
     'POS data privacy',
-    'MorphWorks',
+    'Onuron',
     'Android POS privacy',
     'pos.onuron.org privacy',
   ],
@@ -61,7 +61,7 @@ export default function PrivacyPolicyPage() {
           <div className="mt-4 flex flex-wrap items-center gap-4 text-xs text-muted-foreground border-t border-border pt-4">
             <span><strong>Effective Date:</strong> {lastUpdated}</span>
             <span>•</span>
-            <span><strong>Developer / Legal Entity:</strong> MorphWorks</span>
+            <span><strong>Developer / Legal Entity:</strong> Onuron</span>
             <span>•</span>
             <span><strong>URL:</strong> https://pos.onuron.org/privacy-policy</span>
           </div>
@@ -99,7 +99,7 @@ export default function PrivacyPolicyPage() {
               <span className="text-indigo-600 dark:text-indigo-400">1.</span> About Onuron POS
             </h2>
             <p className="text-sm sm:text-base text-muted-foreground mt-3">
-              Onuron POS is a multi-tenant point-of-sale, billing, and retail inventory management application developed and operated by <strong>MorphWorks</strong> (&quot;we&quot;, &quot;us&quot;, or &quot;our&quot;).
+              Onuron POS is a multi-tenant point-of-sale, billing, and retail inventory management application developed and operated by <strong>Onuron</strong> (&quot;we&quot;, &quot;us&quot;, or &quot;our&quot;).
             </p>
             <p className="text-sm sm:text-base text-muted-foreground mt-2">
               This Privacy Policy applies to the <strong>Onuron POS Android application</strong> (Application ID: <code>com.onuron.pos</code>), the official web application (<code>https://pos.onuron.org</code>), and associated backend APIs. It describes our policies and practices regarding the collection, storage, use, protection, and disclosure of information when you access or use Onuron POS.
@@ -497,7 +497,7 @@ export default function PrivacyPolicyPage() {
               If you have any questions, feedback, or privacy concerns regarding this Privacy Policy or our data practices, please contact our Data Protection team:
             </p>
             <div className="mt-4 p-5 rounded-xl border border-border bg-card text-sm space-y-2">
-              <p><strong>Operating Entity:</strong> MorphWorks</p>
+              <p><strong>Operating Entity:</strong> Onuron</p>
               <p><strong>Application:</strong> Onuron POS (<code>com.onuron.pos</code>)</p>
               <p>
                 <strong>Privacy Inquiries:</strong>{' '}

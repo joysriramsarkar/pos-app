@@ -7,8 +7,8 @@ import { FileText, Shield, CheckCircle2 } from 'lucide-react';
 export const metadata: Metadata = {
   title: 'Terms of Service | Onuron POS',
   description:
-    'Terms of Service for Onuron POS Android application and web platform operated by MorphWorks. Learn about data ownership, licensing, acceptable use, and service commitments.',
-  keywords: ['Onuron POS terms', 'POS terms of service', 'MorphWorks terms', 'pos.onuron.org terms'],
+    'Terms of Service for Onuron POS Android application and web platform operated by Onuron. Learn about data ownership, licensing, acceptable use, and service commitments.',
+  keywords: ['Onuron POS terms', 'POS terms of service', 'Onuron terms', 'pos.onuron.org terms'],
 };
 
 export default function TermsPage() {
@@ -29,7 +29,7 @@ export default function TermsPage() {
             Terms of Service
           </h1>
           <p className="mt-3 text-base text-muted-foreground">
-            Onuron POS • Developed and Operated by <strong>MorphWorks</strong> • Last Updated: {lastUpdated}
+            Onuron POS • Developed and Operated by <strong>Onuron</strong> • Last Updated: {lastUpdated}
           </p>
         </div>
       </section>
@@ -40,7 +40,7 @@ export default function TermsPage() {
           <section className="space-y-3">
             <h2 className="text-lg font-bold text-foreground">1. Acceptance of Terms</h2>
             <p>
-              These Terms of Service (&quot;Terms&quot;) govern your access to and use of the <strong>Onuron POS</strong> mobile application (Android App ID: <code>com.onuron.pos</code>), web portal (<code>https://pos.onuron.org</code>), and associated cloud services operated by <strong>MorphWorks</strong> (&quot;MorphWorks&quot;, &quot;we&quot;, &quot;us&quot;, or &quot;our&quot;).
+              These Terms of Service (&quot;Terms&quot;) govern your access to and use of the <strong>Onuron POS</strong> mobile application (Android App ID: <code>com.onuron.pos</code>), web portal (<code>https://pos.onuron.org</code>), and associated cloud services operated by <strong>Onuron</strong> (&quot;Onuron&quot;, &quot;we&quot;, &quot;us&quot;, or &quot;our&quot;).
             </p>
             <p>
               By installing, creating an account, or using Onuron POS, you agree to be bound by these Terms and our{' '}
@@ -73,10 +73,10 @@ export default function TermsPage() {
           <section className="space-y-3">
             <h2 className="text-lg font-bold text-foreground">4. Business Data Ownership</h2>
             <div className="p-4 rounded-xl border border-indigo-200 dark:border-indigo-900/50 bg-indigo-50/30 dark:bg-indigo-950/20 text-foreground">
-              <strong>Your Data Belongs to You:</strong> You retain full, exclusive ownership of all business catalogs, product inventories, prices, customer lists, and financial records uploaded or generated through Onuron POS. MorphWorks claims no intellectual property rights or ownership over your business data.
+              <strong>Your Data Belongs to You:</strong> You retain full, exclusive ownership of all business catalogs, product inventories, prices, customer lists, and financial records uploaded or generated through Onuron POS. Onuron claims no intellectual property rights or ownership over your business data.
             </div>
             <p className="mt-2">
-              You grant MorphWorks a limited license solely to host, backup, and process your data to provide the POS service to you and your authorized staff.
+              You grant Onuron a limited license solely to host, backup, and process your data to provide the POS service to you and your authorized staff.
             </p>
           </section>
 
@@ -101,10 +101,10 @@ export default function TermsPage() {
           <section className="space-y-3">
             <h2 className="text-lg font-bold text-foreground">7. Disclaimer of Warranties & Limitation of Liability</h2>
             <p>
-              Onuron POS is provided on an &quot;AS IS&quot; and &quot;AS AVAILABLE&quot; basis. To the maximum extent permitted by applicable law, MorphWorks disclaims all warranties of any kind, whether express or implied.
+              Onuron POS is provided on an &quot;AS IS&quot; and &quot;AS AVAILABLE&quot; basis. To the maximum extent permitted by applicable law, Onuron disclaims all warranties of any kind, whether express or implied.
             </p>
             <p>
-              In no event shall MorphWorks be liable for any indirect, incidental, special, consequential, or punitive damages, including loss of profits, revenue, or business data, arising out of or related to your use of the application.
+              In no event shall Onuron be liable for any indirect, incidental, special, consequential, or punitive damages, including loss of profits, revenue, or business data, arising out of or related to your use of the application.
             </p>
           </section>
 
@@ -125,7 +125,7 @@ export default function TermsPage() {
               If you have any questions or legal inquiries regarding these Terms of Service, please contact:
             </p>
             <div className="p-4 rounded-xl border border-border bg-card text-foreground space-y-1">
-              <p><strong>Entity:</strong> MorphWorks</p>
+              <p><strong>Entity:</strong> Onuron</p>
               <p><strong>App:</strong> Onuron POS (<code>com.onuron.pos</code>)</p>
               <p>
                 <strong>Legal & Support Email:</strong>{' '}

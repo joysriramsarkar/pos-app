@@ -30,7 +30,7 @@ export default function AboutTab() {
               <CardTitle className="text-lg font-bold flex items-center gap-2">
                 <span>Onuron POS</span>
                 <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-medium">
-                  v1.0.2
+                  v1.0.4
                 </span>
               </CardTitle>
               <CardDescription className="text-xs">
@@ -43,7 +43,7 @@ export default function AboutTab() {
           <div className="p-3 rounded-lg bg-muted/40 border border-border text-xs space-y-1.5">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Developer / Operating Entity:</span>
-              <strong className="text-foreground">MorphWorks</strong>
+              <strong className="text-foreground">Onuron</strong>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Official Web Domain:</span>
@@ -127,7 +127,7 @@ export default function AboutTab() {
             </div>
           </CardHeader>
           <CardContent className="text-xs text-muted-foreground">
-            Reach MorphWorks technical assistance at support@onuron.org or submit inquiries online.
+            Reach Onuron technical assistance at support@onuron.org or submit inquiries online.
           </CardContent>
         </Card>
       </div>

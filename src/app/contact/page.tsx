@@ -37,7 +37,7 @@ export default function ContactPage() {
             Contact Us
           </h1>
           <p className="mt-3 text-base text-muted-foreground">
-            Have questions about Onuron POS, need technical support, or have privacy inquiries? Our team at <strong>MorphWorks</strong> is here to assist you.
+            Have questions about Onuron POS, need technical support, or have privacy inquiries? Our team at <strong>Onuron</strong> is here to assist you.
           </p>
         </div>
       </section>
@@ -154,7 +154,7 @@ export default function ContactPage() {
 
         {/* Developer Entity Box */}
         <div className="p-4 rounded-xl border border-border bg-muted/20 text-xs text-muted-foreground space-y-1">
-          <p><strong>Developer & Entity:</strong> MorphWorks</p>
+          <p><strong>Developer & Entity:</strong> Onuron</p>
           <p><strong>Application:</strong> Onuron POS (Android App ID: <code>com.onuron.pos</code>)</p>
           <p><strong>Website:</strong> <a href="https://pos.onuron.org" className="underline text-foreground">https://pos.onuron.org</a></p>
         </div>

@@ -307,7 +307,7 @@ export default function AccountDeletionPage() {
             Upon receipt and identity verification of your request, active user credentials and memberships will be purged within 7 business days. As required by applicable commercial accounting and taxation regulations, past tax invoices and audit trails may be archived securely in cold storage until the statutory retention period expires, after which they are irreversibly destroyed.
           </p>
           <p>
-            Operating Entity: <strong>MorphWorks</strong> • Privacy Contact:{' '}
+            Operating Entity: <strong>Onuron</strong> • Privacy Contact:{' '}
             <a href="mailto:privacy@onuron.org" className="text-indigo-600 dark:text-indigo-400 underline">
               privacy@onuron.org
             </a>

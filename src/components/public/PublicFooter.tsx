@@ -14,7 +14,7 @@ export function PublicFooter() {
               </span>
             </div>
             <p className="text-xs text-muted-foreground">
-              Smart Point of Sale & Retail Management System developed & operated by <strong>MorphWorks</strong>.
+              Smart Point of Sale & Retail Management System developed & operated by <strong>Onuron</strong>.
             </p>
           </div>
 
@@ -38,7 +38,7 @@ export function PublicFooter() {
         </div>
 
         <div className="mt-8 pt-6 border-t border-border/60 flex flex-col sm:flex-row items-center justify-between text-xs text-muted-foreground gap-3">
-          <p>© {new Date().getFullYear()} MorphWorks. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} Onuron. All rights reserved.</p>
           <p>
             Official Website: <a href="https://pos.onuron.org" className="text-foreground hover:underline font-medium">pos.onuron.org</a>
           </p>

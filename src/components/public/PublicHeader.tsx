@@ -37,7 +37,7 @@ export function PublicHeader({ activePage }: PublicHeaderProps) {
               Onuron <span className="text-indigo-600 dark:text-indigo-400">POS</span>
             </span>
             <span className="text-[11px] text-muted-foreground font-medium tracking-wide">
-              by MorphWorks
+              by Onuron
             </span>
           </div>
         </Link>

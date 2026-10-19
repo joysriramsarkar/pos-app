@@ -25,3 +25,8 @@
 # Plugins
 -keep class io.capawesome.capacitorjs.plugins.mlkit.barcodescanning.** { *; }
 -keep class com.capacitorjs.plugins.** { *; }
+-keep class io.capawesome.capacitorjs.plugins.firebase.authentication.** { *; }
+
+# Facebook SDK (if missing or not used via Facebook Auth)
+-dontwarn com.facebook.**
+-keep class com.facebook.** { *; }
