@@ -24,7 +24,7 @@ import { BusinessProfileCard } from "@/components/settings/BusinessProfileCard";
 
 export default function SettingsManagement() {
   const t = useTranslations("Settings");
-  const { settings, fetchSettings, saveSettings } = useSettingsStore();
+  const { settings, fetchSettings, saveSettings, lastError } = useSettingsStore();
   const { toast } = useToast();
   const { data: session } = useSession();
   const { setTheme } = useTheme();
@@ -32,16 +32,20 @@ export default function SettingsManagement() {
   const [localSettings, setLocalSettings] = useState<AppSettings>(settings);
   const [isSaving, setIsSaving] = useState(false);
   const [activeTab, setActiveTab] = useState("profile");
+  // While the merchant is typing, an in-flight fetchSettings() must not wipe
+  // the form — that is what made "store name already filled in" look unsavable.
+  const [isDirty, setIsDirty] = useState(false);
 
   useEffect(() => {
     fetchSettings();
   }, [fetchSettings]);
 
   useEffect(() => {
-    setLocalSettings(settings);
-  }, [settings]);
+    if (!isDirty) setLocalSettings(settings);
+  }, [settings, isDirty]);
 
   const handleChange = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
+    setIsDirty(true);
     setLocalSettings(prev => ({ ...prev, [key]: value }));
   };
 
@@ -55,6 +59,7 @@ export default function SettingsManagement() {
 
       const success = await saveSettings(payload as Partial<AppSettings>);
       if (success) {
+        setIsDirty(false);
         toast({ title: t("success"), description: t("success") });
 
         // Special logic for theme saving
@@ -62,12 +67,14 @@ export default function SettingsManagement() {
           setTheme(localSettings.theme_mode);
         }
 
-        // Special logic for language saving
-        if (sectionKeys.includes("app_language")) {
-          setTimeout(() => window.location.reload(), 500);
-        }
+        // Language switching needs no reload: I18nProvider already reacts to
+        // settings.app_language. Reloading here fought with the nav-bar toggle.
       } else {
-        toast({ variant: "destructive", title: t("error"), description: t("error") });
+        toast({
+          variant: "destructive",
+          title: t("error"),
+          description: lastError || t("error"),
+        });
       }
     } finally {
       setIsSaving(false);
@@ -118,7 +125,7 @@ export default function SettingsManagement() {
     { value: "users", label: t("users"), icon: Users, hasChanges: () => false },
     { value: "password", label: t("change_password"), icon: Key, hasChanges: () => false },
     { value: "backup", label: t("backup"), icon: Database, hasChanges: () => false },
-    { value: "about", label: "About & Legal", icon: ShieldCheck, hasChanges: () => false },
+    { value: "about", label: t("about_legal"), icon: ShieldCheck, hasChanges: () => false },
   ];
 
   return (

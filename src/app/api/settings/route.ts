@@ -118,7 +118,9 @@ export async function PUT(request: NextRequest) {
 
     await db.$transaction(async (tx) => {
       for (const [key, rawValue] of entries) {
-        const val = typeof rawValue === "string" ? rawValue : String(rawValue);
+        if (rawValue === undefined) continue;
+        const val =
+          typeof rawValue === "string" ? rawValue.trim() : String(rawValue).trim();
         await tx.businessSetting.upsert({
           where: {
             businessId_key: {
@@ -138,6 +140,23 @@ export async function PUT(request: NextRequest) {
       }
     });
 
+    // Keep the business profile in sync with the store settings so these values
+    // are never overwritten by the business name/phone/address fallbacks in GET
+    // (that mismatch is what made "already filled in" data look unsavable).
+    const businessProfilePatch: Record<string, string> = {};
+    const nextName = entries.find(([k]) => k === 'store_name')?.[1];
+    const nextPhone = entries.find(([k]) => k === 'store_phone')?.[1];
+    const nextAddress = entries.find(([k]) => k === 'store_address')?.[1];
+    if (typeof nextName === 'string' && nextName.trim()) {
+      businessProfilePatch.name = nextName.trim();
+    }
+    if (typeof nextPhone === 'string') businessProfilePatch.phone = nextPhone.trim();
+    if (typeof nextAddress === 'string') businessProfilePatch.address = nextAddress.trim();
+
+    if (Object.keys(businessProfilePatch).length > 0) {
+      await db.business.update({ where: { id: businessId }, data: businessProfilePatch });
+    }
+
     if (Object.keys(changedDetails).length > 0) {
       await logAudit({
         businessId,
@@ -152,8 +171,9 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ success: true, message: "Settings updated successfully" });
   } catch (error: unknown) {
     console.error("Error updating settings:", error);
+    const reason = error instanceof Error ? error.message : String(error);
     return NextResponse.json(
-      { error: "Failed to update settings" },
+      { error: `Failed to update settings: ${reason}` },
       { status: 500 }
     );
   }

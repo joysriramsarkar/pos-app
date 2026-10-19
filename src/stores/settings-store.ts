@@ -62,6 +62,7 @@ const defaultSettings: AppSettings = {
 interface SettingsState {
   settings: AppSettings;
   isLoading: boolean;
+  lastError: string | null;
   setSettings: (settings: Partial<AppSettings>) => void;
   updateSetting: <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => void;
   fetchSettings: () => Promise<void>;
@@ -73,6 +74,7 @@ export const useSettingsStore = create<SettingsState>()(
     (set, get) => ({
       settings: defaultSettings,
       isLoading: false,
+      lastError: null,
 
       setSettings: (newSettings) => {
         set((state) => ({
@@ -123,12 +125,14 @@ export const useSettingsStore = create<SettingsState>()(
       },
 
       saveSettings: async (settingsToSave) => {
-        set({ isLoading: true });
+        set({ isLoading: true, lastError: null });
         try {
           // Convert to string for API payload
           const payload: Record<string, string> = {};
           for (const [key, value] of Object.entries(settingsToSave)) {
-            payload[key] = String(value);
+            // Guard against undefined/objects sneaking in — the API stringifies
+            // them and would persist the literal text "undefined".
+            payload[key] = value === undefined || value === null ? '' : String(value);
           }
 
           const res = await fetch('/api/settings', {
@@ -137,14 +141,24 @@ export const useSettingsStore = create<SettingsState>()(
             body: JSON.stringify(payload),
           });
 
-          const data = await res.json();
-          if (data.success) {
-            get().setSettings(settingsToSave);
-            return true;
+          const data = await res.json().catch(() => ({}));
+
+          if (!res.ok || !data.success) {
+            set({
+              lastError:
+                data?.error ||
+                (res.status === 403
+                  ? 'You do not have permission to change settings.'
+                  : `Settings could not be saved (HTTP ${res.status}).`),
+            });
+            return false;
           }
-          return false;
+
+          get().setSettings(settingsToSave);
+          return true;
         } catch (error) {
           console.error('Failed to save settings:', error);
+          set({ lastError: 'Network error while saving settings.' });
           return false;
         } finally {
           set({ isLoading: false });
