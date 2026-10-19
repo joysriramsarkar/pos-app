@@ -120,59 +120,18 @@ const PRINT_FORMATS: {
   },
 ];
 
-function buildInvoiceHtml(
-  sale: Sale,
-  format: PrintFormat,
-  showLogo: boolean,
-  showGst: boolean,
-  footerMessage: string,
-  storeConfig: {
-    name: string;
-    nameBn: string;
-    address: string;
-    phone: string;
-    gstNumber?: string;
-  },
-  pageStyle: string,
-): string {
-  const container = document.createElement("div");
-  container.className = "print-invoice-container";
-  container.setAttribute("data-format", format);
-  container.innerHTML = renderToString(
-    <PrintInvoice
-      sale={sale}
-      format={format}
-      showLogo={showLogo}
-      showGst={showGst}
-      footerMessage={footerMessage}
-      storeConfig={storeConfig}
-    />,
-  );
-
-  const styleLinks = Array.from(
-    document.querySelectorAll('link[rel="stylesheet"]'),
-  )
-    .map((l) => `<link rel="stylesheet" href="${(l as HTMLLinkElement).href}">`)
-    .join("\n");
-  const inlineStyles = Array.from(document.querySelectorAll("style"))
-    .map((s) => `<style>${s.textContent}</style>`)
-    .join("\n");
-
-  return `<!DOCTYPE html><html><head><meta charset="UTF-8">${styleLinks}${inlineStyles}<style>${pageStyle}</style></head><body>${container.outerHTML}</body></html>`;
-}
-
 function getPageStyle(format: PrintFormat): string {
   switch (format) {
     case "thermal-58":
-      return `@page{size:58mm auto;margin:0}body{width:58mm;max-width:58mm;margin:0;padding:0}.thermal-invoice{width:56mm!important;max-width:56mm!important}`;
+      return `@page{size:58mm auto;margin:0}.thermal-invoice{width:56mm!important;max-width:56mm!important}`;
     case "thermal-80":
-      return `@page{size:80mm auto;margin:0}body{width:80mm;max-width:80mm;margin:0;padding:0}.thermal-invoice{width:78mm!important;max-width:78mm!important}`;
+      return `@page{size:80mm auto;margin:0}.thermal-invoice{width:78mm!important;max-width:78mm!important}`;
     case "a4":
-      return `@page{size:A4 portrait;margin:0.5cm}body{width:210mm;max-width:210mm;margin:0;padding:0}`;
+      return `@page{size:A4 portrait;margin:8mm}`;
     case "a5":
-      return `@page{size:A5 portrait;margin:0.5cm}body{width:148mm;max-width:148mm;margin:0;padding:0}`;
+      return `@page{size:A5 portrait;margin:6mm}`;
     default:
-      return `@page{size:auto;margin:1cm}`;
+      return `@page{size:auto;margin:8mm}`;
   }
 }
 

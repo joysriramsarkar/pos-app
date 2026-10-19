@@ -720,8 +720,24 @@
     "avg_daily": "Avg / Day",
     "avg_entry": "Avg Entry",
     "by_category": "By Category",
-    "categories": "Categories",
-    "categories_map": "Category Map",
+    "categories": {
+      "rent": "Rent",
+      "utilities": "Utilities",
+      "salaries": "Salaries",
+      "supplies": "Supplies",
+      "maintenance": "Maintenance",
+      "supplier payment": "Supplier Payment",
+      "other": "Other"
+    },
+    "categories_map": {
+      "Rent": "Rent",
+      "Utilities": "Utilities",
+      "Salaries": "Salaries",
+      "Supplies": "Supplies",
+      "Maintenance": "Maintenance",
+      "Supplier Payment": "Supplier Payment",
+      "Other": "Other"
+    },
     "category_breakdown": "Category Breakdown",
     "category_pie_chart": "Category Pie Chart",
     "count": "Count",
@@ -1051,7 +1067,17 @@
     "subcategory_placeholder": "Select a subcategory",
     "unit": "Unit",
     "unit_placeholder": "Select a unit",
-    "units": "Units",
+    "units": {
+      "piece": "Piece",
+      "kg": "Kg",
+      "gram": "Gram",
+      "liter": "Liter",
+      "ml": "Ml",
+      "packet": "Packet",
+      "bottle": "Bottle",
+      "dozen": "Dozen",
+      "box": "Box"
+    },
     "update_product": "Update Product",
     "upload_failed": "Could not upload the image.",
     "upload_image": "Upload Image"

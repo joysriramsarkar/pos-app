@@ -25,31 +25,49 @@ function getPageSizeStyle(fmt?: string): string {
   switch (fmt) {
     case 'thermal-58':
       return `
-          @page { size: 58mm auto; margin: 0; padding: 0; }
-          body { width: 58mm; max-width: 58mm; margin: 0; padding: 0; }
+          @page { size: 58mm auto; margin: 0; }
           .print-invoice-container { width: 58mm !important; max-width: 58mm !important; }
         `;
     case 'thermal-80':
       return `
-          @page { size: 80mm auto; margin: 0; padding: 0; }
-          body { width: 80mm; max-width: 80mm; margin: 0; padding: 0; }
+          @page { size: 80mm auto; margin: 0; }
           .print-invoice-container { width: 80mm !important; max-width: 80mm !important; }
         `;
     case 'a4':
       return `
-          @page { size: A4 portrait; margin: 0.5cm; }
-          body { width: 210mm; max-width: 210mm; margin: 0; padding: 0; }
-          .print-invoice-container { width: 210mm !important; max-width: 210mm !important; }
+          @page { size: A4 portrait; margin: 8mm; }
+          .print-invoice-container { width: 100% !important; max-width: 100% !important; }
         `;
     case 'a5':
       return `
-          @page { size: A5 portrait; margin: 0.5cm; }
-          body { width: 148mm; max-width: 148mm; margin: 0; padding: 0; }
-          .print-invoice-container { width: 148mm !important; max-width: 148mm !important; }
+          @page { size: A5 portrait; margin: 6mm; }
+          .print-invoice-container { width: 100% !important; max-width: 100% !important; }
         `;
     default:
-      return `@page { size: auto; margin: 0; padding: 0; }`;
+      return `@page { size: auto; margin: 8mm; }`;
   }
+}
+
+/**
+ * Page size has to be applied to the *top* document too: buildPrintHtml()'s
+ * head styles are thrown away when we mount only the body markup for
+ * window.print(). Without this, every invoice (A4/A5 included) inherited the
+ * global 80mm receipt page size.
+ */
+const PRINT_PAGE_STYLE_ID = 'app-print-page-style';
+
+function applyTopWindowPageStyle(fmt?: string): void {
+  let el = document.getElementById(PRINT_PAGE_STYLE_ID) as HTMLStyleElement | null;
+  if (!el) {
+    el = document.createElement('style');
+    el.id = PRINT_PAGE_STYLE_ID;
+    document.head.appendChild(el);
+  }
+  el.textContent = getPageSizeStyle(fmt);
+}
+
+function clearTopWindowPageStyle(): void {
+  document.getElementById(PRINT_PAGE_STYLE_ID)?.remove();
 }
 
 function collectStyles(): { styleLinks: string[]; inlineStyles: string[] } {
@@ -274,11 +292,16 @@ function nextFrame(): Promise<void> {
  * Print the top-level window. This is the primary path on every platform.
  * Resolves to true only when window.print() actually existed and ran.
  */
-async function tryTopWindowPrint(printHtml: string): Promise<boolean> {
+async function tryTopWindowPrint(
+  printHtml: string,
+  format?: PrintFormat,
+): Promise<boolean> {
   if (typeof window === 'undefined' || typeof window.print !== 'function') return false;
 
   const root = mountPrintRoot(printHtml);
   if (!root) return false;
+
+  applyTopWindowPageStyle(format);
 
   let settled = false;
   const cleanup = () => {
@@ -286,6 +309,7 @@ async function tryTopWindowPrint(printHtml: string): Promise<boolean> {
     settled = true;
     window.removeEventListener?.('afterprint', cleanup);
     unmountPrintRoot();
+    clearTopWindowPageStyle();
   };
 
   try {
@@ -438,7 +462,7 @@ export async function printToIframe(options: PrintOptions): Promise<boolean> {
     }
 
     // 2) Top-window print — the reliable path everywhere
-    const topOk = await tryTopWindowPrint(printHtml);
+    const topOk = await tryTopWindowPrint(printHtml, format);
     if (topOk) {
       onAfterPrint?.();
       return true;

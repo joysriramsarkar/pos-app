@@ -98,6 +98,7 @@ enum SupplierLedgerType {
 enum ExpensePaymentMethod {
   CASH
   UPI
+  MIXED
   BANK
   CARD
   CHEQUE

@@ -46,6 +46,12 @@ export function DayCloseReportModal({
   const [loading, setLoading] = useState(false);
   const [summary, setSummary] = useState<any | null>(null);
 
+  const reportDateLabel = new Date().toLocaleDateString('bn-BD', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+
   const fetchDailySummary = useCallback(async () => {
     try {
       setLoading(true);
@@ -77,11 +83,7 @@ export function DayCloseReportModal({
   // WhatsApp Share text generator
   const handleShareWhatsApp = () => {
     if (!summary) return;
-    const dateStr = new Date().toLocaleDateString('bn-BD', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
+    const dateStr = reportDateLabel;
 
     const todaySales = summary.todaySalesTotal ?? summary.totalSalesAmount ?? 0;
     const salesCount = summary.salesCount ?? summary.totalSalesCount ?? 0;
@@ -116,7 +118,7 @@ export function DayCloseReportModal({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto rounded-3xl p-6">
-        <DialogHeader className="space-y-1 text-left">
+        <DialogHeader className="space-y-1 text-left no-print">
           <div className="flex items-center justify-between">
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               <CalendarCheck className="w-5 h-5 text-primary" />
@@ -132,12 +134,19 @@ export function DayCloseReportModal({
         </DialogHeader>
 
         {loading ? (
-          <div className="py-12 flex flex-col items-center justify-center gap-3">
+          <div className="no-print py-12 flex flex-col items-center justify-center gap-3">
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
             <p className="text-xs text-muted-foreground">আজকের হিসাব সমন্বয় করা হচ্ছে...</p>
           </div>
         ) : summary ? (
-          <div className="space-y-4 pt-1">
+          <div className="print-surface space-y-4 pt-1">
+            {/* Print-only heading: the dialog title is chrome and stays hidden */}
+            <div className="hidden print:block text-center space-y-0.5 pb-1">
+              <h2 className="text-base font-bold">{businessName}</h2>
+              <p className="text-xs font-semibold">দৈনিক সমাপ্তি প্রতিবেদন (Z-Report)</p>
+              <p className="text-[11px]">{reportDateLabel}</p>
+            </div>
+
             {/* Top Net Revenue Card */}
             <div className="p-4 rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border border-primary/20 flex items-center justify-between">
               <div>
@@ -231,7 +240,7 @@ export function DayCloseReportModal({
           </div>
         )}
 
-        <DialogFooter className="pt-3 sm:justify-between gap-2 border-t border-border/40 mt-1">
+        <DialogFooter className="no-print pt-3 sm:justify-between gap-2 border-t border-border/40 mt-1">
           <Button
             type="button"
             variant="outline"

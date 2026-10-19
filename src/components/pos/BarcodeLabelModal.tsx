@@ -49,7 +49,7 @@ export function BarcodeLabelModal({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl p-6">
-        <DialogHeader className="space-y-1 text-left">
+        <DialogHeader className="space-y-1 text-left no-print">
           <div className="flex items-center justify-between">
             <DialogTitle className="text-xl font-bold flex items-center gap-2">
               <Barcode className="w-5 h-5 text-primary" />
@@ -64,7 +64,7 @@ export function BarcodeLabelModal({
         <div className="space-y-4 pt-2">
           {/* Product selector if not pre-selected */}
           {!selectedProduct && products.length > 0 && (
-            <div className="space-y-1.5">
+            <div className="no-print space-y-1.5">
               <Label className="text-xs font-semibold">পণ্য নির্বাচন করুন</Label>
               <select
                 value={productId}
@@ -81,7 +81,7 @@ export function BarcodeLabelModal({
           )}
 
           {/* Quantity and Options */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="no-print grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold">লেবেল সংখ্যা (Labels)</Label>
               <Input
@@ -110,10 +110,10 @@ export function BarcodeLabelModal({
           {/* Label Preview Sheet */}
           {product && (
             <div className="space-y-2 pt-1">
-              <Label className="text-xs font-semibold text-muted-foreground block">
+              <Label className="no-print text-xs font-semibold text-muted-foreground block">
                 প্রিভিউ (Sticker Preview):
               </Label>
-              <div className="border border-border/80 rounded-2xl p-4 bg-muted/20 flex flex-wrap gap-2.5 max-h-56 overflow-y-auto justify-center">
+              <div className="print-surface border border-border/80 rounded-2xl p-4 bg-muted/20 flex flex-wrap gap-2.5 max-h-56 overflow-y-auto justify-center">
                 {Array.from({ length: Math.min(labelCount, 12) }).map((_, i) => (
                   <div
                     key={i}
@@ -154,7 +154,7 @@ export function BarcodeLabelModal({
                 ))}
               </div>
               {labelCount > 12 && (
-                <p className="text-[10px] text-muted-foreground text-center">
+                <p className="no-print text-[10px] text-muted-foreground text-center">
                   মোট {labelCount}টি লেবেল প্রিন্ট হবে...
                 </p>
               )}
@@ -162,7 +162,7 @@ export function BarcodeLabelModal({
           )}
         </div>
 
-        <DialogFooter className="pt-3 sm:justify-end gap-2 border-t border-border/40 mt-1">
+        <DialogFooter className="no-print pt-3 sm:justify-end gap-2 border-t border-border/40 mt-1">
           <Button
             type="button"
             variant="outline"

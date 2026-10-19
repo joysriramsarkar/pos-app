@@ -1,92 +1,94 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Store, Save, Building, Phone, MapPin, Receipt, Loader2, CheckCircle2 } from 'lucide-react';
+import { Store, Save, Phone, MapPin, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useSettingsStore } from '@/stores/settings-store';
 
+/**
+ * Store profile card (name / phone / address / currency / GST).
+ *
+ * It saves through the settings store → PUT /api/settings with flat keys.
+ * The previous version POSTed `{ business }`, an endpoint/method combination
+ * the API never supported (405), so "save" always failed even though the
+ * store name looked editable.
+ */
 export function BusinessProfileCard() {
   const { toast } = useToast();
-  const [loading, setLoading] = useState(false);
+  const { settings, saveSettings, lastError } = useSettingsStore();
   const [saving, setSaving] = useState(false);
+  const [dirty, setDirty] = useState(false);
   const [business, setBusiness] = useState({
-    name: '',
-    phone: '',
-    address: '',
-    currency: '₹',
-    timezone: 'Asia/Kolkata',
-    gstNumber: '',
+    name: settings.store_name || '',
+    phone: settings.store_phone || '',
+    address: settings.store_address || '',
+    currency: settings.currency_symbol || '₹',
+    gstNumber: settings.store_gst || '',
   });
 
+  // Keep the form in sync with the store until the merchant edits a field.
   useEffect(() => {
-    // Fetch business profile from settings
-    const fetchBusiness = async () => {
-      try {
-        setLoading(true);
-        const res = await fetch('/api/settings');
-        if (res.ok) {
-          const data = await res.json();
-          if (data.business) {
-            setBusiness({
-              name: data.business.name || '',
-              phone: data.business.phone || '',
-              address: data.business.address || '',
-              currency: data.business.currency || '₹',
-              timezone: data.business.timezone || 'Asia/Kolkata',
-              gstNumber: data.business.gstNumber || '',
-            });
-          }
-        }
-      } catch (err) {
-        console.error('Failed to load business profile:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchBusiness();
-  }, []);
+    if (dirty) return;
+    setBusiness({
+      name: settings.store_name || '',
+      phone: settings.store_phone || '',
+      address: settings.store_address || '',
+      currency: settings.currency_symbol || '₹',
+      gstNumber: settings.store_gst || '',
+    });
+  }, [settings, dirty]);
+
+  const update = (patch: Partial<typeof business>) => {
+    setDirty(true);
+    setBusiness((prev) => ({ ...prev, ...patch }));
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    const name = business.name.trim();
+    if (!name) {
+      toast({
+        title: 'দোকানের নাম প্রয়োজন',
+        description: 'অনুগ্রহ করে দোকানের নাম লিখুন।',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     try {
       setSaving(true);
-      const res = await fetch('/api/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ business }),
+      const ok = await saveSettings({
+        store_name: name,
+        store_phone: business.phone.trim(),
+        store_address: business.address.trim(),
+        currency_symbol: business.currency.trim() || '₹',
+        store_gst: business.gstNumber.trim(),
       });
 
-      if (!res.ok) throw new Error('ব্যবসায়িক তথ্য সংরক্ষণ ব্যর্থ হয়েছে');
+      if (!ok) {
+        throw new Error(useSettingsStore.getState().lastError || lastError || 'ব্যবসায়িক তথ্য সংরক্ষণ ব্যর্থ হয়েছে');
+      }
 
+      setDirty(false);
       toast({
         title: 'সংরক্ষিত হয়েছে!',
-        description: 'দোকান ও ইনভয়েস প্রোফাইল আপডেট সম্পন্ন হয়েছে।',
+        description: 'দোকান ও ইনভয়েস প্রোফাইল আপডেট সম্পন্ন হয়েছে।',
       });
     } catch (err: any) {
       toast({
         title: 'ত্রুটি',
-        description: err.message,
+        description: err?.message || 'ব্যবসায়িক তথ্য সংরক্ষণ ব্যর্থ হয়েছে',
         variant: 'destructive',
       });
     } finally {
       setSaving(false);
     }
   };
-
-  if (loading) {
-    return (
-      <Card className="rounded-3xl p-6 border-border/60">
-        <div className="flex items-center justify-center py-8 gap-2 text-muted-foreground text-xs">
-          <Loader2 className="w-5 h-5 animate-spin text-primary" />
-          <span>প্রোফাইল লোড হচ্ছে...</span>
-        </div>
-      </Card>
-    );
-  }
 
   return (
     <Card className="rounded-3xl border-border/60 shadow-xs overflow-hidden">
@@ -119,7 +121,7 @@ export function BusinessProfileCard() {
                 <Input
                   id="bizName"
                   value={business.name}
-                  onChange={(e) => setBusiness({ ...business, name: e.target.value })}
+                  onChange={(e) => update({ name: e.target.value })}
                   placeholder="যেমন: লাখন ভাণ্ডার"
                   className="pl-10 h-11 rounded-xl text-sm"
                   required
@@ -136,7 +138,7 @@ export function BusinessProfileCard() {
                 <Input
                   id="bizPhone"
                   value={business.phone}
-                  onChange={(e) => setBusiness({ ...business, phone: e.target.value })}
+                  onChange={(e) => update({ phone: e.target.value })}
                   placeholder="যেমন: +91 98765 43210"
                   className="pl-10 h-11 rounded-xl text-sm"
                 />
@@ -153,7 +155,7 @@ export function BusinessProfileCard() {
               <Input
                 id="bizAddress"
                 value={business.address}
-                onChange={(e) => setBusiness({ ...business, address: e.target.value })}
+                onChange={(e) => update({ address: e.target.value })}
                 placeholder="যেমন: মেইন রোড, বাজার চত্বর, দোকান নং ৪২"
                 className="pl-10 h-11 rounded-xl text-sm"
               />
@@ -168,7 +170,7 @@ export function BusinessProfileCard() {
               <Input
                 id="currency"
                 value={business.currency}
-                onChange={(e) => setBusiness({ ...business, currency: e.target.value })}
+                onChange={(e) => update({ currency: e.target.value })}
                 placeholder="₹ বা ৳"
                 className="h-11 rounded-xl text-sm"
               />
@@ -181,7 +183,7 @@ export function BusinessProfileCard() {
               <Input
                 id="gstNumber"
                 value={business.gstNumber}
-                onChange={(e) => setBusiness({ ...business, gstNumber: e.target.value })}
+                onChange={(e) => update({ gstNumber: e.target.value })}
                 placeholder="GSTIN (ঐচ্ছিক)"
                 className="h-11 rounded-xl text-sm"
               />
@@ -193,7 +195,7 @@ export function BusinessProfileCard() {
               </Label>
               <Input
                 id="timezone"
-                value={business.timezone}
+                value="Asia/Kolkata"
                 disabled
                 className="h-11 rounded-xl text-sm bg-muted/40 cursor-not-allowed"
               />

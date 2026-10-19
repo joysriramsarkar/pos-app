@@ -1,13 +1,22 @@
 'use client';
 
 import * as React from "react";
+import { useTranslations } from 'next-intl';
 import type { Sale, PrintFormat } from "@/types/pos";
 import type { PrintInvoiceProps } from './types-and-utils';
 import { ThermalInvoice } from './ThermalInvoice';
 import { StandardInvoice } from './StandardInvoice';
-import { useTranslations } from 'next-intl';
 
 export type { PrintInvoiceProps } from './types-and-utils';
+
+/**
+ * Fallback footer used when the caller has no translated string at hand.
+ *
+ * PrintInvoice must stay hook-free: it is also rendered through
+ * react-dom/server's renderToString() outside the React tree (see
+ * PrintDialog.handlePrint), where next-intl's context is unavailable.
+ */
+export const DEFAULT_INVOICE_FOOTER = 'This is a computer generated invoice.';
 
 export function PrintInvoice({
   sale,
@@ -19,8 +28,7 @@ export function PrintInvoice({
   storeConfig,
 }: PrintInvoiceProps) {
   const invoiceRef = React.useRef<HTMLDivElement>(null);
-  const tc = useTranslations('Common');
-  const effectiveFooter = footerMessage ?? tc('invoice_footer_default');
+  const effectiveFooter = footerMessage ?? DEFAULT_INVOICE_FOOTER;
 
   const renderInvoice = () => {
     switch (format) {
@@ -110,6 +118,7 @@ export function InvoicePreview({
   footerMessage,
   storeConfig,
 }: InvoicePreviewProps) {
+  const tc = useTranslations('Common');
   const isThermal = format.startsWith("thermal");
   const previewScale = isThermal ? 1 : 0.5;
 
@@ -127,7 +136,7 @@ export function InvoicePreview({
           format={format}
           showLogo={showLogo}
           showGst={showGst}
-          footerMessage={footerMessage}
+          footerMessage={footerMessage ?? tc('invoice_footer_default')}
           storeConfig={storeConfig}
         />
       </div>

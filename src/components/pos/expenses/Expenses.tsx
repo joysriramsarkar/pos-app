@@ -17,6 +17,7 @@ import {
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { convertBengaliToEnglishNumerals } from '@/lib/utils';
+import { toExpensePaymentUi } from '@/lib/expense-payment';
 import { useTranslations } from 'next-intl';
 import { exportToCSV, getExportDate } from '@/lib/export-utils';
 import { useSettingsStore } from '@/stores/settings-store';
@@ -104,8 +105,14 @@ export function Expenses({ onReport }: ExpensesProps) {
       const res = await fetch('/api/expenses');
       if (res.ok) {
         const { data } = await res.json();
-        setExpenses(data);
-        cacheExpenses(data);
+        // The API returns enum members (CASH / UPI / MIXED); the forms and
+        // badges work with labels (Cash / UPI / Mixed).
+        const normalized = (Array.isArray(data) ? data : []).map((expense: Expense) => ({
+          ...expense,
+          paymentMethod: toExpensePaymentUi(expense.paymentMethod),
+        }));
+        setExpenses(normalized);
+        cacheExpenses(normalized);
       }
     } catch (e) {
       console.error(e);
@@ -148,11 +155,13 @@ export function Expenses({ onReport }: ExpensesProps) {
 
   const filteredTotal = useMemo(() => filteredExpenses.reduce((s, e) => s + Number(e.amount ?? 0), 0), [filteredExpenses]);
 
-  // Get category Bengali name
+  // Category label in the current UI language (rent, utilities, salaries, ...).
   const getCategoryBn = (cat: string) => {
-    const key = cat.toLowerCase();
-    // rent, utilities, salaries, supplies, maintenance, other
-    return t(`categories.${key}`) || cat;
+    const label = t(`categories.${cat.trim().toLowerCase()}`);
+    // next-intl returns the full key path ("Expenses.categories.rent") when a
+    // message is missing, so fall back to the canonical value instead of
+    // printing a translation key in the UI.
+    return label.includes('categories.') ? cat : label;
   };
 
   // Category breakdown for selected date

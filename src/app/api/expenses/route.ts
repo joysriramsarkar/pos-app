@@ -6,6 +6,7 @@ import { requireAuth } from "@/lib/api-middleware";
 import { requireBusinessContext, checkPermission } from "@/lib/tenant";
 import { logAudit } from "@/lib/audit";
 import { ExpenseInputSchema } from "@/schemas";
+import { toExpensePaymentMethod } from "@/lib/expense-payment";
 import { toClientError } from '@/lib/api-errors';
 
 const getIp = (req: NextRequest) => req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || undefined;
@@ -150,7 +151,7 @@ export async function POST(request: NextRequest) {
           amount,
           category,
           notes,
-          paymentMethod: (paymentMethod ? paymentMethod.toUpperCase() : 'CASH') as any,
+          paymentMethod: toExpensePaymentMethod(paymentMethod),
           date: parsedDate,
           supplierId: supplierId ?? null,
           supplierName: supplierName ?? null,
@@ -163,7 +164,7 @@ export async function POST(request: NextRequest) {
           amount,
           category,
           notes,
-          paymentMethod: (paymentMethod ? paymentMethod.toUpperCase() : 'CASH') as any,
+          paymentMethod: toExpensePaymentMethod(paymentMethod),
           date: parsedDate,
           supplierId: supplierId ?? null,
           supplierName: supplierName ?? null,
@@ -222,7 +223,7 @@ export async function PUT(request: NextRequest) {
       amount: parsed.data.amount,
       category: parsed.data.category,
       notes: parsed.data.notes ?? null,
-      paymentMethod: parsed.data.paymentMethod || 'Cash',
+      paymentMethod: toExpensePaymentMethod(parsed.data.paymentMethod),
       supplierId: parsed.data.category === 'Supplier Payment' ? parsed.data.supplierId ?? null : null,
       supplierName: parsed.data.category === 'Supplier Payment' ? parsed.data.supplierName ?? null : null,
     };

@@ -364,35 +364,82 @@ body {
 }
 
 /* ===== Print Styles ===== */
+/*
+ * Three print surfaces exist:
+ *   1. #receipt-content  — ReceiptPrint / DailySummary dialogs
+ *   2. #app-print-root   — invoice mounted by lib/printUtility (billing, transactions)
+ *   3. .print-surface    — dialogs printed in place (Z-Report, barcode labels)
+ * Everything outside the active surface is hidden, so window.print() never
+ * emits a blank page or the surrounding app chrome.
+ */
 @media print {
-  /* Hide everything except receipt */
+  html,
+  body {
+    background: #fff !important;
+    color: #000 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Hide everything ... */
   body * {
     visibility: hidden;
   }
 
+  /* ... except the active print surface */
   #receipt-content,
-  #receipt-content * {
-    visibility: visible;
+  #receipt-content *,
+  #app-print-root,
+  #app-print-root *,
+  .print-surface,
+  .print-surface * {
+    visibility: visible !important;
   }
 
-  #receipt-content {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
+  #receipt-content,
+  .print-surface {
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  /* Keep the printed report readable in dark mode */
+  .print-surface {
+    color: #111 !important;
+  }
+
+  .print-surface .text-muted-foreground,
+  .print-surface .text-muted-foreground * {
+    color: #4b5563 !important;
+  }
+
+  .print-surface .bg-card {
+    background-color: #fff !important;
+  }
+
+  #app-print-root {
+    position: static !important;
+    width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    background: #fff !important;
+    color: #000 !important;
   }
 
   /* Hide no-print elements */
-  .no-print {
+  .no-print,
+  .no-print * {
     display: none !important;
-  }
-
-  /* Reset colors for print */
-  body {
-    background: white !important;
-    color: black !important;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
   }
 
   /* Thermal receipt print sizing */
@@ -425,13 +472,7 @@ body {
     border: none !important;
   }
 
-  /* Page settings for thermal */
-  @page {
-    size: 80mm auto;
-    margin: 0;
-  }
-
-  /* Remove all decorative elements, except dialogs containing receipt content */
+  /* Remove all decorative elements, except dialogs containing a print surface */
   [data-radix-overlay],
   [data-radix-popper-content-wrapper] {
     display: none !important;
@@ -441,25 +482,45 @@ body {
     display: none !important;
   }
 
-  [role="dialog"]:has(#receipt-content) {
+  [role="dialog"]:has(#receipt-content),
+  [role="dialog"]:has(.print-surface) {
     display: block !important;
     visibility: visible !important;
-    position: static !important;
-    transform: none !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: auto !important;
+    bottom: auto !important;
+    /* DialogContent is centred with translate-x/y-[-50%]; cancel that shift
+       with a matching transform so the print starts at the page origin.
+       (Lightning CSS folds translate/scale into transform, so resetting the
+       standalone `translate` property here is not reliable.) */
+    transform: translate(50%, 50%) !important;
+    width: 100% !important;
+    max-width: 100% !important;
     max-height: none !important;
     height: auto !important;
     overflow: visible !important;
-    background: white !important;
-    box-shadow: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
     border: none !important;
-    width: 100% !important;
+    box-shadow: none !important;
+    background: #fff !important;
   }
 
-  /* Reset layout constraints on all wrappers inside the print dialog to prevent scroll/height clipping */
-  [role="dialog"]:has(#receipt-content) * {
+  /* Reset layout constraints inside the print dialog to prevent scroll/height clipping */
+  [role="dialog"]:has(#receipt-content) *,
+  [role="dialog"]:has(.print-surface) * {
     max-height: none !important;
     height: auto !important;
     overflow: visible !important;
+  }
+
+  /* Per-job page size is injected by lib/printUtility. Default to the
+     printer's paper instead of forcing 80mm on A4/A5 invoices. */
+  @page {
+    size: auto;
+    margin: 0;
   }
 }
 
