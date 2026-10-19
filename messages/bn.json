@@ -163,6 +163,27 @@
     "load_more": "আরো লোড করুন",
     "system": "সিস্টেম"
   },
+  "Business": {
+    "switch_failed": "দোকান পরিবর্তন করা যায়নি",
+    "unknown_error": "অজানা সমস্যা",
+    "name_too_short": "দোকানের নাম খুব ছোট",
+    "name_too_short_desc": "দোকানের নাম অন্তত ২ অক্ষরের হতে হবে।",
+    "create_failed": "দোকান যোগ করা যায়নি",
+    "created": "দোকান যোগ হয়েছে",
+    "created_desc": "{name} প্রস্তুত। এই দোকানের ওনার আপনি।",
+    "add_store_title": "নতুন দোকান যোগ করুন",
+    "add_store_desc": "আপনার একই অ্যাকাউন্টের অধীনে নতুন দোকান তৈরি হবে এবং আপনি এর ওনার হবেন। নতুন কোনো লগইন তৈরি হবে না।",
+    "store_name": "দোকানের নাম",
+    "store_name_placeholder": "যেমন: লক্ষ্মী ভাণ্ডার",
+    "store_type": "দোকানের ধরন",
+    "phone": "ফোন",
+    "address": "ঠিকানা",
+    "cancel": "বাতিল",
+    "create_store": "দোকান তৈরি করুন",
+    "switch_store": "দোকান পরিবর্তন করুন",
+    "your_stores": "আপনার দোকানসমূহ",
+    "add_store": "নতুন দোকান যোগ করুন"
+  },
   "Navigation": {
     "dashboard": "ড্যাশবোর্ড",
     "billing": "বিলিং",
@@ -199,7 +220,18 @@
     "pending": "বাকি",
     "cart": "কার্ট",
     "bill_now": "বিল করুন",
-    "daily-profit-calculator": "দৈনিক লাভ-ক্ষতি"
+    "daily-profit-calculator": "দৈনিক লাভ-ক্ষতি",
+    "tools_register": "টুলস ও রেজিস্টার",
+    "shift_register": "শিফট রেজিস্টার",
+    "shift_open": "চালু",
+    "shift_closed": "বন্ধ",
+    "day_close": "ডে ক্লোজ (Z-রিপোর্ট)",
+    "csv_import": "পণ্য CSV ইম্পোর্ট",
+    "barcode_sticker": "বারকোড স্টিকার",
+    "counter_lock_pin": "কাউন্টার লক (PIN)",
+    "toggle_theme": "থিম বদলান",
+    "toggle_language": "ভাষা বদলান",
+    "bill_label": "বিল"
   },
   "Billing": {
     "search_products": "পণ্য খুঁজুন...",
@@ -233,7 +265,8 @@
     "done_scanned": "সম্পন্ন ({count}টি স্ক্যান করা হয়েছে)",
     "torch_on": "ফ্ল্যাশলাইট চালু",
     "torch_off": "ফ্ল্যাশলাইট বন্ধ",
-    "scanner_keyboard_fallback": "USB/Bluetooth বারকোড স্ক্যানার ব্যবহার করতে পারেন, অথবা সার্চে কোড টাইপ করুন।"
+    "scanner_keyboard_fallback": "USB/Bluetooth বারকোড স্ক্যানার ব্যবহার করতে পারেন, অথবা সার্চে কোড টাইপ করুন।",
+    "default_discount_hint": "প্রতিটি নতুন বিলে স্বয়ংক্রিয়ভাবে প্রয়োগ হয়। প্রয়োজনে প্রতি বিলে আলাদা করে বদলাতে পারবেন।"
   },
   "Cart": {
     "title": "কার্ট",
@@ -334,7 +367,12 @@
     "mixed_payment": "মিশ্র পেমেন্ট",
     "due_payment_label": "বাকি পেমেন্ট",
     "due": "বাকি",
-    "prepaid": "প্রিপেইড"
+    "prepaid": "প্রিপেইড",
+    "mixed_split_hint": "নগদ ও ইউপিআই আলাদা আলাদা লিখুন। দুটোর যোগফল মোট পরিশোধের পরিমাণের সমান হতে হবে।",
+    "mixed_total": "নগদ + ইউপিআই",
+    "mixed_short": "নগদ + ইউপিআই ({total}) পরিশোধযোগ্য ({amount})-এর চেয়ে কম।",
+    "split_half": "সমান দুই ভাগ",
+    "default_discount_applied": "ডিফল্ট ডিসকাউন্ট {percent}% প্রয়োগ হয়েছে"
   },
   "Common": {
     "save": "সংরক্ষণ করুন",
@@ -397,7 +435,19 @@
     "upi": "ইউপিআই",
     "mixed": "মিশ্র",
     "last_7_days_short": "৭দিন:",
-    "invoice_footer_default": "এটি একটি কম্পিউটার-জেনারেটেড ইনভয়েস।"
+    "invoice_footer_default": "এটি একটি কম্পিউটার-জেনারেটেড ইনভয়েস।",
+    "due": "বকেয়া",
+    "clear": "মুছুন",
+    "unlock_success": "কাউন্টার আনলক সফল",
+    "welcome_back": "স্বাগতম, {name}",
+    "wrong_pin": "ভুল পিন!",
+    "pin_hint": "সঠিক ৪ ডিজিটের পিন প্রদান করুন।",
+    "counter_locked": "কাউন্টার লক করা আছে",
+    "enter_pin_to_unlock": "{name} — আনলক করতে ৪ ডিজিট পিন চাপুন (কীবোর্ডের সংখ্যা দিয়েও দেওয়া যাবে)",
+    "unlock_counter": "কাউন্টার আনলক সফল",
+    "ready_now": "{name} প্রস্তুত",
+    "cashier": "ক্যাশিয়ার",
+    "kitchen": "রান্নাঘর"
   },
   "DailyCalculator": {
     "title": "লাভ-ক্ষতি হিসাবকারী",
@@ -917,7 +967,10 @@
     "a4": "এ৪ (A4) কাগজ",
     "print": "প্রিন্ট করুন",
     "receipt_size": "রসিদের সাইজ",
-    "select_size": "রসিদের কাগজের সাইজ নির্বাচন করুন"
+    "select_size": "রসিদের কাগজের সাইজ নির্বাচন করুন",
+    "print_failed": "প্রিন্ট ডায়ালগ খোলা যায়নি",
+    "print_failed_desc": "Share PDF ব্যবহার করে শেয়ার শিট থেকে প্রিন্টার অ্যাপ বেছে নিন।",
+    "opening_print": "প্রিন্ট ডায়ালগ খোলা হচ্ছে…"
   },
   "PrintInvoice": {
     "invoice": "ইনভয়েস",
@@ -1578,7 +1631,12 @@
     "color_pink": "গোলাপি",
     "color_gray": "ধূসর",
     "failed_restore": "রিস্টোর ব্যর্থ হয়েছে",
-    "unknown_error": "অজানা ত্রুটি"
+    "unknown_error": "অজানা ত্রুটি",
+    "about_legal": "পরিচিতি ও আইনি",
+    "store_profile_saved": "দোকানের তথ্য সংরক্ষণ হয়েছে",
+    "store_profile_failed": "দোকানের তথ্য সংরক্ষণ করা যায়নি",
+    "language_switched": "ভাষা পরিবর্তন করে বাংলা করা হয়েছে",
+    "language_switched_bn": "ভাষা পরিবর্তন করে বাংলা করা হয়েছে"
   },
   "Stock": {
     "title": "স্টক ব্যবস্থাপনা",
@@ -1877,5 +1935,34 @@
     "role_viewer_desc": "শুধুমাত্র রিপোর্ট এবং বিক্রয় দেখতে পারেন",
     "leave_blank_placeholder": "পরিবর্তন না করতে চাইলে ফাঁকা রাখুন",
     "enter_new_password_placeholder": "নতুন পাসওয়ার্ড লিখুন (ঐচ্ছিক)"
+  },
+  "categories": {
+    "rent": "Rent",
+    "utilities": "Utilities",
+    "salaries": "Salaries",
+    "supplies": "Supplies",
+    "maintenance": "Maintenance",
+    "supplier payment": "Supplier Payment",
+    "other": "Other"
+  },
+  "categories_map": {
+    "Rent": "Rent",
+    "Utilities": "Utilities",
+    "Salaries": "Salaries",
+    "Supplies": "Supplies",
+    "Maintenance": "Maintenance",
+    "Supplier Payment": "Supplier Payment",
+    "Other": "Other"
+  },
+  "units": {
+    "piece": "Piece",
+    "kg": "Kilogram",
+    "gram": "Gram",
+    "liter": "Liter",
+    "ml": "Milliliter",
+    "packet": "Packet",
+    "bottle": "Bottle",
+    "dozen": "Dozen",
+    "box": "Box"
   }
 }
