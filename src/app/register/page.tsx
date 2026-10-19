@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { signIn } from "next-auth/react";
+import { signIn, useSession } from "next-auth/react";
 import Link from "next/link";
 import {
   Card,
@@ -40,9 +40,25 @@ const STORE_TYPES = [
 
 export default function RegisterPage() {
   const router = useRouter();
+  const { data: session, status: sessionStatus } = useSession();
   const [step, setStep] = useState<1 | 2>(1);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Adding a store must NOT mint a second user account (that produced duplicate
+  // owners). It now lives in the store switcher, so an old ?mode=add-business
+  // link just sends an already-signed-in merchant back to the POS.
+  // Read from window (not useSearchParams) — this page is statically exported.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const isAddBusinessMode = new URLSearchParams(window.location.search).get("mode") === "add-business";
+    if (!isAddBusinessMode) return;
+
+    if (sessionStatus === "loading") return;
+    if (sessionStatus === "authenticated" || session) {
+      router.replace("/pos");
+    }
+  }, [session, sessionStatus, router]);
 
   // Step 1: User Account
   const [name, setName] = useState("");
