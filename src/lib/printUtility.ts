@@ -2,17 +2,21 @@ import { Capacitor } from '@capacitor/core';
 import type { PrintFormat } from '@/types/pos';
 
 /**
- * PrintOptions interface for configuring iframe-based printing
+ * PrintOptions interface for configuring printing
  */
 interface PrintOptions {
   printContent: HTMLElement;
   pageStyle?: string;
   onBeforePrint?: () => void;
   onAfterPrint?: () => void;
+  onError?: (message: string) => void;
   format?: PrintFormat;
   /** Optional document title for print job / PDF filename */
   documentName?: string;
 }
+
+const PRINT_ROOT_ID = 'app-print-root';
+const PRINT_ROOT_STYLE_ID = 'app-print-root-style';
 
 const isCapacitorNative = (): boolean =>
   typeof window !== 'undefined' && !!Capacitor.isNativePlatform?.();
@@ -161,6 +165,149 @@ function cleanupIframe(iframe: HTMLIFrameElement): void {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Top-window printing — the ONLY path that works on mobile browsers.
+//
+// Mobile Safari has no iframe.print() at all, Chrome for Android dropped
+// reliable iframe printing, and Android's WebView only routes the TOP frame to
+// PrintManager. So we mount the invoice into the real document behind a print
+// stylesheet and call window.print() on the top window. It is a visible white
+// overlay while printing so mobile engines actually rasterise it.
+// ---------------------------------------------------------------------------
+
+let printRootStyleEl: HTMLStyleElement | null = null;
+
+function ensurePrintRootStyle(): HTMLStyleElement {
+  const existing = document.getElementById(PRINT_ROOT_STYLE_ID);
+  if (existing) return existing as HTMLStyleElement;
+
+  const style = document.createElement('style');
+  style.id = PRINT_ROOT_STYLE_ID;
+  style.textContent = `
+    #${PRINT_ROOT_ID} {
+      position: fixed !important;
+      top: 0 !important;
+      left: 0 !important;
+      right: 0 !important;
+      bottom: 0 !important;
+      overflow: auto !important;
+      background: #fff !important;
+      color: #000 !important;
+      z-index: 2147483647 !important;
+      -webkit-overflow-scrolling: touch !important;
+    }
+    @media print {
+      html, body { background: #fff !important; }
+      body > *:not(#${PRINT_ROOT_ID}) { display: none !important; }
+      #${PRINT_ROOT_ID} {
+        position: static !important;
+        overflow: visible !important;
+        height: auto !important;
+        width: 100% !important;
+      }
+      .no-print, .no-print * { display: none !important; }
+    }
+  `;
+  document.head.appendChild(style);
+  printRootStyleEl = style;
+  return style;
+}
+
+function mountPrintRoot(printHtml: string): HTMLElement | null {
+  try {
+    ensurePrintRootStyle();
+    document.getElementById(PRINT_ROOT_ID)?.remove();
+
+    // Strip the full document wrapper — we only need the invoice markup; the
+    // app stylesheets are already linked in the current page.
+    const bodyMatch = printHtml.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+    const inner = bodyMatch ? bodyMatch[1] : printHtml;
+
+    const root = document.createElement('div');
+    root.id = PRINT_ROOT_ID;
+    root.innerHTML = inner;
+    document.body.appendChild(root);
+    return root;
+  } catch (err) {
+    console.warn('[PrintUtil] Could not mount print root:', err);
+    return null;
+  }
+}
+
+function unmountPrintRoot(): void {
+  try {
+    document.getElementById(PRINT_ROOT_ID)?.remove();
+  } catch {
+    /* noop */
+  }
+}
+
+function waitForImages(scope: ParentNode): Promise<void> {
+  const images = Array.from(scope.querySelectorAll('img'));
+  if (images.length === 0) return Promise.resolve();
+
+  return Promise.all(
+    images.map((img) => {
+      const el = img as HTMLImageElement;
+      if (el.complete) return Promise.resolve();
+      return new Promise<void>((resolve) => {
+        const done = () => resolve();
+        el.addEventListener('load', done, { once: true });
+        el.addEventListener('error', done, { once: true });
+        setTimeout(done, 3000);
+      });
+    }),
+  ).then(() => undefined);
+}
+
+function nextFrame(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => resolve());
+    } else {
+      setTimeout(() => resolve(), 16);
+    }
+  });
+}
+
+/**
+ * Print the top-level window. This is the primary path on every platform.
+ * Resolves to true only when window.print() actually existed and ran.
+ */
+async function tryTopWindowPrint(printHtml: string): Promise<boolean> {
+  if (typeof window === 'undefined' || typeof window.print !== 'function') return false;
+
+  const root = mountPrintRoot(printHtml);
+  if (!root) return false;
+
+  let settled = false;
+  const cleanup = () => {
+    if (settled) return;
+    settled = true;
+    window.removeEventListener?.('afterprint', cleanup);
+    unmountPrintRoot();
+  };
+
+  try {
+    await waitForImages(root);
+    await nextFrame();
+    await nextFrame();
+
+    window.addEventListener?.('afterprint', cleanup, { once: true });
+    window.focus?.();
+    window.print();
+
+    // Some WebViews/browsers never fire afterprint — never leave the white
+    // overlay stuck on screen.
+    setTimeout(cleanup, 5000);
+    return true;
+  } catch (err) {
+    console.warn('[PrintUtil] window.print() failed:', err);
+    cleanup();
+    return false;
+  }
+}
+
 /** Cordova printer plugin (optional — not shipped by default). */
 function tryCordovaPrint(html: string, name: string): Promise<boolean> {
   const printer = (window as any).cordova?.plugins?.printer;
@@ -180,11 +327,7 @@ function tryCordovaPrint(html: string, name: string): Promise<boolean> {
   });
 }
 
-/**
- * Trigger browser/WebView print dialog on an iframe window.
- * Android System WebView (Chromium) routes this to PrintManager.
- * Keep iframe off-screen but not display:none — some WebViews skip print for display:none frames.
- */
+/** Fallback: print through a hidden iframe. Kept for older desktop browsers. */
 function tryIframePrint(iframe: HTMLIFrameElement): Promise<boolean> {
   const win = iframe.contentWindow;
   if (!win?.print) return Promise.resolve(false);
@@ -204,7 +347,6 @@ function tryIframePrint(iframe: HTMLIFrameElement): Promise<boolean> {
       win.addEventListener?.('afterprint', onAfter);
       win.focus();
       win.print();
-      // afterprint is flaky on some Android WebViews — assume success after a beat
       setTimeout(() => finish(true), 1500);
     } catch (err) {
       console.warn('[PrintUtil] iframe.print() failed:', err);
@@ -214,8 +356,8 @@ function tryIframePrint(iframe: HTMLIFrameElement): Promise<boolean> {
 }
 
 /**
- * Last-resort native print: write a PDF and open the system share sheet
- * (user can pick a printer app). Prefer real print dialogs above this.
+ * Last resort: write a PDF and open the system share sheet (user picks a
+ * printer app). Prefer real print dialogs above this.
  */
 async function sharePdfFallback(
   printHtml: string,
@@ -232,113 +374,99 @@ async function sharePdfFallback(
   });
 }
 
+async function tryIframeRoute(printHtml: string): Promise<boolean> {
+  const iframe = document.createElement('iframe');
+  iframe.setAttribute('aria-hidden', 'true');
+  iframe.style.cssText =
+    'position:fixed;top:0;left:0;width:100%;height:100%;opacity:0.01;pointer-events:none;border:0;';
+  iframe.id = `print-iframe-${Date.now()}`;
+  document.body.appendChild(iframe);
+
+  const iframeDoc = iframe.contentWindow?.document;
+  if (!iframeDoc) {
+    cleanupIframe(iframe);
+    return false;
+  }
+
+  iframeDoc.open();
+  iframeDoc.write(printHtml);
+  iframeDoc.close();
+  await waitForImages(iframeDoc);
+
+  const ok = await tryIframePrint(iframe);
+  setTimeout(() => cleanupIframe(iframe), 2000);
+  return ok;
+}
+
 /**
- * Industry-standard iframe-based print utility for POS applications.
+ * Printing entry point. Resolves to true when a print dialog was handed off.
  *
- * Web: iframe + window.print()
- * Android/iOS Capacitor:
- *   1) optional cordova-plugin-printer
- *   2) WebView print() → Android PrintManager
- *   3) PDF share sheet (never HTML)
+ * Order: cordova printer → top-window print (works on mobile + Android WebView)
+ *        → iframe print → PDF share sheet.
  */
-export const printToIframe = (options: PrintOptions): void => {
+export async function printToIframe(options: PrintOptions): Promise<boolean> {
   const {
     printContent,
     pageStyle,
     onBeforePrint,
     onAfterPrint,
+    onError,
     format,
     documentName = 'Invoice',
   } = options;
 
   if (!printContent) {
     console.error('[PrintUtil] Print content is missing.');
-    return;
+    onError?.('Print content is missing.');
+    return false;
   }
 
-  const isCapacitor = isCapacitorNative();
   const printHtml = buildPrintHtml(printContent, pageStyle, format);
 
-  const iframe = document.createElement('iframe');
-  // Off-screen but paintable — display:none breaks print on many Android WebViews
-  iframe.setAttribute('aria-hidden', 'true');
-  iframe.style.cssText =
-    'position:fixed;right:0;bottom:0;width:1px;height:1px;opacity:0;pointer-events:none;border:0;';
-  iframe.id = `print-iframe-${Date.now()}`;
-  document.body.appendChild(iframe);
+  try {
+    onBeforePrint?.();
 
-  const iframeDoc = iframe.contentWindow?.document;
-  if (!iframeDoc) {
-    console.error('[PrintUtil] Could not access iframe document.');
-    cleanupIframe(iframe);
-    return;
-  }
+    const isNative = isCapacitorNative();
 
-  iframeDoc.open();
-  iframeDoc.write(printHtml);
-  iframeDoc.close();
-
-  const handlePrint = async (): Promise<void> => {
-    try {
-      onBeforePrint?.();
-
-      if (isCapacitor) {
-        // 1) Optional cordova printer plugin
-        const cordovaOk = await tryCordovaPrint(printHtml, documentName);
-        if (cordovaOk) {
-          onAfterPrint?.();
-          cleanupIframe(iframe);
-          return;
-        }
-
-        // 2) WebView / Chromium print dialog (Android PrintManager)
-        const iframeOk = await tryIframePrint(iframe);
-        if (iframeOk) {
-          onAfterPrint?.();
-          // Delay cleanup so the print service can snapshot content
-          setTimeout(() => cleanupIframe(iframe), 2000);
-          return;
-        }
-
-        // 3) PDF share sheet (print apps accept PDF, not HTML)
-        console.warn('[PrintUtil] Native print dialog unavailable — sharing PDF');
-        await sharePdfFallback(printHtml, format, documentName);
+    // 1) Optional cordova printer plugin
+    if (isNative) {
+      const cordovaOk = await tryCordovaPrint(printHtml, documentName);
+      if (cordovaOk) {
         onAfterPrint?.();
-        cleanupIframe(iframe);
-        return;
+        return true;
       }
-
-      // Desktop / mobile browser
-      const ok = await tryIframePrint(iframe);
-      if (!ok) {
-        console.error('[PrintUtil] Print failed');
-      }
-      onAfterPrint?.();
-      setTimeout(() => cleanupIframe(iframe), 1000);
-    } catch (error) {
-      console.error('[PrintUtil] Print failed:', error);
-      cleanupIframe(iframe);
     }
-  };
 
-  const loadableElements = iframe.contentWindow?.document.querySelectorAll('img');
-  let loadedCount = 0;
-  const totalCount = loadableElements?.length ?? 0;
+    // 2) Top-window print — the reliable path everywhere
+    const topOk = await tryTopWindowPrint(printHtml);
+    if (topOk) {
+      onAfterPrint?.();
+      return true;
+    }
 
-  if (totalCount === 0) {
-    setTimeout(handlePrint, 150);
-  } else {
-    loadableElements?.forEach((img: Element) => {
-      const imgElement = img as HTMLImageElement;
-      const incrementLoaded = (): void => {
-        loadedCount++;
-        if (loadedCount === totalCount) handlePrint();
-      };
-      if (imgElement.complete) incrementLoaded();
-      else {
-        imgElement.addEventListener('load', incrementLoaded, { once: true });
-        imgElement.addEventListener('error', incrementLoaded, { once: true });
-      }
-    });
+    // 3) Hidden-iframe print (older desktop browsers)
+    const iframeOk = await tryIframeRoute(printHtml);
+    if (iframeOk) {
+      onAfterPrint?.();
+      return true;
+    }
+
+    // 4) PDF share sheet — always reachable, works on every phone
+    if (isNative) {
+      console.warn('[PrintUtil] Print dialog unavailable — sharing PDF instead');
+      await sharePdfFallback(printHtml, format, documentName);
+      onAfterPrint?.();
+      return true;
+    }
+
+    console.error('[PrintUtil] Print failed');
+    onError?.('The print dialog could not be opened.');
+    onAfterPrint?.();
+    return false;
+  } catch (error) {
+    console.error('[PrintUtil] Print failed:', error);
+    onError?.(error instanceof Error ? error.message : String(error));
+    onAfterPrint?.();
+    return false;
   }
-};
+}

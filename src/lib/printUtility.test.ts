@@ -27,6 +27,51 @@ vi.mock('@capacitor/core', () => ({
   },
 }));
 
+/** Simulate a browser/WebView that exposes window.print(). */
+function mockTopWindowPrint() {
+  const spy = vi.fn();
+  (global.window as any).print = spy;
+  return spy;
+}
+
+/** Simulate a browser with no window.print() at all (iframe-only path). */
+function removeTopWindowPrint() {
+  try {
+    delete (global.window as any).print;
+  } catch {
+    (global.window as any).print = undefined;
+  }
+}
+
+/** Spy on iframe printing by faking the contentWindow of any appended iframe. */
+function spyOnIframePrint() {
+  const iframePrintSpy = vi.fn();
+  const originalAppend = document.body.appendChild.bind(document.body);
+  const appendChildSpy = vi
+    .spyOn(document.body, 'appendChild')
+    .mockImplementation(((node: any) => {
+      if (node && node.tagName === 'IFRAME') {
+        Object.defineProperty(node, 'contentWindow', {
+          value: {
+            document: {
+              querySelectorAll: () => [],
+              open: vi.fn(),
+              write: vi.fn(),
+              close: vi.fn(),
+            },
+            focus: vi.fn(),
+            print: iframePrintSpy,
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn(),
+          },
+          writable: true,
+        });
+      }
+      return originalAppend(node);
+    }) as any);
+  return { iframePrintSpy, appendChildSpy };
+}
+
 describe('printToIframe', () => {
   let originalWindow: any;
   let originalDocument: any;
@@ -67,55 +112,89 @@ describe('printToIframe', () => {
     consoleWarnSpy.mockRestore();
   });
 
-  it('should log an error and return early if printContent is missing', () => {
-    printToIframe({ printContent: null as any });
+  it('should log an error and return early if printContent is missing', async () => {
+    const onError = vi.fn();
+    const ok = await printToIframe({ printContent: null as any, onError });
+
     expect(consoleErrorSpy).toHaveBeenCalledWith('[PrintUtil] Print content is missing.');
+    expect(onError).toHaveBeenCalled();
+    expect(ok).toBe(false);
   });
 
-  it('should standard web print with an iframe and trigger onBeforePrint and onAfterPrint', async () => {
+  it('prints through window.print() — the path mobile browsers actually support', async () => {
     const printContent = document.createElement('div');
     printContent.innerHTML = '<p>Test Invoice</p>';
 
+    const topPrintSpy = mockTopWindowPrint();
     const onBeforePrint = vi.fn();
     const onAfterPrint = vi.fn();
-    const printSpy = vi.fn();
 
-    global.setTimeout = ((fn: any) => {
-      fn();
-      return 0 as any;
-    }) as any;
-
-    const appendChildSpy = vi.spyOn(document.body, 'appendChild').mockImplementation((node) => {
-      const iframe = node as HTMLIFrameElement;
-      Object.defineProperty(iframe, 'contentWindow', {
-        value: {
-          document: {
-            querySelectorAll: () => [],
-            open: vi.fn(),
-            write: vi.fn(),
-            close: vi.fn(),
-          },
-          focus: vi.fn(),
-          print: printSpy,
-          addEventListener: vi.fn(),
-          removeEventListener: vi.fn(),
-        },
-        writable: true,
-      });
-      return node;
-    });
-
-    printToIframe({
+    const ok = await printToIframe({
       printContent,
       onBeforePrint,
       onAfterPrint,
     });
 
-    await new Promise((resolve) => originalSetTimeout(resolve, 0));
-
+    expect(topPrintSpy).toHaveBeenCalled();
     expect(onBeforePrint).toHaveBeenCalled();
-    expect(printSpy).toHaveBeenCalled();
     expect(onAfterPrint).toHaveBeenCalled();
+    expect(ok).toBe(true);
+  });
+
+  it('mounts the invoice into the real document so mobile engines can render it', async () => {
+    const printContent = document.createElement('div');
+    printContent.innerHTML = '<p class="thermal-invoice">Test Invoice</p>';
+
+    mockTopWindowPrint();
+    await printToIframe({ printContent });
+
+    const root = document.getElementById('app-print-root');
+    expect(root).not.toBeNull();
+    expect(root?.innerHTML).toContain('thermal-invoice');
+    expect(document.getElementById('app-print-root-style')).not.toBeNull();
+  });
+
+  it('falls back to the hidden iframe when window.print() is unavailable', async () => {
+    const printContent = document.createElement('div');
+    printContent.innerHTML = '<p>Test Invoice</p>';
+
+    removeTopWindowPrint();
+    global.setTimeout = ((fn: any) => {
+      fn();
+      return 0 as any;
+    }) as any;
+
+    const { iframePrintSpy, appendChildSpy } = spyOnIframePrint();
+
+    const ok = await printToIframe({ printContent });
+
+    expect(iframePrintSpy).toHaveBeenCalled();
+    expect(ok).toBe(true);
+
+    appendChildSpy.mockRestore();
+  });
+
+  it('reports an error when no print route is available on the web', async () => {
+    const printContent = document.createElement('div');
+    printContent.innerHTML = '<p>Test Invoice</p>';
+
+    removeTopWindowPrint();
+    const { appendChildSpy } = spyOnIframePrint();
+
+    // Break the iframe route too: pretend the iframe has no print().
+    const originalAppend = document.body.appendChild.bind(document.body);
+    appendChildSpy.mockImplementation(((node: any) => {
+      if (node && node.tagName === 'IFRAME') {
+        Object.defineProperty(node, 'contentWindow', { value: undefined, writable: true });
+      }
+      return originalAppend(node);
+    }) as any);
+
+    const onError = vi.fn();
+    const ok = await printToIframe({ printContent, onError });
+
+    expect(ok).toBe(false);
+    expect(onError).toHaveBeenCalled();
 
     appendChildSpy.mockRestore();
   });
@@ -139,79 +218,29 @@ describe('printToIframe', () => {
         },
       };
 
-      global.setTimeout = ((fn: any) => {
-        fn();
-        return 0 as any;
-      }) as any;
+      const topPrintSpy = mockTopWindowPrint();
 
-      const appendChildSpy = vi.spyOn(document.body, 'appendChild').mockImplementation((node) => {
-        const iframe = node as HTMLIFrameElement;
-        Object.defineProperty(iframe, 'contentWindow', {
-          value: {
-            document: {
-              querySelectorAll: () => [],
-              open: vi.fn(),
-              write: vi.fn(),
-              close: vi.fn(),
-            },
-            focus: vi.fn(),
-            print: vi.fn(),
-            addEventListener: vi.fn(),
-            removeEventListener: vi.fn(),
-          },
-          writable: true,
-        });
-        return node;
-      });
-
-      printToIframe({ printContent });
-
-      await new Promise((resolve) => originalSetTimeout(resolve, 0));
+      const ok = await printToIframe({ printContent });
 
       expect(cordovaPrintSpy).toHaveBeenCalled();
+      // Cordova wins, so the web paths must not run.
+      expect(topPrintSpy).not.toHaveBeenCalled();
+      expect(ok).toBe(true);
 
-      appendChildSpy.mockRestore();
       delete (global.window as any).cordova;
     });
 
-    it('should fall back to WebView print when cordova printer is missing', async () => {
+    it('prints via the top window when no cordova printer is installed', async () => {
       const printContent = document.createElement('div');
-      const printSpy = vi.fn();
+      printContent.innerHTML = '<p>Test Invoice</p>';
 
       delete (global.window as any).cordova;
+      const topPrintSpy = mockTopWindowPrint();
 
-      global.setTimeout = ((fn: any) => {
-        fn();
-        return 0 as any;
-      }) as any;
+      const ok = await printToIframe({ printContent });
 
-      const appendChildSpy = vi.spyOn(document.body, 'appendChild').mockImplementation((node) => {
-        const iframe = node as HTMLIFrameElement;
-        Object.defineProperty(iframe, 'contentWindow', {
-          value: {
-            document: {
-              querySelectorAll: () => [],
-              open: vi.fn(),
-              write: vi.fn(),
-              close: vi.fn(),
-            },
-            focus: vi.fn(),
-            print: printSpy,
-            addEventListener: vi.fn(),
-            removeEventListener: vi.fn(),
-          },
-          writable: true,
-        });
-        return node;
-      });
-
-      printToIframe({ printContent });
-
-      await new Promise((resolve) => originalSetTimeout(resolve, 0));
-
-      expect(printSpy).toHaveBeenCalled();
-
-      appendChildSpy.mockRestore();
+      expect(topPrintSpy).toHaveBeenCalled();
+      expect(ok).toBe(true);
     });
   });
 });

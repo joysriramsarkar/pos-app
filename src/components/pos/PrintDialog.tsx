@@ -34,14 +34,14 @@ interface PrintDialogProps {
 
 const PRINT_FORMATS: {
   value: PrintFormat;
-  label: string;
-  description: string;
+  labelKey: string;
+  descriptionKey: string;
   icon: React.ReactNode;
 }[] = [
   {
     value: "thermal-58",
-    label: "Thermal 58mm",
-    description: "Small receipt printer",
+    labelKey: "thermal_58",
+    descriptionKey: "thermal_58_desc",
     icon: (
       <svg
         className="w-5 h-5"
@@ -60,8 +60,8 @@ const PRINT_FORMATS: {
   },
   {
     value: "thermal-80",
-    label: "Thermal 80mm",
-    description: "Standard receipt printer",
+    labelKey: "thermal_80",
+    descriptionKey: "thermal_80_desc",
     icon: (
       <svg
         className="w-5 h-5"
@@ -80,8 +80,8 @@ const PRINT_FORMATS: {
   },
   {
     value: "a4",
-    label: "A4 Paper",
-    description: "Full page invoice",
+    labelKey: "a4_paper",
+    descriptionKey: "a4_desc",
     icon: (
       <svg
         className="w-5 h-5"
@@ -100,8 +100,8 @@ const PRINT_FORMATS: {
   },
   {
     value: "a5",
-    label: "A5 Paper",
-    description: "Half page invoice",
+    labelKey: "a5_paper",
+    descriptionKey: "a5_desc",
     icon: (
       <svg
         className="w-5 h-5"
@@ -228,7 +228,7 @@ export function PrintDialog({
     preloadPdfLibs();
   }, [open, settings.print_paper_size, settings.print_footer]);
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
     if (!sale || isPrinting) return;
     setIsPrinting(true);
     const container = document.createElement("div");
@@ -244,19 +244,42 @@ export function PrintDialog({
         storeConfig={storeConfig}
       />,
     );
-    printToIframe({
-      printContent: container,
-      pageStyle: getPageStyle(selectedFormat),
-      format: selectedFormat,
-      documentName: `Invoice-${sale.invoiceNumber}`,
-      onAfterPrint: () => {
-        setIsPrinting(false);
-        onOpenChange(false);
-        onPrint?.(selectedFormat);
-      },
-    });
-    // Safety: clear printing flag if native path never calls onAfterPrint
-    setTimeout(() => setIsPrinting(false), 8000);
+
+    try {
+      const printed = await printToIframe({
+        printContent: container,
+        pageStyle: getPageStyle(selectedFormat),
+        format: selectedFormat,
+        documentName: `Invoice-${sale.invoiceNumber}`,
+        onAfterPrint: () => {
+          setIsPrinting(false);
+          onPrint?.(selectedFormat);
+        },
+        onError: () => {
+          setIsPrinting(false);
+        },
+      });
+
+      if (!printed) {
+        toast({
+          title: t('print_failed'),
+          description: t('print_failed_desc'),
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      // Only close the dialog once the print dialog has actually been handed off.
+      onOpenChange(false);
+    } catch (err: unknown) {
+      console.error('Print failed:', err);
+      setIsPrinting(false);
+      toast({
+        title: t('print_failed'),
+        description: t('print_failed_desc'),
+        variant: 'destructive',
+      });
+    }
   };
 
   /** One-tap PDF share (native sheet / download). Never shares HTML. */
@@ -337,9 +360,9 @@ export function PrintDialog({
                     />
                     {fmt.icon}
                     <div className="text-center">
-                      <p className="font-medium text-sm">{fmt.label}</p>
+                      <p className="font-medium text-sm">{t(fmt.labelKey)}</p>
                       <p className="text-xs text-muted-foreground">
-                        {fmt.description}
+                        {t(fmt.descriptionKey)}
                       </p>
                     </div>
                   </Label>
@@ -387,7 +410,7 @@ export function PrintDialog({
                 value={footerMessage}
                 onChange={(e) => setFooterMessage(e.target.value)}
                 className="w-full p-2 text-sm border rounded-md resize-none h-16 bg-background"
-                placeholder="Custom footer message..."
+                placeholder={t('footer_placeholder')}
               />
             </div>
 
