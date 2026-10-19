@@ -187,9 +187,12 @@ export function POSDashboard() {
   const { theme, resolvedTheme, setTheme } = useTheme();
   const logout = useLogout();
   
-  const toggleLanguage = useCallback(() => {
-    const { settings, updateSetting } = useSettingsStore.getState();
-    updateSetting('app_language', settings.app_language === 'bn' ? 'en' : 'bn');
+  const toggleLanguage = useCallback(async () => {
+    const { settings, saveSettings } = useSettingsStore.getState();
+    const next: 'bn' | 'en' = settings.app_language === 'bn' ? 'en' : 'bn';
+    // Persist to the server first — a local-only change gets overwritten by the
+    // next fetchSettings() call and the UI silently flips back.
+    await saveSettings({ app_language: next });
   }, []);
   
   const toggleTheme = useCallback(() => {
@@ -1162,18 +1165,18 @@ export function POSDashboard() {
       {/* Quick Retail Tools */}
       <div className="p-3 border-t bg-slate-50/70 dark:bg-slate-900/40 space-y-1">
         <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-2 mb-1">
-          টুলস ও রেজিস্টার
+          {t('tools_register')}
         </p>
         <button
           onClick={() => setIsShiftModalOpen(true)}
           className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-medium hover:bg-slate-200/60 dark:hover:bg-slate-800 text-foreground transition-colors group"
         >
           <Banknote className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform" />
-          <span className="truncate flex-1 text-left">শিফট রেজিস্টার</span>
+          <span className="truncate flex-1 text-left">{t('shift_register')}</span>
           {activeShift ? (
-            <span className="text-[9px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-1.5 py-0.2 rounded-full font-semibold">চালু</span>
+            <span className="text-[9px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-1.5 py-0.2 rounded-full font-semibold">{t('shift_open')}</span>
           ) : (
-            <span className="text-[9px] bg-slate-200 dark:bg-slate-700 text-muted-foreground px-1.5 py-0.2 rounded-full font-semibold">বন্ধ</span>
+            <span className="text-[9px] bg-slate-200 dark:bg-slate-700 text-muted-foreground px-1.5 py-0.2 rounded-full font-semibold">{t('shift_closed')}</span>
           )}
         </button>
 
@@ -1182,7 +1185,7 @@ export function POSDashboard() {
           className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-medium hover:bg-slate-200/60 dark:hover:bg-slate-800 text-foreground transition-colors group"
         >
           <CalendarCheck className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform" />
-          <span className="truncate flex-1 text-left">ডে ক্লোজ (Z-রিপোর্ট)</span>
+          <span className="truncate flex-1 text-left">{t('day_close')}</span>
         </button>
 
         <button
@@ -1190,7 +1193,7 @@ export function POSDashboard() {
           className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-medium hover:bg-slate-200/60 dark:hover:bg-slate-800 text-foreground transition-colors group"
         >
           <FileSpreadsheet className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 group-hover:scale-110 transition-transform" />
-          <span className="truncate flex-1 text-left">পণ্য CSV ইম্পোর্ট</span>
+          <span className="truncate flex-1 text-left">{t('csv_import')}</span>
         </button>
 
         <button
@@ -1198,7 +1201,7 @@ export function POSDashboard() {
           className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-medium hover:bg-slate-200/60 dark:hover:bg-slate-800 text-foreground transition-colors group"
         >
           <Barcode className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 group-hover:scale-110 transition-transform" />
-          <span className="truncate flex-1 text-left">বারকোড স্টিকার</span>
+          <span className="truncate flex-1 text-left">{t('barcode_sticker')}</span>
         </button>
 
         <button
@@ -1206,7 +1209,7 @@ export function POSDashboard() {
           className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-medium hover:bg-slate-200/60 dark:hover:bg-slate-800 text-foreground transition-colors group"
         >
           <UserCog className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 group-hover:scale-110 transition-transform" />
-          <span className="truncate flex-1 text-left">কাউন্টার লক (PIN)</span>
+          <span className="truncate flex-1 text-left">{t('counter_lock_pin')}</span>
         </button>
       </div>
 
@@ -1233,7 +1236,7 @@ export function POSDashboard() {
               size="icon"
               onClick={toggleTheme}
               className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-slate-200 dark:hover:bg-slate-800"
-              title="Toggle Theme"
+              title={t('toggle_theme')}
             >
               {resolvedTheme === 'dark' ? <Sun className="h-4 w-4 text-amber-500" /> : <Moon className="h-4 w-4" />}
             </Button>
@@ -1242,7 +1245,7 @@ export function POSDashboard() {
               size="icon"
               onClick={toggleLanguage}
               className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-slate-200 dark:hover:bg-slate-800"
-              title="Toggle Language"
+              title={t('toggle_language')}
             >
               <Languages className="h-4 w-4" />
             </Button>
@@ -1270,12 +1273,12 @@ export function POSDashboard() {
             {isOnline ? (
               <>
                 <Wifi className="w-3 h-3 mr-1" />
-                Online
+                {t('online')}
               </>
             ) : (
               <>
                 <WifiOff className="w-3 h-3 mr-1" />
-                Offline
+                {t('offline')}
               </>
             )}
           </Badge>
@@ -1886,9 +1889,12 @@ export function POSDashboard() {
       <CashierPinModal
         open={isCashierPinOpen}
         onOpenChange={setIsCashierPinOpen}
-        cashierName={activeUser?.name || 'ক্যাশিয়ার'}
+        cashierName={activeUser?.name || tc('cashier')}
         onSuccess={() => {
-          toast({ title: 'কাউন্টার আনলক সফল', description: `${activeUser?.name || 'ক্যাশিয়ার'} প্রস্তুত` });
+          toast({
+            title: tc('unlock_counter'),
+            description: tc('ready_now', { name: activeUser?.name || tc('cashier') }),
+          });
         }}
       />
 
