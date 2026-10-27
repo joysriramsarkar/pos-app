@@ -7,7 +7,7 @@ import {
   parseNumberAt,
   findNumberPhrases,
 } from './bn-parser';
-import { searchProducts, findCustomer, stringSimilarity } from './comam-matcher';
+import { searchProducts, findCustomer } from './comam-matcher';
 import { parseComamCommand } from './comam-engine';
 import type { Product, Customer } from '@/types/pos';
 
@@ -170,6 +170,21 @@ describe('Comam matcher and search tests', () => {
       createdAt: new Date(),
       updatedAt: new Date(),
     },
+    {
+      id: 'p9',
+      barcode: '999',
+      name: 'Bisk Farm Marie Biscuit Rs. 10',
+      nameBn: 'বিস্কফার্ম মেরি বিস্কুট ১০ টাকা',
+      category: 'Snacks',
+      buyingPrice: 8,
+      sellingPrice: 10,
+      unit: 'piece',
+      currentStock: 50,
+      minStockLevel: 5,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
   ];
 
   const mockCustomers: Customer[] = [
@@ -205,9 +220,9 @@ describe('Comam matcher and search tests', () => {
     expect(resChini.matches[0].product.nameBn).toBe('চিনি');
     expect(resChini.isAmbiguous).toBe(false);
 
-    // 'বিস্কুট' matches two biscuit products closely -> ambiguous
+    // 'বিস্কুট' matches biscuit products closely -> ambiguous
     const resBiscuit = searchProducts(mockProducts, 'বিস্কুট');
-    expect(resBiscuit.matches.length).toBe(2);
+    expect(resBiscuit.matches.length).toBeGreaterThanOrEqual(2);
     expect(resBiscuit.isAmbiguous).toBe(true);
   });
 
@@ -328,6 +343,67 @@ describe('Comam matcher and search tests', () => {
 
     // Total: 20 + 60 + 10 = 90
     expect(draft.total).toBe(90);
+  });
+
+  it('handles biskfarm marie input without hanging or freezing on 1000 products', () => {
+    const manyProducts: Product[] = [];
+    for (let i = 0; i < 1000; i++) {
+      manyProducts.push({
+        id: `p_${i}`,
+        name: `Product ${i} pack Rs. ${i % 100}`,
+        nameBn: `পণ্য ${i} প্যাকেট ${i % 100} টাকা`,
+        sellingPrice: (i % 100) + 10,
+        buyingPrice: (i % 100) + 5,
+        unit: i % 2 === 0 ? 'piece' : 'kg',
+        currentStock: 10,
+        minStockLevel: 2,
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+    }
+    // Also include Sugar and BiskFarm
+    manyProducts.push(...mockProducts);
+
+    const t0 = performance.now();
+    const draft = parseComamCommand(
+      'এক কেজি চিনি 10 টাকার বিস্কফার্মেরি বিস্কুট 1:10 টাকা',
+      manyProducts,
+      mockCustomers
+    );
+    const elapsed = performance.now() - t0;
+    console.log(`Elapsed for 1000 products: ${elapsed.toFixed(2)}ms`);
+    expect(elapsed).toBeLessThan(1500);
+    expect(draft).toBeDefined();
+  });
+
+  it('accurately parses user input: এক কেজি চিনি 10 টাকার বিস্কফার মেরি বিস্কুট 1:10 টাকা', () => {
+    const draft = parseComamCommand(
+      'এক কেজি চিনি 10 টাকার বিস্কফার মেরি বিস্কুট 1:10 টাকা',
+      mockProducts,
+      mockCustomers
+    );
+    expect(draft.kind).toBe('sale');
+    expect(draft.unknownItems.length).toBe(0);
+    expect(draft.ambiguities.length).toBe(0);
+    expect(draft.items.length).toBe(2);
+
+    // Item 1: Sugar 1 kg (Rs. 60)
+    const chini = draft.items.find((i) => i.nameBn?.includes('চিনি'));
+    expect(chini).toBeDefined();
+    expect(chini?.qty).toBe(1);
+    expect(chini?.unitPrice).toBe(60);
+    expect(chini?.lineTotal).toBe(60);
+
+    // Item 2: Bisk Farm Marie 10 Tk (1 pc)
+    const biscuit = draft.items.find((i) => i.nameBn?.includes('মেরি') || i.name.includes('Marie'));
+    expect(biscuit).toBeDefined();
+    expect(biscuit?.qty).toBe(1);
+    expect(biscuit?.unitPrice).toBe(10);
+    expect(biscuit?.lineTotal).toBe(10);
+
+    // Total: 60 + 10 = 70
+    expect(draft.total).toBe(70);
   });
 });
 

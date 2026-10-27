@@ -32,6 +32,13 @@ const BRAND_ALIASES: Record<string, string[]> = {
   'সার্ফ এক্সেল': ['surf excel'],
   'লাইফবয়': ['lifebuoy', 'লাইসবয়'],
   'ফরচুন': ['fortune'],
+  'বিস্কফার্ম': ['বিস্কফার', 'বিস্কফার্মের', 'বিস্ক ফার্ম', 'biskfarm', 'bisk farm'],
+  'বিস্কফার': ['বিস্কফার্ম', 'বিস্কফার্মের', 'biskfarm'],
+  'biskfarm': ['বিস্কফার্ম', 'বিস্কফার', 'বিস্ক ফার্ম'],
+  'মেরি': ['marie', 'মেরি বিস্কুট'],
+  'marie': ['মেরি'],
+  'বিস্কুট': ['বিস্কিট', 'biscuit', 'biscuits'],
+  'biscuit': ['বিস্কুট', 'বিস্কিট'],
 };
 
 export function normalizeBengali(text: string): string {

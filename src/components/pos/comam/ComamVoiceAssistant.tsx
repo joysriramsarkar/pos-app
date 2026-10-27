@@ -13,7 +13,6 @@ import {
   Volume2,
   VolumeX,
   X,
-  CreditCard,
   User,
   ArrowRight,
   RefreshCw,
@@ -21,14 +20,13 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { useCartStore, useProductsStore, useCustomersStore } from '@/stores/pos-store';
-import { parseComamCommand, type ComamDraft, type DraftItem } from '@/lib/comam/comam-engine';
+import { parseComamCommand, type ComamDraft } from '@/lib/comam/comam-engine';
 import { formatBnTaka, formatBnNumber } from '@/lib/comam/bn-parser';
 import type { Product } from '@/types/pos';
 
@@ -55,8 +53,10 @@ export function ComamVoiceAssistant({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [hasSpeechSupport, setHasSpeechSupport] = useState(true);
 
-  // Web Speech API recognition reference
+  // Web Speech API recognition reference and latest transcript tracking
   const recognitionRef = useRef<any>(null);
+  const latestTranscriptRef = useRef('');
+  const handleProcessCommandRef = useRef<((cmd?: string) => Promise<void>) | null>(null);
 
   // Initialize SpeechRecognition on mount
   useEffect(() => {
@@ -79,12 +79,14 @@ export function ComamVoiceAssistant({
       recognition.onstart = () => {
         setIsListening(true);
         setErrorMsg(null);
+        latestTranscriptRef.current = '';
       };
 
       recognition.onresult = (event: any) => {
         const transcript = Array.from(event.results)
           .map((result: any) => result[0].transcript)
           .join('');
+        latestTranscriptRef.current = transcript;
         setInputText(transcript);
       };
 
@@ -98,6 +100,10 @@ export function ComamVoiceAssistant({
 
       recognition.onend = () => {
         setIsListening(false);
+        const spokenText = latestTranscriptRef.current.trim();
+        if (spokenText.length >= 2 && handleProcessCommandRef.current) {
+          handleProcessCommandRef.current(spokenText);
+        }
       };
 
       recognitionRef.current = recognition;
@@ -162,35 +168,48 @@ export function ComamVoiceAssistant({
     setErrorMsg(null);
     setServerAnswer(null);
 
-    // 1. Instant deterministic parse client-side
-    const localDraft = parseComamCommand(text, products, customers);
-    setDraft(localDraft);
+    try {
+      // 1. Instant deterministic parse client-side
+      const localDraft = parseComamCommand(text, products, customers);
+      setDraft(localDraft);
 
-    // 2. Call server API for reports or due queries
-    if (localDraft.kind === 'report' || localDraft.kind === 'due_query') {
-      try {
-        const res = await fetch('/api/comam', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ command: text }),
-        });
+      // 2. Call server API for reports or due queries
+      if (localDraft.kind === 'report' || localDraft.kind === 'due_query') {
+        try {
+          const res = await fetch('/api/comam', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ command: text }),
+          });
 
-        if (res.ok) {
-          const data = await res.json();
-          if (data.answerBn) {
-            setServerAnswer(data.answerBn);
-            speakText(data.answerBn);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.answerBn) {
+              setServerAnswer(data.answerBn);
+              speakText(data.answerBn);
+            }
           }
+        } catch (err) {
+          console.warn('Failed to fetch server answer:', err);
         }
-      } catch (err) {
-        console.warn('Failed to fetch server answer:', err);
+      } else if (localDraft.kind === 'sale') {
+        speakText(localDraft.summaryBn);
+      } else if (localDraft.kind === 'unknown') {
+        if (localDraft.summaryBn) {
+          speakText(localDraft.summaryBn);
+        }
       }
-    } else if (localDraft.kind === 'sale') {
-      speakText(localDraft.summaryBn);
+    } catch (err) {
+      console.error('Comam command processing error:', err);
+      setErrorMsg('কমান্ডটি প্রক্রিয়া করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।');
+    } finally {
+      setIsProcessing(false);
     }
-
-    setIsProcessing(false);
   };
+
+  useEffect(() => {
+    handleProcessCommandRef.current = handleProcessCommand;
+  });
 
   // Add parsed draft items to active POS cart
   const handleAddToCart = (directCheckout: boolean = false) => {
@@ -384,8 +403,38 @@ export function ComamVoiceAssistant({
             )}
           </div>
 
+          {/* Unrecognized Command Notice */}
+          {draft && draft.kind === 'unknown' && (
+            <div className="space-y-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <h4 className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+                    পণ্য চিহ্নিত করা যায়নি
+                  </h4>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    {draft.summaryBn || 'আপনার কথার সাথে ক্যাটালগের কোনো পণ্যের নাম মেলেনি। পণ্যের সঠিক নাম বা পরিমাণ স্পষ্ট করে বলুন।'}
+                  </p>
+                </div>
+              </div>
+
+              {draft.unknownItems.length > 0 && (
+                <div className="p-2.5 rounded-lg bg-background/80 border border-border/40 space-y-1.5 text-xs">
+                  <span className="font-medium text-muted-foreground">চিহ্নিত না হওয়া অংশ:</span>
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    {draft.unknownItems.map((u, i) => (
+                      <Badge key={i} variant="secondary" className="text-xs">
+                        {u.text} {u.statedPrice ? `(${formatBnTaka(u.statedPrice)})` : ''}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Quick Prompts */}
-          {!draft && !serverAnswer && (
+          {(!draft || draft.kind === 'unknown') && !serverAnswer && (
             <div className="space-y-2">
               <span className="text-xs text-muted-foreground font-medium">উদাহরণ বাক্যসমূহ:</span>
               <div className="flex flex-wrap gap-1.5">

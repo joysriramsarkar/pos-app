@@ -17,7 +17,6 @@ import {
   findCustomer,
   normalizeBengali,
   searchProducts,
-  type ProductMatch,
 } from './comam-matcher';
 
 export interface DraftItem {
@@ -88,19 +87,31 @@ export interface ComamDraft {
 }
 
 function splitSegments(text: string): string[] {
+  // Normalize colon artifact in speech recognition (e.g., "1:10" -> "1টা 10")
+  const normalized = text.replace(/(\d+|[০-৯]+):(\d+|[০-৯]+)/g, '$1টা $2');
+
   // First split by explicit separators: comma, danda, 'এবং', 'আর', 'ও'
-  const rawParts = text
+  const rawParts = normalized
     .split(/[,،।\n;]| এবং | আর | ও /g)
     .map((s) => s.trim())
     .filter(Boolean);
 
   const result: string[] = [];
-  for (const part of rawParts) {
+  for (let part of rawParts) {
+    // Split boundary when any word is followed by a stated price pattern that is followed by a product name:
+    // e.g. "চিনি 10 টাকার বিস্কুট" -> "চিনি" and "10 টাকার বিস্কুট"
+    // But keeps "সানরাইজ হলুদ ৳10 দামের" intact because nothing follows ৳10 দামের.
+    part = part.replace(
+      /(?<=\S)\s+(?=(?:[৳₹$]\s*[\d০-৯]+|[\d০-৯]+)\s*(?:টাকার|টাকা\s*দামের|দামের)\s+[^\s,।\d০-৯]+)/gi,
+      '###SPLIT###'
+    );
+
     // If a segment contains boundary where a quantity/unit is followed by another item:
     // e.g. "সেভেন আপ 2টা 01 কেজি চিনি"
+    // But do NOT split if the following token is just the item's own price e.g. "১টা ১০ টাকা"
     const subParts = part
       .replace(
-        /(\S+?(?:টা|টি|টে|টো|খানা|পিস|কেজি|গ্রাম|লিটার|বোতল|প্যাকেট|প্যাক|ডজন|kg|g|l|ml|pcs?))\s+(?=(?:[৳₹$]\s*[\d০-৯]+|[\d০-৯]+|এক|দুই|তিন|চার|পাঁচ|ছয়|সাত|আট|নয়|দশ|দেড়|আড়াই|আধা|হাফ|পৌনে|সোয়া))/gi,
+        /(\S+?(?:টা|টি|টে|টো|খানা|পিস|কেজি|গ্রাম|লিটার|বোতল|প্যাকেট|প্যাক|ডজন|kg|g|l|ml|pcs?))\s+(?=(?:[\d০-৯]+|এক|দুই|তিন|চার|পাঁচ|ছয়|সাত|আট|নয়|দশ|দেড়|আড়াই|আধা|হাফ|পৌনে|সোয়া)\s*(?:টা|টি|টে|টো|খানা|পিস|কেজি|গ্রাম|লিটার|বোতল|প্যাকেট|প্যাক|ডজন|kg|g|l|ml|pcs?|(?!টাকা\b)[^\s,।\d০-৯]+))/gi,
         '$1###SPLIT###'
       )
       .split('###SPLIT###')
@@ -138,7 +149,15 @@ function extractStatedPrice(segment: string): { statedPrice: number | null; clea
       }
 
       if (priceVal !== null && !isNaN(priceVal) && priceVal > 0) {
-        const clean = segment.replace(match[0], ' ').replace(/\s+/g, ' ').trim();
+        let clean = segment.replace(match[0], ' ');
+        // Also strip any redundant price mentions from the rest of the segment
+        clean = clean
+          .replace(
+            /(?:[৳₹$]\s*[\d০-৯]+|[\d০-৯]+)\s*(?:টাকা\s*দামের|টাকার\s*দামের|টাকার|টাকা\s*মূল্যের|মূল্যের|দামের|দামে|দর|টাকা)/gi,
+            ' '
+          )
+          .replace(/\s+/g, ' ')
+          .trim();
         return { statedPrice: priceVal, cleanSegment: clean };
       }
     }
@@ -277,7 +296,24 @@ function parseItemSegment(
   // Clean filler words
   rest = rest.replace(/(দাও|দিন|দেন|নাও|করো|করুন|চাই|লিখে রাখো|রাখো|বিল|প্যাকেট)/g, '').trim();
 
+  // Try matching original rest, and fallback to rest stripped of redundant price tokens
+  const strippedPriceRest = rest
+    .replace(
+      /(?:[৳₹$]\s*[\d০-৯]+|[\d০-৯]+)\s*(?:টাকা\s*দামের|টাকার\s*দামের|টাকার|টাকা\s*মূল্যের|মূল্যের|দামের|দামে|দর|টাকা)/gi,
+      ' '
+    )
+    .replace(/\s+/g, ' ')
+    .trim();
+
   let { matches, isAmbiguous } = searchProducts(products, rest);
+  if (matches.length === 0 && strippedPriceRest && strippedPriceRest !== rest) {
+    const fallbackSearch = searchProducts(products, strippedPriceRest);
+    if (fallbackSearch.matches.length > 0) {
+      matches = fallbackSearch.matches;
+      isAmbiguous = fallbackSearch.isAmbiguous;
+      rest = strippedPriceRest;
+    }
+  }
 
   if (matches.length === 0) {
     return {
@@ -529,6 +565,16 @@ export function parseComamCommand(
     if (depth > 4) return;
     const cleanedSeg = segText.replace(/(নগদে?|বাকিতে?|ইউপিআই(?:তে)?|বিল(?:\s*করো)?)/g, ' ').trim();
     if (!cleanedSeg || cleanedSeg.length < 2) return;
+
+    // Ensure segment contains actual product words, not just isolated numbers or price suffixes
+    const productWordsOnly = cleanedSeg
+      .replace(/(?:[৳₹$]\s*[\d০-৯]+|[\d০-৯]+(?:\.[\d০-৯]+)?)/g, ' ')
+      .replace(
+        /(টাকা\s*দামের|টাকার\s*দামের|টাকার|টাকা\s*মূল্যের|মূল্যের|দামের|দামে|দর|টাকা|পিস|টা|টি|টে|টো|খানা)/gi,
+        ' '
+      )
+      .trim();
+    if (!productWordsOnly || productWordsOnly.length < 2) return;
 
     const res = parseItemSegment(products, cleanedSeg);
     if (res.item) {
