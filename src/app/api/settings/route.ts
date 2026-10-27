@@ -169,11 +169,10 @@ export async function PUT(request: NextRequest) {
     }
 
     return NextResponse.json({ success: true, message: "Settings updated successfully" });
-  } catch (error: unknown) {
+   } catch (error: unknown) {
     console.error("Error updating settings:", error);
-    const reason = error instanceof Error ? error.message : String(error);
     return NextResponse.json(
-      { error: `Failed to update settings: ${reason}` },
+      { error: "Failed to update settings. Please try again." },
       { status: 500 }
     );
   }

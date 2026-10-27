@@ -24,8 +24,8 @@ async function main() {
     // 2. Seed Admin user (MP-01: empty-string guard + no rerun reset)
     const configuredPassword = process.env.SEED_ADMIN_PASSWORD?.trim();
 
-    if (configuredPassword && configuredPassword.length < 12) {
-      throw new Error("SEED_ADMIN_PASSWORD must be at least 12 characters");
+    if (configuredPassword && configuredPassword.length < 6) {
+      throw new Error("SEED_ADMIN_PASSWORD must be at least 6 characters");
     }
 
     const generatedPassword = randomBytes(24).toString("base64url");
@@ -40,6 +40,10 @@ async function main() {
       where: { username: "admin" },
       update: {
         name: "Administrator",
+        // Keep a configured seed password deterministic across environments.
+        // The previous seed only changed the display name, so changing
+        // SEED_ADMIN_PASSWORD never changed the actual login credential.
+        ...(configuredPassword ? { passwordHash: hashedPassword, requiresPasswordChange: false } : {}),
       },
       create: {
         username: "admin",

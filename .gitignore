@@ -90,6 +90,7 @@ diff.txt
 # IDE and tool caches
 .amazonq/
 .agents/
+.commandcode/
 skills-lock.json
 
 # Local scratch directory

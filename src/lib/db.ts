@@ -117,12 +117,15 @@ function createPrismaClient(connectionString: string): PrismaClient {
     process.env.NEXT_RUNTIME === 'edge' ||
     getCloudflareEnv() !== null
   )
+  const isPgBouncer = /(?:[?&])pgbouncer=true(?:&|$)/i.test(cleanUrl)
 
   const poolConfig = {
     connectionString: cleanUrl,
-    max: isEdgeOrWorker ? 2 : (process.env.DATABASE_POOL_SIZE ? parseInt(process.env.DATABASE_POOL_SIZE, 10) : 10),
-    idleTimeoutMillis: isEdgeOrWorker ? 3000 : 10000,
-    connectionTimeoutMillis: isEdgeOrWorker ? 5000 : 10000,
+    // Supabase transaction poolers reject bursts from a large app-side pool.
+    // Keep the local pool bounded while still allowing parallel dashboard reads.
+    max: isEdgeOrWorker ? 2 : (process.env.DATABASE_POOL_SIZE ? parseInt(process.env.DATABASE_POOL_SIZE, 10) : isPgBouncer ? 4 : 10),
+    idleTimeoutMillis: isEdgeOrWorker ? 3000 : isPgBouncer ? 5000 : 10000,
+    connectionTimeoutMillis: isEdgeOrWorker ? 5000 : isPgBouncer ? 20000 : 10000,
     allowExitOnIdle: true,
   }
 

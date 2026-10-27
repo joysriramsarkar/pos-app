@@ -61,6 +61,9 @@ export function ProductDialog({
   const [unit, setUnit] = useState(product?.unit || 'piece');
   const [currentStock, setCurrentStock] = useState(product?.currentStock.toString() || '0');
   const [minStockLevel, setMinStockLevel] = useState(product?.minStockLevel.toString() || '5');
+  const [attributes, setAttributes] = useState<Array<{ key: string; value: string }>>(() =>
+    Object.entries(product?.attributes || {}).map(([key, value]) => ({ key, value: String(value) })),
+  );
   const [isActive, setIsActive] = useState(product ? product.isActive : true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -124,6 +127,9 @@ export function ProductDialog({
         setUnit(product.unit);
         setCurrentStock(product.currentStock.toString());
         setMinStockLevel(product.minStockLevel.toString());
+          setAttributes(
+            Object.entries(product.attributes || {}).map(([key, value]) => ({ key, value: String(value) })),
+          );
         setIsActive(product.isActive);
         setIsNameBnTouched(true);
         setIsNameTouched(true);
@@ -141,6 +147,7 @@ export function ProductDialog({
         setUnit('piece');
         setCurrentStock('0');
         setMinStockLevel('5');
+          setAttributes([]);
         setIsActive(true);
         setIsNameBnTouched(false);
         setIsNameTouched(false);
@@ -306,6 +313,12 @@ export function ProductDialog({
         currentStock: parseFloat(currentStock) || 0,
         minStockLevel: parseFloat(minStockLevel) || 5,
         isActive,
+        attributes: Object.fromEntries(
+          attributes
+            .map(({ key, value }) => ({ key: key.trim(), value: value.trim() }))
+            .filter(({ key, value }) => key.length > 0 && value.length > 0)
+            .map(({ key, value }) => [key, value]),
+        ),
       };
 
       await onSubmit?.(data);
@@ -332,6 +345,7 @@ export function ProductDialog({
     unit !== product?.unit ||
     currentStock !== product?.currentStock.toString() ||
     minStockLevel !== product?.minStockLevel.toString() ||
+      JSON.stringify(Object.fromEntries(attributes.map(({ key, value }) => [key, value]))) !== JSON.stringify(product?.attributes || {}) ||
     isActive !== product?.isActive
   ) : true;
 
@@ -531,6 +545,68 @@ export function ProductDialog({
                   />
                 </div>
               )}
+            </div>
+
+            {/* Unit */}
+            {/* Flexible tenant-specific attributes (color, size, brand, etc.) */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Product details</Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => setAttributes((current) => [...current, { key: '', value: '' }])}
+                >
+                  Add detail
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Add category-specific details such as color, size, brand, model, material, or expiry date.
+              </p>
+              {attributes.length === 0 && (
+                <div className="rounded-md border border-dashed p-2 text-xs text-muted-foreground">
+                  No extra details added.
+                </div>
+              )}
+              {attributes.map((attribute, index) => (
+                <div key={`${index}-${attribute.key}`} className="flex gap-2">
+                  <Input
+                    aria-label={`Detail name ${index + 1}`}
+                    placeholder="Color / Size / Brand"
+                    value={attribute.key}
+                    onChange={(event) =>
+                      setAttributes((current) =>
+                        current.map((item, itemIndex) =>
+                          itemIndex === index ? { ...item, key: event.target.value } : item,
+                        ),
+                      )
+                    }
+                  />
+                  <Input
+                    aria-label={`Detail value ${index + 1}`}
+                    placeholder="e.g. Blue / XL"
+                    value={attribute.value}
+                    onChange={(event) =>
+                      setAttributes((current) =>
+                        current.map((item, itemIndex) =>
+                          itemIndex === index ? { ...item, value: event.target.value } : item,
+                        ),
+                      )
+                    }
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`Remove detail ${index + 1}`}
+                    onClick={() => setAttributes((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
             </div>
 
             {/* Unit */}

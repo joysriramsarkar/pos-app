@@ -30,6 +30,8 @@ export interface ProductImportRow {
   openingStock?: number;
   minStockLevel?: number;
   taxRate?: number;
+  /** JSON object for tenant-defined metadata such as color, size, brand, etc. */
+  attributes?: Record<string, string>;
 
   // Validation result (added during processing)
   _rowIndex?: number;
@@ -92,6 +94,9 @@ export function parseProductCSV(csvText: string): ProductImportRow[] {
     minimumstock:  'minStockLevel',
     taxrate:       'taxRate',
     tax:           'taxRate',
+    attributes:    'attributes',
+    details:       'attributes',
+    productdetails:'attributes',
   };
 
   const rows: ProductImportRow[] = [];
@@ -110,6 +115,22 @@ export function parseProductCSV(csvText: string): ProductImportRow[] {
       if (['buyingPrice', 'sellingPrice', 'openingStock', 'minStockLevel', 'taxRate'].includes(col)) {
         const num = parseFloat(val.replace(/,/g, ''));
         (row as any)[col] = isNaN(num) ? undefined : num;
+      } else if (col === 'attributes') {
+        if (val) {
+          try {
+            const parsed = JSON.parse(val);
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+              (row as any).attributes = Object.fromEntries(
+                Object.entries(parsed).map(([key, value]) => [key.trim(), String(value).trim()])
+              );
+            }
+          } catch {
+            // Also accept a simple `Color=Red; Size=XL` format for spreadsheets.
+            const pairs = val.split(';').map((part) => part.split('=').map((v) => v.trim()));
+            const attrs = Object.fromEntries(pairs.filter(([key, value]) => key && value));
+            if (Object.keys(attrs).length > 0) (row as any).attributes = attrs;
+          }
+        }
       } else {
         (row as any)[col] = val || undefined;
       }
@@ -275,6 +296,7 @@ export async function commitImport(
         currentStock: row.openingStock ?? 0,
         minStockLevel: row.minStockLevel ?? 5,
         isActive: true,
+        attributes: row.attributes ?? undefined,
       };
 
       const product = await db.product.create({ data: productData });
@@ -346,12 +368,13 @@ export async function exportProductsCSV(businessId: string): Promise<string> {
       unit: true,
       currentStock: true,
       minStockLevel: true,
+      attributes: true,
     },
   });
 
   const headers = [
     'Barcode', 'Name', 'Bengali Name', 'Category', 'Sub Category',
-    'Purchase Price', 'Selling Price', 'Unit', 'Current Stock', 'Min Stock'
+    'Purchase Price', 'Selling Price', 'Unit', 'Current Stock', 'Min Stock', 'Attributes'
   ];
 
   const rows = products.map((p) => [
@@ -365,6 +388,7 @@ export async function exportProductsCSV(businessId: string): Promise<string> {
     p.unit,
     Number(p.currentStock).toFixed(0),
     Number(p.minStockLevel).toFixed(0),
+    p.attributes && typeof p.attributes === 'object' ? JSON.stringify(p.attributes) : '',
   ]);
 
   // Neutralise CSV formula injection (cells starting with = + - @ tab/CR).
@@ -389,11 +413,11 @@ export async function exportProductsCSV(businessId: string): Promise<string> {
 export function getImportTemplate(): string {
   const headers = [
     'Barcode', 'Name', 'Bengali Name', 'Category', 'Sub Category',
-    'Purchase Price', 'Selling Price', 'Unit', 'Opening Stock', 'Min Stock', 'Tax Rate'
+    'Purchase Price', 'Selling Price', 'Unit', 'Opening Stock', 'Min Stock', 'Tax Rate', 'Attributes'
   ];
   const example = [
     '8901234567890', 'Rice 5kg', 'চাল ৫কেজি', 'Grains', '',
-    '200', '250', 'packet', '50', '5', '0'
+    '200', '250', 'packet', '50', '5', '0', '{"Color":"White","Size":"M"}'
   ];
 
   return '\uFEFF' + [

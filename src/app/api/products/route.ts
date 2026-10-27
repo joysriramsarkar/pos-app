@@ -149,6 +149,7 @@ export async function POST(request: NextRequest) {
           currentStock: validatedData.currentStock,
           minStockLevel: validatedData.minStockLevel,
           isActive: validatedData.isActive,
+          attributes: validatedData.attributes ?? undefined,
         },
       });
 
@@ -295,6 +296,7 @@ export async function PUT(request: NextRequest) {
           unit: validatedData.unit,
           minStockLevel: validatedData.minStockLevel,
           isActive: validatedData.isActive,
+          attributes: validatedData.attributes ?? undefined,
           updatedAt: new Date(),
         },
       });
