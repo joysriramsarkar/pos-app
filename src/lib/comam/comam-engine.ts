@@ -6,6 +6,7 @@
 import type { Product, Customer } from '@/types/pos';
 import {
   UNITS,
+  bnToAscii,
   findNumberPhrases,
   formatBnNumber,
   formatBnTaka,
@@ -87,34 +88,118 @@ export interface ComamDraft {
 }
 
 function splitSegments(text: string): string[] {
-  return text
-    .split(/[,،]| এবং | আর | ও /g)
+  // First split by explicit separators: comma, danda, 'এবং', 'আর', 'ও'
+  const rawParts = text
+    .split(/[,،।\n;]| এবং | আর | ও /g)
     .map((s) => s.trim())
     .filter(Boolean);
+
+  const result: string[] = [];
+  for (const part of rawParts) {
+    // If a segment contains boundary where a quantity/unit is followed by another item:
+    // e.g. "সেভেন আপ 2টা 01 কেজি চিনি"
+    const subParts = part
+      .replace(
+        /(\S+?(?:টা|টি|টে|টো|খানা|পিস|কেজি|গ্রাম|লিটার|বোতল|প্যাকেট|প্যাক|ডজন|kg|g|l|ml|pcs?))\s+(?=(?:[৳₹$]\s*[\d০-৯]+|[\d০-৯]+|এক|দুই|তিন|চার|পাঁচ|ছয়|সাত|আট|নয়|দশ|দেড়|আড়াই|আধা|হাফ|পৌনে|সোয়া))/gi,
+        '$1###SPLIT###'
+      )
+      .split('###SPLIT###')
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    result.push(...subParts);
+  }
+
+  return result;
 }
 
 function extractStatedPrice(segment: string): { statedPrice: number | null; cleanSegment: string } {
-  const phrases = findNumberPhrases(segment);
+  // 1. Explicit pattern with currency symbol or price suffix:
+  // e.g. "৳10 দামের", "৳ 10 দামের", "৳10", "₹10", "১০ টাকা দামের", "১০ টাকার", "১০ দামের", "10/- দামের"
+  const priceRegexes = [
+    /(?:^|\s)([৳₹$]\s*[\d০-৯]+(?:\.[\d০-৯]+)?)\s*(?:টাকা\s*দামের|টাকার\s*দামের|টাকার|টাকা\s*মূল্যের|মূল্যের|দামের|দামে|দর)?(?=$|[\s,।])/i,
+    /(?:^|\s)([\d০-৯]+(?:\.[\d০-৯]+)?|[^\s,।]+)\s*(?:টাকা\s*দামের|টাকার\s*দামের|টাকার|টাকা\s*মূল্যের|মূল্যের|দামের|দামে|দর)(?=$|[\s,।])/i,
+    /(?:^|\s)([৳₹$]\s*[\d০-৯]+(?:\.[\d০-৯]+)?)(?=$|[\s,।])/i,
+  ];
 
-  for (const { value, start, end } of phrases) {
-    const after = segment.slice(end);
-    const stripped = after.trimStart();
-    const lead = after.length - stripped.length;
-
-    for (const token of ['টাকা দামের', 'টাকার', 'টাকা']) {
-      if (stripped.startsWith(token)) {
-        const cut = end + lead + token.length;
-        if (token === 'টাকা' && !segment.slice(cut).trim()) {
-          // Stated total at end of segment, skip
-          continue;
+  for (const regex of priceRegexes) {
+    const match = segment.match(regex);
+    if (match) {
+      const numPart = match[1].replace(/^[৳₹$]|^(?:tk|rs)\.?|[\/–-]+$|[৳₹$]$/gi, '').trim();
+      const phrases = findNumberPhrases(numPart);
+      let priceVal: number | null = null;
+      if (phrases.length > 0) {
+        priceVal = phrases[0].value;
+      } else {
+        const ascii = bnToAscii(numPart);
+        if (/^\d+(\.\d+)?$/.test(ascii)) {
+          priceVal = parseFloat(ascii);
         }
-        const clean = (segment.slice(0, start) + ' ' + segment.slice(cut)).trim();
-        return { statedPrice: value, cleanSegment: clean };
+      }
+
+      if (priceVal !== null && !isNaN(priceVal) && priceVal > 0) {
+        const clean = segment.replace(match[0], ' ').replace(/\s+/g, ' ').trim();
+        return { statedPrice: priceVal, cleanSegment: clean };
       }
     }
   }
 
+  // 2. Fallback using findNumberPhrases for written words e.g. "দশ টাকা দামের"
+  const phrases = findNumberPhrases(segment);
+  for (const phrase of phrases) {
+    const after = segment.slice(phrase.end).trimStart();
+    for (const token of ['টাকা দামের', 'টাকার দামের', 'টাকার', 'দামের', 'দামে', 'মূল্যের', 'টাকা']) {
+      if (after.startsWith(token)) {
+        if (token === 'টাকা' && !after.slice(token.length).trim()) {
+          // Stated total at end of entire segment (skip)
+          continue;
+        }
+        const cut = segment.indexOf(token, phrase.end) + token.length;
+        const clean = (segment.slice(0, phrase.start) + ' ' + segment.slice(cut)).trim();
+        return { statedPrice: phrase.value, cleanSegment: clean };
+      }
+    }
+    if (phrase.isCurrency) {
+      const clean = (segment.slice(0, phrase.start) + ' ' + segment.slice(phrase.end)).trim();
+      return { statedPrice: phrase.value, cleanSegment: clean };
+    }
+  }
+
   return { statedPrice: null, cleanSegment: segment };
+}
+
+function getTailAfterProduct(rest: string, product: Product): string {
+  const names = [
+    product.nameBn ? normalizeBengali(product.nameBn) : '',
+    product.name ? normalizeBengali(product.name) : '',
+  ].filter(Boolean);
+
+  const normRest = normalizeBengali(rest);
+  let maxEnd = -1;
+
+  for (const n of names) {
+    const idx = normRest.indexOf(n);
+    if (idx >= 0) {
+      maxEnd = Math.max(maxEnd, idx + n.length);
+    }
+  }
+
+  // Also check individual significant product words (e.g. "চিনি", "সাবান")
+  if (maxEnd < 0) {
+    for (const n of names) {
+      for (const w of n.split(/\s+/)) {
+        if (w.length >= 3) {
+          const idx = normRest.indexOf(w);
+          if (idx >= 0) {
+            maxEnd = Math.max(maxEnd, idx + w.length);
+          }
+        }
+      }
+    }
+  }
+
+  if (maxEnd < 0) return '';
+  return normRest.slice(maxEnd).trim().replace(/^[,।\s]+/, '');
 }
 
 function parseItemSegment(
@@ -124,6 +209,7 @@ function parseItemSegment(
   item: DraftItem | null;
   ambiguity: Ambiguity | null;
   unknown: UnknownItem | null;
+  cleanSegment: string;
 } {
   const { statedPrice, cleanSegment } = extractStatedPrice(rawSegment);
   let segment = cleanSegment;
@@ -202,16 +288,28 @@ function parseItemSegment(
         qty: qty || 1.0,
         statedPrice,
       },
+      cleanSegment,
     };
   }
 
-  const finalQty = (qty || 1.0) * unitFactor;
+  let finalQty = (qty || 1.0) * unitFactor;
 
   // Stated price variant selection: "১০ টাকা দামের বিস্কুট" picks the 10-taka pack!
   if (statedPrice !== null) {
-    const priceHits = matches.filter((m) => Math.abs(m.product.sellingPrice - statedPrice) < 0.01);
-    if (priceHits.length === 1) {
+    const priceHits = matches.filter(
+      (m) =>
+        Math.abs(m.product.sellingPrice - statedPrice) < 0.01 ||
+        (m.product.nameBn &&
+          (m.product.nameBn.includes(`${statedPrice} টাকা`) ||
+            m.product.nameBn.includes(`${formatBnNumber(statedPrice)} টাকা`))) ||
+        (m.product.name &&
+          (m.product.name.toLowerCase().includes(`rs. ${statedPrice}`) ||
+            m.product.name.toLowerCase().includes(`rs ${statedPrice}`)))
+    );
+
+    if (priceHits.length >= 1) {
       const p = priceHits[0].product;
+      const unitP = p.sellingPrice > 0 ? p.sellingPrice : statedPrice;
       return {
         item: {
           product: p,
@@ -220,11 +318,13 @@ function parseItemSegment(
           nameBn: p.nameBn || p.name,
           qty: finalQty,
           unit: p.unit,
-          unitPrice: p.sellingPrice,
-          lineTotal: Math.round(p.sellingPrice * finalQty * 100) / 100,
+          unitPrice: unitP,
+          lineTotal: Math.round(unitP * finalQty * 100) / 100,
+          ambiguous: false,
         },
         ambiguity: null,
         unknown: null,
+        cleanSegment,
       };
     }
   }
@@ -233,7 +333,10 @@ function parseItemSegment(
   let lineTotal = Math.round(chosenProduct.sellingPrice * finalQty * 100) / 100;
 
   // Weight-based stated price e.g. "৭৫ টাকার চিনি"
-  if (statedPrice !== null && matches.length === 1 && (chosenProduct.unit === 'kg' || chosenProduct.unit === 'litre')) {
+  if (statedPrice !== null && (chosenProduct.unit === 'kg' || chosenProduct.unit === 'litre')) {
+    if (chosenProduct.sellingPrice > 0) {
+      finalQty = Math.round((statedPrice / chosenProduct.sellingPrice) * 1000) / 1000;
+    }
     lineTotal = statedPrice;
   }
 
@@ -271,6 +374,7 @@ function parseItemSegment(
     },
     ambiguity,
     unknown: null,
+    cleanSegment,
   };
 }
 
@@ -421,21 +525,43 @@ export function parseComamCommand(
   const unknownItems: UnknownItem[] = [];
   const ambiguities: Ambiguity[] = [];
 
-  for (const seg of segments) {
-    // Ignore payment or customer trailing words in segment, but preserve price expressions
-    const cleanedSeg = seg.replace(/(নগদে?|বাকিতে?|ইউপিআই(?:তে)?|বিল(?:\s*করো)?)/g, ' ').trim();
-    if (!cleanedSeg) continue;
+  function consume(segText: string, depth = 0) {
+    if (depth > 4) return;
+    const cleanedSeg = segText.replace(/(নগদে?|বাকিতে?|ইউপিআই(?:তে)?|বিল(?:\s*করো)?)/g, ' ').trim();
+    if (!cleanedSeg || cleanedSeg.length < 2) return;
 
     const res = parseItemSegment(products, cleanedSeg);
     if (res.item) {
       items.push(res.item);
+      const tail = getTailAfterProduct(res.cleanSegment, res.item.product);
+      if (
+        tail &&
+        (findNumberPhrases(tail).length > 0 ||
+          /(\S+?)(টে|টা|টি|টো|খানা|কেজি|গ্রাম|লিটার)/.test(tail))
+      ) {
+        consume(tail, depth + 1);
+      }
     }
     if (res.ambiguity) {
       ambiguities.push(res.ambiguity);
     }
     if (res.unknown) {
-      unknownItems.push(res.unknown);
+      // Strip price and filler residues from unknown product text
+      const cleanUnknown = res.unknown.text
+        .replace(/^[৳₹$]\s*[\d০-৯]+(?:\.[\d০-৯]+)?/gi, '')
+        .replace(/(টাকা\s*দামের|টাকার\s*দামের|টাকার|টাকা\s*মূল্যের|মূল্যের|দামের|দামে|দর|বিল|করো|দিন|দাও)/gi, '')
+        .trim();
+      if (cleanUnknown.length >= 2) {
+        unknownItems.push({
+          ...res.unknown,
+          text: cleanUnknown,
+        });
+      }
     }
+  }
+
+  for (const seg of segments) {
+    consume(seg);
   }
 
   const total = items.reduce((sum, item) => sum + item.lineTotal, 0);

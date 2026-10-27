@@ -4,6 +4,36 @@
  */
 import type { Product, Customer } from '@/types/pos';
 
+import { bnToAscii } from './bn-parser';
+
+const BRAND_ALIASES: Record<string, string[]> = {
+  'সেভেন আপ': ['৭ আপ', '7 up', '7up', 'seven up'],
+  '৭ আপ': ['সেভেন আপ', '7 up', '7up', 'seven up'],
+  '7 up': ['সেভেন আপ', '৭ আপ', '7up'],
+  '7up': ['সেভেন আপ', '৭ আপ', '7 up'],
+  'সানরাইজ': ['সাবরাইজ', 'sunrise'],
+  'সাবরাইজ': ['সানরাইজ', 'sunrise'],
+  'sunrise': ['সানরাইজ', 'সাবরাইজ'],
+  'হলুদ': ['হলদি', 'haldi', 'turmeric'],
+  'haldi': ['হলুদ', 'হলদি'],
+  'চিনি': ['sugar', 'সুগার'],
+  'sugar': ['চিনি'],
+  'কোক': ['কোকা কোলা', 'কোকাকোলা', 'coca cola', 'coke'],
+  'কোকাকোলা': ['কোক', 'কোকা কোলা', 'coke'],
+  'থামস আপ': ['থাম্বস আপ', 'thums up', 'thumps up'],
+  'স্প্রাইট': ['sprite'],
+  'মিরিন্ডা': ['mirinda'],
+  'ফান্টা': ['fanta'],
+  'ম্যাগি': ['maggi'],
+  'ক্লোজ আপ': ['close up', 'ক্লোজআপ'],
+  'ডাভ': ['dove'],
+  'লাক্স': ['lux'],
+  'হুইল': ['wheel'],
+  'সার্ফ এক্সেল': ['surf excel'],
+  'লাইফবয়': ['lifebuoy', 'লাইসবয়'],
+  'ফরচুন': ['fortune'],
+};
+
 export function normalizeBengali(text: string): string {
   if (!text) return '';
   return text
@@ -14,6 +44,47 @@ export function normalizeBengali(text: string): string {
     .replace(/[\s\-_]+/g, ' ')
     .replace(/[।,;:!?\"'()]/g, '')
     .trim();
+}
+
+export function expandQueryAliases(text: string): string[] {
+  const norm = normalizeBengali(text);
+  if (!norm) return [];
+  const variants = new Set<string>([norm]);
+
+  // Transliterate English spoken numbers in Bengali script
+  const numSub = norm
+    .replace(/\bসেভেন\b|সেভেন/g, '৭')
+    .replace(/\bওয়ান\b|ওয়ান/g, '১')
+    .replace(/\bটু\b|টু/g, '২')
+    .replace(/\bথ্রি\b|থ্রি/g, '৩')
+    .replace(/\bফোর\b|ফোর/g, '৪')
+    .replace(/\bফাইভ\b|ফাইভ/g, '৫')
+    .replace(/\bসিক্স\b|সিক্স/g, '৬')
+    .replace(/\bএইট\b|এইট/g, '৮')
+    .replace(/\bনাইন\b|নাইন/g, '৯')
+    .replace(/\bটেন\b|টেন/g, '১০');
+  variants.add(numSub);
+
+  // English digits representation (e.g. "৭ আপ" -> "7 up" / "7 আপ")
+  const asciiConverted = bnToAscii(numSub);
+  variants.add(asciiConverted);
+  variants.add(asciiConverted.replace(/আপ\b/g, 'up'));
+
+  // Brand synonyms
+  for (const [key, aliases] of Object.entries(BRAND_ALIASES)) {
+    if (norm.includes(key)) {
+      for (const alias of aliases) {
+        variants.add(norm.replace(key, alias).trim());
+      }
+    }
+    if (numSub.includes(key)) {
+      for (const alias of aliases) {
+        variants.add(numSub.replace(key, alias).trim());
+      }
+    }
+  }
+
+  return Array.from(variants).filter(Boolean);
 }
 
 /** Compute string similarity ratio (Dice's coefficient / bigram overlap) */
@@ -83,8 +154,8 @@ export function searchProducts(
   query: string,
   limit: number = 5
 ): SearchProductsResult {
-  const q = normalizeBengali(query);
-  if (!q) return { matches: [], isAmbiguous: false };
+  const qVariants = expandQueryAliases(query);
+  if (qVariants.length === 0) return { matches: [], isAmbiguous: false };
 
   const scored: ProductMatch[] = [];
 
@@ -95,15 +166,24 @@ export function searchProducts(
     const names = getProductNames(product);
 
     for (const name of names) {
-      if (q === name) {
-        bestScore = 1.0;
-        break;
-      } else if (q.length >= 2 && (name.includes(q) || q.includes(name))) {
-        bestScore = Math.max(bestScore, 0.9);
-      } else {
-        const sim = stringSimilarity(q, name);
-        bestScore = Math.max(bestScore, sim);
+      for (const q of qVariants) {
+        if (q === name) {
+          bestScore = Math.max(bestScore, 1.0);
+          break;
+        } else if (q.length >= 2 && (name.includes(q) || q.includes(name))) {
+          bestScore = Math.max(bestScore, 0.92);
+        } else {
+          // Token subset match: all tokens of q exist in name
+          const qWords = q.split(/\s+/).filter((w) => w.length >= 2);
+          if (qWords.length >= 2 && qWords.every((w) => name.includes(w))) {
+            bestScore = Math.max(bestScore, 0.90);
+          } else {
+            const sim = stringSimilarity(q, name);
+            bestScore = Math.max(bestScore, sim);
+          }
+        }
       }
+      if (bestScore >= 1.0) break;
     }
 
     if (bestScore >= 0.55) {

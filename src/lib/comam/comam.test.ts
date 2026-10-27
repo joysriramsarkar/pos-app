@@ -110,6 +110,66 @@ describe('Comam matcher and search tests', () => {
       createdAt: new Date(),
       updatedAt: new Date(),
     },
+    {
+      id: 'p5',
+      barcode: '555',
+      name: '7 UP Rs. 10',
+      nameBn: '৭ আপ ১০ টাকা',
+      category: 'Beverages',
+      buyingPrice: 8,
+      sellingPrice: 10,
+      unit: 'piece',
+      currentStock: 20,
+      minStockLevel: 5,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+    {
+      id: 'p6',
+      barcode: '666',
+      name: '7 Up Rs. 20',
+      nameBn: '৭ আপ ২০ টাকা',
+      category: 'Beverages',
+      buyingPrice: 16,
+      sellingPrice: 20,
+      unit: 'piece',
+      currentStock: 15,
+      minStockLevel: 5,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+    {
+      id: 'p7',
+      barcode: '777',
+      name: 'Sunrise Haldi Rs. 10',
+      nameBn: 'সানরাইজ হলুদ গুড়ো ১০ টাকা',
+      category: 'Groceries',
+      buyingPrice: 8,
+      sellingPrice: 10,
+      unit: 'piece',
+      currentStock: 30,
+      minStockLevel: 5,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+    {
+      id: 'p8',
+      barcode: '888',
+      name: 'Sunrise Haldi g',
+      nameBn: 'সানরাইজ হলুদ ৫০ গ্রাম',
+      category: 'Groceries',
+      buyingPrice: 15,
+      sellingPrice: 18,
+      unit: 'piece',
+      currentStock: 25,
+      minStockLevel: 5,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
   ];
 
   const mockCustomers: Customer[] = [
@@ -231,4 +291,43 @@ describe('Comam matcher and search tests', () => {
     expect(draft.kind).toBe('sale');
     expect(draft.items[0].qty).toBe(24); // 2 * 12
   });
+
+  it('accurately parses user complex command: ৳10 দামের সেভেন আপ 2টা 01 কেজি চিনি এবং একটা সানরাইজ হলুদ ৳10 দামের।', () => {
+    const draft = parseComamCommand(
+      '৳10 দামের সেভেন আপ 2টা 01 কেজি চিনি এবং একটা সানরাইজ হলুদ ৳10 দামের।',
+      mockProducts,
+      mockCustomers
+    );
+
+    expect(draft.kind).toBe('sale');
+    expect(draft.unknownItems.length).toBe(0);
+    expect(draft.ambiguities.length).toBe(0);
+    expect(draft.items.length).toBe(3);
+
+    // Item 1: 7 Up Rs. 10 (qty 2)
+    const sevenUp = draft.items.find((i) => i.nameBn?.includes('৭ আপ') || i.name.includes('7 UP'));
+    expect(sevenUp).toBeDefined();
+    expect(sevenUp?.qty).toBe(2);
+    expect(sevenUp?.unitPrice).toBe(10);
+    expect(sevenUp?.lineTotal).toBe(20);
+
+    // Item 2: Sugar 1 kg (qty 1)
+    const chini = draft.items.find((i) => i.nameBn?.includes('চিনি') || i.name.includes('Sugar'));
+    expect(chini).toBeDefined();
+    expect(chini?.qty).toBe(1);
+    expect(chini?.unit).toBe('kg');
+    expect(chini?.unitPrice).toBe(60);
+    expect(chini?.lineTotal).toBe(60);
+
+    // Item 3: Sunrise Haldi Rs. 10 (qty 1, picked the 10-taka variant over 18-taka 50g variant)
+    const haldi = draft.items.find((i) => i.nameBn?.includes('সানরাইজ হলুদ') || i.name.includes('Sunrise Haldi'));
+    expect(haldi).toBeDefined();
+    expect(haldi?.qty).toBe(1);
+    expect(haldi?.unitPrice).toBe(10);
+    expect(haldi?.lineTotal).toBe(10);
+
+    // Total: 20 + 60 + 10 = 90
+    expect(draft.total).toBe(90);
+  });
 });
+

@@ -116,16 +116,24 @@ export const UNITS: Record<string, UnitDef> = {
   'pack': { unit: 'piece', factor: 1.0 },
 };
 
+function stripCurrencySymbols(tok: string): { stripped: string; hasCurrency: boolean } {
+  const hasCurrency = /^[৳₹$]|^(?:tk|rs)\.?|[\/–-]+$|[৳₹$]$/i.test(tok);
+  const stripped = tok.replace(/^[৳₹$]|^(?:tk|rs)\.?|[\/–-]+$|[৳₹$]$/gi, '').trim();
+  return { stripped, hasCurrency };
+}
+
 function restUnder(tokens: string[], i: number, limit: number): [number | null, number] {
   if (i >= tokens.length) return [null, i];
   const tok = tokens[i];
-  const asciiTok = bnToAscii(tok);
+  const { stripped } = stripCurrencySymbols(tok);
+  const asciiTok = bnToAscii(stripped || tok);
   if (/^\d+(\.\d+)?$/.test(asciiTok)) {
     const val = parseFloat(asciiTok);
     if (val < limit) return [val, i + 1];
   }
-  if (WORD_NUMBERS[tok] !== undefined && WORD_NUMBERS[tok] < limit) {
-    return [WORD_NUMBERS[tok], i + 1];
+  const cleanTok = stripped || tok;
+  if (WORD_NUMBERS[cleanTok] !== undefined && WORD_NUMBERS[cleanTok] < limit) {
+    return [WORD_NUMBERS[cleanTok], i + 1];
   }
   return [null, i];
 }
@@ -133,33 +141,37 @@ function restUnder(tokens: string[], i: number, limit: number): [number | null, 
 function baseNumber(tokens: string[], i: number): [number | null, number] {
   if (i >= tokens.length) return [null, i];
   const tok = tokens[i];
-  const asciiTok = bnToAscii(tok);
+  const { stripped } = stripCurrencySymbols(tok);
+  const asciiTok = bnToAscii(stripped || tok);
   let value: number | null = null;
 
   if (/^\d+(\.\d+)?$/.test(asciiTok)) {
     value = parseFloat(asciiTok);
     i += 1;
-  } else if (tok.endsWith('শ') && WORD_NUMBERS[tok.slice(0, -1)] !== undefined && WORD_NUMBERS[tok.slice(0, -1)] < 10) {
-    value = WORD_NUMBERS[tok.slice(0, -1)] * 100;
-    i += 1;
-    const [rest, j] = restUnder(tokens, i, 100);
-    if (rest !== null) {
-      value += rest;
-      i = j;
-    }
-  } else if (tok.endsWith('শো') && WORD_NUMBERS[tok.slice(0, -2)] !== undefined && WORD_NUMBERS[tok.slice(0, -2)] < 10) {
-    value = WORD_NUMBERS[tok.slice(0, -2)] * 100;
-    i += 1;
-    const [rest, j] = restUnder(tokens, i, 100);
-    if (rest !== null) {
-      value += rest;
-      i = j;
-    }
-  } else if (WORD_NUMBERS[tok] !== undefined) {
-    value = WORD_NUMBERS[tok];
-    i += 1;
   } else {
-    return [null, i];
+    const cleanTok = stripped || tok;
+    if (cleanTok.endsWith('শ') && WORD_NUMBERS[cleanTok.slice(0, -1)] !== undefined && WORD_NUMBERS[cleanTok.slice(0, -1)] < 10) {
+      value = WORD_NUMBERS[cleanTok.slice(0, -1)] * 100;
+      i += 1;
+      const [rest, j] = restUnder(tokens, i, 100);
+      if (rest !== null) {
+        value += rest;
+        i = j;
+      }
+    } else if (cleanTok.endsWith('শো') && WORD_NUMBERS[cleanTok.slice(0, -2)] !== undefined && WORD_NUMBERS[cleanTok.slice(0, -2)] < 10) {
+      value = WORD_NUMBERS[cleanTok.slice(0, -2)] * 100;
+      i += 1;
+      const [rest, j] = restUnder(tokens, i, 100);
+      if (rest !== null) {
+        value += rest;
+        i = j;
+      }
+    } else if (WORD_NUMBERS[cleanTok] !== undefined) {
+      value = WORD_NUMBERS[cleanTok];
+      i += 1;
+    } else {
+      return [null, i];
+    }
   }
 
   // Multipliers: শত / শো / হাজার
@@ -187,7 +199,18 @@ function baseNumber(tokens: string[], i: number): [number | null, number] {
 export function parseNumberAt(tokens: string[], i: number): [number | null, number] {
   if (i >= tokens.length) return [null, i];
   const tok = tokens[i];
-  const lower = tok.toLowerCase();
+
+  // Standalone currency indicator like ৳ or ₹ or Tk
+  if (/^[৳₹$]$/.test(tok) || /^(tk|rs)\.?$/i.test(tok)) {
+    if (i + 1 < tokens.length) {
+      const [subVal, nextIdx] = parseNumberAt(tokens, i + 1);
+      if (subVal !== null) return [subVal, nextIdx];
+    }
+    return [null, i];
+  }
+
+  const { stripped } = stripCurrencySymbols(tok);
+  const lower = (stripped || tok).toLowerCase();
 
   if (lower === 'half') return [0.5, i + 1];
 
@@ -215,14 +238,15 @@ export function parseNumberAt(tokens: string[], i: number): [number | null, numb
     return [null, i];
   }
 
-  if (FRACTION_WORDS[tok] !== undefined) {
+  const cleanTok = stripped || tok;
+  if (FRACTION_WORDS[cleanTok] !== undefined) {
     if (i + 1 < tokens.length && tokens[i + 1] === 'হাজার') {
-      return [FRACTION_WORDS[tok] * 1000, i + 2];
+      return [FRACTION_WORDS[cleanTok] * 1000, i + 2];
     }
-    return [FRACTION_WORDS[tok], i + 1];
+    return [FRACTION_WORDS[cleanTok], i + 1];
   }
 
-  if (tok === 'একশ' || tok === 'একশো' || tok === 'শত') {
+  if (cleanTok === 'একশ' || cleanTok === 'একশো' || cleanTok === 'শত') {
     const [rest, j] = baseNumber(tokens, i + 1);
     if (rest !== null && rest < 100) {
       return [100 + rest, j];
@@ -237,6 +261,7 @@ export interface NumberPhrase {
   value: number;
   start: number;
   end: number;
+  isCurrency?: boolean;
 }
 
 export function findNumberPhrases(text: string): NumberPhrase[] {
@@ -255,10 +280,15 @@ export function findNumberPhrases(text: string): NumberPhrase[] {
   while (i < words.length) {
     const [value, j] = parseNumberAt(words, i);
     if (value !== null && j > i) {
+      const hasCurrency =
+        /^[৳₹$]|^(?:tk|rs)\.?|[\/–-]+$|[৳₹$]$/i.test(tokens[i].word) ||
+        (i > 0 && /^[৳₹$]$/i.test(tokens[i - 1].word));
+
       found.push({
         value,
         start: tokens[i].start,
         end: tokens[j - 1].end,
+        isCurrency: hasCurrency,
       });
       i = j;
     } else {
