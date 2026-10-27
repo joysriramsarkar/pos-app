@@ -405,5 +405,34 @@ describe('Comam matcher and search tests', () => {
     // Total: 60 + 10 = 70
     expect(draft.total).toBe(70);
   });
+
+  it('tests customer billing: এক কেজি খোলা চিনি লক্ষণ সরকারের নামে বিল করো', () => {
+    const draft = parseComamCommand(
+      'এক কেজি খোলা চিনি লক্ষণ সরকারের নামে বিল করো',
+      mockProducts,
+      mockCustomers
+    );
+    expect(draft.kind).toBe('sale');
+    expect(draft.customerName).toBe('লক্ষণ সরকার');
+    expect(draft.items.length).toBe(1);
+    expect(draft.items[0].nameBn).toBe('চিনি');
+    expect(draft.items[0].qty).toBe(1);
+    expect(draft.unknownItems.length).toBe(0);
+    expect(draft.total).toBe(60);
+  });
+
+  it('tests customer billing with registered customer: রহিমদার নামে ১ কেজি চিনি বিল করো', () => {
+    const draft = parseComamCommand(
+      'রহিমদার নামে ১ কেজি চিনি বিল করো',
+      mockProducts,
+      mockCustomers
+    );
+    expect(draft.kind).toBe('sale');
+    expect(draft.customer?.name).toBe('রহিম');
+    expect(draft.items.length).toBe(1);
+    expect(draft.items[0].nameBn).toBe('চিনি');
+    expect(draft.items[0].qty).toBe(1);
+    expect(draft.unknownItems.length).toBe(0);
+  });
 });
 

@@ -13,6 +13,7 @@ import {
   parseNumberAt,
 } from './bn-parser';
 import {
+  extractCustomerClause,
   extractSpokenCustomerName,
   findCustomer,
   normalizeBengali,
@@ -545,18 +546,21 @@ export function parseComamCommand(
     };
   }
 
-  // 5. Billing / Sale Command ("দুই কেজি চিনি, ১ কেজি ডাল, রহিমদার নামে বাকি")
-  const customer = findCustomer(customers, raw);
-  const newCustomerName = customer ? null : extractSpokenCustomerName(raw, products);
+  // 5. Billing / Sale Command ("এক কেজি খোলা চিনি লক্ষণ সরকারের নামে বিল করো")
+  const { customer, customerName, cleanItemsText, isExplicitDue } = extractCustomerClause(
+    raw,
+    customers,
+    products
+  );
 
   let paymentType: 'Cash' | 'Due' | 'UPI' = 'Cash';
-  if (/বাকি|বাকিতে|নামে|খাতায়/.test(raw)) {
+  if (isExplicitDue || /বাকি|বাকিতে|খাতায়/.test(raw)) {
     paymentType = 'Due';
   } else if (/ইউপিআই|ইউপিআইতে|upi|gpay|paytm|phonepe|অনলাইন|অনলাইনে/.test(raw)) {
     paymentType = 'UPI';
   }
 
-  const segments = splitSegments(raw);
+  const segments = splitSegments(cleanItemsText);
   const items: DraftItem[] = [];
   const unknownItems: UnknownItem[] = [];
   const ambiguities: Ambiguity[] = [];
@@ -620,13 +624,23 @@ export function parseComamCommand(
     );
     summaryBn = `${itemSummaries.join(', ')} — মোট ${formatBnTaka(total)}`;
 
-    if (paymentType === 'Due') {
-      const custName = customer?.name || newCustomerName || 'ক্রেতা';
-      summaryBn += ` (${custName}-এর নামে বাকি)`;
-    } else if (paymentType === 'UPI') {
-      summaryBn += ' (ইউপিআই)';
+    const custName = customer?.name || customerName;
+    if (custName) {
+      if (paymentType === 'Due') {
+        summaryBn += ` (${custName}-এর নামে বাকি)`;
+      } else if (paymentType === 'UPI') {
+        summaryBn += ` (${custName}-এর নামে ইউপিআই)`;
+      } else {
+        summaryBn += ` (${custName}-এর নামে বিল)`;
+      }
     } else {
-      summaryBn += ' (নগদ)';
+      if (paymentType === 'Due') {
+        summaryBn += ` (বাকি)`;
+      } else if (paymentType === 'UPI') {
+        summaryBn += ' (ইউপিআই)';
+      } else {
+        summaryBn += ' (নগদ)';
+      }
     }
   } else if (unknownItems.length > 0) {
     summaryBn = `ক্যাটালগে মেলেনি: ${unknownItems.map((u) => u.text).join(', ')}`;
@@ -641,7 +655,7 @@ export function parseComamCommand(
     unknownItems,
     ambiguities,
     customer,
-    customerName: customer ? customer.name : newCustomerName,
+    customerName: customer ? customer.name : customerName,
     paymentType,
     total: Math.round(total * 100) / 100,
     summaryBn,

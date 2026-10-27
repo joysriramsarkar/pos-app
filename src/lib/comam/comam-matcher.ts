@@ -39,6 +39,17 @@ const BRAND_ALIASES: Record<string, string[]> = {
   'marie': ['মেরি'],
   'বিস্কুট': ['বিস্কিট', 'biscuit', 'biscuits'],
   'biscuit': ['বিস্কুট', 'বিস্কিট'],
+  'খোলা চিনি': ['চিনি', 'সাদা চিনি', 'লুজ চিনি', 'sugar'],
+  'লুজ চিনি': ['চিনি', 'খোলা চিনি', 'sugar'],
+  'সাদা চিনি': ['চিনি', 'sugar'],
+  'সরিষার তেল': ['সর্ষের তেল', 'মাস্টার্ড অয়েল', 'mustard oil', 'সরিষা তেল'],
+  'সর্ষের তেল': ['সরিষার তেল', 'mustard oil', 'সরিষা তেল'],
+  'সরিষা তেল': ['সরিষার তেল', 'mustard oil'],
+  'সাদা তেল': ['সয়াবিন তেল', 'সয়াবিন তেল', 'রিফাইন তেল', 'soyabean oil'],
+  'সয়াবিন তেল': ['সাদা তেল', 'সয়াবিন তেল', 'soyabean oil', 'রিফাইন তেল'],
+  'সয়াবিন তেল': ['সাদা তেল', 'সয়াবিন তেল', 'soyabean oil', 'রিফাইন তেল'],
+  'খোলা চাল': ['চাল', 'rice'],
+  'খোলা ডাল': ['ডাল', 'মসুর ডাল'],
 };
 
 export function normalizeBengali(text: string): string {
@@ -281,4 +292,179 @@ export function extractSpokenCustomerName(text: string, products: Product[]): st
   }
 
   return null;
+}
+
+export function isProductOrUnitOrNumber(word: string, products: Product[]): boolean {
+  const norm = normalizeBengali(word);
+  if (!norm) return false;
+
+  const UNITS = [
+    'কেজি', 'গ্রাম', 'লিটার', 'পিস', 'প্যাকেট', 'প্যাক', 'ডজন', 'বোতল',
+    'টা', 'টি', 'টে', 'টো', 'খানা', 'টাকা', 'টাকার', 'মূল্যের', 'দামের', 'দর'
+  ];
+  if (UNITS.includes(norm)) return true;
+  if (/^[\d০-৯]+$/.test(norm)) return true;
+
+  const NUM_WORDS = [
+    'এক', 'দুই', 'তিন', 'চার', 'পাঁচ', 'ছয়', 'সাত', 'আট', 'নয়', 'দশ',
+    'এগারো', 'বারো', 'তেরো', 'চৌদ্দ', 'পনেরো', 'ষোলো', 'সতেরো', 'আঠারো', 'উনিশ', 'কুড়ি', 'বিশ',
+    'আধা', 'হাফ', 'দেড়', 'আড়াই', 'পৌনে', 'সোয়া'
+  ];
+  if (NUM_WORDS.includes(norm)) return true;
+
+  // Check product catalog
+  for (const p of products) {
+    if (p.nameBn) {
+      const pNorm = normalizeBengali(p.nameBn);
+      if (pNorm === norm || pNorm.split(/\s+/).includes(norm)) return true;
+    }
+    if (p.name) {
+      const pNorm = normalizeBengali(p.name);
+      if (pNorm === norm || pNorm.split(/\s+/).includes(norm)) return true;
+    }
+  }
+
+  return false;
+}
+
+export function extractCustomerClause(
+  rawText: string,
+  customers: Customer[],
+  products: Product[]
+): {
+  customer: Customer | null;
+  customerName: string | null;
+  cleanItemsText: string;
+  isExplicitDue: boolean;
+} {
+  const text = rawText
+    .replace(/[।,;:!?\"'()]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  let customerCandidate: string | null = null;
+  let cleanItemsText = text;
+  let isExplicitDue = false;
+
+  // 1. Direct match with registered customer
+  const registeredCust = findCustomer(customers, text);
+  if (registeredCust) {
+    const names = [
+      registeredCust.name,
+      registeredCust.nameEn,
+    ].filter(Boolean) as string[];
+
+    for (const n of names) {
+      const normN = normalizeBengali(n);
+      if (normN && normN.length >= 2) {
+        const regex = new RegExp(`(?:^|\\s+)${normN}(?:-এর|ের|র)?(?=\\s+|$)`, 'gi');
+        cleanItemsText = cleanItemsText.replace(regex, ' ').replace(/\s+/g, ' ').trim();
+      }
+    }
+
+    if (/নামে\s*বাকি|খাতায়|বাকি/.test(text)) {
+      isExplicitDue = true;
+    }
+
+    cleanItemsText = cleanItemsText
+      .replace(
+        /(?:-এর|ের|র)?\s*(?:নামে|খাতায়)(?:\s*(?:বাকি|বিল))?(?:\s*(?:করো|করুন|রাখো|দাও|দিন|লিখে\s*রাখো|লিখুন))?/gi,
+        ' '
+      )
+      .replace(/(?:বিল(?:\s*করো)?|দাও|দিন|সেল\s*করো|করুন)$/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    return {
+      customer: registeredCust,
+      customerName: registeredCust.name,
+      cleanItemsText,
+      isExplicitDue,
+    };
+  }
+
+  // 2. Pattern: "... [customer] (র/এর)? নামে [বাকি/বিল/করো/রাখো]"
+  const nameMatch = text.match(
+    /(?:^|\s+)নামে(?:\s+(?:বাকি|বিল|খাতায়))?(?:\s*(?:করো|করুন|রাখো|দাও|দিন|লিখে\s*রাখো|লিখুন))?(?=$|\s+)/i
+  );
+  if (nameMatch) {
+    if (/বাকি|খাতায়/.test(nameMatch[0])) {
+      isExplicitDue = true;
+    }
+    const beforeName = text.slice(0, nameMatch.index).trim();
+    const afterName = text.slice(nameMatch.index! + nameMatch[0].length).trim();
+    const tokens = beforeName.split(/\s+/).filter(Boolean);
+
+    const nameTokens: string[] = [];
+    while (tokens.length > 0 && nameTokens.length < 3) {
+      const last = tokens[tokens.length - 1];
+      const cleanedLast = last
+        .replace(/(?:-এর|ের|র)$/, '')
+        .replace(/(?:দার|দা|কাকার|কাকা)$/, '')
+        .trim();
+
+      if (
+        isProductOrUnitOrNumber(cleanedLast, products) ||
+        isProductOrUnitOrNumber(last, products)
+      ) {
+        break;
+      }
+      nameTokens.unshift(cleanedLast);
+      tokens.pop();
+    }
+
+    if (nameTokens.length > 0) {
+      customerCandidate = nameTokens.join(' ');
+      cleanItemsText = (tokens.join(' ') + ' ' + afterName).trim();
+    }
+  }
+
+  // 3. Pattern: "... [customer] (কে/রে) বিল করো / দাও"
+  if (!customerCandidate) {
+    const keMatch = text.match(
+      /(?:^|\s+)([^\s]+(?:\s+[^\s]+){0,2}?)(?:কে|রে)\s+(?:বিল\s*করো|দাও|দিন|সেল\s*করো|করুন|বাকি|খাতায়)/i
+    );
+    if (keMatch) {
+      const words = keMatch[1].trim().split(/\s+/).filter(Boolean);
+      const nameTokens: string[] = [];
+      while (words.length > 0 && nameTokens.length < 3) {
+        const last = words[words.length - 1];
+        const cleanedLast = last
+          .replace(/(?:-এর|ের|র)$/, '')
+          .replace(/(?:দার|দা|কাকার|কাকা)$/, '')
+          .trim();
+        if (
+          isProductOrUnitOrNumber(cleanedLast, products) ||
+          isProductOrUnitOrNumber(last, products)
+        ) {
+          break;
+        }
+        nameTokens.unshift(cleanedLast);
+        words.pop();
+      }
+      if (nameTokens.length > 0) {
+        customerCandidate = nameTokens.join(' ');
+        cleanItemsText = text
+          .replace(keMatch[0], ' ' + words.join(' ') + ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+      }
+    }
+  }
+
+  cleanItemsText = cleanItemsText
+    .replace(/(?:বিল(?:\s*করো)?|দাও|দিন|সেল\s*করো|করুন)$/i, '')
+    .trim();
+
+  let matchedCustomer: Customer | null = null;
+  if (customerCandidate) {
+    matchedCustomer = findCustomer(customers, customerCandidate);
+  }
+
+  return {
+    customer: matchedCustomer,
+    customerName: matchedCustomer ? matchedCustomer.name : customerCandidate,
+    cleanItemsText,
+    isExplicitDue,
+  };
 }

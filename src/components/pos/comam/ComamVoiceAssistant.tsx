@@ -222,8 +222,21 @@ export function ComamVoiceAssistant({
       cart.addItem(item.product, item.qty);
     });
 
-    // Set customer if detected
-    cart.setCustomer(draft.customer || null);
+    // Set customer if detected (registered customer object or spoken customer name)
+    if (draft.customer) {
+      cart.setCustomer(draft.customer);
+    } else if (draft.customerName) {
+      cart.setCustomer({
+        id: `walkin_${Date.now()}`,
+        name: draft.customerName,
+        phone: '',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        isActive: true,
+      } as any);
+    } else {
+      cart.setCustomer(null);
+    }
 
     // Set payment method
     if (draft.paymentType === 'Due') {
