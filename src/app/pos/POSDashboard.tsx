@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
@@ -79,6 +79,14 @@ const BarcodeLabelModal = dynamic(
   () => import('@/components/pos/BarcodeLabelModal').then((mod) => mod.BarcodeLabelModal),
   { ssr: false }
 );
+const ComamVoiceAssistant = dynamic(
+  () => import('@/components/pos/comam/ComamVoiceAssistant').then((mod) => mod.ComamVoiceAssistant),
+  { ssr: false }
+);
+const ComamFab = dynamic(
+  () => import('@/components/pos/comam/ComamFab').then((mod) => mod.ComamFab),
+  { ssr: false }
+);
 import type { PaymentData } from '@/components/pos/CheckoutDialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -121,6 +129,8 @@ import {
   CalendarCheck,
   Barcode,
   FileSpreadsheet,
+  Mic,
+  Sparkles,
 } from 'lucide-react';
 import { useCartStore, useProductsStore, useSyncStore, useUIStore, useCustomersStore, useSalesStore, useQuantityUsageStore, useProductUsageStore } from '@/stores/pos-store';
 import { useSettingsStore } from '@/stores/settings-store';
@@ -280,7 +290,20 @@ export function POSDashboard() {
   const [isDayCloseModalOpen, setIsDayCloseModalOpen] = useState(false);
   const [isCashierPinOpen, setIsCashierPinOpen] = useState(false);
   const [isBarcodeLabelModalOpen, setIsBarcodeLabelModalOpen] = useState(false);
+  const [isComamOpen, setIsComamOpen] = useState(false);
   const [activeShift, setActiveShift] = useState<{ id: string; status: string; openingCash: number } | null>(null);
+
+  // Global Alt+V shortcut to toggle Comam Voice Assistant
+  useEffect(() => {
+    const handleVoiceShortcut = (e: KeyboardEvent) => {
+      if (e.altKey && (e.key === 'v' || e.key === 'V')) {
+        e.preventDefault();
+        setIsComamOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleVoiceShortcut);
+    return () => window.removeEventListener('keydown', handleVoiceShortcut);
+  }, []);
 
   useEffect(() => {
     fetch('/api/shifts?status=OPEN')
@@ -1167,6 +1190,17 @@ export function POSDashboard() {
         <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-2 mb-1">
           {t('tools_register')}
         </p>
+
+        <button
+          onClick={() => setIsComamOpen(true)}
+          className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-medium hover:bg-emerald-500/15 dark:hover:bg-emerald-950/40 bg-emerald-500/5 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 transition-all group relative shadow-xs"
+          title="comam AI — ভয়েস বিলিং অ্যাসিস্ট্যান্ট (Alt+V)"
+        >
+          <Sparkles className="w-3.5 h-3.5 text-emerald-500 group-hover:scale-110 transition-transform animate-pulse" />
+          <span className="truncate flex-1 text-left font-semibold">comam AI ভয়েস বিলিং</span>
+          <span className="text-[9px] bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.2 rounded-full font-semibold">Alt+V</span>
+        </button>
+
         <button
           onClick={() => setIsShiftModalOpen(true)}
           className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-medium hover:bg-slate-200/60 dark:hover:bg-slate-800 text-foreground transition-colors group"
@@ -1402,6 +1436,17 @@ export function POSDashboard() {
             </div>
 
             <div className="flex items-center gap-0.5 shrink-0">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsComamOpen(true)}
+                className="h-8 w-8 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 touch-manipulation relative"
+                aria-label="comam AI Voice Assistant"
+                title="comam AI — ভয়েস বিলিং (Alt+V)"
+              >
+                <Sparkles className="h-4 w-4 animate-pulse text-emerald-500" />
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-emerald-500" />
+              </Button>
               <Button
                 variant="ghost"
                 size="icon"
@@ -1905,6 +1950,16 @@ export function POSDashboard() {
         products={products}
         businessName={storeName}
       />
+
+      {/* Comam AI Voice Assistant Dialog */}
+      <ComamVoiceAssistant
+        isOpen={isComamOpen}
+        onClose={() => setIsComamOpen(false)}
+        onOpenCheckout={handleOpenCheckout}
+      />
+
+      {/* Comam Floating Microphone Button */}
+      <ComamFab onClick={() => setIsComamOpen(true)} />
   </div>
 </div>
   );
