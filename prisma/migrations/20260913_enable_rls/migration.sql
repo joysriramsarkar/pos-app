@@ -260,3 +260,8 @@ CREATE POLICY memberships_tenant_isolation ON memberships
   FOR ALL
   USING (business_id = get_current_business_id())
   WITH CHECK (business_id = get_current_business_id());
+
+-- NOTE: payments, supplier_ledger_entries, cash_register_shifts and
+-- tax_categories are created by 20261010_schema_parity. Their RLS policies are
+-- applied in 20261011_rls_remaining, because in a fresh replay they do not
+-- exist yet at this point (P3018 / 42P01).

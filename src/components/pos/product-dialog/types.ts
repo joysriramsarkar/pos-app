@@ -20,6 +20,7 @@ export interface ProductFormData {
   currentStock: number;
   minStockLevel: number;
   isActive: boolean;
+  attributes?: Record<string, string>;
 }
 
 export const UNITS = [

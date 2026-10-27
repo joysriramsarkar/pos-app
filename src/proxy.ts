@@ -154,8 +154,9 @@ export const proxy = withAuth(
         }
       }
 
-      // MP-35: trusted client IP — prefer Cloudflare, then x-real-ip,
-      // then the leftmost XFF entry. Never blindly trust arbitrary XFF.
+      // MP-35: trusted client IP — prefer proxy-provided headers
+      // (cf-connecting-ip / x-real-ip), then the leftmost XFF entry.
+      // Never blindly trust arbitrary XFF.
       const cfIp = request.headers.get("cf-connecting-ip")?.trim();
       const rawRealIp = request.headers.get("x-real-ip")?.trim();
       const rawForwardedFor = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();

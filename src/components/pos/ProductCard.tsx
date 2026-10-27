@@ -97,6 +97,15 @@ export function ProductCard({ product }: ProductCardProps) {
               <Badge variant="secondary" className="text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0 h-3.5 sm:h-4 bg-secondary/50 lg:hover:bg-secondary max-w-full truncate">
                 {product.category}
               </Badge>
+              {product.attributes && Object.keys(product.attributes).length > 0 && (
+                <div className="flex flex-wrap gap-1 text-[9px] sm:text-[10px] text-muted-foreground">
+                  {Object.entries(product.attributes).slice(0, 3).map(([key, value]) => (
+                    <span key={key} className="rounded bg-muted px-1.5 py-0.5 truncate max-w-full">
+                      {key}: {value}
+                    </span>
+                  ))}
+                </div>
+              )}
 
               {/* Price & Stock */}
               <div className="flex flex-col mt-0.5 sm:mt-2">

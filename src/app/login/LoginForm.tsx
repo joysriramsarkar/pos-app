@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, Suspense } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useTranslations, useLocale } from "next-intl";
+import { useTranslations } from "next-intl";
 import { useSettingsStore } from "@/stores/settings-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,8 +34,10 @@ import { signInWithPopup, getRedirectResult, GoogleAuthProvider, auth as firebas
 export default function LoginForm() {
   const t = useTranslations("Login");
   const { settings, updateSetting } = useSettingsStore();
-  const currentLocale = useLocale();
-  const isBn = settings.app_language === "bn" || currentLocale === "bn";
+  // The persisted app setting is the source of truth. Using `|| currentLocale`
+  // made the English toggle ineffective when the route was initially rendered
+  // with the Bengali locale.
+  const isBn = settings.app_language === "bn";
 
   const handleLanguageChange = (newLang: "bn" | "en") => {
     updateSetting("app_language", newLang);

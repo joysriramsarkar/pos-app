@@ -183,7 +183,7 @@ export function usePartiesManagement(refreshKey?: number) {
     const timeoutId = setTimeout(() => {
       customersController.abort();
       suppliersController.abort();
-    }, 15000);
+    }, 30000);
 
     const fetchData = async () => {
       try {
@@ -201,7 +201,9 @@ export function usePartiesManagement(refreshKey?: number) {
             const { data } = await customersResult.value.json();
             if (active) setCustomers(data);
           } catch (parseErr) {
-            console.error('Failed to parse customers response:', parseErr);
+            if ((parseErr as { name?: string })?.name !== 'AbortError') {
+              console.error('Failed to parse customers response:', parseErr);
+            }
           }
         } else if (customersResult.status === 'fulfilled') {
           console.error('Failed to fetch customers. Status:', customersResult.value.status);

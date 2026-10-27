@@ -1,5 +1,5 @@
 // Lakhan Bhandar POS System - Multi-Tenant Database Schema
-// Compatible with PostgreSQL (Neon / Cloudflare Hyperdrive)
+// Compatible with PostgreSQL (Neon / self-hosted / Docker)
 
 generator client {
   provider   = "prisma-client-js"
@@ -213,6 +213,9 @@ model Product {
   minStockLevel Decimal @db.Decimal(19, 6)  @default(5) @map("min_stock_level")
   isActive      Boolean  @default(true) @map("is_active") // Soft delete
   imageUrl      String?  @map("image_url")
+  // Tenant-defined product metadata such as color, size, brand, model,
+  // material, expiry date, or any category-specific attribute.
+  attributes    Json?
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 

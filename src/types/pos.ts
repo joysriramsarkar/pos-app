@@ -30,6 +30,8 @@ export interface Product {
   minStockLevel: number;
   isActive: boolean;
   imageUrl?: string;
+  /** Tenant-defined metadata, e.g. color, size, brand, model, expiryDate. */
+  attributes?: Record<string, string> | null;
   createdAt: Date;
   updatedAt: Date;
 }

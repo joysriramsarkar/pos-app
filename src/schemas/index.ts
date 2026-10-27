@@ -17,6 +17,7 @@ export const ProductInputSchema = z.object({
   currentStock: z.coerce.number().default(0),
   minStockLevel: z.coerce.number().default(5),
   isActive: z.boolean().default(true),
+  attributes: z.record(z.string().trim().min(1).max(80), z.string().trim().max(500)).optional().nullable(),
 });
 
 export type ProductInput = z.infer<typeof ProductInputSchema>;
