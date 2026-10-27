@@ -17,23 +17,20 @@ const withBundleAnalyzer = bundleAnalyzer({
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  // standalone output — Docker build-এর জন্য; opennextjs-cloudflare নিজে bundle করে
+  // standalone output — Docker / Node.js deployment
   output: 'standalone',
   allowedDevOrigins: devOrigins,
-  // Prisma/pg Node.js resolution চাই — Cloudflare Worker-এও nodejs_compat flag দিয়ে চলে
+  // Prisma/pg Node.js runtime resolution
   serverExternalPackages: [
     "@prisma/client",
     ".prisma/client",
     "@prisma/adapter-pg",
     "pg",
-    "pg-cloudflare",
   ],
   outputFileTracingIncludes: {
     "**/*": [
       "./node_modules/.prisma/client/**",
       "./node_modules/@prisma/client/**",
-      "./node_modules/pg-cloudflare/dist/**",
-      "./node_modules/pg-cloudflare/esm/**",
     ],
   },
   experimental: {

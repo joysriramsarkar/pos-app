@@ -14,8 +14,6 @@ FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run db:generate
-ENV DOCKER_BUILD=1
-ENV BUILD_TARGET=node
 # Build-time placeholders only — never real secrets. Next.js evaluates route
 # modules during `next build`; the runner stage (FROM base) starts clean.
 ENV DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy"

@@ -31,7 +31,7 @@ if (isProd) {
   const missing: string[] = [];
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl || dbUrl.includes("dummy:dummy")) {
-    missing.push("DATABASE_URL (or Hyperdrive binding) is required in production");
+    missing.push("DATABASE_URL is required in production");
   }
   const secret = process.env.NEXTAUTH_SECRET;
   if (!secret || secret.length < 32) {

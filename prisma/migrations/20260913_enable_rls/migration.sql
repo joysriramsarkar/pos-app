@@ -261,46 +261,7 @@ CREATE POLICY memberships_tenant_isolation ON memberships
   USING (business_id = get_current_business_id())
   WITH CHECK (business_id = get_current_business_id());
 
--- ============================================================================
--- 20. Payments
--- ============================================================================
-ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
-ALTER TABLE payments FORCE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS payments_tenant_isolation ON payments;
-CREATE POLICY payments_tenant_isolation ON payments
-  FOR ALL
-  USING (business_id = get_current_business_id())
-  WITH CHECK (business_id = get_current_business_id());
-
--- ============================================================================
--- 21. Supplier Ledger Entries
--- ============================================================================
-ALTER TABLE supplier_ledger_entries ENABLE ROW LEVEL SECURITY;
-ALTER TABLE supplier_ledger_entries FORCE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS supplier_ledger_entries_tenant_isolation ON supplier_ledger_entries;
-CREATE POLICY supplier_ledger_entries_tenant_isolation ON supplier_ledger_entries
-  FOR ALL
-  USING (business_id = get_current_business_id())
-  WITH CHECK (business_id = get_current_business_id());
-
--- ============================================================================
--- 22. Cash Register Shifts
--- ============================================================================
-ALTER TABLE cash_register_shifts ENABLE ROW LEVEL SECURITY;
-ALTER TABLE cash_register_shifts FORCE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS cash_register_shifts_tenant_isolation ON cash_register_shifts;
-CREATE POLICY cash_register_shifts_tenant_isolation ON cash_register_shifts
-  FOR ALL
-  USING (business_id = get_current_business_id())
-  WITH CHECK (business_id = get_current_business_id());
-
--- ============================================================================
--- 23. Tax Categories
--- ============================================================================
-ALTER TABLE tax_categories ENABLE ROW LEVEL SECURITY;
-ALTER TABLE tax_categories FORCE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS tax_categories_tenant_isolation ON tax_categories;
-CREATE POLICY tax_categories_tenant_isolation ON tax_categories
-  FOR ALL
-  USING (business_id = get_current_business_id())
-  WITH CHECK (business_id = get_current_business_id());
+-- NOTE: payments, supplier_ledger_entries, cash_register_shifts and
+-- tax_categories are created by 20261010_schema_parity. Their RLS policies are
+-- applied in 20261011_rls_remaining, because in a fresh replay they do not
+-- exist yet at this point (P3018 / 42P01).

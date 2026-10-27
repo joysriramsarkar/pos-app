@@ -41,11 +41,6 @@ bun.lock
 yarn.lock
 
 
-# Cloudflare OpenNext
-.open-next/
-.wrangler/
-.dev.vars
-
 # env files (keep .env.example committed)
 .env
 .env.local

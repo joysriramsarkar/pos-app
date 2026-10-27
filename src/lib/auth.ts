@@ -225,7 +225,7 @@ export const authOptions: NextAuthOptions = {
         if (!isOtp) {
           let isPasswordValid = false;
           try {
-            // Offload 12-round bcrypt to PostgreSQL pgcrypto to avoid Cloudflare Worker CPU limit (50ms)
+            // Offload 12-round bcrypt to PostgreSQL pgcrypto to avoid the CPU cost
             const normHash = (user.passwordHash || '').replace(/^\$2b\$/, '$2a$');
             const pgCheck = await db.$queryRaw<{ matches: boolean }[]>`
               SELECT (crypt(${passwordInput!}, ${normHash}) = ${normHash}) AS "matches"
