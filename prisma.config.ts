@@ -8,7 +8,6 @@ import { defineConfig } from 'prisma/config';
  *   Neon-এর DIRECT_URL ব্যবহার করো — pooled URL migration-এ কাজ করে না।
  *
  * - Runtime (app)-এ PrismaClient adapter দিয়ে connection পায় (src/lib/db.ts):
- *   Cloudflare Worker → Hyperdrive.connectionString
  *   Node.js / local → process.env.DATABASE_URL
  *
  * দেখো: https://pris.ly/d/config-datasource

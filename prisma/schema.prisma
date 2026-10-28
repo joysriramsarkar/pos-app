@@ -1,5 +1,5 @@
 // Lakhan Bhandar POS System - Multi-Tenant Database Schema
-// Compatible with PostgreSQL (Neon / Cloudflare Hyperdrive)
+// Compatible with PostgreSQL (Neon / self-hosted / Docker)
 
 generator client {
   provider   = "prisma-client-js"

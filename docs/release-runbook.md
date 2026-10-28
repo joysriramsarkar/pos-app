@@ -19,12 +19,12 @@
 
 ## 2. Cron কোথায় চলে (MP-37)
 
-| Job | Vercel (`vercel.json`) | Cloudflare (`wrangler.jsonc`) |
+| Job | Vercel (`vercel.json`) | Self-hosted / Docker |
 |---|---|---|
-| update-popularity (02:00) | ✅ fires | ❌ `triggers.crons` নেই + `scheduled` handler নেই → কখনো চলে না |
-| purge-sync (02:30) | ✅ fires | ❌ একই |
+| update-popularity (02:00) | ✅ fires | বাইরের scheduler দরকার |
+| purge-sync (02:30) | ✅ fires | বাইরের scheduler দরকার |
 
-Production target এখনও দ্বৈত (Vercel + Cloudflare দুটোই configured)। সিদ্ধান্ত না হওয়া পর্যন্ত: cron-এর জন্য **Vercel deployment-কে authoritative** ধরো, অথবা বাইরের scheduler (cron-job.org) দিয়ে HTTPS + `Authorization: Bearer $CRON_SECRET`। Cloudflare-কে primary করলে `triggers.crons` + `scheduled` handler wiring যাচাই করে নিতে হবে (এই repo-তে অনুপস্থিত — ইচ্ছা করে যোগ করিনি, ভুল confidence এড়াতে)।
+Cron-এর জন্য **Vercel deployment-কে authoritative** ধরো, অথবা বাইরের scheduler (cron-job.org) দিয়ে HTTPS + `Authorization: Bearer $CRON_SECRET`। Self-hosted deployment-এ `scheduled` handler নেই — তাই বাইরের scheduler ছাড়া জনপ্রিয়তা/purge job চলবে না।
 
 ## 3. Android lifecycle acceptance (প্রতি stable candidate-এ, supported device-এ)
 

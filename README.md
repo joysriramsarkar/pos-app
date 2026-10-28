@@ -67,7 +67,7 @@
 | **Language** | TypeScript |
 | **Styling** | Tailwind CSS 4, shadcn/ui |
 | **State Management** | Zustand |
-| **Database & ORM** | Prisma 7 (Neon PostgreSQL via Cloudflare Hyperdrive) |
+| **Database & ORM** | Prisma 7 (PostgreSQL — Neon / Docker) |
 | **Offline Storage** | IndexedDB |
 | **Authentication** | NextAuth.js |
 | **Native (Android)** | Capacitor 8, ML Kit barcode, Filesystem + Share for PDF |
