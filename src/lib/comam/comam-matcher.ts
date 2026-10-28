@@ -60,6 +60,31 @@ const BRAND_ALIASES: Record<string, string[]> = {
   'সয়াবিন তেল': ['সাদা তেল', 'সয়াবিন তেল', 'soyabean oil', 'রিফাইন তেল'],
   'খোলা চাল': ['চাল', 'rice'],
   'খোলা ডাল': ['ডাল', 'মসুর ডাল'],
+  'আমুল': ['amul', 'আমল'],
+  'amul': ['আমুল'],
+  'চকলেট': ['chocolate', 'চকোলেট'],
+  'চকোলেট': ['চকলেট', 'chocolate'],
+  'chocolate': ['চকলেট'],
+  'সিরাপ': ['syrup'],
+  'syrup': ['সিরাপ'],
+  'ডার্ক': ['dark'],
+  'dark': ['ডার্ক'],
+  'পেপসি': ['pepsi'],
+  'pepsi': ['পেপসি'],
+  'দুধ': ['milk', 'দুদ'],
+  'milk': ['দুধ'],
+  'শক্তি': ['shakti'],
+  'shakti': ['শক্তি'],
+  'কালো': ['black'],
+  'black': ['কালো'],
+  'নেভিকাট': ['navy cut', 'নেভি কাট', 'নেভিকাড', 'নেবিকাট', 'navycut'],
+  'নেভি কাট': ['নেভিকাট', 'navy cut'],
+  'গোল্ড ফ্ল্যাক': ['gold flake', 'গোল্ড ফ্লেক', 'গোল্ডফ্ল্যাক', 'goldflake'],
+  'ফ্ল্যাক': ['flake', 'ফ্লেক'],
+  'সিগারেট': ['cigarette', 'cigarettes'],
+  'পেপার বোট': ['paper boat', 'পেপারবোট'],
+  'নেসকাফে': ['nescafe'],
+  'nescafe': ['নেসকাফে'],
 };
 
 export function normalizeBengali(text: string): string {
@@ -72,6 +97,201 @@ export function normalizeBengali(text: string): string {
     .replace(/[\s\-_]+/g, ' ')
     .replace(/[।,;:!?\"'()]/g, '')
     .trim();
+}
+
+/** Fold long vowels to short (ASR confuses them, e.g. spoken long-u
+ * Amul). Used only for comparison variants, never for display text. */
+export function foldLongVowels(text: string): string {
+  return text.replace(/ী/g, 'ি').replace(/ূ/g, 'ু');
+}
+
+const PHONETIC_CHAR_MAP: Record<string, string> = {
+  'ট': 'ট', 'ঠ': 'ট', 'ড': 'ট', 'ঢ': 'ট',
+  'ত': 'ত', 'থ': 'ত', 'দ': 'ত', 'ধ': 'ত',
+  'প': 'প', 'ফ': 'প',
+  'ব': 'ব', 'ভ': 'ব',
+  'ক': 'ক', 'খ': 'ক', 'গ': 'ক', 'ঘ': 'ক', 'ঙ': 'ক',
+  'চ': 'চ', 'ছ': 'চ', 'জ': 'চ', 'ঝ': 'চ', 'য': 'চ',
+  'শ': 'স', 'ষ': 'স', 'স': 'স',
+  'র': 'র', 'ল': 'র',
+  'ণ': 'ন', 'ন': 'ন',
+  'ম': 'ম', 'হ': 'হ', 'ড়': 'র', 'ঢ়': 'র',
+};
+
+/**
+ * Phonetic key for a Bengali word as actually heard by speech recognition.
+ * bn-BD ASR systematically confuses consonant classes (ট/ড, ত/দ, প/ফ, ব/ভ,
+ * শ/স, র/ল in English brand names like Flake->ফ্রেক) and drops vowel
+ * length, so matching on this collapsed consonant skeleton makes
+ * "নেভিকাড" and "নেভিকাট", "ফ্রেক" and "ফ্ল্যাক" compare equal while
+ * genuinely different words stay apart.
+ */
+export function phoneticKeyBn(word: string): string {
+  return phoneticKeyFromNormalized(foldLongVowels(normalizeBengali(word)));
+}
+
+/** Phonetic key for a word that is already normalizeBengali()-ed. */
+export function phoneticKeyFromNormalized(norm: string): string {
+  let out = '';
+  const chars = Array.from(norm);
+  for (let idx = 0; idx < chars.length; idx++) {
+    const ch = chars[idx];
+    // Ya-phala (্য, as in ফ্ল্যাক) is a glide ASR often drops entirely
+    // (ফ্রেক): it carries no consonant identity of its own here.
+    if (ch === 'য' && idx > 0 && chars[idx - 1] === '্') continue;
+    if (PHONETIC_CHAR_MAP[ch]) {
+      out += PHONETIC_CHAR_MAP[ch];
+    } else if (/[ািীুূৃেৈোৌ্ँঃয়অআইঈউঊএঐওঔ\s]/.test(ch)) {
+      continue; // vowel signs / independent vowels carry little identity
+    } else {
+      out += ch;
+    }
+  }
+  return out;
+}
+
+/** Similarity between two spoken/catalog words with ASR confusions forgiven. */
+export function tokenPhoneticSimilarity(a: string, b: string): number {
+  const fa = foldLongVowels(normalizeBengali(a));
+  const fb = foldLongVowels(normalizeBengali(b));
+  if (!fa || !fb) return 0;
+  if (fa === fb) return 1;
+
+  // Length ratio guard: a short word cannot be phonetically equal to a multi-word phrase
+  const lenRatio = Math.min(fa.length, fb.length) / Math.max(fa.length, fb.length);
+  if (lenRatio < 0.6) return 0;
+
+  const ka = phoneticKeyBn(a);
+  const kb = phoneticKeyBn(b);
+  let sim = stringSimilarity(fa, fb);
+  if (ka && ka === kb) return ka.length >= 3 ? 0.97 : Math.max(sim, 0.7);
+  if (ka.length >= 2 && kb.length >= 2) {
+    const kRatio = Math.min(ka.length, kb.length) / Math.max(ka.length, kb.length);
+    if (kRatio >= 0.7) {
+      sim = Math.max(sim, stringSimilarity(ka, kb));
+    }
+  }
+  return sim;
+}
+
+/**
+ * Catalog-aware transcript repair: rewrite spoken tokens that phonetically
+ * match catalog product-name tokens into the catalog spelling, so the
+ * shopkeeper sees (and the parser reads) "নেভিকাট … গোল্ড ফ্ল্যাক" instead
+ * of the recognizer's "নেভিকাড … গোল্ডফ্রেক". Joined ASR tokens are split
+ * back ("পেপারবোর্ড" -> "পেপার বোট"). Non-product words are left untouched.
+ */
+interface CatalogNameForm {
+  displayTokens: string[];
+  normTokens: string[];
+  tokenKeys: string[];
+}
+
+const catalogNameFormsCache = new WeakMap<Product[], CatalogNameForm[]>();
+
+function getCatalogNameForms(products: Product[]): CatalogNameForm[] {
+  const cached = catalogNameFormsCache.get(products);
+  if (cached) return cached;
+  const forms: CatalogNameForm[] = [];
+  for (const p of products) {
+    if (p.isActive === false) continue;
+    const display = (p.nameBn || p.name || '').trim();
+    if (!display) continue;
+    const rawTokens = display.split(/\s+/).filter(Boolean);
+    const normTokens = normalizeBengali(display).split(/\s+/).filter(Boolean);
+    if (normTokens.length === 0) continue;
+
+    // Filter out trailing prices and packaging units from display replacement forms
+    let cut = normTokens.length;
+    for (let i = 0; i < normTokens.length; i++) {
+      if (
+        /^[\d০-৯]+(?:\.[\d০-৯]+)?$/.test(normTokens[i]) &&
+        i + 1 < normTokens.length &&
+        ['টাকা', 'গ্রাম', 'কেজি', 'লিটার', 'মিলি'].includes(normTokens[i + 1])
+      ) {
+        cut = i;
+        break;
+      }
+      if (i === normTokens.length - 2 && /^[\d০-৯]+(?:\.[\d০-৯]+)?$/.test(normTokens[i]) && normTokens[i + 1] === 'টাকা') {
+        cut = i;
+        break;
+      }
+    }
+
+    const trimmedNorm = normTokens.slice(0, cut);
+    const trimmedDisplay = rawTokens.slice(0, cut);
+    if (trimmedNorm.length > 0) {
+      forms.push({
+        displayTokens: trimmedDisplay,
+        normTokens: trimmedNorm,
+        tokenKeys: trimmedNorm.map((t) => phoneticKeyFromNormalized(foldLongVowels(t))),
+      });
+    }
+  }
+  catalogNameFormsCache.set(products, forms);
+  return forms;
+}
+
+export function correctTranscriptWithCatalog(text: string, products: Product[]): string {
+  if (!text || products.length === 0) return text;
+
+  const forms = getCatalogNameForms(products);
+  if (forms.length === 0) return text;
+
+  const rawTokens = text.split(/\s+/).filter(Boolean);
+  const out: string[] = [];
+  let i = 0;
+  while (i < rawTokens.length) {
+    let best: { end: number; display: string[]; sim: number } | null = null;
+    // Try text windows of 1-2 tokens against name windows of 1-2 tokens.
+    for (let textWin = 1; textWin <= 2 && i + textWin <= rawTokens.length; textWin++) {
+      const heard = rawTokens.slice(i, i + textWin).join(' ');
+      const heardKeys = new Set(
+        rawTokens
+          .slice(i, i + textWin)
+          .map((t) => phoneticKeyFromNormalized(foldLongVowels(normalizeBengali(t))))
+      );
+      const heardTokens = new Set(
+        rawTokens.slice(i, i + textWin).map((t) => normalizeBengali(t))
+      );
+      for (const form of forms) {
+        const shares = form.normTokens.some(
+          (t, ti) =>
+            heardTokens.has(t) ||
+            heardKeys.has(form.tokenKeys[ti]) ||
+            (form.tokenKeys[ti].length >= 3 &&
+              Array.from(heardKeys).some(
+                (hk) =>
+                  hk.length >= 3 &&
+                  (hk.startsWith(form.tokenKeys[ti]) || form.tokenKeys[ti].startsWith(hk))
+              ))
+        );
+        if (!shares) continue;
+        for (
+          let nameWin = Math.max(1, textWin - 1);
+          nameWin <= textWin + 1 && nameWin <= form.normTokens.length;
+          nameWin++
+        ) {
+          for (let s = 0; s + nameWin <= form.normTokens.length; s++) {
+            const catalogJoined = form.normTokens.slice(s, s + nameWin).join(' ');
+            if (normalizeBengali(heard) === catalogJoined) continue; // already correct
+            const sim = tokenPhoneticSimilarity(heard, catalogJoined);
+            if (sim >= 0.94 && (!best || sim > best.sim || (sim === best.sim && nameWin > best.display.length))) {
+              best = { end: i + textWin, display: form.displayTokens.slice(s, s + nameWin), sim };
+            }
+          }
+        }
+      }
+    }
+    if (best) {
+      out.push(...best.display);
+      i = best.end;
+    } else {
+      out.push(rawTokens[i]);
+      i += 1;
+    }
+  }
+  return out.join(' ');
 }
 
 export function expandQueryAliases(text: string): string[] {
@@ -126,6 +346,26 @@ export function expandQueryAliases(text: string): string[] {
     }
   }
 
+  // Cumulative alias pass: apply every brand alias at once so a Bengali
+  // query can equal an English-only catalog name ("Amul Dark Chocolate").
+  let cumulative = norm;
+  const queryIsBengali = /[\u0980-\u09FF]/.test(norm);
+  for (const [key, aliases] of Object.entries(BRAND_ALIASES)) {
+    // One direction only per pass: bidirectional alias pairs would
+    // otherwise replace each other's output back and cancel out.
+    if (/[\u0980-\u09FF]/.test(key) !== queryIsBengali) continue;
+    if (aliases.length > 0 && cumulative.includes(key)) {
+      cumulative = cumulative.split(key).join(aliases[0]);
+    }
+  }
+  if (cumulative !== norm) variants.add(cumulative);
+  variants.add(transliterateBnToLatin(norm));
+  if (cumulative !== norm) variants.add(transliterateBnToLatin(cumulative));
+
+  // Vowel-folded copies of every variant, so spoken long/short vowel
+  // variants still reach an exact catalog match.
+  for (const v of Array.from(variants)) variants.add(foldLongVowels(v));
+
   return Array.from(variants).filter(Boolean);
 }
 
@@ -136,7 +376,10 @@ export function stringSimilarity(s1: string, s2: string): number {
 
   if (str1 === str2) return 1.0;
   if (!str1 || !str2) return 0.0;
-  if (str1.includes(str2) || str2.includes(str1)) return 0.9;
+  // Substring shortcut only for meaningful lengths: a 1-2 char catalog
+  // value (size "L", category initial) is inside almost every query and
+  // must not score as a near-match for unrelated spoken words.
+  if (Math.min(str1.length, str2.length) >= 3 && (str1.includes(str2) || str2.includes(str1))) return 0.9;
 
   // Bigram Dice coefficient
   const getBigrams = (str: string): Map<string, number> => {
@@ -173,7 +416,11 @@ export interface SearchProductsResult {
   isAmbiguous: boolean;
 }
 
+const productNamesCache = new WeakMap<Product, string[]>();
+
 function getProductNames(p: Product): string[] {
+  const cached = productNamesCache.get(p);
+  if (cached) return cached;
   const names: string[] = [];
   if (p.nameBn) names.push(normalizeBengali(p.nameBn));
   if (p.name) names.push(normalizeBengali(p.name));
@@ -188,10 +435,76 @@ function getProductNames(p: Product): string[] {
     }
   }
 
-  return names.filter(Boolean);
+  const folded = names.map((n) => foldLongVowels(n)).filter((n) => !names.includes(n));
+  const result = [...names, ...folded].filter(Boolean);
+  productNamesCache.set(p, result);
+  return result;
 }
 
+interface NameInfo {
+  name: string;
+  words: string[];
+  keys: string[];
+}
+
+const productNameInfoCache = new WeakMap<Product, NameInfo[]>();
+
+function getProductNameInfos(p: Product): NameInfo[] {
+  const cached = productNameInfoCache.get(p);
+  if (cached) return cached;
+  const infos = getProductNames(p).map((name) => {
+    const words = name.split(/\s+/).filter((w) => w.length >= 2);
+    return { name, words, keys: words.map((w) => phoneticKeyFromNormalized(foldLongVowels(w))) };
+  });
+  productNameInfoCache.set(p, infos);
+  return infos;
+}
+
+const catalogVocabCache = new WeakMap<
+  Product[],
+  { tokens: Set<string>; keys: Set<string> }
+>();
+
+function getCatalogVocab(products: Product[]): { tokens: Set<string>; keys: Set<string> } {
+  const cached = catalogVocabCache.get(products);
+  if (cached) return cached;
+  const tokens = new Set<string>();
+  const keys = new Set<string>();
+  for (const p of products) {
+    if (p.isActive === false) continue;
+    for (const info of getProductNameInfos(p)) {
+      info.words.forEach((w) => tokens.add(w));
+      info.keys.forEach((k) => keys.add(k));
+    }
+  }
+  const vocab = { tokens, keys };
+  catalogVocabCache.set(products, vocab);
+  return vocab;
+}
+
+const searchResultCache = new WeakMap<Product[], Map<string, SearchProductsResult>>();
+
 export function searchProducts(
+  products: Product[],
+  query: string,
+  limit: number = 5
+): SearchProductsResult {
+  const cacheKey = `${limit}|${query}`;
+  let perCatalog = searchResultCache.get(products);
+  const cached = perCatalog?.get(cacheKey);
+  if (cached) return cached;
+
+  const result = searchProductsUncached(products, query, limit);
+  if (!perCatalog) {
+    perCatalog = new Map();
+    searchResultCache.set(products, perCatalog);
+  }
+  if (perCatalog.size > 500) perCatalog.clear();
+  perCatalog.set(cacheKey, result);
+  return result;
+}
+
+function searchProductsUncached(
   products: Product[],
   query: string,
   limit: number = 5
@@ -200,16 +513,71 @@ export function searchProducts(
   const qVariants = expandQueryAliases(query);
   if (qVariants.length === 0) return { matches: [], isAmbiguous: false };
 
+  // Per-variant word lists are query-level facts: compute once, not once
+  // per product x name x variant in the scan below.
+  const variantInfos = qVariants.map((q) => ({
+    q,
+    words: q.split(/\s+/).filter((w) => w.length >= 2),
+  }));
+  const qTokenSet = new Set<string>();
+  const qKeySet = new Set<string>();
+  for (const v of variantInfos) {
+    for (const w of v.words) {
+      qTokenSet.add(w);
+      qTokenSet.add(foldLongVowels(w));
+      qKeySet.add(phoneticKeyFromNormalized(foldLongVowels(w)));
+    }
+  }
+  const productCouldMatch = (infos: NameInfo[]): boolean => {
+    for (const info of infos) {
+      for (let i = 0; i < info.words.length; i++) {
+        const w = info.words[i];
+        if (qTokenSet.has(w) || qTokenSet.has(foldLongVowels(w))) return true;
+        const k = info.keys[i];
+        if (qKeySet.has(k)) return true;
+        for (const qk of qKeySet) {
+          if (
+            k.length >= 3 &&
+            qk.length >= 3 &&
+            (k.startsWith(qk) || qk.startsWith(k))
+          ) {
+            return true;
+          }
+        }
+      }
+      // Substring relations in either direction (name inside query etc.)
+      for (const v of variantInfos) {
+        if (info.name.includes(v.q) || v.q.includes(info.name)) return true;
+      }
+    }
+    return false;
+  };
+  const alignQWords = normQuery.split(/\s+/).filter((w) => w.length >= 2);
+  const alignQKeys = alignQWords.map((w) => phoneticKeyBn(w));
+  const diceGate = (name: string): boolean => {
+    const words = name.split(/\s+/).filter((w) => w.length >= 2);
+    for (const w of words) {
+      const k = phoneticKeyBn(w);
+      for (const qk of alignQKeys) {
+        if (k === qk) return true;
+        if (k.length >= 3 && qk.length >= 3 && (k.includes(qk) || qk.includes(k))) return true;
+      }
+      // A spoken word appearing verbatim inside the name also opens the gate.
+      if (alignQWords.some((qw) => name.includes(qw))) return true;
+    }
+    return false;
+  };
   const scored: ProductMatch[] = [];
 
   for (const product of products) {
     if (product.isActive === false) continue;
 
     let bestScore = 0.0;
-    const names = getProductNames(product);
+    const names = getProductNameInfos(product);
+    if (!productCouldMatch(names)) continue;
 
-    for (const name of names) {
-      for (const q of qVariants) {
+    for (const { name, words: nWords, keys: nKeysArr } of names) {
+      for (const { q, words: qWordsPre } of variantInfos) {
         let score = 0.0;
         if (q === name) {
           // Direct unaliased exact match gets 1.05; aliased exact match gets 1.0
@@ -217,20 +585,43 @@ export function searchProducts(
         } else if (q.length >= 3 && name.includes(q)) {
           const lengthBonus = Math.min(0.06, (q.length / Math.max(name.length, 1)) * 0.06);
           score = 0.92 + lengthBonus;
-        } else if (q.length >= 3 && q.includes(name)) {
+        } else if (q.length >= 3 && name.length >= 3 && q.includes(name)) {
+          // name.length guard: a 1-2 char catalog value (size "L", a short
+          // category/attribute) must never substring-match every query.
           score = 0.91;
         } else {
           // Token subset match: all tokens of q exist in name
-          const qWords = q.split(/\s+/).filter((w) => w.length >= 2);
+          const qWords = qWordsPre;
           if (qWords.length >= 2 && qWords.every((w) => name.includes(w))) {
             score = 0.90;
-          } else {
+          } else if (diceGate(name)) {
             const sim = stringSimilarity(q, name);
             score = sim;
           }
         }
         bestScore = Math.max(bestScore, score);
         if (bestScore >= 1.05) break;
+      }
+      // ASR-tolerant token alignment, once per catalog name: each spoken
+      // word is matched phonetically against the name's words, so a
+      // garbled brand token ("নেভিকাড", "গোল্ডফ্রেক") still lands on the
+      // right product even when whole-string similarity is weak.
+      if (bestScore < 0.88) {
+        const nKeys = new Set(nKeysArr);
+        const sharesSkeleton = alignQWords.some((w) => nKeys.has(phoneticKeyBn(w)));
+        if (sharesSkeleton && nWords.length > 0) {
+          let sum = 0;
+          let covered = 0;
+          for (const qw of alignQWords) {
+            const bestTok = Math.max(...nWords.map((nw) => tokenPhoneticSimilarity(qw, nw)));
+            sum += bestTok;
+            if (bestTok >= 0.75) covered++;
+          }
+          const avg = sum / alignQWords.length;
+          if (avg >= 0.8 && covered / alignQWords.length >= 0.5) {
+            bestScore = Math.max(bestScore, 0.76 + avg * 0.12);
+          }
+        }
       }
       if (bestScore >= 1.05) break;
     }
@@ -241,7 +632,22 @@ export function searchProducts(
   }
 
   scored.sort((a, b) => b.score - a.score);
-  const topMatches = scored.slice(0, limit);
+  let topMatches = scored.slice(0, limit);
+
+  if (topMatches.length === 0) {
+    const { tokens: catalogTokens, keys: catalogKeys } = getCatalogVocab(products);
+    const qWords = normQuery.split(/\s+/).filter(Boolean);
+    const kept = qWords.filter(
+      (w) =>
+        catalogTokens.has(w) ||
+        catalogKeys.has(phoneticKeyBn(w)) ||
+        /[\d০-৯]/.test(w)
+    );
+    if (kept.length > 0 && kept.length < qWords.length) {
+      const retry = searchProductsUncached(products, kept.join(' '), limit);
+      if (retry.matches.length > 0) return retry;
+    }
+  }
 
   const isAmbiguous =
     topMatches.length >= 2 &&

@@ -20,8 +20,12 @@ import {
   extractSpokenCustomerName,
   findCustomer,
   normalizeBengali,
+  phoneticKeyBn,
+  phoneticKeyFromNormalized,
   searchProducts,
+  stringSimilarity,
   stripBengaliSuffixes,
+  tokenPhoneticSimilarity,
 } from './comam-matcher';
 
 export interface DraftItem {
@@ -95,14 +99,111 @@ export interface ComamDraft {
   needsClarification: boolean;
 }
 
+const SPLIT_NUM_WORDS = new Set([
+  'এক', 'দুই', 'তিন', 'চার', 'পাঁচ', 'ছয়', 'সাত', 'আট', 'নয়', 'দশ', 'এগারো', 'বারো',
+  'তেরো', 'চৌদ্দ', 'পনেরো', 'ষোলো', 'সতেরো', 'আঠারো', 'উনিশ', 'কুড়ি', 'বিশ', 'তিরিশ',
+  'চল্লিশ', 'পঞ্চাশ', 'ষাট', 'সত্তর', 'আশি', 'নব্বই', 'একশ', 'একশো', 'শত', 'হাজার', 'দু',
+  'ওয়ান', 'ওয়ান', 'টু', 'থ্রি', 'ফোর', 'ফাইভ', 'সিক্স', 'এইট', 'নাইন', 'টেন',
+]);
+const SPLIT_FRACTION_WORDS = new Set(['আধা', 'আধ', 'হাফ', 'দেড়', 'দেড়', 'আড়াই', 'আড়াই', 'পৌনে', 'পোনে', 'সোয়া', 'সাড়ে']);
+const SPLIT_PRICE_WORDS = new Set(['টাকা', 'টাকার', 'দামের', 'দামে', 'দর', 'মূল্যের']);
+const SPLIT_FILLER_WORDS = new Set(['দাও', 'দিন', 'দেন', 'নাও', 'করো', 'করুন', 'চাই', 'বিল', 'এবং', 'আর', 'ও', 'হল', 'হলো']);
+
+function isPieceQuantityToken(tok: string): boolean {
+  return /^(?:এক|দুই|তিন|চার|পাঁচ|ছয়|সাত|আট|নয়|দশ|ওয়ান|ওয়ান|টু|থ্রি|ফোর|ফাইভ|সিক্স|এইট|নাইন|টেন|এগারো|বারো|তেরো|চৌদ্দ|পনেরো|ষোলো|সতেরো|আঠারো|উনিশ|কুড়ি|বিশ|দু|[\d০-৯]+)(?:টা|টি|টে|টো|খানা)$/.test(tok);
+}
+
+function isQuantityStarter(tok: string): boolean {
+  return (
+    isPieceQuantityToken(tok) ||
+    SPLIT_NUM_WORDS.has(tok) ||
+    SPLIT_FRACTION_WORDS.has(tok) ||
+    /^[\d০-৯]+(?:\.[\d০-৯]+)?$/.test(tok) ||
+    /^[৳₹$]/.test(tok)
+  );
+}
+
+/** True when a real product word follows the quantity at tokens[i] (skipping
+ * units and stated-price phrases like "১০ টাকা দামের"). A quantity followed
+ * only by another quantity is a trailing quantity of the previous item
+ * (e.g. "কোকাকোলা দুইটা"), not the start of a new item. */
+function hasProductAhead(tokens: string[], i: number): boolean {
+  for (let j = i + 1; j < tokens.length; j++) {
+    const t = tokens[j];
+    if (UNITS[t] || SPLIT_PRICE_WORDS.has(t) || SPLIT_FILLER_WORDS.has(t)) continue;
+    if (/^[৳₹$]/.test(t)) continue;
+    // A bare number directly before a price word is a stated price, skip it.
+    if (/^[\d০-৯]+(?:\.[\d০-৯]+)?$/.test(t) && j + 1 < tokens.length && SPLIT_PRICE_WORDS.has(tokens[j + 1])) continue;
+    if (isQuantityStarter(t)) return false;
+    if (t.length >= 2) return true;
+  }
+  return false;
+}
+
+/**
+ * Split a comma-less run of quantity-led items into one chunk per item:
+ * "একটা আমুল চকলেট সিরাপ একটা আমুল ডার্ক চকলেট একটা আমুল শক্তি দুধ"
+ *  -> ["একটা আমুল চকলেট সিরাপ", "একটা আমুল ডার্ক চকলেট", "একটা আমুল শক্তি দুধ"]
+ * A new chunk starts at a quantity word only when the current chunk already
+ * has its own quantity and product words — so trailing quantities
+ * ("কোকাকোলা দুইটা", "চিনি ২ কেজি") never split their own item in half.
+ */
+function splitQuantityLedItems(part: string): string[] {
+  const tokens = part.split(/\s+/).filter(Boolean);
+  if (tokens.length < 4) return [part];
+
+  const chunks: string[] = [];
+  let current: string[] = [];
+  let currentHasQty = false;
+  let currentHasProduct = false;
+  // Only quantity-LED chunks ("একটা X একটা Y") split at the next quantity.
+  // In a product-first chunk ("চিনি দুই কেজি সাবান তিনটা") the quantity
+  // after a product word is that product's own trailing quantity, so the
+  // chunk must stay whole (the product-name splitter handles it instead).
+  let currentIsQtyLed = false;
+
+  for (let i = 0; i < tokens.length; i++) {
+    const tok = tokens[i];
+    if (
+      current.length > 0 &&
+      currentIsQtyLed &&
+      isQuantityStarter(tok) &&
+      currentHasQty &&
+      currentHasProduct &&
+      hasProductAhead(tokens, i)
+    ) {
+      chunks.push(current.join(' '));
+      current = [];
+      currentHasQty = false;
+      currentHasProduct = false;
+      currentIsQtyLed = false;
+    }
+    if (current.length === 0) {
+      currentIsQtyLed = isQuantityStarter(tok) || /^[৳₹$]/.test(tok);
+    }
+    current.push(tok);
+    if (isQuantityStarter(tok)) {
+      currentHasQty = true;
+    } else if (!UNITS[tok] && !SPLIT_PRICE_WORDS.has(tok) && !SPLIT_FILLER_WORDS.has(tok) && tok.length >= 2) {
+      currentHasProduct = true;
+    }
+  }
+  if (current.length > 0) chunks.push(current.join(' '));
+  return chunks;
+}
+
 function splitSegments(text: string): string[] {
   // Normalize colon artifact in speech recognition (e.g., "1:10 টাকা" -> "১০ টাকা") and clean spoken punctuation
   let normalized = normalizeColonArtifacts(text);
   normalized = cleanSpokenPunctuation(normalized);
 
-  // First split by explicit separators: comma, danda, 'এবং', 'আর', 'ও'
+  // First split by explicit separators: comma, 'এবং', 'আর', 'ও'.
+  // The danda '।' is NOT a separator: ASR drops it at mere pauses, often
+  // in the middle of one item ("নেভিকাড। সিগারেট পাঁচটা গোল্ডফ্রেক"),
+  // so it is treated as a space and product names mark item boundaries.
+  normalized = normalized.replace(/।/g, ' ');
   const rawParts = normalized
-    .split(/[,،।\n;]| এবং | আর | ও /g)
+    .split(/[,،\n;]| এবং | আর | ও /g)
     .map((s) => s.trim())
     .filter(Boolean);
 
@@ -128,7 +229,9 @@ function splitSegments(text: string): string[] {
       .map((s) => s.trim())
       .filter(Boolean);
 
-    result.push(...subParts);
+    for (const sub of subParts) {
+      result.push(...splitQuantityLedItems(sub));
+    }
   }
 
   return result;
@@ -240,6 +343,330 @@ function getTailAfterProduct(rest: string, product: Product): string {
   return tailCand;
 }
 
+function tokensEqualForProduct(a: string, b: string): boolean {
+  const na = normalizeBengali(a);
+  const nb = normalizeBengali(b);
+  if (!na || !nb) return false;
+  const fold = (s: string) => s.replace(/ী/g, 'ি').replace(/ূ/g, 'ু');
+  return na === nb || fold(na) === fold(nb) || stripBengaliSuffixes(na) === stripBengaliSuffixes(nb);
+}
+
+/**
+ * Product-anchored split: when one comma-less segment names two or more
+ * catalog products ("চিনি দুই কেজি সাবান তিনটা ডিম এক ডজন", or
+ * "আমুল ডার্ক চকলেট দুইটা আমুল চকলেট সিরাপ একটা"), split right before
+ * each product name after the first. Quantities stay attached to the
+ * product they belong to, whichever side of the name they were spoken on.
+ */
+export function splitByKnownProducts(products: Product[], segment: string): string[] {
+  const tokens = segment.split(/\s+/).filter(Boolean);
+  if (tokens.length < 3) return [segment];
+
+  const forms = getNameForms(products);
+  if (forms.length === 0) return [segment];
+
+  const normTokens = tokens.map((t) => normalizeBengali(t));
+  const textKeys = tokens.map((t) => phoneticKeyBn(t));
+  const fold = (s: string) => s.replace(/ী/g, 'ি').replace(/ূ/g, 'ু');
+
+  function tokenMatch(ti: number, form: NameForm, ni: number): boolean {
+    if (normTokens[ti] === form.tokens[ni]) return true;
+    if (fold(normTokens[ti]) === fold(form.tokens[ni])) return true;
+    // Phonetic-skeleton equality only for substantive keys, so short
+    // words ("এক", "হল") can never anchor a product by sound alone.
+    // Single-token product names need an exact/folded match: with all
+    // vowels stripped, unrelated words collide ("সেভেন" ~ "সাবান").
+    if (form.tokens.length < 2) return false;
+    return textKeys[ti].length >= 3 && textKeys[ti] === form.keys[ni];
+  }
+
+  // A heard token can cover two catalog tokens when ASR joins words
+  // ("গোল্ডফ্রেক" = গোল্ড+ফ্ল্যাক, "পেপারবোর্ড" = পেপার+বোট), or the reverse
+  // when it splits them — matching on phonetic skeletons keeps this cheap.
+  function matchSeqAt(ti: number, form: NameForm, ni: number, skipsLeft = 2): number {
+    if (ni >= form.tokens.length) return ti;
+    if (ti >= tokens.length) return -1;
+    if (tokenMatch(ti, form, ni)) {
+      const r = matchSeqAt(ti + 1, form, ni + 1, skipsLeft);
+      if (r >= 0) return r;
+    }
+    if (ni > 0 && skipsLeft > 0) {
+      const r = matchSeqAt(ti + 1, form, ni, skipsLeft - 1);
+      if (r >= 0) return r;
+    }
+    // Allow skipping a middle catalog token that speaker omitted (e.g. "আমুল কোকা কফি" -> "আমুল ... কফি")
+    if (ni > 0 && ni + 1 < form.tokens.length && skipsLeft > 0) {
+      const r = matchSeqAt(ti, form, ni + 1, skipsLeft - 1);
+      if (r >= 0) return r;
+    }
+    const concatKey = ni + 1 < form.tokens.length ? form.keys[ni] + form.keys[ni + 1] : '';
+    // Length ratio guard: a heard token may only stand for two catalog
+    // tokens when their skeletons are near-equal in length too — a mere
+    // prefix ("ময়দা" for "ময়দা খোলা") is one token, not a joined pair.
+    const lenRatio1 =
+      concatKey.length > 0
+        ? Math.min(textKeys[ti].length, concatKey.length) / Math.max(textKeys[ti].length, concatKey.length)
+        : 0;
+    if (
+      ni + 1 < form.tokens.length &&
+      textKeys[ti].length >= 3 &&
+      (textKeys[ti] === concatKey ||
+        (concatKey.length >= 4 && lenRatio1 >= 0.75 && stringSimilarity(textKeys[ti], concatKey) >= 0.85))
+    ) {
+      const r = matchSeqAt(ti + 1, form, ni + 2, skipsLeft);
+      if (r >= 0) return r;
+    }
+    const joinedHeardKey = ti + 1 < tokens.length ? textKeys[ti] + textKeys[ti + 1] : '';
+    const lenRatio2 =
+      form.keys[ni].length > 0 && joinedHeardKey.length > 0
+        ? Math.min(joinedHeardKey.length, form.keys[ni].length) / Math.max(joinedHeardKey.length, form.keys[ni].length)
+        : 0;
+    if (
+      ti + 1 < tokens.length &&
+      form.keys[ni].length >= 3 &&
+      (joinedHeardKey === form.keys[ni] ||
+        (form.keys[ni].length >= 4 &&
+          lenRatio2 >= 0.75 &&
+          stringSimilarity(joinedHeardKey, form.keys[ni]) >= 0.85))
+    ) {
+      const r = matchSeqAt(ti + 2, form, ni + 1, skipsLeft);
+      if (r >= 0) return r;
+    }
+    return -1;
+  }
+
+  const formsByFirstToken = new Map<string, NameForm[]>();
+  for (const form of forms) {
+    for (const bucketKey of [form.tokens[0], form.keys[0]]) {
+      const arr = formsByFirstToken.get(bucketKey);
+      if (arr) arr.push(form);
+      else formsByFirstToken.set(bucketKey, [form]);
+    }
+  }
+  const candidateForms = (ti: number): NameForm[] => {
+    const seen = new Set<NameForm>();
+    const out: NameForm[] = [];
+    for (const bucketKey of [normTokens[ti], textKeys[ti]]) {
+      for (const f of formsByFirstToken.get(bucketKey) || []) {
+        if (!seen.has(f)) {
+          seen.add(f);
+          out.push(f);
+        }
+      }
+    }
+    // Joined ASR tokens ("গোল্ডফ্রেক" for গোল্ড+ফ্ল্যাক) start with the
+    // first name token's skeleton: include forms whose first key is a
+    // prefix of (or prefixed by) the heard token's key.
+    const heardKey = textKeys[ti];
+    if (heardKey.length >= 3) {
+      for (const form of forms) {
+        const firstKey = form.keys[0];
+        if (
+          firstKey.length >= 3 &&
+          (heardKey.startsWith(firstKey) || firstKey.startsWith(heardKey)) &&
+          !seen.has(form)
+        ) {
+          seen.add(form);
+          out.push(form);
+        }
+      }
+    }
+    return out;
+  };
+
+  const occurrences: Array<{ start: number; end: number; seqLen: number }> = [];
+  for (let start = 0; start < tokens.length; start++) {
+    let bestSeqLen = 0;
+    let bestEnd = -1;
+    for (const form of candidateForms(start)) {
+      if (form.tokens.length < bestSeqLen) continue;
+      const end = matchSeqAt(start, form, 0);
+      if (end > start && (form.tokens.length > bestSeqLen || end > bestEnd)) {
+        bestSeqLen = form.tokens.length;
+        bestEnd = end;
+      }
+    }
+    if (bestEnd <= start) {
+      // No full name here: try a distinctive first-token (brand) anchor.
+      for (const form of candidateForms(start)) {
+        if (form.tokens.length < 2) continue;
+        if (!tokenMatch(start, form, 0)) continue;
+        const first = form.tokens[0];
+        const sharingFirst = forms.filter((f) => f.tokens[0] === first).length;
+        const appearsMidName = forms.some(
+          (f) => f.tokens.slice(1).includes(first)
+        );
+        if (sharingFirst <= 40 && !appearsMidName && first.length >= 3) {
+          bestSeqLen = 1;
+          bestEnd = start + 1;
+        }
+        break;
+      }
+    }
+    if (bestEnd > start) {
+      // A lone-token anchor right after a word that completes a longer
+      // catalog name with it ("খোলা চিনি" spoken for "চিনি খোলা") is part
+      // of that name, not the start of a new item.
+      if (bestSeqLen === 1 && start > 0) {
+        const pair = [normTokens[start - 1], normTokens[start]];
+        const partOfLonger = forms.some(
+          (f) =>
+            f.tokens.length >= 2 &&
+            pair.every((w) => f.tokens.includes(w)) &&
+            !(f.tokens.length === 1)
+        );
+        if (partOfLonger) continue;
+      }
+      const prev = occurrences[occurrences.length - 1];
+      if (!prev || start >= prev.end) {
+        occurrences.push({ start, end: bestEnd, seqLen: bestSeqLen });
+      }
+    }
+  }
+
+  if (occurrences.length < 2) return [segment];
+
+  // Decide which item a quantity in the gap between two product names
+  // belongs to: if the following product already has its own quantity
+  // after its name, the gap quantity closes the previous item
+  // ("নেভিকাড সিগারেট পাঁচটা | গোল্ডফ্রেক সিগারেট দশটা"); otherwise it
+  // leads the next item ("...সিরাপ | একটা আমুল ডার্ক চকলেট").
+  const boundaries: number[] = [0];
+  for (let i = 1; i < occurrences.length; i++) {
+    const gapStart = occurrences[i - 1].end;
+    const occStart = occurrences[i].start;
+    let gapQtyAt = -1;
+    for (let j = gapStart; j < occStart; j++) {
+      if (isQuantityStarter(tokens[j].replace(/[।,;!?]+$/, ''))) {
+        gapQtyAt = j;
+        break;
+      }
+    }
+    if (gapQtyAt < 0) {
+      boundaries.push(occStart);
+      continue;
+    }
+    // If the gap starts with a stated price phrase for the next product
+    // (e.g. "চিনি 10 টাকার বিস্কুট" or "সেভেন আপ ৳10 দামের হলুদ"):
+    // the price leads the next item, so split right before the price.
+    const isPriceWord = (t: string) => SPLIT_PRICE_WORDS.has(t) || /^[৳₹$]/.test(t);
+    const gapStartsWithPrice =
+      isPriceWord(tokens[gapQtyAt].replace(/[।,;!?]+$/, '')) ||
+      (gapQtyAt + 1 < occStart &&
+        isPriceWord(tokens[gapQtyAt + 1].replace(/[।,;!?]+$/, '')) &&
+        !isPieceQuantityToken(tokens[gapQtyAt].replace(/[।,;!?]+$/, '')));
+
+    if (gapStartsWithPrice) {
+      boundaries.push(gapQtyAt);
+      continue;
+    }
+    // Two quantities in one gap ("সেভেন আপ 2টা 01 কেজি চিনি"): the first,
+    // spoken right after the previous product, is its trailing quantity;
+    // the second leads the next item. Split between them.
+    if (gapQtyAt === gapStart) {
+      let firstGroupEnd = gapQtyAt + 1;
+      while (
+        firstGroupEnd < occStart &&
+        UNITS[tokens[firstGroupEnd].replace(/[।,;!?]+$/, '')]
+      ) {
+        firstGroupEnd++;
+      }
+      let secondQtyAt = -1;
+      for (let j = firstGroupEnd; j < occStart; j++) {
+        if (isQuantityStarter(tokens[j].replace(/[।,;!?]+$/, ''))) {
+          secondQtyAt = j;
+          break;
+        }
+      }
+      if (secondQtyAt >= 0) {
+        boundaries.push(secondQtyAt);
+        continue;
+      }
+    }
+    const afterEnd = i + 1 < occurrences.length ? occurrences[i + 1].start : tokens.length;
+    let nextHasOwnQty = false;
+    for (let j = occurrences[i].end; j < afterEnd; j++) {
+      if (isQuantityStarter(tokens[j].replace(/[।,;!?]+$/, ''))) {
+        nextHasOwnQty = true;
+        break;
+      }
+    }
+    boundaries.push(nextHasOwnQty ? occStart : gapQtyAt);
+  }
+
+  const chunks: string[] = [];
+  for (let i = 0; i < boundaries.length; i++) {
+    const from = boundaries[i];
+    const to = i + 1 < boundaries.length ? boundaries[i + 1] : tokens.length;
+    const chunk = tokens.slice(from, to).join(' ').trim();
+    if (chunk) chunks.push(chunk);
+  }
+  return chunks.length > 1 ? chunks : [segment];
+}
+
+interface NameForm {
+  tokens: string[];
+  keys: string[];
+}
+
+const nameFormsCache = new WeakMap<Product[], NameForm[]>();
+
+function getNameForms(products: Product[]): NameForm[] {
+  let forms = nameFormsCache.get(products);
+  if (forms) return forms;
+  forms = [];
+  const seen = new Set<string>();
+  for (const p of products) {
+    if (p.isActive === false) continue;
+    for (const rawName of [p.nameBn, p.name]) {
+      if (!rawName) continue;
+      const seq = normalizeBengali(rawName).split(/\s+/).filter(Boolean);
+      if (seq.length === 0) continue;
+
+      const fullKey = seq.join(' ');
+      if (!seen.has(fullKey) && (seq.length >= 2 || (seq.length === 1 && seq[0].length >= 3))) {
+        seen.add(fullKey);
+        forms.push({ tokens: seq, keys: seq.map((t) => phoneticKeyFromNormalized(t)) });
+      }
+
+      // Core form: strip trailing prices (e.g. "৯০ টাকা", "২০ টাকা", "১০") and packaging units
+      const core: string[] = [];
+      for (let i = 0; i < seq.length; i++) {
+        const t = seq[i];
+        if (
+          /^[\d০-৯]+(?:\.[\d০-৯]+)?$/.test(t) &&
+          i + 1 < seq.length &&
+          ['টাকা', 'গ্রাম', 'কেজি', 'লিটার', 'মিলি', 'প্যাকেট', 'পিস'].includes(seq[i + 1])
+        ) {
+          break;
+        }
+        if (i === seq.length - 2 && /^[\d০-৯]+(?:\.[\d০-৯]+)?$/.test(t) && seq[i + 1] === 'টাকা') {
+          break;
+        }
+        if (i === seq.length - 1 && (/^[\d০-৯]+(?:\.[\d০-৯]+)?$/.test(t) || t === 'টাকা')) {
+          break;
+        }
+        core.push(t);
+      }
+
+      const coreKey = core.join(' ');
+      if (
+        core.length > 0 &&
+        core.length < seq.length &&
+        !seen.has(coreKey) &&
+        (core.length >= 2 || (core.length === 1 && core[0].length >= 3))
+      ) {
+        seen.add(coreKey);
+        forms.push({ tokens: core, keys: core.map((t) => phoneticKeyFromNormalized(t)) });
+      }
+    }
+  }
+  // Sort longer forms first so greedy matching prioritizes more specific multi-token names
+  forms.sort((a, b) => b.tokens.length - a.tokens.length);
+  nameFormsCache.set(products, forms);
+  return forms;
+}
+
 function parseItemSegment(
   products: Product[],
   rawSegment: string
@@ -291,12 +718,14 @@ function parseItemSegment(
   let unitFactor = 1.0;
   let rest = segment;
 
+  let spokenUnitWord = false;
   if (qtySpan) {
     const after = segment.slice(qtySpan[1]).trim();
     const sortedUnits = Object.entries(UNITS).sort((a, b) => b[0].length - a[0].length);
     for (const [unitWord, def] of sortedUnits) {
       if (after.startsWith(unitWord)) {
         unitFactor = def.factor;
+        spokenUnitWord = true;
         rest = (segment.slice(0, qtySpan[0]) + ' ' + after.slice(unitWord.length)).trim();
         break;
       }
@@ -348,6 +777,22 @@ function parseItemSegment(
   }
 
   let finalQty = (qty || 1.0) * unitFactor;
+
+  // Price-echo guard: catalog names often embed their price ("আমুল
+  // শক্তি ৩৩ টাকা"). A bare number phrase equal to the matched product's
+  // price, with no unit spoken, echoes that name — not a quantity.
+  if (qtySpan && qty !== null && !spokenUnitWord) {
+    const chosen = matches[0].product;
+    if (Math.abs(chosen.sellingPrice - qty) < 0.01) {
+      const nameText = `${chosen.nameBn || ''} ${chosen.name || ''}`;
+      if (
+        nameText.includes(formatBnNumber(qty)) ||
+        nameText.toLowerCase().includes(String(qty))
+      ) {
+        finalQty = 1.0;
+      }
+    }
+  }
 
   // Stated price variant selection: "১০ টাকা দামের বিস্কুট" picks the 10-taka pack!
   if (statedPrice !== null) {
@@ -433,6 +878,17 @@ function parseItemSegment(
   };
 }
 
+export function dedupeConsecutiveWords(text: string): string {
+  const tokens = text.split(/\s+/).filter(Boolean);
+  const out: string[] = [];
+  for (const tok of tokens) {
+    const prev = out[out.length - 1];
+    if (prev && normalizeBengali(prev) === normalizeBengali(tok)) continue;
+    out.push(tok);
+  }
+  return out.join(' ');
+}
+
 export function parseComamCommand(
   text: string,
   products: Product[],
@@ -441,6 +897,7 @@ export function parseComamCommand(
   let raw = text.trim();
   raw = normalizeColonArtifacts(raw);
   raw = cleanSpokenPunctuation(raw);
+  raw = dedupeConsecutiveWords(raw);
   const norm = normalizeBengali(raw);
 
   // 1. Detect Specific Product Sales Query (e.g. "আজকে আমুল শক্তি কয়টা বিক্রি হয়েছে?", "আজ চিনি কতটুকু বিক্রি হলো?")
@@ -664,7 +1121,22 @@ export function parseComamCommand(
     paymentType = 'UPI';
   }
 
-  const segments = splitSegments(cleanItemsText);
+  // Product-anchored split of the WHOLE utterance first: ASR punctuation
+  // (। ,) lands at speech pauses, often in the middle of one item, so
+  // catalog product names — matched phonetically — are the reliable item
+  // boundaries. The punctuation/quantity splitters remain the fallback.
+  const anchoredSegments = splitByKnownProducts(products, cleanItemsText);
+  // Anchored chunks can still contain a trailing "এবং <item>" the anchor
+  // pass could not see (e.g. a price-led item spoken by price + short
+  // name), so each chunk goes through the regular segment splitter too.
+  const segments =
+    anchoredSegments.length > 1
+      ? anchoredSegments.flatMap((chunk) =>
+          chunk
+            .split(/ এবং | আর | ও /g)
+            .flatMap((part) => splitQuantityLedItems(part))
+        )
+      : splitSegments(cleanItemsText);
   const items: DraftItem[] = [];
   const unknownItems: UnknownItem[] = [];
   const ambiguities: Ambiguity[] = [];
@@ -692,6 +1164,19 @@ export function parseComamCommand(
       .trim();
     if (!productWordsOnly || productWordsOnly.length < 2) return;
 
+    // One segment can still hide several product-first items with no
+    // separator at all ("চিনি দুই কেজি সাবান তিনটা"): split on catalog
+    // product names and parse each piece as its own item.
+    if (depth < 4) {
+      const productChunks = splitByKnownProducts(products, cleanedSeg);
+      if (productChunks.length > 1) {
+        for (const chunk of productChunks) {
+          consume(chunk, depth + 1);
+        }
+        return;
+      }
+    }
+
     const res = parseItemSegment(products, cleanedSeg);
     if (res.item) {
       items.push(res.item);
@@ -699,15 +1184,101 @@ export function parseComamCommand(
       if (
         tail &&
         (findNumberPhrases(tail).length > 0 ||
-          /(\S+?)(টে|টা|টি|টো|খানা|কেজি|গ্রাম|লিটার)/.test(tail))
+          /(\S+?)(টে|টা|টি|টো|খানা|কেজি|গ্রাম|লিটার)/.test(tail) ||
+          searchProducts(products, tail).matches.length > 0)
       ) {
-        consume(tail, depth + 1);
+        // Name-continuation guard: a quantity-less tail whose first
+        // content word belongs to the just-billed product's own name is
+        // the remainder of that name — never bill it as a second product.
+        const tailContentWords = tail
+          .split(/\s+/)
+          .filter(Boolean)
+          .map((t) => t.replace(/[।,;!?]+$/, ''))
+          .filter(
+            (t) =>
+              !isQuantityStarter(t) &&
+              !UNITS[t] &&
+              !['এবং', 'আর', 'ও'].includes(t)
+          );
+        const foldV = (x: string) => x.replace(/ী/g, 'ি').replace(/ূ/g, 'ু');
+        const ownNameTokens = `${res.item.product.nameBn || ''} ${res.item.product.name || ''}`
+          .split(/\s+/)
+          .map((t) => foldV(normalizeBengali(t)));
+        const tailHasQty =
+          findNumberPhrases(tail).length > 0 ||
+          /(\S+?)(টে|টা|টি|টো|খানা)/.test(tail);
+        if (
+          tailContentWords.length > 0 &&
+          !tailHasQty &&
+          ownNameTokens.includes(foldV(normalizeBengali(tailContentWords[0])))
+        ) {
+          // skip tail consumption entirely
+        } else if (true) {
+        // Descriptor guard: strip the quantity this item already used;
+        // if one generic word remains and it is just a descriptor token
+        // (a word of this product's name, or a category word shared by
+        // several products like দুধ/সিগারেট), it is not another item.
+        const tailWords = tail.split(/\s+/).filter(Boolean);
+        let wi = 0;
+        while (
+          wi < tailWords.length &&
+          (isQuantityStarter(tailWords[wi].replace(/[।,;!?]+$/, '')) ||
+            UNITS[tailWords[wi].replace(/[।,;!?]+$/, '')])
+        ) {
+          wi++;
+        }
+        const residue = tailWords.slice(wi);
+        let isDescriptorResidue = false;
+        if (residue.length === 1) {
+          const w = normalizeBengali(residue[0]);
+          const ownTokens = `${res.item.product.nameBn || ''} ${res.item.product.name || ''}`
+            .split(/\s+/)
+            .map((t) => normalizeBengali(t));
+          const sharedCount = products.filter((p) =>
+            `${p.nameBn || ''} ${p.name || ''}`
+              .split(/\s+/)
+              .map((t) => normalizeBengali(t))
+              .includes(w)
+          ).length;
+          isDescriptorResidue = ownTokens.includes(w) || sharedCount >= 2;
+        }
+        if (!isDescriptorResidue) {
+          consume(tail, depth + 1);
+        }
+        }
       }
     }
     if (res.ambiguity) {
       ambiguities.push(res.ambiguity);
     }
     if (res.unknown) {
+      // If segment is multi-word (>= 3 words) and failed to match as a single item,
+      // try to extract any identifiable catalog product from inside it before declaring unknown!
+      const segTokens = cleanedSeg.split(/\s+/).filter(Boolean);
+      if (segTokens.length >= 3 && depth < 4) {
+        let bestSub: { start: number; end: number; score: number } | null = null;
+        for (let win = Math.min(segTokens.length - 1, 4); win >= 2; win--) {
+          for (let s = 0; s + win <= segTokens.length; s++) {
+            const subStr = segTokens.slice(s, s + win).join(' ');
+            const { matches } = searchProducts(products, subStr);
+            if (matches.length > 0 && matches[0].score >= 0.88) {
+              if (!bestSub || matches[0].score > bestSub.score || win > (bestSub.end - bestSub.start)) {
+                bestSub = { start: s, end: s + win, score: matches[0].score };
+              }
+            }
+          }
+        }
+        if (bestSub) {
+          const before = segTokens.slice(0, bestSub.start).join(' ').trim();
+          const matchChunk = segTokens.slice(bestSub.start, bestSub.end).join(' ').trim();
+          const after = segTokens.slice(bestSub.end).join(' ').trim();
+          if (before) consume(before, depth + 1);
+          if (matchChunk) consume(matchChunk, depth + 1);
+          if (after) consume(after, depth + 1);
+          return;
+        }
+      }
+
       // Strip price and filler residues from unknown product text
       const cleanUnknown = res.unknown.text
         .replace(/^[৳₹$]\s*[\d০-৯]+(?:\.[\d০-৯]+)?/gi, '')
@@ -715,14 +1286,18 @@ export function parseComamCommand(
         .trim();
 
       const isIgnorableWord =
-        /^(?:[\d০-৯]+|এক|দুই|তিন|চার|পাঁচ|ছয়|সাত|আট|নয়|দশ|দেড়|দেড়|আড়াই|আড়াই|আধা|আধ)?\s*(?:টা|টি|টে|টো|খানা|পিস|কেজি|গ্রাম|লিটার|পোয়া|পোয়া|প্যাকেট|প্যাক|ডজন|বোতল|কমা|দাঁড়ি|দাড়ি|ফুলস্টপ)?$/i.test(
+        /^(?:[\d০-৯]+|এক|দুই|তিন|চার|পাঁচ|ছয়|সাত|আট|নয়|দশ|ওয়ান|ওয়ান|টু|থ্রি|ফোর|ফাইভ|সিক্স|এইট|নাইন|টেন|দেড়|দেড়|আড়াই|আড়াই|আধা|আধ)?\s*(?:টা|টি|টে|টো|খানা|পিস|কেজি|গ্রাম|লিটার|পোয়া|পোয়া|প্যাকেট|প্যাক|ডজন|বোতল|কমা|দাঁড়ি|দাড়ি|ফুলস্টপ)?$/i.test(
           cleanUnknown
         ) ||
         cleanUnknown === 'কমা' ||
         cleanUnknown === 'দাঁড়ি' ||
         cleanUnknown === 'ফুলস্টপ';
 
-      if (cleanUnknown.length >= 2 && !isIgnorableWord) {
+      if (
+        cleanUnknown.length >= 2 &&
+        !isIgnorableWord &&
+        !/^[\u09BE-\u09CC\u09CD]/.test(cleanUnknown)
+      ) {
         unknownItems.push({
           ...res.unknown,
           text: cleanUnknown,

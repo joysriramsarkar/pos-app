@@ -13,6 +13,7 @@ import {
   findCustomer,
   extractDueQueryTarget,
   stripBengaliSuffixes,
+  correctTranscriptWithCatalog,
 } from './comam-matcher';
 import { parseComamCommand } from './comam-engine';
 import type { Product, Customer } from '@/types/pos';
@@ -296,6 +297,186 @@ describe('Comam matcher and search tests', () => {
       createdAt: new Date(),
       updatedAt: new Date(),
     },
+    {
+      id: 'p17',
+      barcode: '1717',
+      name: 'Amul Chocolate Syrup',
+      nameBn: 'আমুল চকলেট সিরাপ',
+      category: 'Confectionery',
+      buyingPrice: 120,
+      sellingPrice: 150,
+      unit: 'piece',
+      currentStock: 12,
+      minStockLevel: 3,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+    {
+      id: 'p18',
+      barcode: '1818',
+      name: 'Amul Dark Chocolate',
+      nameBn: 'আমুল ডার্ক চকলেট',
+      category: 'Confectionery',
+      buyingPrice: 70,
+      sellingPrice: 90,
+      unit: 'piece',
+      currentStock: 12,
+      minStockLevel: 3,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+    {
+      id: 'p19',
+      barcode: '1919',
+      name: 'Amul Shakti Milk',
+      nameBn: 'আমুল শক্তি দুধ',
+      category: 'Dairy & Frozen',
+      buyingPrice: 28,
+      sellingPrice: 35,
+      unit: 'piece',
+      currentStock: 12,
+      minStockLevel: 3,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+    {
+      id: 'p21',
+      barcode: '2121',
+      name: 'Soap',
+      nameBn: 'সাবান',
+      category: 'Household',
+      buyingPrice: 28,
+      sellingPrice: 35,
+      unit: 'piece',
+      currentStock: 60,
+      minStockLevel: 5,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+    {
+      id: 'p22',
+      barcode: '2222',
+      name: 'Egg',
+      nameBn: 'ডিম',
+      category: 'Dairy',
+      buyingPrice: 6,
+      sellingPrice: 7,
+      unit: 'piece',
+      currentStock: 120,
+      minStockLevel: 10,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+    {
+      id: 'p23',
+      barcode: '2323',
+      name: 'Maggi Noodles',
+      nameBn: 'ম্যাগি নুডলস',
+      category: 'Packaged Snacks',
+      buyingPrice: 12,
+      sellingPrice: 15,
+      unit: 'piece',
+      currentStock: 40,
+      minStockLevel: 5,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+    {
+      id: 'p24',
+      barcode: '2424',
+      name: 'Navy Cut Cigarette',
+      nameBn: 'নেভিকাট সিগারেট',
+      category: 'Tobacco',
+      buyingPrice: 14,
+      sellingPrice: 18,
+      unit: 'piece',
+      currentStock: 100,
+      minStockLevel: 10,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+    {
+      id: 'p25',
+      barcode: '2525',
+      name: 'Gold Flake Cigarette',
+      nameBn: 'গোল্ড ফ্ল্যাক সিগারেট',
+      category: 'Tobacco',
+      buyingPrice: 12,
+      sellingPrice: 15,
+      unit: 'piece',
+      currentStock: 100,
+      minStockLevel: 10,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+    {
+      id: 'p26',
+      barcode: '2626',
+      name: 'Shikhar Cigarette',
+      nameBn: 'শিখর সিগারেট',
+      category: 'Tobacco',
+      buyingPrice: 8,
+      sellingPrice: 10,
+      unit: 'piece',
+      currentStock: 100,
+      minStockLevel: 10,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+    {
+      id: 'p27',
+      barcode: '2727',
+      name: 'Paper Boat Jeera Rs. 20',
+      nameBn: 'পেপার বোট জিরা ২০ টাকা',
+      category: 'Beverages',
+      buyingPrice: 16,
+      sellingPrice: 20,
+      unit: 'piece',
+      currentStock: 30,
+      minStockLevel: 5,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+    {
+      id: 'p28',
+      barcode: '2828',
+      name: 'Paper Boat Litchi Rs. 20',
+      nameBn: 'পেপার বোট লিচু ২০ টাকা',
+      category: 'Beverages',
+      buyingPrice: 16,
+      sellingPrice: 20,
+      unit: 'piece',
+      currentStock: 30,
+      minStockLevel: 5,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+    {
+      id: 'p20',
+      barcode: '2020',
+      name: 'Pepsi Black Rs. 10',
+      nameBn: 'পেপসি কালো ১০ টাকা',
+      category: 'Beverages',
+      buyingPrice: 8,
+      sellingPrice: 10,
+      unit: 'piece',
+      currentStock: 24,
+      minStockLevel: 5,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
   ];
 
   const mockCustomers: Customer[] = [
@@ -498,7 +679,6 @@ describe('Comam matcher and search tests', () => {
       mockProducts,
       mockCustomers
     );
-
     expect(draft.kind).toBe('sale');
     expect(draft.unknownItems.length).toBe(0);
     expect(draft.ambiguities.length).toBe(0);
@@ -820,6 +1000,248 @@ describe('Comam matcher and search tests', () => {
       expect(draft.unknownItems.length).toBe(0);
     });
 
+    it('Scenario 7 (reported 28 Oct): repeated একটা-led items without commas + ASR আমূল variant + 1:10 Pepsi', () => {
+      // No commas between the first three items; ASR wrote আমূল (long ূ) for আমুল.
+      // Every item must be found separately — never one merged unknown blob.
+      const draft = parseComamCommand(
+        'একটা আমূল চকলেট সিরাপ একটা আমুল ডার্ক চকলেট একটা আমুল শক্তি দুধ এবং 1:10 টাকা দামের পেপসি।',
+        mockProducts,
+        mockCustomers
+      );
+      expect(draft.kind).toBe('sale');
+      expect(draft.customer).toBeNull();
+      expect(draft.unknownItems.length).toBe(0);
+      expect(draft.items.length).toBe(4);
+
+      const syrup = draft.items.find((it) => it.product.id === 'p17');
+      expect(syrup).toBeDefined();
+      expect(syrup?.qty).toBe(1);
+
+      const dark = draft.items.find((it) => it.product.id === 'p18');
+      expect(dark).toBeDefined();
+      expect(dark?.qty).toBe(1);
+
+      const shaktiMilk = draft.items.find((it) => it.product.id === 'p19');
+      expect(shaktiMilk).toBeDefined();
+      expect(shaktiMilk?.qty).toBe(1);
+
+      const pepsi = draft.items.find((it) => it.product.id === 'p20');
+      expect(pepsi).toBeDefined();
+      expect(pepsi?.qty).toBe(1);
+      expect(pepsi?.unitPrice).toBe(10);
+
+      expect(draft.total).toBe(150 + 90 + 35 + 10);
+    });
+
+    it('Scenario 8: quantity-led list with mixed leading/trailing quantities stays split per item', () => {
+      const draft = parseComamCommand(
+        'দুইটা আমুল ডার্ক চকলেট, একটা আমুল চকলেট সিরাপ আর আমুল শক্তি দুধ তিনটা',
+        mockProducts,
+        mockCustomers
+      );
+      expect(draft.kind).toBe('sale');
+      expect(draft.unknownItems.length).toBe(0);
+      expect(draft.items.length).toBe(3);
+      expect(draft.items.find((it) => it.product.id === 'p18')?.qty).toBe(2);
+      expect(draft.items.find((it) => it.product.id === 'p17')?.qty).toBe(1);
+      expect(draft.items.find((it) => it.product.id === 'p19')?.qty).toBe(3);
+    });
+
+    it('Scenario 9: Bengali query matches English-only catalog names (Amul)', () => {
+      const englishOnly: Product[] = [
+        {
+          id: 'e1',
+          barcode: 'e1',
+          name: 'Amul Dark Chocolate',
+          category: 'Confectionery',
+          buyingPrice: 70,
+          sellingPrice: 90,
+          unit: 'piece',
+          currentStock: 10,
+          minStockLevel: 2,
+          isActive: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          id: 'e2',
+          barcode: 'e2',
+          name: 'Amul Chocolate Syrup',
+          category: 'Confectionery',
+          buyingPrice: 120,
+          sellingPrice: 150,
+          unit: 'piece',
+          currentStock: 10,
+          minStockLevel: 2,
+          isActive: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ];
+      const draft = parseComamCommand(
+        'একটা আমুল ডার্ক চকলেট একটা আমুল চকলেট সিরাপ',
+        englishOnly,
+        mockCustomers
+      );
+      expect(draft.kind).toBe('sale');
+      expect(draft.unknownItems.length).toBe(0);
+      expect(draft.items.length).toBe(2);
+      expect(draft.items.find((it) => it.product.id === 'e1')?.qty).toBe(1);
+      expect(draft.items.find((it) => it.product.id === 'e2')?.qty).toBe(1);
+    });
+
+    it('Scenario 10: product-first items with trailing quantities and no commas', () => {
+      const draft = parseComamCommand(
+        'চিনি দুই কেজি সাবান তিনটা ডিম এক ডজন',
+        mockProducts,
+        mockCustomers
+      );
+      expect(draft.kind).toBe('sale');
+      expect(draft.unknownItems.length).toBe(0);
+      expect(draft.items.length).toBe(3);
+      expect(draft.items.find((it) => it.product.id === 'p1')?.qty).toBe(2);
+      expect(draft.items.find((it) => it.product.id === 'p21')?.qty).toBe(3);
+      expect(draft.items.find((it) => it.product.id === 'p22')?.qty).toBe(12);
+    });
+
+    it('Scenario 11: trailing-then-leading Amul items without commas', () => {
+      const draft = parseComamCommand(
+        'আমুল ডার্ক চকলেট দুইটা আমুল চকলেট সিরাপ একটা',
+        mockProducts,
+        mockCustomers
+      );
+      expect(draft.kind).toBe('sale');
+      expect(draft.unknownItems.length).toBe(0);
+      expect(draft.ambiguities.length).toBe(0);
+      expect(draft.items.length).toBe(2);
+      expect(draft.items.find((it) => it.product.id === 'p18')?.qty).toBe(2);
+      expect(draft.items.find((it) => it.product.id === 'p17')?.qty).toBe(1);
+    });
+
+    it('Scenario 12: brand-only speech matches the branded product ("ম্যাগি" = Maggi Noodles)', () => {
+      const draft = parseComamCommand(
+        'একটা ম্যাগি একটা আমুল ডার্ক চকলেট',
+        mockProducts,
+        mockCustomers
+      );
+      expect(draft.kind).toBe('sale');
+      expect(draft.unknownItems.length).toBe(0);
+      expect(draft.items.length).toBe(2);
+      const maggi = draft.items.find((it) => it.product.id === 'p23');
+      expect(maggi).toBeDefined();
+      expect(maggi?.qty).toBe(1);
+      expect(draft.items.find((it) => it.product.id === 'p18')).toBeDefined();
+
+      const fullName = parseComamCommand('দুইটা ম্যাগি নুডলস', mockProducts, mockCustomers);
+      expect(fullName.items.length).toBe(1);
+      expect(fullName.items[0].product.id).toBe('p23');
+      expect(fullName.items[0].qty).toBe(2);
+    });
+
+    it('Scenario 13: a spoken item truly missing from the catalog stays unknown, neighbours still bill', () => {
+      const draft = parseComamCommand(
+        'একটা হরলিক্স একটা আমুল ডার্ক চকলেট',
+        mockProducts,
+        mockCustomers
+      );
+      expect(draft.kind).toBe('sale');
+      expect(draft.items.length).toBe(1);
+      expect(draft.items[0].product.id).toBe('p18');
+      expect(draft.unknownItems.length).toBe(1);
+      expect(draft.unknownItems[0].text).toContain('হরলিক্স');
+    });
+
+    it('Scenario 14 (reported 28 Oct): correctly spoken cigarette brands bill exactly', () => {
+      const draft = parseComamCommand(
+        'নেভিকাট সিগারেট ৫টা আর গোল্ড ফ্ল্যাক সিগারেট ১০টা।',
+        mockProducts,
+        mockCustomers
+      );
+      expect(draft.kind).toBe('sale');
+      expect(draft.unknownItems.length).toBe(0);
+      expect(draft.items.length).toBe(2);
+      expect(draft.items.find((it) => it.product.id === 'p24')?.qty).toBe(5);
+      expect(draft.items.find((it) => it.product.id === 'p25')?.qty).toBe(10);
+    });
+
+    it('Scenario 15 (reported 28 Oct): garbled ASR transcript of the same sentence still bills correctly', () => {
+      // What bn-BD speech recognition actually produced on the shop device:
+      // নেভিকাট -> নেভিকাড (ট/ড), গোল্ড ফ্ল্যাক -> গোল্ডফ্রেক (joined, ল/র),
+      // with the generic word and quantities reordered across pauses.
+      const draft = parseComamCommand(
+        'নেভিকাড। সিগারেট পাঁচটা গোল্ডফ্রেক, সিগারেট দশটা।',
+        mockProducts,
+        mockCustomers
+      );
+      expect(draft.kind).toBe('sale');
+      expect(draft.unknownItems.length).toBe(0);
+      expect(draft.items.length).toBe(2);
+      expect(draft.items.find((it) => it.product.id === 'p24')?.qty).toBe(5);
+      expect(draft.items.find((it) => it.product.id === 'p25')?.qty).toBe(10);
+      // The generic word alone must never bill a random cigarette brand.
+      expect(draft.items.find((it) => it.product.id === 'p26')).toBeUndefined();
+    });
+
+    it('Scenario 16: joined ASR brand token (পেপারবোর্ড for পেপার বোট) matches the right flavour', () => {
+      const draft = parseComamCommand(
+        'পেপারবোর্ড জিরা দুইটা',
+        mockProducts,
+        mockCustomers
+      );
+      expect(draft.kind).toBe('sale');
+      expect(draft.unknownItems.length).toBe(0);
+      expect(draft.items.length).toBe(1);
+      expect(draft.items[0].product.id).toBe('p27');
+      expect(draft.items[0].qty).toBe(2);
+    });
+
+    it('Scenario 17: catalog-aware transcript correction repairs ASR brand spellings for display', () => {
+      const fixed = correctTranscriptWithCatalog(
+        'নেভিকাড সিগারেট পাঁচটা গোল্ডফ্রেক সিগারেট দশটা',
+        mockProducts
+      );
+      expect(fixed).toContain('নেভিকাট');
+      expect(fixed).toContain('গোল্ড ফ্ল্যাক');
+      expect(fixed).not.toContain('নেভিকাড');
+      expect(fixed).not.toContain('গোল্ডফ্রেক');
+    });
+
+    it('Scenario 18 (reported 28 Oct): the sentence the shopkeeper actually said bills exactly', () => {
+      const draft = parseComamCommand(
+        'দুইটা নেভিকাট সিগারেট, গোল্ডফ্ল্যাক এবং আমুল শক্তি তিনটা',
+        mockProducts,
+        mockCustomers
+      );
+      expect(draft.kind).toBe('sale');
+      expect(draft.unknownItems.length).toBe(0);
+      expect(draft.items.length).toBe(3);
+      expect(draft.items.find((it) => it.product.id === 'p24')?.qty).toBe(2);
+      expect(draft.items.find((it) => it.product.id === 'p25')?.qty).toBe(1);
+      const shakti = draft.items.find((it) => it.product.id === 'p10' || it.product.id === 'p19');
+      expect(shakti).toBeDefined();
+      expect(shakti?.qty).toBe(3);
+    });
+
+    it('Scenario 19 (reported 28 Oct): the garbled Muse transcript of that sentence still bills the same', () => {
+      // What Muse ASR actually returned: garbage tokens (রাস্কইট, ক্যাপচার),
+      // stuttered duplicates (গোল্ড গোল্ড, আমূল আমূল), a hallucinated ৫,
+      // and a trailing descriptor দুধ that must not become a second milk item.
+      const draft = parseComamCommand(
+        'দুইটা নেভিকাট রাস্কইট গোল্ড গোল্ড ফ্ল্যাক ক্যাপচার সিগারেট ৫ এবং আমূল আমূল শক্তি ৩টা দুধ',
+        mockProducts,
+        mockCustomers
+      );
+      expect(draft.kind).toBe('sale');
+      expect(draft.unknownItems.length).toBe(0);
+      expect(draft.items.length).toBe(3);
+      expect(draft.items.find((it) => it.product.id === 'p24')?.qty).toBe(2);
+      expect(draft.items.find((it) => it.product.id === 'p25')?.qty).toBe(1);
+      const shakti = draft.items.find((it) => it.product.id === 'p10' || it.product.id === 'p19');
+      expect(shakti).toBeDefined();
+      expect(shakti?.qty).toBe(3);
+      expect(draft.total).toBeLessThan(500);
+    });
+
     it('Scenario 6: Traditional Bengali fraction units with পোয়া (আধা পোয়া, দেড় পোয়া, তিন পোয়া)', () => {
       // ১ পোয়া = 0.25 kg
       // আধা পোয়া = 0.125 kg
@@ -833,6 +1255,170 @@ describe('Comam matcher and search tests', () => {
 
       const draft3 = parseComamCommand('দুই পোয়া চিনি খোলা', mockProducts, mockCustomers);
       expect(draft3.items[0].qty).toBe(0.5);
+    });
+
+    it('Scenario 20 (reported 28 Oct): user screenshot sentence with cigarette quantities and prices', () => {
+      const prods = [
+        ...mockProducts,
+        {
+          id: 'p35',
+          barcode: '3535',
+          name: 'Navy Cut Small Rs. 6',
+          nameBn: 'নেভিকাট ছোটো ৬ টাকা',
+          category: 'Tobacco',
+          buyingPrice: 5,
+          sellingPrice: 6,
+          unit: 'piece' as const,
+          currentStock: 100,
+          minStockLevel: 10,
+          isActive: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          id: 'p36',
+          barcode: '3636',
+          name: 'Capture Cigarette Rs. 5',
+          nameBn: 'ক্যাপচার সিগারেট ৫ টাকা',
+          category: 'Tobacco',
+          buyingPrice: 4,
+          sellingPrice: 5,
+          unit: 'piece' as const,
+          currentStock: 100,
+          minStockLevel: 10,
+          isActive: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ];
+      const draft = parseComamCommand(
+        'নেভিকাট ছোটো ৬ ক্যাপচার সিগারেট ৫ ক্যাপচার সিগারেট',
+        prods,
+        mockCustomers
+      );
+      expect(draft.kind).toBe('sale');
+      expect(draft.unknownItems.length).toBe(0);
+      expect(draft.items.length).toBe(3);
+      expect(draft.items[0].product.id).toBe('p35');
+      expect(draft.items[0].qty).toBe(1);
+      expect(draft.items[0].unitPrice).toBe(6);
+      expect(draft.items[1].product.id).toBe('p36');
+      expect(draft.items[1].qty).toBe(1);
+      expect(draft.items[2].product.id).toBe('p36');
+      expect(draft.items[2].qty).toBe(1);
+      expect(draft.total).toBe(16);
+    });
+
+    it('Scenario 21 (reported 28 Oct): rapid unpunctuated multi-product speech with "টু" quantity', () => {
+      const prods = [
+        ...mockProducts,
+        {
+          id: 'p30',
+          barcode: '3030',
+          name: 'Good Knight Oil Rs. 90',
+          nameBn: 'গুড নাইট অয়েল ৯০ টাকা',
+          category: 'Household',
+          buyingPrice: 70,
+          sellingPrice: 90,
+          unit: 'piece' as const,
+          currentStock: 10,
+          minStockLevel: 2,
+          isActive: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          id: 'p31',
+          barcode: '3131',
+          name: 'Kelloggs Multigrain Chocos Rs. 20',
+          nameBn: "কেলোগ'স মাল্টিগ্রেইন চকোস ২০ টাকা",
+          category: 'Packaged Snacks',
+          buyingPrice: 16,
+          sellingPrice: 20,
+          unit: 'piece' as const,
+          currentStock: 20,
+          minStockLevel: 5,
+          isActive: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          id: 'p32',
+          barcode: '3232',
+          name: 'Amul Kool Coffee Rs. 60',
+          nameBn: 'আমুল কুল কফি ৬০ টাকা',
+          category: 'Beverages',
+          buyingPrice: 48,
+          sellingPrice: 60,
+          unit: 'piece' as const,
+          currentStock: 15,
+          minStockLevel: 3,
+          isActive: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ];
+      const draft = parseComamCommand(
+        'টু গুড নাইট অয়েল কেলোগ স মাল্টিগ্রেইন চকোস আমুল কোজ কফি আমুল শক্তি',
+        prods,
+        mockCustomers
+      );
+      expect(draft.kind).toBe('sale');
+      expect(draft.unknownItems.length).toBe(0);
+      expect(draft.items.length).toBe(4);
+      const gn = draft.items.find((it) => it.product.id === 'p30');
+      expect(gn).toBeDefined();
+      expect(gn?.qty).toBe(2);
+      expect(draft.items.find((it) => it.product.id === 'p31')).toBeDefined();
+      expect(draft.items.find((it) => it.product.id === 'p32')).toBeDefined();
+      expect(draft.items.find((it) => it.product.id === 'p10' || it.product.id === 'p19')).toBeDefined();
+    });
+
+    it('Scenario 22 (reported 28 Oct): rapid unpunctuated multi-product speech with colloquial tokens', () => {
+      const prods = [
+        ...mockProducts,
+        {
+          id: 'p33',
+          barcode: '3333',
+          name: 'Biskfarm Butter Ruskit Rs. 10',
+          nameBn: 'বিস্কফার্ম বাটার রাস্কইট দাম ১০',
+          category: 'Confectionery',
+          buyingPrice: 8,
+          sellingPrice: 10,
+          unit: 'piece' as const,
+          currentStock: 30,
+          minStockLevel: 5,
+          isActive: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          id: 'p34',
+          barcode: '3434',
+          name: 'Pepsi Rs. 20',
+          nameBn: 'পেপসি ২০ টাকা',
+          category: 'Beverages',
+          buyingPrice: 16,
+          sellingPrice: 20,
+          unit: 'piece' as const,
+          currentStock: 30,
+          minStockLevel: 5,
+          isActive: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ];
+      const draft = parseComamCommand(
+        'আমল সিরাম আমুল স্লিম দুধ টাকা বাটার রাইডেন্ট দাম পেপসি',
+        prods,
+        mockCustomers
+      );
+      expect(draft.kind).toBe('sale');
+      // No concatenated multi-word unknown items!
+      expect(draft.unknownItems.every((u) => u.text.split(/\s+/).length <= 2)).toBe(true);
+      expect(draft.items.length).toBeGreaterThanOrEqual(2);
+      expect(draft.items.find((it) => it.product.id === 'p34')).toBeDefined();
+      expect(draft.items.find((it) => it.product.id === 'p33')).toBeDefined();
     });
   });
 });

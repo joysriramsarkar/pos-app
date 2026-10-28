@@ -96,10 +96,18 @@ export async function POST(request: NextRequest) {
       prepaidBalance: Number(c.prepaidBalance),
     }));
 
-    // 2. Parse command using Meta Spark AI Model with seamless deterministic fallback
+    // 2. Parse with Meta Spark, but never let it under-parse a bill: the
+    // deterministic engine sees the full catalog (Spark only samples it),
+    // so whenever it finds more sale items — or a sale at all where Spark
+    // found none — its draft wins.
+    const localDraft = parseComamCommand(command, products, customers);
     let draft: ComamDraft | null = await understandWithMetaSpark(command, products, customers);
-    if (!draft) {
-      draft = parseComamCommand(command, products, customers);
+    if (
+      !draft ||
+      (localDraft.kind === 'sale' &&
+        (draft.kind !== 'sale' || localDraft.items.length > draft.items.length))
+    ) {
+      draft = localDraft;
     }
 
     // 3. Handle live dynamic server-side reports or queries

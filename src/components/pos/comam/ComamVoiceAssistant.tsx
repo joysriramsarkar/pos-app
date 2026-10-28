@@ -28,7 +28,30 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { useCartStore, useProductsStore, useCustomersStore } from '@/stores/pos-store';
 import { parseComamCommand, type ComamDraft } from '@/lib/comam/comam-engine';
+import { correctTranscriptWithCatalog } from '@/lib/comam/comam-matcher';
 import { formatBnTaka, formatBnNumber, formatForBengaliSpeech } from '@/lib/comam/bn-parser';
+
+/**
+ * Pick the recognition alternative that best fits this shop's catalog.
+ * bn-BD recognizers return several guesses; the first is often the worst
+ * for English brand names spoken in Bengali. Each candidate is repaired
+ * against the catalog (নেভিকাড -> নেভিকাট) and scored by how completely
+ * it parses into billable items.
+ */
+function pickBestTranscript(candidates: string[], products: Product[], customers: any[]): string {
+  let best = candidates[0] || '';
+  let bestScore = -Infinity;
+  for (const raw of candidates) {
+    const corrected = correctTranscriptWithCatalog(raw, products as any);
+    const d = parseComamCommand(corrected, products as any, customers as any);
+    const score = d.items.length * 3 - d.unknownItems.length * 2 - (d.needsClarification ? 1 : 0);
+    if (score > bestScore) {
+      bestScore = score;
+      best = corrected;
+    }
+  }
+  return best;
+}
 import type { Product } from '@/types/pos';
 
 interface ComamVoiceAssistantProps {
@@ -55,7 +78,11 @@ export function ComamVoiceAssistant({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [hasSpeechSupport, setHasSpeechSupport] = useState(true);
 
-  // Web Speech API recognition reference and latest transcript tracking
+  // Browser bn-BD speech recognition is the ear (restored by request:
+  // it hears this shop's speech better than the server ASR did).
+  // English brand names are handled downstream: several recognition
+  // alternatives are requested and the one that best matches the
+  // catalog wins, with phonetic repair (see pickBestTranscript).
   const recognitionRef = useRef<any>(null);
   const latestTranscriptRef = useRef('');
   const handleProcessCommandRef = useRef<((cmd?: string) => Promise<void>) | null>(null);
@@ -77,6 +104,13 @@ export function ComamVoiceAssistant({
       recognition.continuous = false;
       recognition.interimResults = true;
       recognition.lang = 'bn-BD';
+      // Ask for several hypotheses: the top one is frequently wrong for
+      // English brand names spoken in Bengali (Navy Cut, Gold Flake);
+      // pickBestTranscript keeps the guess that actually matches this
+      // shop's catalog and repairs the rest phonetically.
+      try {
+        recognition.maxAlternatives = 5;
+      } catch {}
 
       recognition.onstart = () => {
         setIsListening(true);
@@ -88,9 +122,24 @@ export function ComamVoiceAssistant({
       };
 
       recognition.onresult = (event: any) => {
-        const transcript = Array.from(event.results)
-          .map((result: any) => result[0].transcript)
-          .join('');
+        let interim = '';
+        const finalParts: string[] = [];
+        for (const result of Array.from(event.results) as any[]) {
+          if (result.isFinal) {
+            const alternatives = Array.from(result)
+              .map((r: any) => r.transcript)
+              .filter(Boolean);
+            const best = pickBestTranscript(
+              alternatives.length > 0 ? alternatives : [''],
+              useProductsStore.getState().products,
+              useCustomersStore.getState().customers
+            );
+            if (best) finalParts.push(best);
+          } else {
+            interim += result[0].transcript;
+          }
+        }
+        const transcript = (finalParts.join(' ') + (interim ? (finalParts.length > 0 ? ' ' : '') + interim : '')).trim();
         latestTranscriptRef.current = transcript;
         setInputText(transcript);
       };
@@ -186,7 +235,7 @@ export function ComamVoiceAssistant({
       setErrorMsg(null);
       latestTranscriptRef.current = '';
 
-      // 2. Auto-start microphone recording immediately
+      // 2. Auto-start listening immediately
       const timer = setTimeout(() => {
         if (recognitionRef.current && !isListening) {
           try {
@@ -286,8 +335,13 @@ export function ComamVoiceAssistant({
     setServerAnswer(null);
 
     try {
-      // 1. Instant deterministic parse client-side
-      const localDraft = parseComamCommand(text, products, customers);
+      // 1. Instant deterministic parse client-side. Repair the heard/typed
+      // words against the catalog first, so ASR spellings (নেভিকাড,
+      // গোল্ডফ্রেক, পেপারবোর্ড) bill as their real products; the input box
+      // shows the repaired sentence so the shopkeeper can verify it.
+      const correctedText = correctTranscriptWithCatalog(text, products);
+      if (correctedText !== text) setInputText(correctedText);
+      const localDraft = parseComamCommand(correctedText, products, customers);
       setDraft(localDraft);
 
       // 2. Call server API for reports or due queries
@@ -296,7 +350,7 @@ export function ComamVoiceAssistant({
           const res = await fetch('/api/comam', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ command: text }),
+            body: JSON.stringify({ command: correctedText }),
           });
 
           if (res.ok) {
@@ -332,6 +386,13 @@ export function ComamVoiceAssistant({
   const handleAddToCart = (directCheckout: boolean = false) => {
     if (!draft || draft.items.length === 0) return;
 
+    // Guard first: an unregistered customer cannot take a due sale, and
+    // the cart must stay untouched when we refuse (no half-added bill).
+    if (!draft.customer && draft.hasUnknownCustomer && draft.paymentType === 'Due') {
+      setErrorMsg(`"${draft.customerName}" গ্রাহক তালিকায় নেই। বাকি বিক্রি করতে প্রথমে গ্রাহক তৈরি করুন।`);
+      return;
+    }
+
     const cart = useCartStore.getState();
 
     // Add each item with its quantity
@@ -342,9 +403,6 @@ export function ComamVoiceAssistant({
     // Set customer if detected (registered customer object or spoken customer name)
     if (draft.customer) {
       cart.setCustomer(draft.customer);
-    } else if (draft.hasUnknownCustomer && draft.paymentType === 'Due') {
-      setErrorMsg(`"${draft.customerName}" গ্রাহক তালিকায় নেই। বাকি বিক্রি করতে প্রথমে গ্রাহক তৈরি করুন।`);
-      return;
     } else if (draft.customerName) {
       cart.setCustomer({
         id: `walkin_${Date.now()}`,
