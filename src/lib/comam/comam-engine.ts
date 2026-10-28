@@ -7,17 +7,21 @@ import type { Product, Customer } from '@/types/pos';
 import {
   UNITS,
   bnToAscii,
+  cleanSpokenPunctuation,
   findNumberPhrases,
   formatBnNumber,
   formatBnTaka,
+  normalizeColonArtifacts,
   parseNumberAt,
 } from './bn-parser';
 import {
   extractCustomerClause,
+  extractDueQueryTarget,
   extractSpokenCustomerName,
   findCustomer,
   normalizeBengali,
   searchProducts,
+  stripBengaliSuffixes,
 } from './comam-matcher';
 
 export interface DraftItem {
@@ -69,7 +73,8 @@ export type ReportType =
   | 'sales_summary'
   | 'low_stock'
   | 'top_products'
-  | 'week_compare';
+  | 'week_compare'
+  | 'product_sales';
 
 export interface ComamDraft {
   kind: CommandKind;
@@ -79,17 +84,21 @@ export interface ComamDraft {
   ambiguities: Ambiguity[];
   customer: Customer | null;
   customerName?: string | null;
+  hasUnknownCustomer?: boolean;
   paymentType: 'Cash' | 'Due' | 'UPI';
   total: number;
   report?: ReportType;
+  targetProduct?: Product;
+  period?: 'today' | 'week' | 'month';
   duePaymentAmount?: number;
   summaryBn: string;
   needsClarification: boolean;
 }
 
 function splitSegments(text: string): string[] {
-  // Normalize colon artifact in speech recognition (e.g., "1:10" -> "1টা 10")
-  const normalized = text.replace(/(\d+|[০-৯]+):(\d+|[০-৯]+)/g, '$1টা $2');
+  // Normalize colon artifact in speech recognition (e.g., "1:10 টাকা" -> "১০ টাকা") and clean spoken punctuation
+  let normalized = normalizeColonArtifacts(text);
+  normalized = cleanSpokenPunctuation(normalized);
 
   // First split by explicit separators: comma, danda, 'এবং', 'আর', 'ও'
   const rawParts = normalized
@@ -219,7 +228,16 @@ function getTailAfterProduct(rest: string, product: Product): string {
   }
 
   if (maxEnd < 0) return '';
-  return normRest.slice(maxEnd).trim().replace(/^[,।\s]+/, '');
+  const tailCand = normRest.slice(maxEnd).trim().replace(/^[,।\s]+/, '');
+  // If the tail is just a bare quantity or unit that was part of this item (e.g. "দুইটা", "দুটো", "১টা", "২ কেজি"), it's not a new product!
+  if (
+    /^(?:[\d০-৯]+|এক|দুই|তিন|চার|পাঁচ|ছয়|সাত|আট|নয়|দশ|দেড়|দেড়|আড়াই|আড়াই|আধা|আধ)?\s*(?:টা|টি|টে|টো|খানা|পিস|কেজি|গ্রাম|লিটার|পোয়া|পোয়া|প্যাকেট|প্যাক|ডজন|বোতল)?$/.test(
+      tailCand
+    )
+  ) {
+    return '';
+  }
+  return tailCand;
 }
 
 function parseItemSegment(
@@ -420,11 +438,53 @@ export function parseComamCommand(
   products: Product[],
   customers: Customer[]
 ): ComamDraft {
-  const raw = text.trim();
+  let raw = text.trim();
+  raw = normalizeColonArtifacts(raw);
+  raw = cleanSpokenPunctuation(raw);
   const norm = normalizeBengali(raw);
 
-  // 1. Detect Reports Intent
-  if (/বিক্রি|সেলস|লাভ|পরিসংখ্যান|হিসাব/.test(raw) && /কেমন|কত|আজ|আজকের|আজকে|সপ্তাহে|সপ্তাহের/.test(raw)) {
+  // 1. Detect Specific Product Sales Query (e.g. "আজকে আমুল শক্তি কয়টা বিক্রি হয়েছে?", "আজ চিনি কতটুকু বিক্রি হলো?")
+  const isAskingSaleQuantity =
+    /বিক্রি|সেল|বিক্রয়/.test(raw) &&
+    /কয়টা|কয়টি|কটা|কতটা|কতগুলো|কতটুকু|পরিমাণ|কত\s*পিস|কত\s*কেজি|কত\s*প্যাকেট|কত\s*টাকার|কতটাকা/.test(raw);
+
+  if (isAskingSaleQuantity || (/বিক্রি|সেল/.test(raw) && !/সবচেয়ে|বেশি|কম|টপ|জনপ্রিয়|মোট\s*বিক্রি|আজ\s*কত\s*বিক্রি|আজকের\s*বিক্রি/.test(raw))) {
+    const cleanedForProduct = raw
+      .replace(/(আজকে?|গতকাল|এই\s*সপ্তাহে?|এই\s*মাসে?|কয়টা|কয়টি|কটা|কতটা|কতগুলো|কতটুকু|পরিমাণ|পিস|কেজি|প্যাকেট|টাকার|টাকা|বিক্রি|বিক্রয়|সেল|হয়েছে|হলো|বলুন|বলো|জানাও|তথ্য|রিপোর্ট|\?|।)/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (cleanedForProduct.length >= 2) {
+      const { matches } = searchProducts(products, cleanedForProduct, 1);
+      if (matches.length > 0 && matches[0].score >= 0.52) {
+        const targetProd = matches[0].product;
+        const period: 'today' | 'week' | 'month' = /সপ্তাহ/.test(raw)
+          ? 'week'
+          : /মাস/.test(raw)
+          ? 'month'
+          : 'today';
+        const prodTitle = targetProd.nameBn || targetProd.name;
+        return {
+          kind: 'report',
+          raw,
+          items: [],
+          unknownItems: [],
+          ambiguities: [],
+          customer: null,
+          paymentType: 'Cash',
+          total: 0,
+          report: 'product_sales',
+          targetProduct: targetProd,
+          period,
+          summaryBn: `"${prodTitle}"-এর বিক্রয় তথ্য দেখা হচ্ছে।`,
+          needsClarification: false,
+        };
+      }
+    }
+  }
+
+  // 2. Detect General Reports Intent
+  if (/বিক্রি|সেলস|লাভ|পরিসংখ্যান|হিসাব/.test(raw) && /কেমন|কত|আজ|আজকের|আজকে|সপ্তাহে|সপ্তাহের|মাসে|মাসের/.test(raw)) {
     if (/সপ্তাহ/.test(raw)) {
       return {
         kind: 'report',
@@ -450,7 +510,9 @@ export function parseComamCommand(
       paymentType: 'Cash',
       total: 0,
       report: 'sales_summary',
-      summaryBn: 'আজকের মোট বিক্রয় ও লাভের তথ্য বের করা হচ্ছে।',
+      summaryBn: /লাভ/.test(raw)
+        ? 'আজকের বিক্রয় ও আনুমানিক লাভের হিসাব বের করা হচ্ছে।'
+        : 'আজকের মোট বিক্রয়ের হিসাব বের করা হচ্ছে।',
       needsClarification: false,
     };
   }
@@ -487,24 +549,66 @@ export function parseComamCommand(
     };
   }
 
-  // 2. Detect Due Query Intent ("কার কত বাকি?", "রহিমদার কত বাকি?")
-  if (norm.includes('বাকি') && (norm.includes('কত') || norm.includes('কার') || norm.includes('কাদের'))) {
-    const cust = findCustomer(customers, raw);
-    return {
-      kind: 'due_query',
-      raw,
-      items: [],
-      unknownItems: [],
-      ambiguities: [],
-      customer: cust,
-      customerName: cust ? cust.name : null,
-      paymentType: 'Due',
-      total: 0,
-      summaryBn: cust
-        ? `${cust.name}-এর বাকি হিসাব: ${formatBnTaka(cust.totalDue)}।`
-        : 'সকল ক্রেতার বাকি হিসাব দেখা হচ্ছে।',
-      needsClarification: false,
-    };
+  // 3. Detect Due Query Intent ("কার কত বাকি?", "লক্ষণ সরকারের বাকি কত?", "রহিমদার কত বাকি?")
+  const hasDueWord = norm.includes('বাকি') || norm.includes('বকেয়া');
+  const isQuestioningDue =
+    /(?:^|\s)(কত|কার|কাদের|হিসাব|বলো|জানাও|দেখাও)(?:\s|$)/.test(norm) ||
+    /^(কার|কাদের|মোট|সব|কত)\s*(?:বাকি|বকেয়া)/.test(norm);
+
+  if (
+    hasDueWord &&
+    isQuestioningDue &&
+    !/কেজি|গ্রাম|লিটার|পিস|প্যাকেট|ডজন|বোতল|\bটা\b|\bটি\b|দামের|টাকার\s+[^\s]+/.test(raw)
+  ) {
+    const { isGeneral, targetName } = extractDueQueryTarget(raw);
+
+    if (isGeneral || !targetName) {
+      return {
+        kind: 'due_query',
+        raw,
+        items: [],
+        unknownItems: [],
+        ambiguities: [],
+        customer: null,
+        customerName: null,
+        paymentType: 'Due',
+        total: 0,
+        summaryBn: 'সকল ক্রেতার বাকি হিসাব দেখা হচ্ছে।',
+        needsClarification: false,
+      };
+    }
+
+    // Specific customer due query
+    const cust = findCustomer(customers, targetName) || findCustomer(customers, raw);
+    if (cust) {
+      return {
+        kind: 'due_query',
+        raw,
+        items: [],
+        unknownItems: [],
+        ambiguities: [],
+        customer: cust,
+        customerName: (cust as any).nameBn || cust.name,
+        paymentType: 'Due',
+        total: 0,
+        summaryBn: `${(cust as any).nameBn || cust.name}-এর বাকি হিসাব: ${formatBnTaka(cust.totalDue)}।`,
+        needsClarification: false,
+      };
+    } else {
+      return {
+        kind: 'due_query',
+        raw,
+        items: [],
+        unknownItems: [],
+        ambiguities: [],
+        customer: null,
+        customerName: targetName,
+        paymentType: 'Due',
+        total: 0,
+        summaryBn: `"${targetName}" নামে কোনো গ্রাহক খুঁজে পাওয়া যায়নি।`,
+        needsClarification: false,
+      };
+    }
   }
 
   // 3. Detect Undo Last Sale ("শেষ বিক্রিটা বাতিল করো")
@@ -567,16 +671,24 @@ export function parseComamCommand(
 
   function consume(segText: string, depth = 0) {
     if (depth > 4) return;
-    const cleanedSeg = segText.replace(/(নগদে?|বাকিতে?|ইউপিআই(?:তে)?|বিল(?:\s*করো)?)/g, ' ').trim();
+    const cleanedSeg = segText
+      .replace(/(?:^|\s)(?:নগদে?|বাকিতে?|ইউপিআই(?:তে)?|বিল(?:\s*করো)?|হল|হলো|এবং|আর|ও)(?=$|\s)/gi, ' ')
+      .replace(/[।,;!?]/g, ' ')
+      .trim();
     if (!cleanedSeg || cleanedSeg.length < 2) return;
 
-    // Ensure segment contains actual product words, not just isolated numbers or price suffixes
+    // Ensure segment contains actual product words, not just isolated numbers, units, filler words or price suffixes
     const productWordsOnly = cleanedSeg
       .replace(/(?:[৳₹$]\s*[\d০-৯]+|[\d০-৯]+(?:\.[\d০-৯]+)?)/g, ' ')
       .replace(
-        /(টাকা\s*দামের|টাকার\s*দামের|টাকার|টাকা\s*মূল্যের|মূল্যের|দামের|দামে|দর|টাকা|পিস|টা|টি|টে|টো|খানা)/gi,
+        /(টাকা\s*দামের|টাকার\s*দামের|টাকার|টাকা\s*মূল্যের|মূল্যের|দামের|দামে|দর|টাকা|পিস|টা|টি|টে|টো|খানা|কেজি|গ্রাম|লিটার|পোয়া|পোয়া|প্যাকেট|প্যাক|ডজন|বোতল)/gi,
         ' '
       )
+      .replace(
+        /(?:^|[\s।,;!?])(?:এক|দুই|দুটো|দুইটা|একটা|তিন|তিনটা|চার|পাঁচ|ছয়|সাত|আট|নয়|দশ|এগারো|বারো|তেরো|চৌদ্দ|পনেরো|ষোলো|সতেরো|আঠারো|উনিশ|কুড়ি|বিশ|তিরিশ|চল্লিশ|পঞ্চাশ|ষাট|সত্তর|আশি|নব্বই|একশো|শত|হাজার|আধা|আধ|হাফ|দেড়|দেড়|আড়াই|আড়াই|পৌনে|সোয়া|কমা|দাঁড়ি|দাড়ি|ফুলস্টপ|হল|হলো|এবং|আর|ও)(?=$|[\s।,;!?])/gi,
+        ' '
+      )
+      .replace(/[\s।,;!?]+/g, ' ')
       .trim();
     if (!productWordsOnly || productWordsOnly.length < 2) return;
 
@@ -601,7 +713,16 @@ export function parseComamCommand(
         .replace(/^[৳₹$]\s*[\d০-৯]+(?:\.[\d০-৯]+)?/gi, '')
         .replace(/(টাকা\s*দামের|টাকার\s*দামের|টাকার|টাকা\s*মূল্যের|মূল্যের|দামের|দামে|দর|বিল|করো|দিন|দাও)/gi, '')
         .trim();
-      if (cleanUnknown.length >= 2) {
+
+      const isIgnorableWord =
+        /^(?:[\d০-৯]+|এক|দুই|তিন|চার|পাঁচ|ছয়|সাত|আট|নয়|দশ|দেড়|দেড়|আড়াই|আড়াই|আধা|আধ)?\s*(?:টা|টি|টে|টো|খানা|পিস|কেজি|গ্রাম|লিটার|পোয়া|পোয়া|প্যাকেট|প্যাক|ডজন|বোতল|কমা|দাঁড়ি|দাড়ি|ফুলস্টপ)?$/i.test(
+          cleanUnknown
+        ) ||
+        cleanUnknown === 'কমা' ||
+        cleanUnknown === 'দাঁড়ি' ||
+        cleanUnknown === 'ফুলস্টপ';
+
+      if (cleanUnknown.length >= 2 && !isIgnorableWord) {
         unknownItems.push({
           ...res.unknown,
           text: cleanUnknown,
@@ -624,6 +745,7 @@ export function parseComamCommand(
     );
     summaryBn = `${itemSummaries.join(', ')} — মোট ${formatBnTaka(total)}`;
 
+    const hasUnknownCustomer = Boolean(customerName && !customer);
     const custName = customer?.name || customerName;
     if (custName) {
       if (paymentType === 'Due') {
@@ -632,6 +754,9 @@ export function parseComamCommand(
         summaryBn += ` (${custName}-এর নামে ইউপিআই)`;
       } else {
         summaryBn += ` (${custName}-এর নামে বিল)`;
+      }
+      if (hasUnknownCustomer) {
+        summaryBn += ` — সতর্কতা: "${customerName}" গ্রাহক তালিকায় নেই, নতুন তৈরি করতে পারেন।`;
       }
     } else {
       if (paymentType === 'Due') {
@@ -648,6 +773,8 @@ export function parseComamCommand(
     summaryBn = 'কথাটি বুঝতে পারিনি — আবার বলবেন?';
   }
 
+  const hasUnknownCustomer = Boolean(customerName && !customer);
+
   return {
     kind: items.length > 0 ? 'sale' : 'unknown',
     raw,
@@ -655,7 +782,8 @@ export function parseComamCommand(
     unknownItems,
     ambiguities,
     customer,
-    customerName: customer ? customer.name : customerName,
+    customerName: customer ? ((customer as any).nameBn || customerName || customer.name) : customerName,
+    hasUnknownCustomer,
     paymentType,
     total: Math.round(total * 100) / 100,
     summaryBn,

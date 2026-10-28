@@ -4,10 +4,16 @@ import {
   toBnDigits,
   formatBnNumber,
   formatBnTaka,
+  formatForBengaliSpeech,
   parseNumberAt,
   findNumberPhrases,
 } from './bn-parser';
-import { searchProducts, findCustomer } from './comam-matcher';
+import {
+  searchProducts,
+  findCustomer,
+  extractDueQueryTarget,
+  stripBengaliSuffixes,
+} from './comam-matcher';
 import { parseComamCommand } from './comam-engine';
 import type { Product, Customer } from '@/types/pos';
 
@@ -185,6 +191,111 @@ describe('Comam matcher and search tests', () => {
       createdAt: new Date(),
       updatedAt: new Date(),
     },
+    {
+      id: 'p10',
+      barcode: '1010',
+      name: 'Amul Shakti',
+      nameBn: 'আমুল শক্তি',
+      category: 'Dairy',
+      buyingPrice: 25,
+      sellingPrice: 30,
+      unit: 'piece',
+      currentStock: 15,
+      minStockLevel: 3,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+    {
+      id: 'p11',
+      barcode: '1111',
+      name: 'Britannia Marie Biscuit Rs. 10',
+      nameBn: 'ব্রিটানিয়া মেরি ১০ টাকা',
+      category: 'Snacks',
+      buyingPrice: 8,
+      sellingPrice: 10,
+      unit: 'piece',
+      currentStock: 50,
+      minStockLevel: 5,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+    {
+      id: 'p12',
+      barcode: '1212',
+      name: 'Britannia Milk Bikis Rs. 10',
+      nameBn: 'ব্রিটানিয়া মিল্ক বিকিস ১০ টাকা',
+      category: 'Snacks',
+      buyingPrice: 8,
+      sellingPrice: 10,
+      unit: 'piece',
+      currentStock: 50,
+      minStockLevel: 5,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+    {
+      id: 'p13',
+      barcode: '1313',
+      name: 'Sugar Loose',
+      nameBn: 'চিনি খোলা',
+      category: 'Groceries',
+      buyingPrice: 55,
+      sellingPrice: 65,
+      unit: 'kg',
+      currentStock: 100,
+      minStockLevel: 10,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+    {
+      id: 'p14',
+      barcode: '1414',
+      name: 'Maida Loose',
+      nameBn: 'ময়দা খোলা',
+      category: 'Groceries',
+      buyingPrice: 32,
+      sellingPrice: 40,
+      unit: 'kg',
+      currentStock: 80,
+      minStockLevel: 10,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+    {
+      id: 'p15',
+      barcode: '1515',
+      name: 'Coca Cola 750ml',
+      nameBn: 'কোকাকোলা ৭৫০ মিলি',
+      category: 'Beverages',
+      buyingPrice: 32,
+      sellingPrice: 40,
+      unit: 'piece',
+      currentStock: 25,
+      minStockLevel: 5,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+    {
+      id: 'p16',
+      barcode: '1616',
+      name: 'Sprite 1L',
+      nameBn: 'স্প্রাইট ১০০ টাকা',
+      category: 'Beverages',
+      buyingPrice: 85,
+      sellingPrice: 100,
+      unit: 'piece',
+      currentStock: 20,
+      minStockLevel: 5,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
   ];
 
   const mockCustomers: Customer[] = [
@@ -208,6 +319,80 @@ describe('Comam matcher and search tests', () => {
       totalDue: 0,
       totalPaid: 500,
       prepaidBalance: 100,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+    {
+      id: 'c3',
+      name: 'Lakhan Sarkar',
+      nameBn: 'লক্ষণ সরকার',
+      nameEn: 'Lakhan Sarkar',
+      phone: '01700000003',
+      totalDue: 1023.5,
+      totalPaid: 5000,
+      prepaidBalance: 0,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+    {
+      id: 'c4',
+      name: 'অনির্বাণ বি',
+      nameEn: 'Anirban B',
+      phone: '01700000004',
+      totalDue: 0,
+      totalPaid: 0,
+      prepaidBalance: 0,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+    {
+      id: 'c5',
+      name: 'আপসি সে (সোমরু)',
+      nameEn: 'Apsi Se',
+      phone: '01700000005',
+      totalDue: 0,
+      totalPaid: 0,
+      prepaidBalance: 0,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+    {
+      id: 'c6',
+      name: 'সাধীর মা',
+      nameEn: 'Sadhir Ma',
+      phone: '01700000006',
+      totalDue: 0,
+      totalPaid: 0,
+      prepaidBalance: 0,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+    {
+      id: 'c7',
+      name: 'মৌটু একটা লোক',
+      nameEn: 'Motu Ekta Lok',
+      phone: '01700000007',
+      totalDue: 0,
+      totalPaid: 0,
+      prepaidBalance: 0,
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+    {
+      id: 'c8',
+      name: 'সুশীল সিংহ',
+      nameBn: 'সুশীল সিংহ',
+      nameEn: 'Sushil Singha',
+      phone: '01700000008',
+      totalDue: 250,
+      totalPaid: 500,
+      prepaidBalance: 0,
       isActive: true,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -433,6 +618,222 @@ describe('Comam matcher and search tests', () => {
     expect(draft.items[0].nameBn).toBe('চিনি');
     expect(draft.items[0].qty).toBe(1);
     expect(draft.unknownItems.length).toBe(0);
+    expect(draft.hasUnknownCustomer).toBe(false);
+  });
+
+  it('detects unknown customer in sale and flags hasUnknownCustomer', () => {
+    const draft = parseComamCommand(
+      '১০ টাকার বিস্কুট ৩ প্যাকেট — কামাল হোসেনের নামে বাকি',
+      mockProducts,
+      mockCustomers
+    );
+    expect(draft.kind).toBe('sale');
+    expect(draft.customer).toBeNull();
+    expect(draft.customerName).toBe('কামাল হোসেন');
+    expect(draft.hasUnknownCustomer).toBe(true);
+    expect(draft.paymentType).toBe('Due');
+  });
+
+  it('tests product sales report: আজকে আমুল শক্তি কয়টা বিক্রি হয়েছে?', () => {
+    const draft = parseComamCommand(
+      'আজকে আমুল শক্তি কয়টা বিক্রি হয়েছে?',
+      mockProducts,
+      mockCustomers
+    );
+    expect(draft.kind).toBe('report');
+    expect(draft.report).toBe('product_sales');
+    expect(draft.targetProduct).toBeDefined();
+    expect(draft.targetProduct?.id).toBe('p10');
+    expect(draft.targetProduct?.nameBn).toBe('আমুল শক্তি');
+  });
+
+  it('tests specific customer due query: লক্ষণ সরকারের বাকি কত?', () => {
+    const draft = parseComamCommand(
+      'লক্ষণ সরকারের বাকি কত?',
+      mockProducts,
+      mockCustomers
+    );
+    expect(draft.kind).toBe('due_query');
+    expect(draft.customer).toBeDefined();
+    expect(draft.customer?.id).toBe('c3');
+    expect(draft.summaryBn).toContain('লক্ষণ সরকার');
+  });
+
+  it('tests specific customer due query when customer is not registered', () => {
+    const draft = parseComamCommand(
+      'সুধীরকাকার কত বাকি?',
+      mockProducts,
+      mockCustomers
+    );
+    expect(draft.kind).toBe('due_query');
+    expect(draft.customer).toBeNull();
+    expect(draft.customerName).toBe('সুধীর');
+    expect(draft.summaryBn).toContain('"সুধীর" নামে কোনো গ্রাহক খুঁজে পাওয়া যায়নি');
+  });
+
+  it('tests general due query: কার কত বাকি?', () => {
+    const draft = parseComamCommand(
+      'কার কত বাকি?',
+      mockProducts,
+      mockCustomers
+    );
+    expect(draft.kind).toBe('due_query');
+    expect(draft.customer).toBeNull();
+    expect(draft.customerName).toBeNull();
+    expect(draft.summaryBn).toBe('সকল ক্রেতার বাকি হিসাব দেখা হচ্ছে।');
+  });
+
+  it('formats text for Bengali speech without "পুঁটকি" for decimal points', () => {
+    const speech1 = formatForBengaliSpeech('রবিন তামাং ১০২৩.৫ টাকা।');
+    expect(speech1).toContain('১০২৩ দশমিক ৫ টাকা');
+    expect(speech1).not.toContain('পুঁটকি');
+
+    const speech2 = formatForBengaliSpeech('মোট বাকি ১৮৭৯৬.৫০ টাকা।');
+    expect(speech2).toContain('১৮৭৯৬ দশমিক ৫০ টাকা');
+
+    const speech3 = formatForBengaliSpeech('১ piece × ১০ টাকা');
+    expect(speech3).toContain('১ piece গুণ ১০ টাকা');
+
+    const speech4 = formatForBengaliSpeech('৳২০ দামের বিস্কুট');
+    expect(speech4).toContain('২০ টাকা');
+  });
+
+  describe('User-reported screenshots & voice billing edge cases', () => {
+    it('Scenario 1: 1:10 টাকা দামের ব্রিটানিয়া মেরী বিস্কুট এবং এক কেজি খোলা চিনি।', () => {
+      // Must NOT match customer "অনির্বাণ বি"
+      // Must match "ব্রিটানিয়া মেরি ১০ টাকা" (NOT মিল্ক বিকিস)
+      // Must match "খোলা চিনি" 1 kg
+      const draft = parseComamCommand(
+        '1:10 টাকা দামের ব্রিটানিয়া মেরী বিস্কুট এবং এক কেজি খোলা চিনি।',
+        mockProducts,
+        mockCustomers
+      );
+      expect(draft.kind).toBe('sale');
+      expect(draft.customer).toBeNull();
+      expect(draft.customerName).toBeNull();
+      expect(draft.items.length).toBe(2);
+
+      const marie = draft.items.find((it) => it.product.id === 'p11');
+      expect(marie).toBeDefined();
+      expect(marie?.qty).toBe(1);
+      expect(marie?.unitPrice).toBe(10);
+
+      const chini = draft.items.find((it) => it.product.id === 'p13' || it.product.id === 'p1');
+      expect(chini).toBeDefined();
+      expect(chini?.qty).toBe(1);
+
+      expect(draft.unknownItems.length).toBe(0);
+    });
+
+    it('Scenario 2: আধা কেজি চিনি খোলা এক কেজি খোলা ময়দা এবং হল ৳10 দামের দুটো হলুদের প্যাকেট।', () => {
+      // Must NOT match customer "আপসি সে (সোমরু)"
+      // Must match চিনি খোলা (0.5 kg), খোলা ময়দা (1 kg), and হলুদ (2 piece @ 10 Tk)
+      // Must NOT have "হলুদের" in unknown items
+      const draft = parseComamCommand(
+        'আধা কেজি চিনি খোলা এক কেজি খোলা ময়দা এবং হল ৳10 দামের দুটো হলুদের প্যাকেট।',
+        mockProducts,
+        mockCustomers
+      );
+      expect(draft.kind).toBe('sale');
+      expect(draft.customer).toBeNull();
+      expect(draft.customerName).toBeNull();
+      expect(draft.items.length).toBe(3);
+
+      const chini = draft.items.find((it) => it.nameBn?.includes('চিনি'));
+      expect(chini).toBeDefined();
+      expect(chini?.qty).toBe(0.5);
+
+      const maida = draft.items.find((it) => it.nameBn?.includes('ময়দা'));
+      expect(maida).toBeDefined();
+      expect(maida?.qty).toBe(1);
+
+      const haldi = draft.items.find((it) => it.nameBn?.includes('হলুদ') || it.nameBn?.includes('হলু'));
+      expect(haldi).toBeDefined();
+      expect(haldi?.qty).toBe(2);
+
+      expect(draft.unknownItems.length).toBe(0);
+    });
+
+    it('Scenario 3: এক পোয়া চিনি খোলা কমা এক।', () => {
+      // Bengali unit "পোয়া" / "পোয়া" must equal 0.25 kg
+      // Spoken punctuation "কমা" must NOT be treated as unknown product
+      // Must NOT match customer "সাধীর মা"
+      const draft = parseComamCommand(
+        'এক পোয়া চিনি খোলা কমা এক।',
+        mockProducts,
+        mockCustomers
+      );
+      expect(draft.kind).toBe('sale');
+      expect(draft.customer).toBeNull();
+      expect(draft.customerName).toBeNull();
+      expect(draft.items.length).toBe(1);
+
+      const chini = draft.items[0];
+      expect(chini.nameBn).toContain('চিনি');
+      expect(chini.qty).toBe(0.25);
+      expect(draft.unknownItems.length).toBe(0);
+    });
+
+    it('Scenario 4: ৳40 দামের কোকাকোলা দুইটা একটা ৳100 দামের স্প্রাইট।', () => {
+      // "দুইটা" and "একটা" must NOT end up in unknownItems!
+      // Must NOT match customer "মৌটু একটা লোক"
+      const draft = parseComamCommand(
+        '৳40 দামের কোকাকোলা দুইটা একটা ৳100 দামের স্প্রাইট।',
+        mockProducts,
+        mockCustomers
+      );
+      expect(draft.kind).toBe('sale');
+      expect(draft.customer).toBeNull();
+      expect(draft.customerName).toBeNull();
+      expect(draft.items.length).toBe(2);
+
+      const coke = draft.items.find((it) => it.nameBn?.includes('কোকাকোলা'));
+      expect(coke).toBeDefined();
+      expect(coke?.qty).toBe(2);
+
+      const sprite = draft.items.find((it) => it.nameBn?.includes('স্প্রাইট'));
+      expect(sprite).toBeDefined();
+      expect(sprite?.qty).toBe(1);
+
+      expect(draft.unknownItems.length).toBe(0);
+    });
+
+    it('Scenario 5: আমুল শক্তি তিনটা সুশীল সিংহের নামে।', () => {
+      // Backward token scanner must stop at "তিনটা"
+      // Customer must be "সুশীল সিংহ", NOT "তিনটা সুশীল সিংহ"
+      // Item must be Amul Shakti with qty 3
+      const draft = parseComamCommand(
+        'আমুল শক্তি তিনটা সুশীল সিংহের নামে।',
+        mockProducts,
+        mockCustomers
+      );
+      expect(draft.kind).toBe('sale');
+      expect(draft.customer).toBeDefined();
+      expect(draft.customer?.name).toBe('সুশীল সিংহ');
+      expect(draft.customerName).toBe('সুশীল সিংহ');
+      expect(draft.paymentType).toBe('Due');
+      expect(draft.items.length).toBe(1);
+
+      const amul = draft.items[0];
+      expect(amul.nameBn).toContain('আমুল শক্তি');
+      expect(amul.qty).toBe(3);
+      expect(draft.unknownItems.length).toBe(0);
+    });
+
+    it('Scenario 6: Traditional Bengali fraction units with পোয়া (আধা পোয়া, দেড় পোয়া, তিন পোয়া)', () => {
+      // ১ পোয়া = 0.25 kg
+      // আধা পোয়া = 0.125 kg
+      // দেড় পোয়া = 0.375 kg
+      // দুই পোয়া = 0.5 kg
+      const draft1 = parseComamCommand('আধা পোয়া চিনি খোলা', mockProducts, mockCustomers);
+      expect(draft1.items[0].qty).toBe(0.125);
+
+      const draft2 = parseComamCommand('দেড় পোয়া চিনি খোলা', mockProducts, mockCustomers);
+      expect(draft2.items[0].qty).toBe(0.375);
+
+      const draft3 = parseComamCommand('দুই পোয়া চিনি খোলা', mockProducts, mockCustomers);
+      expect(draft3.items[0].qty).toBe(0.5);
+    });
   });
 });
 

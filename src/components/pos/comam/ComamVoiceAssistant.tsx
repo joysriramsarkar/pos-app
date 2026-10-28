@@ -14,6 +14,7 @@ import {
   VolumeX,
   X,
   User,
+  UserPlus,
   ArrowRight,
   RefreshCw,
 } from 'lucide-react';
@@ -27,7 +28,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { useCartStore, useProductsStore, useCustomersStore } from '@/stores/pos-store';
 import { parseComamCommand, type ComamDraft } from '@/lib/comam/comam-engine';
-import { formatBnTaka, formatBnNumber } from '@/lib/comam/bn-parser';
+import { formatBnTaka, formatBnNumber, formatForBengaliSpeech } from '@/lib/comam/bn-parser';
 import type { Product } from '@/types/pos';
 
 interface ComamVoiceAssistantProps {
@@ -50,6 +51,7 @@ export function ComamVoiceAssistant({
   const [draft, setDraft] = useState<ComamDraft | null>(null);
   const [serverAnswer, setServerAnswer] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isCreatingCustomer, setIsCreatingCustomer] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [hasSpeechSupport, setHasSpeechSupport] = useState(true);
 
@@ -80,6 +82,9 @@ export function ComamVoiceAssistant({
         setIsListening(true);
         setErrorMsg(null);
         latestTranscriptRef.current = '';
+        setInputText('');
+        setDraft(null);
+        setServerAnswer(null);
       };
 
       recognition.onresult = (event: any) => {
@@ -121,15 +126,48 @@ export function ComamVoiceAssistant({
     };
   }, []);
 
-  // Text-To-Speech readback
+  // Text-To-Speech readback with natural voice selection & decimal pronunciation fix
   const speakText = useCallback(
     (text: string) => {
       if (!ttsEnabled || typeof window === 'undefined' || !window.speechSynthesis) return;
       try {
         window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(text);
+
+        // Convert decimals (e.g. ১০২৩.৫ -> ১০২৩ দশমিক ৫) so TTS speaks "দশমিক" instead of "পুঁটকি"
+        const speechText = formatForBengaliSpeech(text);
+        if (!speechText) return;
+
+        const utterance = new SpeechSynthesisUtterance(speechText);
         utterance.lang = 'bn-BD';
-        utterance.rate = 1.0;
+        utterance.rate = 0.94; // natural, clear cadence
+        utterance.pitch = 1.0;
+
+        // Prioritize natural Bengali voices (Edge/Windows Microsoft Online Natural or Google বাংলা)
+        const voices = window.speechSynthesis.getVoices();
+        const bestVoice =
+          voices.find(
+            (v) =>
+              (v.lang.startsWith('bn') || v.lang.includes('Bengali')) &&
+              (v.name.includes('Natural') || v.name.includes('Online'))
+          ) ||
+          voices.find(
+            (v) =>
+              (v.lang === 'bn-BD' || v.lang === 'bn-IN' || v.lang.startsWith('bn')) &&
+              v.name.includes('Google')
+          ) ||
+          voices.find(
+            (v) =>
+              v.lang === 'bn-BD' ||
+              v.lang === 'bn-IN' ||
+              v.lang.startsWith('bn') ||
+              v.name.toLowerCase().includes('bengali') ||
+              v.name.includes('বাংলা')
+          );
+
+        if (bestVoice) {
+          utterance.voice = bestVoice;
+        }
+
         window.speechSynthesis.speak(utterance);
       } catch (err) {
         console.warn('TTS error:', err);
@@ -137,6 +175,42 @@ export function ComamVoiceAssistant({
     },
     [ttsEnabled]
   );
+
+  // Auto-clear and auto-start listening when assistant opens
+  useEffect(() => {
+    if (isOpen) {
+      // 1. Clear previous text and cards
+      setInputText('');
+      setDraft(null);
+      setServerAnswer(null);
+      setErrorMsg(null);
+      latestTranscriptRef.current = '';
+
+      // 2. Auto-start microphone recording immediately
+      const timer = setTimeout(() => {
+        if (recognitionRef.current && !isListening) {
+          try {
+            recognitionRef.current.start();
+          } catch (e) {
+            console.warn('Auto-start recognition error:', e);
+          }
+        }
+      }, 250);
+
+      return () => clearTimeout(timer);
+    } else {
+      // Stop and cancel speech when closed
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch {}
+      }
+      setIsListening(false);
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+    }
+  }, [isOpen]);
 
   const toggleListening = () => {
     if (!recognitionRef.current) {
@@ -151,11 +225,54 @@ export function ComamVoiceAssistant({
       setIsListening(false);
     } else {
       setErrorMsg(null);
+      setInputText('');
+      setDraft(null);
+      setServerAnswer(null);
+      latestTranscriptRef.current = '';
       try {
         recognitionRef.current.start();
       } catch (e) {
         console.warn('Start recognition failed:', e);
       }
+    }
+  };
+
+  // Create new customer on 1-click
+  const handleCreateCustomer = async (customerName: string) => {
+    if (!customerName) return;
+    setIsCreatingCustomer(true);
+    setErrorMsg(null);
+    try {
+      const res = await fetch('/api/customers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: customerName, phone: '' }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'নতুন গ্রাহক তৈরি করা যায়নি');
+      }
+
+      const { data: newCustomer } = await res.json();
+      useCustomersStore.getState().addCustomer(newCustomer);
+
+      setDraft((prev) =>
+        prev
+          ? {
+              ...prev,
+              customer: newCustomer,
+              hasUnknownCustomer: false,
+            }
+          : null
+      );
+
+      speakText(`${newCustomer.name} নামে নতুন গ্রাহক তৈরি করা হয়েছে।`);
+    } catch (err: any) {
+      console.error('Failed to create customer:', err);
+      setErrorMsg(err.message || 'নতুন গ্রাহক তৈরি করা যায়নি।');
+    } finally {
+      setIsCreatingCustomer(false);
     }
   };
 
@@ -225,6 +342,9 @@ export function ComamVoiceAssistant({
     // Set customer if detected (registered customer object or spoken customer name)
     if (draft.customer) {
       cart.setCustomer(draft.customer);
+    } else if (draft.hasUnknownCustomer && draft.paymentType === 'Due') {
+      setErrorMsg(`"${draft.customerName}" গ্রাহক তালিকায় নেই। বাকি বিক্রি করতে প্রথমে গ্রাহক তৈরি করুন।`);
+      return;
     } else if (draft.customerName) {
       cart.setCustomer({
         id: `walkin_${Date.now()}`,
@@ -470,7 +590,7 @@ export function ComamVoiceAssistant({
 
           {/* Server Report / Due Query Answer */}
           {serverAnswer && (
-            <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-900 dark:text-emerald-200">
+            <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-900 dark:text-emerald-200 space-y-2.5">
               <div className="flex items-start gap-2.5">
                 <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
                 <div>
@@ -478,6 +598,27 @@ export function ComamVoiceAssistant({
                   <p className="text-sm leading-relaxed">{serverAnswer}</p>
                 </div>
               </div>
+              {draft?.customerName && !draft.customer && (
+                <div className="pt-2 border-t border-emerald-500/20 flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-xs text-muted-foreground">
+                    &ldquo;{draft.customerName}&rdquo; নামে নতুন গ্রাহক যোগ করবেন?
+                  </span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => handleCreateCustomer(draft.customerName!)}
+                    disabled={isCreatingCustomer}
+                    className="h-8 text-xs bg-emerald-600 hover:bg-emerald-500 text-white gap-1.5 shadow-sm"
+                  >
+                    {isCreatingCustomer ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <UserPlus className="w-3.5 h-3.5" />
+                    )}
+                    &ldquo;{draft.customerName}&rdquo; নতুন গ্রাহক তৈরি করুন
+                  </Button>
+                </div>
+              )}
             </div>
           )}
 
@@ -501,6 +642,62 @@ export function ComamVoiceAssistant({
                   )}
                 </div>
               </div>
+
+              {/* Unknown Customer Notice and 1-Click Creation */}
+              {draft.hasUnknownCustomer && draft.customerName && (
+                <div className="p-3.5 rounded-xl border border-amber-500/40 bg-amber-500/10 space-y-2.5">
+                  <div className="flex items-start gap-2.5">
+                    <UserPlus className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                      <h4 className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+                        গ্রাহক পাওয়া যায়নি
+                      </h4>
+                      <p className="text-xs text-amber-800 dark:text-amber-300">
+                        &ldquo;<span className="font-semibold">{draft.customerName}</span>&rdquo; নামে খাতার তালিকায় কোনো গ্রাহক নেই। আপনি কি এই নামে নতুন গ্রাহক তৈরি করতে চান?
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => handleCreateCustomer(draft.customerName!)}
+                      disabled={isCreatingCustomer}
+                      className="h-8 text-xs bg-amber-600 hover:bg-amber-500 text-white gap-1.5 shadow-sm"
+                    >
+                      {isCreatingCustomer ? (
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <UserPlus className="w-3.5 h-3.5" />
+                      )}
+                      &ldquo;{draft.customerName}&rdquo; নতুন গ্রাহক তৈরি করুন
+                    </Button>
+
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setDraft((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                hasUnknownCustomer: false,
+                                customer: null,
+                                customerName: null,
+                                paymentType: 'Cash',
+                              }
+                            : null
+                        );
+                      }}
+                      className="h-8 text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      সাধারণ ক্রেতা (নগদ) হিসেবে বিল করুন
+                    </Button>
+                  </div>
+                </div>
+              )}
 
               {/* Items List */}
               <div className="space-y-2">
@@ -583,34 +780,50 @@ export function ComamVoiceAssistant({
               </div>
 
               {/* Action Buttons */}
-              <div className="pt-2 flex gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => handleAddToCart(false)}
-                  disabled={draft.needsClarification || draft.items.length === 0}
-                  className="flex-1 gap-1.5 border-emerald-500/30 hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-300"
-                >
-                  <ShoppingCart className="w-4 h-4" />
-                  কার্টে যোগ করুন
-                </Button>
+              <div className="pt-2 flex flex-col gap-2">
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => handleAddToCart(false)}
+                    disabled={
+                      draft.needsClarification ||
+                      draft.items.length === 0 ||
+                      (draft.hasUnknownCustomer && draft.paymentType === 'Due')
+                    }
+                    className="flex-1 gap-1.5 border-emerald-500/30 hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-300"
+                  >
+                    <ShoppingCart className="w-4 h-4" />
+                    কার্টে যোগ করুন
+                  </Button>
 
-                <Button
-                  type="button"
-                  onClick={() => handleAddToCart(true)}
-                  disabled={draft.needsClarification || draft.items.length === 0}
-                  className="flex-1 gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white"
-                >
-                  সরাসরি বিল করুন
-                  <ArrowRight className="w-4 h-4" />
-                </Button>
+                  <Button
+                    type="button"
+                    onClick={() => handleAddToCart(true)}
+                    disabled={
+                      draft.needsClarification ||
+                      draft.items.length === 0 ||
+                      (draft.hasUnknownCustomer && draft.paymentType === 'Due')
+                    }
+                    className="flex-1 gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white"
+                  >
+                    সরাসরি বিল করুন
+                    <ArrowRight className="w-4 h-4" />
+                  </Button>
+                </div>
+
+                {draft.hasUnknownCustomer && draft.paymentType === 'Due' && (
+                  <p className="text-xs text-center text-amber-600 dark:text-amber-400">
+                    ⚠️ বাকিতে বিক্রি করার আগে উপরে &ldquo;{draft.customerName}&rdquo; গ্রাহক তৈরি করুন।
+                  </p>
+                )}
+
+                {draft.needsClarification && (
+                  <p className="text-xs text-center text-amber-500">
+                    ⚠️ কার্টে যোগ করার আগে উপরের বিকল্প থেকে একটি নির্দিষ্ট পণ্য বেছে নিন।
+                  </p>
+                )}
               </div>
-
-              {draft.needsClarification && (
-                <p className="text-xs text-center text-amber-500">
-                  ⚠️ কার্টে যোগ করার আগে উপরের বিকল্প থেকে একটি নির্দিষ্ট পণ্য বেছে নিন।
-                </p>
-              )}
             </div>
           )}
         </div>

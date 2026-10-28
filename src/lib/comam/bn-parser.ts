@@ -63,10 +63,13 @@ export const WORD_NUMBERS: Record<string, number> = {
 };
 
 export const FRACTION_WORDS: Record<string, number> = {
+  'আধ': 0.5,
   'আধা': 0.5,
   'অর্ধেক': 0.5,
   'দেড়': 1.5,
+  'দেড়': 1.5,
   'আড়াই': 2.5,
+  'আড়াই': 2.5,
   'হাফ': 0.5,
   'half': 0.5,
 };
@@ -80,6 +83,8 @@ export const UNITS: Record<string, UnitDef> = {
   'কেজি': { unit: 'kg', factor: 1.0 },
   'কিলো': { unit: 'kg', factor: 1.0 },
   'কিলোগ্রাম': { unit: 'kg', factor: 1.0 },
+  'পোয়া': { unit: 'kg', factor: 0.25 },
+  'পোয়া': { unit: 'kg', factor: 0.25 },
   'গ্রাম': { unit: 'kg', factor: 0.001 },
   'লিটার': { unit: 'litre', factor: 1.0 },
   'লি': { unit: 'litre', factor: 1.0 },
@@ -95,6 +100,8 @@ export const UNITS: Record<string, UnitDef> = {
   'বোতল': { unit: 'piece', factor: 1.0 },
   'ডজন': { unit: 'piece', factor: 12.0 },
   // English / Banglish unit aliases
+  'powa': { unit: 'kg', factor: 0.25 },
+  'poa': { unit: 'kg', factor: 0.25 },
   'g': { unit: 'kg', factor: 0.001 },
   'gm': { unit: 'kg', factor: 0.001 },
   'gram': { unit: 'kg', factor: 0.001 },
@@ -297,4 +304,79 @@ export function findNumberPhrases(text: string): NumberPhrase[] {
   }
 
   return found;
+}
+
+/**
+ * Formats Bengali text specifically for Text-To-Speech (TTS) engines.
+ * Fixes:
+ * - Converts decimal point '.' between numbers to ' দশমিক ' (prevents TTS pronouncing '.' as 'পুঁটকি')
+ * - Replaces currency symbols (৳, ₹, Rs., Tk.) with ' টাকা '
+ * - Normalizes multiplication '×' to ' গুণ '
+ * - Strips emojis and formatting noise (asterisks, bullet points, brackets)
+ * - Converts trailing '.' to Bengali danda '।' for natural sentence cadence
+ */
+export function formatForBengaliSpeech(rawText: string): string {
+  if (!rawText) return '';
+
+  let speech = rawText;
+
+  // 1. Strip markdown asterisks, hashes, brackets, dashes
+  speech = speech
+    .replace(/[*_#`~]/g, '')
+    .replace(/[\(\)\[\]\{\}]/g, ', ')
+    .replace(/[—–]/g, ', ');
+
+  // 2. Replace currency symbols with 'টাকা'
+  speech = speech
+    .replace(/[৳₹]\s*([০-৯\d]+)/g, '$1 টাকা')
+    .replace(/(?:rs|tk)\.?\s*([০-৯\d]+)/gi, '$1 টাকা')
+    .replace(/([০-৯\d]+)\s*[৳₹]/g, '$1 টাকা');
+
+  // 3. Replace multiplication '×'
+  speech = speech.replace(/\s*×\s*/g, ' গুণ ');
+
+  // 4. Fix decimal points! (Both Bengali digits and English digits)
+  // e.g. "১০২৩.৫" -> "১০২৩ দশমিক ৫", "1023.5" -> "1023 দশমিক 5"
+  speech = speech.replace(/([\d০-৯]+)\.([\d০-৯]+)/g, '$1 দশমিক $2');
+
+  // 5. Replace any remaining standalone '.' (period) with '।' (danda) or space so TTS never says 'পুঁটকি'
+  speech = speech.replace(/\s*\.\s*(?=$|\s|[।,])/g, '। ');
+
+  // 6. Clean excess spaces and punctuation
+  speech = speech
+    .replace(/\s+/g, ' ')
+    .replace(/\s*([।,])\s*/g, '$1 ')
+    .trim();
+
+  return speech;
+}
+
+/**
+ * Normalizes speech recognition colon artifacts like "1:10 টাকা দামের" -> "১০ টাকা দামের"
+ * or "1:10" -> "১টা ১০".
+ */
+export function normalizeColonArtifacts(text: string): string {
+  if (!text) return '';
+  // When followed by টাকা / টাকার / দামের, the second number is the stated price:
+  // e.g. "1:10 টাকা দামের" -> "১০ টাকা দামের", "1:20 টাকা" -> "২০ টাকা"
+  let res = text.replace(
+    /(?:^|\s)(?:[\d০-৯]+):([\d০-৯]+)\s*(টাকা\s*দামের|টাকার\s*দামের|টাকার|টাকা\s*মূল্যের|মূল্যের|দামের|দর|টাকা)/gi,
+    ' $1 $2 '
+  );
+  // Generic time/ratio artifact: "1:10" -> "1টা 10"
+  res = res.replace(/([\d০-৯]+):([\d০-৯]+)/g, '$1টা $2');
+  return res.replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Strips spoken punctuation words that speech-to-text engines transcribe literally:
+ * e.g. "কমা", "দাঁড়ি", "দাড়ি", "ফুলস্টপ".
+ */
+export function cleanSpokenPunctuation(text: string): string {
+  if (!text) return '';
+  return text
+    .replace(/(?:^|\s)কমা(?=$|\s|[।,])/gi, ', ')
+    .replace(/(?:^|\s)(?:দাঁড়ি|দাড়ি|ফুলস্টপ)(?=$|\s|[।,])/gi, '। ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }

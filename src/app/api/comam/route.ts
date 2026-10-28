@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { requireAuth } from "@/lib/api-middleware";
 import { requireBusinessContext } from "@/lib/tenant";
 import { parseComamCommand, type ComamDraft } from "@/lib/comam/comam-engine";
+import { understandWithMetaSpark } from "@/lib/comam/comam-ai";
 import { formatBnNumber, formatBnTaka } from "@/lib/comam/bn-parser";
 import type { Product, Customer } from "@/types/pos";
 
@@ -95,14 +96,73 @@ export async function POST(request: NextRequest) {
       prepaidBalance: Number(c.prepaidBalance),
     }));
 
-    // 2. Parse command using Comam engine
-    const draft: ComamDraft = parseComamCommand(command, products, customers);
+    // 2. Parse command using Meta Spark AI Model with seamless deterministic fallback
+    let draft: ComamDraft | null = await understandWithMetaSpark(command, products, customers);
+    if (!draft) {
+      draft = parseComamCommand(command, products, customers);
+    }
 
     // 3. Handle live dynamic server-side reports or queries
     if (draft.kind === "report") {
       const now = new Date();
       const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
 
+      // 3.1 Product Specific Sales Report (e.g. "আমুল শক্তি কয়টা বিক্রি হয়েছে?")
+      if (draft.report === "product_sales" && draft.targetProduct) {
+        const prod = draft.targetProduct;
+        let periodStart = todayStart;
+        let periodLabel = "আজ";
+
+        if (draft.period === "week") {
+          periodStart = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+          periodLabel = "এই সপ্তাহে";
+        } else if (draft.period === "month") {
+          periodStart = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+          periodLabel = "এই মাসে";
+        }
+
+        const saleItems = await db.saleItem.findMany({
+          where: {
+            productId: prod.id,
+            sale: {
+              businessId,
+              createdAt: { gte: periodStart },
+              status: "COMPLETED",
+            },
+          },
+          select: {
+            quantity: true,
+            totalPrice: true,
+          },
+        });
+
+        const totalQty = saleItems.reduce((acc, it) => acc + Number(it.quantity), 0);
+        const totalAmount = saleItems.reduce((acc, it) => acc + Number(it.totalPrice), 0);
+        const prodTitle = prod.nameBn || prod.name;
+
+        let answerBn = "";
+        if (totalQty > 0) {
+          answerBn = `${periodLabel} "${prodTitle}" মোট ${formatBnNumber(totalQty)} ${prod.unit} বিক্রি হয়েছে (মোট ${formatBnTaka(totalAmount)})। বর্তমান স্টক: ${formatBnNumber(prod.currentStock)} ${prod.unit}।`;
+        } else {
+          answerBn = `${periodLabel} "${prodTitle}" কোনো বিক্রি হয়নি। বর্তমান স্টক: ${formatBnNumber(prod.currentStock)} ${prod.unit}।`;
+        }
+
+        return NextResponse.json({
+          kind: "report",
+          report: draft.report,
+          answerBn,
+          data: {
+            productId: prod.id,
+            productName: prodTitle,
+            totalQuantity: totalQty,
+            totalAmount,
+            currentStock: prod.currentStock,
+          },
+          draft,
+        });
+      }
+
+      // 3.2 Sales & Profit Summary
       if (draft.report === "sales_summary") {
         const todaySales = await db.sale.findMany({
           where: {
@@ -110,17 +170,63 @@ export async function POST(request: NextRequest) {
             createdAt: { gte: todayStart },
             status: "COMPLETED",
           },
-          select: {
-            totalAmount: true,
+          include: {
+            items: true,
           },
         });
 
         const totalAmount = todaySales.reduce((acc, s) => acc + Number(s.totalAmount), 0);
         const count = todaySales.length;
 
-        const answerBn = `আজ মোট ${formatBnTaka(totalAmount)} বিক্রি হয়েছে (${formatBnNumber(
-          count
-        )}টি বিল)।`;
+        // Calculate profit
+        let totalProfit = 0;
+        const prodCostMap = new Map<string, number>(products.map((p) => [p.id, p.buyingPrice]));
+        for (const s of todaySales) {
+          for (const it of s.items) {
+            const buyingPrice = prodCostMap.get(it.productId) || 0;
+            const cost = buyingPrice * Number(it.quantity);
+            totalProfit += Number(it.totalPrice) - cost;
+          }
+        }
+
+        let answerBn = "";
+        if (/লাভ/.test(command)) {
+          answerBn = `আজ মোট ${formatBnTaka(totalAmount)} বিক্রি হয়েছে এবং আনুমানিক লাভ ${formatBnTaka(totalProfit)} (${formatBnNumber(count)}টি বিল)।`;
+        } else {
+          answerBn = `আজ মোট ${formatBnTaka(totalAmount)} বিক্রি হয়েছে (${formatBnNumber(count)}টি বিল)।`;
+        }
+
+        return NextResponse.json({
+          kind: "report",
+          report: draft.report,
+          answerBn,
+          data: {
+            salesCount: count,
+            totalSales: totalAmount,
+            totalProfit,
+          },
+          draft,
+        });
+      }
+
+      // 3.3 Week Compare
+      if (draft.report === "week_compare") {
+        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+        const weekSales = await db.sale.findMany({
+          where: {
+            businessId,
+            createdAt: { gte: sevenDaysAgo },
+            status: "COMPLETED",
+          },
+          select: {
+            totalAmount: true,
+          },
+        });
+
+        const totalAmount = weekSales.reduce((acc, s) => acc + Number(s.totalAmount), 0);
+        const count = weekSales.length;
+
+        const answerBn = `গত ৭ দিনে মোট ${formatBnTaka(totalAmount)} বিক্রি হয়েছে (${formatBnNumber(count)}টি বিল)।`;
 
         return NextResponse.json({
           kind: "report",
@@ -134,6 +240,7 @@ export async function POST(request: NextRequest) {
         });
       }
 
+      // 3.4 Low Stock Report
       if (draft.report === "low_stock") {
         const lowStockProducts = products.filter((p) => p.currentStock <= p.minStockLevel);
         const answerBn =
@@ -155,6 +262,7 @@ export async function POST(request: NextRequest) {
         });
       }
 
+      // 3.5 Top Products Report
       if (draft.report === "top_products") {
         const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
         const topItems = await db.saleItem.groupBy({
@@ -216,6 +324,19 @@ export async function POST(request: NextRequest) {
         });
       }
 
+      // If specific customer was asked but not found
+      if (draft.customerName) {
+        const answerBn = `"${draft.customerName}" নামে কোনো গ্রাহক খুঁজে পাওয়া যায়নি।`;
+        return NextResponse.json({
+          kind: "due_query",
+          answerBn,
+          customerNotFound: true,
+          customerName: draft.customerName,
+          draft,
+        });
+      }
+
+      // General due query (for all customers)
       const topDues = customers
         .filter((c) => c.totalDue > 0)
         .sort((a, b) => b.totalDue - a.totalDue)
