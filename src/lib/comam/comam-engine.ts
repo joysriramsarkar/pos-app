@@ -19,6 +19,9 @@ import {
   extractDueQueryTarget,
   extractSpokenCustomerName,
   findCustomer,
+  expandQueryAliases,
+  getProductNames,
+  BRAND_ALIASES,
   GENERIC_CATEGORY_WORDS,
   normalizeBengali,
   phoneticKeyBn,
@@ -302,11 +305,7 @@ function extractStatedPrice(segment: string): { statedPrice: number | null; clea
 }
 
 function getTailAfterProduct(rest: string, product: Product, products?: Product[]): string {
-  const names = [
-    product.nameBn ? normalizeBengali(product.nameBn) : '',
-    product.name ? normalizeBengali(product.name) : '',
-  ].filter(Boolean);
-
+  const names = getProductNames(product);
   const normRest = normalizeBengali(rest);
   const fold = (s: string) => s.replace(/ী/g, 'ি').replace(/ূ/g, 'ু');
   const foldedRest = fold(normRest);
@@ -322,13 +321,24 @@ function getTailAfterProduct(rest: string, product: Product, products?: Product[
 
   // Also check individual significant product words (e.g. "চিনি", "সাবান")
   if (maxEnd < 0) {
+    const restTokens = normRest.split(/\s+/).filter(Boolean);
     for (const n of names) {
       for (const w of n.split(/\s+/)) {
         if (w.length >= 3) {
           const foldedW = fold(w);
-          const idx = foldedRest.indexOf(foldedW);
-          if (idx >= 0) {
-            maxEnd = Math.max(maxEnd, idx + foldedW.length);
+          let currPos = 0;
+          for (const tok of restTokens) {
+            const tokPos = normRest.indexOf(tok, currPos);
+            const foldedTok = fold(tok);
+            if (
+              foldedTok === foldedW ||
+              stripBengaliSuffixes(foldedTok) === stripBengaliSuffixes(foldedW) ||
+              BRAND_ALIASES[foldedW]?.includes(foldedTok) ||
+              BRAND_ALIASES[foldedTok]?.includes(foldedW)
+            ) {
+              maxEnd = Math.max(maxEnd, tokPos + tok.length);
+            }
+            currPos = tokPos + tok.length;
           }
         }
       }

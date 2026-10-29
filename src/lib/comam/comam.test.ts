@@ -10,12 +10,13 @@ import {
 } from './bn-parser';
 import {
   searchProducts,
+  hasWordMatch,
   findCustomer,
   extractDueQueryTarget,
   stripBengaliSuffixes,
   correctTranscriptWithCatalog,
 } from './comam-matcher';
-import { parseComamCommand } from './comam-engine';
+import { parseComamCommand, splitByKnownProducts } from './comam-engine';
 import type { Product, Customer } from '@/types/pos';
 
 describe('Comam bn-parser tests', () => {
@@ -604,7 +605,6 @@ describe('Comam matcher and search tests', () => {
       mockProducts,
       mockCustomers
     );
-
     expect(draft.kind).toBe('sale');
     expect(draft.items.length).toBe(2);
     expect(draft.items[0].nameBn).toBe('চিনি');
@@ -626,7 +626,6 @@ describe('Comam matcher and search tests', () => {
       mockProducts,
       mockCustomers
     );
-
     expect(draft.kind).toBe('sale');
     expect(draft.items.length).toBe(1);
     expect(draft.items[0].unitPrice).toBe(10);
@@ -1419,6 +1418,186 @@ describe('Comam matcher and search tests', () => {
       expect(draft.items.length).toBeGreaterThanOrEqual(2);
       expect(draft.items.find((it) => it.product.id === 'p34')).toBeDefined();
       expect(draft.items.find((it) => it.product.id === 'p33')).toBeDefined();
+    });
+
+    it('Scenario 23 (reported 29 Oct): ৳১৩ দামের একটা গোল্ড ফ্লেক্স সিগারেট।', () => {
+      const prods: Product[] = [
+        {
+          id: 'p1',
+          barcode: '101',
+          name: 'Gol Morich Rs. 10',
+          nameBn: 'গোল মরিচ ১০ টাকা',
+          category: 'Groceries',
+          buyingPrice: 8,
+          sellingPrice: 10,
+          unit: 'piece' as const,
+          currentStock: 20,
+          minStockLevel: 5,
+          isActive: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          id: 'p2',
+          barcode: '102',
+          name: 'Deepti Gol Khasta Biscuit Rs. 60',
+          nameBn: 'দীপ্তি গোল খাস্তা বিস্কুট ৬০ টাকা',
+          category: 'Packaged Snacks',
+          buyingPrice: 50,
+          sellingPrice: 60,
+          unit: 'piece' as const,
+          currentStock: 20,
+          minStockLevel: 5,
+          isActive: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          id: 'p3',
+          barcode: '103',
+          name: 'City Gold 100g',
+          nameBn: 'সিটি গোল্ড ১০০ গ্রাম',
+          category: 'General',
+          buyingPrice: 40,
+          sellingPrice: 54,
+          unit: 'piece' as const,
+          currentStock: 10,
+          minStockLevel: 2,
+          isActive: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          id: 'p4',
+          barcode: '104',
+          name: "Kellogg's Corn Flakes Rs. 20",
+          nameBn: 'কেলগস কর্ন ফ্লেক্স ২০ টাকা',
+          category: 'Packaged Snacks',
+          buyingPrice: 16,
+          sellingPrice: 20,
+          unit: 'piece' as const,
+          currentStock: 15,
+          minStockLevel: 5,
+          isActive: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          id: 'p4b',
+          barcode: '104b',
+          name: "Kellogg's Corn Flakes Rs. 95",
+          nameBn: 'কেলগস কর্ন ফ্লেক্স ৯৫ টাকা',
+          category: 'Packaged Snacks',
+          buyingPrice: 80,
+          sellingPrice: 95,
+          unit: 'piece' as const,
+          currentStock: 15,
+          minStockLevel: 5,
+          isActive: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          id: 'p4c',
+          barcode: '104c',
+          name: "Kellogg's Corn Flakes Rs. 10",
+          nameBn: 'কেলগস কর্ন ফ্লেক্স ১০ টাকা',
+          category: 'Packaged Snacks',
+          buyingPrice: 8,
+          sellingPrice: 10,
+          unit: 'piece' as const,
+          currentStock: 15,
+          minStockLevel: 5,
+          isActive: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          id: 'p5',
+          barcode: '105',
+          name: 'Gold Flake King Rs. 20',
+          nameBn: 'গোল্ড ফ্ল্যাক কিং ২০ টাকা',
+          category: 'Cigarettes',
+          buyingPrice: 16,
+          sellingPrice: 20,
+          unit: 'piece' as const,
+          currentStock: 50,
+          minStockLevel: 10,
+          isActive: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          id: 'p5b',
+          barcode: '105b',
+          name: 'Gold Flake King Rs. 25',
+          nameBn: 'গোল্ড ফ্ল্যাক কিং ২৫ টাকা',
+          category: 'Cigarettes',
+          buyingPrice: 20,
+          sellingPrice: 25,
+          unit: 'piece' as const,
+          currentStock: 50,
+          minStockLevel: 10,
+          isActive: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          id: 'p5c',
+          barcode: '105c',
+          name: 'Gold Flake Light Rs. 20',
+          nameBn: 'গোল্ড ফ্ল্যাক লাইট ২০ টাকা',
+          category: 'Cigarettes',
+          buyingPrice: 16,
+          sellingPrice: 20,
+          unit: 'piece' as const,
+          currentStock: 50,
+          minStockLevel: 10,
+          isActive: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          id: 'p6',
+          barcode: '106',
+          name: 'Gold Flake Rs. 13',
+          nameBn: 'গোল্ড ফ্ল্যাক ১৩ টাকা',
+          category: 'Cigarettes',
+          buyingPrice: 10,
+          sellingPrice: 13,
+          unit: 'piece' as const,
+          currentStock: 50,
+          minStockLevel: 10,
+          isActive: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ];
+
+      const draft = parseComamCommand(
+        '৳১৩ দামের একটা গোল্ড ফ্লেক্স সিগারেট।',
+        prods,
+        mockCustomers
+      );
+      expect(draft.kind).toBe('sale');
+      expect(draft.items.length).toBe(1);
+      expect(draft.items[0].product.id).toBe('p6');
+      expect(draft.items[0].qty).toBe(1);
+      expect(draft.unknownItems.length).toBe(0);
+
+      // Edge case: if exact 13 Tk pack does not exist in store, it bills the closest Gold Flake variant with ambiguity options
+      const prodsWithout13 = prods.filter((p) => p.id !== 'p6');
+      const draft2 = parseComamCommand(
+        '৳১৩ দামের একটা গোল্ড ফ্লেক্স সিগারেট।',
+        prodsWithout13,
+        mockCustomers
+      );
+      expect(draft2.kind).toBe('sale');
+      expect(draft2.items.length).toBe(1);
+      expect(draft2.items[0].product.nameBn).toContain('গোল্ড ফ্ল্যাক');
+      expect(draft2.items[0].ambiguous).toBe(true);
+      expect(draft2.items[0].options?.every((opt) => opt.nameBn.includes('গোল্ড ফ্ল্যাক'))).toBe(true);
+      expect(draft2.unknownItems.length).toBe(0);
     });
   });
 });

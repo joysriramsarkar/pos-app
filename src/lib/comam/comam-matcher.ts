@@ -6,7 +6,7 @@ import type { Product, Customer } from '@/types/pos';
 
 import { bnToAscii } from './bn-parser';
 
-const BRAND_ALIASES: Record<string, string[]> = {
+export const BRAND_ALIASES: Record<string, string[]> = {
   'সেভেন আপ': ['৭ আপ', '7 up', '7up', 'seven up'],
   '৭ আপ': ['সেভেন আপ', '7 up', '7up', 'seven up'],
   '7 up': ['সেভেন আপ', '৭ আপ', '7up'],
@@ -82,8 +82,14 @@ const BRAND_ALIASES: Record<string, string[]> = {
   'black': ['কালো'],
   'নেভিকাট': ['navy cut', 'নেভি কাট', 'নেভিকাড', 'নেবিকাট', 'navycut'],
   'নেভি কাট': ['নেভিকাট', 'navy cut'],
-  'গোল্ড ফ্ল্যাক': ['gold flake', 'গোল্ড ফ্লেক', 'গোল্ডফ্ল্যাক', 'goldflake'],
-  'ফ্ল্যাক': ['flake', 'ফ্লেক'],
+  'গোল্ড ফ্ল্যাক': ['gold flake', 'গোল্ড ফ্লেক', 'গোল্ড ফ্লেক্স', 'গোল্ডফ্ল্যাক', 'গোল্ডফ্লেক', 'গোল্ডফ্লেক্স', 'goldflake'],
+  'গোল্ড ফ্লেক': ['গোল্ড ফ্ল্যাক', 'গোল্ড ফ্লেক্স', 'gold flake', 'গোল্ডফ্ল্যাক', 'গোল্ডফ্লেক', 'গোল্ডফ্লেক্স'],
+  'গোল্ড ফ্লেক্স': ['গোল্ড ফ্ল্যাক', 'গোল্ড ফ্লেক', 'gold flake', 'গোল্ডফ্ল্যাক', 'গোল্ডফ্লেক', 'গোল্ডফ্লেক্স'],
+  'গোল্ডফ্লেক্স': ['গোল্ড ফ্ল্যাক', 'গোল্ড ফ্লেক', 'gold flake', 'গোল্ডফ্ল্যাক', 'গোল্ড ফ্লেক্স'],
+  'গোল্ডফ্লেক': ['গোল্ড ফ্ল্যাক', 'গোল্ড ফ্লেক', 'gold flake', 'গোল্ডফ্ল্যাক', 'গোল্ড ফ্লেক'],
+  'ফ্ল্যাক': ['flake', 'flakes', 'ফ্লেক', 'ফ্লেক্স'],
+  'ফ্লেক': ['flake', 'flakes', 'ফ্ল্যাক', 'ফ্লেক্স'],
+  'ফ্লেক্স': ['flake', 'flakes', 'ফ্ল্যাক', 'ফ্লেক'],
   'সিগারেট': ['cigarette', 'cigarettes'],
   'পেপার বোট': ['paper boat', 'পেপারবোট'],
   'নেসকাফে': ['nescafe'],
@@ -96,6 +102,49 @@ export const GENERIC_CATEGORY_WORDS = new Set([
   'টুথপেস্ট', 'মধু', 'ঘি', 'মাখন', 'আটা', 'ময়দা', 'ময়দা', 'সুজি', 'ডাল', 'চাল', 'লবণ', 'নুন',
   'প্যাকেট', 'প্যাক', 'বোতল'
 ]);
+
+export const CATEGORY_ANCHORS: Record<string, { namePatterns: string[]; categoryPatterns: string[] }> = {
+  'সিগারেট': {
+    namePatterns: [
+      'সিগারেট', 'cigarette', 'bidi', 'বিড়ি', 'গোল্ড ফ্ল্যাক', 'গোল্ড ফ্লেক', 'গোল্ড ফ্লেক্স',
+      'gold flake', 'নেভিকাট', 'navy cut', 'শিখর', 'চারমিনার', 'উইলস', 'wills',
+      'বেনসন', 'benson', 'মার্লবোরো', 'marlboro', 'টোটাল', 'টোটাল সিগারেট', 'classic', 'king'
+    ],
+    categoryPatterns: ['cigarette', 'সিগারেট', 'tobacco', 'ধূমপান'],
+  },
+  'বিস্কুট': {
+    namePatterns: ['বিস্কুট', 'বিস্কিট', 'biscuit', 'cookie', 'cookies', 'মেরী', 'মেরি', 'marie'],
+    categoryPatterns: ['snack', 'biscuit', 'bakery', 'confectionery', 'বিস্কুট'],
+  },
+  'বিস্কিট': {
+    namePatterns: ['বিস্কুট', 'বিস্কিট', 'biscuit', 'cookie', 'cookies', 'মেরী', 'মেরি', 'marie'],
+    categoryPatterns: ['snack', 'biscuit', 'bakery', 'confectionery', 'বিস্কুট'],
+  },
+  'সাবান': {
+    namePatterns: ['সাবান', 'soap', 'bar', 'lifebuoy', 'lux', 'dettol'],
+    categoryPatterns: ['cleaning', 'household', 'personal', 'সাবান'],
+  },
+  'শ্যাম্পু': {
+    namePatterns: ['শ্যাম্পু', 'shampoo'],
+    categoryPatterns: ['personal', 'hair', 'শ্যাম্পু'],
+  },
+  'দুধ': {
+    namePatterns: ['দুধ', 'milk', 'দুদ', 'আমুল', 'amul'],
+    categoryPatterns: ['dairy', 'milk', 'দুধ'],
+  },
+  'কফি': {
+    namePatterns: ['কফি', 'coffee', 'nescafe', 'নেসকাফে'],
+    categoryPatterns: ['beverage', 'coffee', 'কফি'],
+  },
+  'চা': {
+    namePatterns: ['চা', 'tea', 'তাজমহল', 'রেড লেবেল'],
+    categoryPatterns: ['beverage', 'tea', 'চা'],
+  },
+  'তেল': {
+    namePatterns: ['তেল', 'oil', 'সর্ষে', 'সরিষা', 'সয়াবিন', 'ফরচুন'],
+    categoryPatterns: ['oil', 'groceries', 'তেল'],
+  },
+};
 
 export function hasWordMatch(container: string, target: string): boolean {
   if (!container || !target) return false;
@@ -463,7 +512,7 @@ export interface SearchProductsResult {
 
 const productNamesCache = new WeakMap<Product, string[]>();
 
-function getProductNames(p: Product): string[] {
+export function getProductNames(p: Product): string[] {
   const cached = productNamesCache.get(p);
   if (cached) return cached;
   const names: string[] = [];
@@ -615,6 +664,28 @@ function searchProductsUncached(
   };
   const alignQWords = normQuery.split(/\s+/).filter((w) => w.length >= 2);
   const alignQKeys = alignQWords.map((w) => phoneticKeyBn(w));
+
+  const qTokensList = normQuery.split(/\s+/).filter(Boolean);
+  const qTokensWithStripped = [
+    ...qTokensList,
+    ...qTokensList.map((t) => stripBengaliSuffixes(t)),
+  ];
+  const activeAnchorKey = Object.keys(CATEGORY_ANCHORS).find((key) =>
+    qTokensWithStripped.includes(key)
+  );
+  const activeAnchor = activeAnchorKey ? CATEGORY_ANCHORS[activeAnchorKey] : null;
+
+  // Helper to check if a product specifically matches the non-generic core of the query
+  const queryCoreWords = normQuery
+    .split(/\s+/)
+    .filter((w) => !GENERIC_CATEGORY_WORDS.has(w) && !GENERIC_CATEGORY_WORDS.has(stripBengaliSuffixes(w)));
+
+  const productMatchesCore = (p: Product): boolean => {
+    if (queryCoreWords.length === 0) return true;
+    const pText = `${p.nameBn || ''} ${p.name || ''}`;
+    return queryCoreWords.some((cw) => hasWordMatch(pText, cw) || pText.includes(cw));
+  };
+
   const diceGate = (name: string): boolean => {
     const words = name.split(/\s+/).filter((w) => w.length >= 2);
     for (const w of words) {
@@ -632,6 +703,17 @@ function searchProductsUncached(
 
   for (const product of products) {
     if (product.isActive === false) continue;
+
+    if (activeAnchor) {
+      const pName = `${product.nameBn || ''} ${product.name || ''}`.toLowerCase();
+      const pCat = (product.category || '').toLowerCase();
+      const matchesAnchor =
+        activeAnchor.namePatterns.some((pat) => pName.includes(pat.toLowerCase())) ||
+        activeAnchor.categoryPatterns.some((pat) => pCat.includes(pat.toLowerCase()));
+      if (!matchesAnchor) {
+        continue;
+      }
+    }
 
     let bestScore = 0.0;
     const names = getProductNameInfos(product);
@@ -704,22 +786,16 @@ function searchProductsUncached(
         catalogKeys.has(phoneticKeyBn(w)) ||
         /[\d০-৯]/.test(w)
     );
-    if (kept.length > 0 && kept.length < qWords.length) {
+    const substantiveKept = kept.filter(
+      (w) =>
+        !GENERIC_CATEGORY_WORDS.has(w) &&
+        !GENERIC_CATEGORY_WORDS.has(stripBengaliSuffixes(w))
+    );
+    if (substantiveKept.length > 0 && kept.length < qWords.length) {
       const retry = searchProductsUncached(products, kept.join(' '), limit);
       if (retry.matches.length > 0) return retry;
     }
   }
-
-  // Helper to check if a product specifically matches the non-generic core of the query
-  const queryCoreWords = normQuery
-    .split(/\s+/)
-    .filter((w) => !GENERIC_CATEGORY_WORDS.has(w) && !GENERIC_CATEGORY_WORDS.has(stripBengaliSuffixes(w)));
-
-  const productMatchesCore = (p: Product): boolean => {
-    if (queryCoreWords.length === 0) return true;
-    const pText = `${p.nameBn || ''} ${p.name || ''}`;
-    return queryCoreWords.some((cw) => hasWordMatch(pText, cw) || pText.includes(cw));
-  };
 
   const isAmbiguous =
     topMatches.length >= 2 &&
