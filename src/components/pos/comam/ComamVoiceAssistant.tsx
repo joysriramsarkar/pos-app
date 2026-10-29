@@ -252,13 +252,15 @@ export function ComamVoiceAssistant({
       latestTranscriptRef.current = '';
 
       // 2. Auto-start listening immediately with retry
-      const tryStart = (retriesLeft = 3) => {
+      let isCancelled = false;
+      const tryStart = (retriesLeft = 5) => {
+        if (isCancelled) return;
         if (recognitionRef.current) {
           try {
             recognitionRef.current.start();
           } catch (e: any) {
-            if (e.name !== 'InvalidStateError' && retriesLeft > 0) {
-              setTimeout(() => tryStart(retriesLeft - 1), 100);
+            if (retriesLeft > 0) {
+              setTimeout(() => tryStart(retriesLeft - 1), 150);
             }
           }
         } else if (retriesLeft > 0) {
@@ -266,8 +268,10 @@ export function ComamVoiceAssistant({
         }
       };
 
-      const timer = setTimeout(() => tryStart(3), 50);
-      return () => clearTimeout(timer);
+      tryStart(5);
+      return () => {
+        isCancelled = true;
+      };
     } else {
       // Stop and cancel speech when closed
       if (recognitionRef.current) {

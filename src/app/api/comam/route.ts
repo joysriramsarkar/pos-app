@@ -280,15 +280,18 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // 3.5 Top Products Report
+      // 3.5 Top Products / Product Sales Breakdown Report
       if (draft.report === "top_products") {
-        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+        const isToday = draft.period === 'today' || /আজ|আজকে/.test(command);
+        const periodStart = isToday ? todayStart : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+        const periodLabel = isToday ? "আজ" : "গত ৭ দিনে";
+
         const topItems = await db.saleItem.groupBy({
           by: ["productId"],
           where: {
             sale: {
               businessId,
-              createdAt: { gte: sevenDaysAgo },
+              createdAt: { gte: periodStart },
               status: "COMPLETED",
             },
           },
@@ -298,7 +301,7 @@ export async function POST(request: NextRequest) {
           },
           orderBy: {
             _sum: {
-              totalPrice: "desc",
+              quantity: "desc",
             },
           },
           take: 5,
@@ -308,6 +311,7 @@ export async function POST(request: NextRequest) {
           const prod = products.find((p) => p.id === item.productId);
           return {
             name: prod?.nameBn || prod?.name || "পণ্য",
+            unit: prod?.unit || "piece",
             amount: Number(item._sum?.totalPrice || 0),
             qty: Number(item._sum?.quantity || 0),
           };
@@ -315,9 +319,9 @@ export async function POST(request: NextRequest) {
 
         const answerBn =
           topWithNames.length === 0
-            ? "গত ৭ দিনে বিক্রির কোনো ডেটা পাওয়া যায়নি।"
-            : `গত ৭ দিনে বেশি বিক্রি: ${topWithNames
-                .map((t) => `${t.name} (${formatBnTaka(t.amount)})`)
+            ? `${periodLabel} বিক্রির কোনো তথ্য পাওয়া যায়নি।`
+            : `${periodLabel} বেশি বিক্রি: ${topWithNames
+                .map((t) => `${t.name} (${formatBnNumber(t.qty)} ${t.unit})`)
                 .join(", ")}।`;
 
         return NextResponse.json({

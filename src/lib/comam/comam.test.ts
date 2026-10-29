@@ -1606,6 +1606,63 @@ describe('Comam matcher and search tests', () => {
       expect(draft2.items[0].options?.every((opt) => opt.nameBn.includes('গোল্ড ফ্ল্যাক'))).toBe(true);
       expect(draft2.unknownItems.length).toBe(0);
     });
+
+    it('Scenario 24 (current_problems verification): due queries for specific customers vs general due', () => {
+      // 1. Specific customer due queries with spelling/suffix variants
+      const draftRahim = parseComamCommand('রহিমের বাকি কত?', mockProducts, mockCustomers);
+      expect(draftRahim.kind).toBe('due_query');
+      expect(draftRahim.customer?.name).toBe('রহিম');
+      expect(draftRahim.summaryBn).toContain('৩৫০ টাকা');
+
+      const draftSushil = parseComamCommand('সুশীল সিংহ এর বাকি কত?', mockProducts, mockCustomers);
+      expect(draftSushil.kind).toBe('due_query');
+      expect(draftSushil.customer?.name).toBe('সুশীল সিংহ');
+      expect(draftSushil.summaryBn).toContain('২৫০ টাকা');
+
+      const draftLakhan = parseComamCommand('লক্ষণ সরকারের বাকি কত টাকা?', mockProducts, mockCustomers);
+      expect(draftLakhan.kind).toBe('due_query');
+      expect(draftLakhan.customer?.name).toBe('Lakhan Sarkar');
+
+      // General due queries
+      const draftGeneral = parseComamCommand('কার কত বাকি?', mockProducts, mockCustomers);
+      expect(draftGeneral.kind).toBe('due_query');
+      expect(draftGeneral.customer).toBeNull();
+      expect(draftGeneral.summaryBn).toContain('সকল ক্রেতার');
+
+      const draftGeneral2 = parseComamCommand('মোট বাকি কত?', mockProducts, mockCustomers);
+      expect(draftGeneral2.kind).toBe('due_query');
+      expect(draftGeneral2.customer).toBeNull();
+    });
+
+    it('Scenario 25 (current_problems verification): sales reports & product sales inquiries', () => {
+      // 1. "কোন পণ্য কয়টা বিক্রি হয়েছে?" -> top_products report
+      const draftTop = parseComamCommand('কোন পণ্য কয়টা বিক্রি হয়েছে?', mockProducts, mockCustomers);
+      expect(draftTop.kind).toBe('report');
+      expect(draftTop.report).toBe('top_products');
+      expect(draftTop.unknownItems.length).toBe(0);
+
+      // 2. "আজকের রিপোর্ট দেখাও" -> sales_summary report
+      const draftReport = parseComamCommand('আজকের রিপোর্ট দেখাও', mockProducts, mockCustomers);
+      expect(draftReport.kind).toBe('report');
+      expect(draftReport.report).toBe('sales_summary');
+      expect(draftReport.unknownItems.length).toBe(0);
+
+      // 3. Specific product sales query: "আজ চিনি কতটুকু বিক্রি হলো?"
+      const draftChini = parseComamCommand('আজ চিনি কতটুকু বিক্রি হলো?', mockProducts, mockCustomers);
+      expect(draftChini.kind).toBe('report');
+      expect(draftChini.report).toBe('product_sales');
+      expect(draftChini.targetProduct?.nameBn).toBe('চিনি');
+    });
+
+    it('Scenario 26 (current_problems verification): decimal pronunciation in TTS speech text', () => {
+      const speech1 = formatForBengaliSpeech('মোট বাকি ১০২৩.৫ টাকা');
+      expect(speech1).toContain('দশমিক');
+      expect(speech1).not.toContain('১০২৩.৫');
+
+      const speech2 = formatForBengaliSpeech('পুঁটকি দিয়ে হিসাব হবে না');
+      expect(speech2).toContain('দশমিক');
+      expect(speech2).not.toContain('পুঁটকি');
+    });
   });
 });
 

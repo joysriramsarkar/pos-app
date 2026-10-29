@@ -1024,7 +1024,10 @@ export function parseComamCommand(
   }
 
   // 2. Detect General Reports Intent
-  if (/বিক্রি|সেলস|লাভ|পরিসংখ্যান|হিসাব/.test(raw) && /কেমন|কত|আজ|আজকের|আজকে|সপ্তাহে|সপ্তাহের|মাসে|মাসের/.test(raw)) {
+  if (
+    (/বিক্রি|সেলস|লাভ|পরিসংখ্যান|হিসাব|রিপোর্ট/.test(raw) && /কেমন|কত|কতো|আজ|আজকের|আজকে|সপ্তাহে|সপ্তাহের|মাসে|মাসের|দেখাও|বলো|জানাও/.test(raw)) ||
+    /^(?:আজকের|এই\s*সপ্তাহের|এই\s*মাসের)?\s*(?:বিক্রি|সেলস)?\s*রিপোর্ট(?:\s*(?:দেখাও|বলো|জানাও))?$/i.test(raw)
+  ) {
     if (/সপ্তাহ/.test(raw)) {
       return {
         kind: 'report',
@@ -1073,7 +1076,11 @@ export function parseComamCommand(
     };
   }
 
-  if (/বেশি বিক্রি|টপ পণ্য|জনপ্রিয়/.test(raw)) {
+  if (
+    /বেশি বিক্রি|টপ পণ্য|জনপ্রিয়/.test(raw) ||
+    (/কোন|কী/.test(raw) && /পণ্য|জিনিস|মাল/.test(raw) && /বিক্রি|সেল/.test(raw))
+  ) {
+    const isToday = /আজ|আজকে/.test(raw);
     return {
       kind: 'report',
       raw,
@@ -1084,23 +1091,44 @@ export function parseComamCommand(
       paymentType: 'Cash',
       total: 0,
       report: 'top_products',
-      summaryBn: 'সবচেয়ে বেশি বিক্রিত পণ্যের হিসাব প্রস্তুত করা হচ্ছে।',
+      period: isToday ? 'today' : 'week',
+      summaryBn: isToday
+        ? 'আজকের বিক্রিত পণ্যের হিসাব প্রস্তুত করা হচ্ছে।'
+        : 'সবচেয়ে বেশি বিক্রিত পণ্যের হিসাব প্রস্তুত করা হচ্ছে।',
       needsClarification: false,
     };
   }
 
   // 3. Detect Due Query Intent ("কার কত বাকি?", "লক্ষণ সরকারের বাকি কত?", "রহিমদার কত বাকি?")
-  const hasDueWord = norm.includes('বাকি') || norm.includes('বকেয়া');
+  const hasDueWord = norm.includes('বাকি') || norm.includes('বকেয়া') || norm.includes('দেনা');
   const isQuestioningDue =
-    /(?:^|\s)(কত|কার|কাদের|হিসাব|বলো|জানাও|দেখাও)(?:\s|$)/.test(norm) ||
-    /^(কার|কাদের|মোট|সব|কত)\s*(?:বাকি|বকেয়া)/.test(norm);
+    /(?:^|\s)(কত|কতো|কার|কাদের|হিসাব|বলো|জানাও|দেখাও|আছে|কি)(?:\s|$)/.test(norm) ||
+    /^(কার|কাদের|মোট|সব|কত|কতো)\s*(?:বাকি|বকেয়া|দেনা)/.test(norm) ||
+    /(?:বাকি|বকেয়া|দেনা)\s*(?:কত|কতো|হিসাব|বলো|জানাও|দেখাও)/.test(norm);
 
   if (
     hasDueWord &&
     isQuestioningDue &&
     !/কেজি|গ্রাম|লিটার|পিস|প্যাকেট|ডজন|বোতল|\bটা\b|\bটি\b|দামের|টাকার\s+[^\s]+/.test(raw)
   ) {
+    const directCust = findCustomer(customers, raw);
     const { isGeneral, targetName } = extractDueQueryTarget(raw);
+
+    if (directCust) {
+      return {
+        kind: 'due_query',
+        raw,
+        items: [],
+        unknownItems: [],
+        ambiguities: [],
+        customer: directCust,
+        customerName: (directCust as any).nameBn || directCust.name,
+        paymentType: 'Due',
+        total: 0,
+        summaryBn: `${(directCust as any).nameBn || directCust.name}-এর বাকি হিসাব: ${formatBnTaka(directCust.totalDue)}।`,
+        needsClarification: false,
+      };
+    }
 
     if (isGeneral || !targetName) {
       return {
@@ -1119,7 +1147,7 @@ export function parseComamCommand(
     }
 
     // Specific customer due query
-    const cust = findCustomer(customers, targetName) || findCustomer(customers, raw);
+    const cust = findCustomer(customers, targetName);
     if (cust) {
       return {
         kind: 'due_query',

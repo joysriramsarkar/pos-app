@@ -884,8 +884,8 @@ export function extractDueQueryTarget(text: string): {
 
   // 1. Pure general query patterns
   const isPureGeneral =
-    /^(?:দোকানের\s+|আমাদের\s+)?(?:কার|কাদের|সকলের|সবার|দোকানের)\s+(?:কত\s+)?(?:বাকি|বকেয়া|দেনা)/i.test(norm) ||
-    /^(?:মোট\s+|সব\s+)?(?:বাকি|বকেয়া|দেনা)(?:\s*(?:কত|কেমন|হিসাব|খাতা|তালিকা|বলো|জানাও|দেখাও))?$/i.test(norm) ||
+    /^(?:দোকানের\s+|আমাদের\s+)?(?:কার|কাদের|সকলের|সবার|দোকানের)\s+(?:কত|কতো)?\s*(?:বাকি|বকেয়া|দেনা)/i.test(norm) ||
+    /^(?:মোট\s+|সব\s+)?(?:বাকি|বকেয়া|দেনা)(?:\s*(?:কত|কতো|কেমন|হিসাব|খাতা|তালিকা|বলো|জানাও|দেখাও))?$/i.test(norm) ||
     /^(?:বাকি|বকেয়া)\s*খাতা/i.test(norm);
 
   if (isPureGeneral) {
@@ -895,16 +895,16 @@ export function extractDueQueryTarget(text: string): {
   // 2. Extract customer candidate:
   // e.g. "রহিমদার কত টাকা বাকি", "লক্ষণ সরকারের মোট বাকি কত", "রহিমের বাকি কত আছে"
   let candidate = norm
-    .replace(/^(?:আজকে?|দয়া\s*করে|একটু)\s+/, '')
+    .replace(/^(?:আজকে?|দয়া\s*করে|একটু|দোকানে\s+)?/i, '')
     .replace(/\s+(?:বাকি|বকেয়া|দেনা)(?:\s*(?:হিসাব|খাতা))?.*$/i, '')
-    .replace(/\s+(?:কত|কেমন|কত\s*টাকা|কতটাকা)\s+(?:বাকি|বকেয়া|দেনা).*$/i, '')
+    .replace(/\s+(?:কত|কতো|কেমন|কত\s*টাকা|কতটাকা)\s+(?:বাকি|বকেয়া|দেনা).*$/i, '')
     .replace(/\s+(?:মোট|সব)\s+(?:বাকি|বকেয়া|দেনা).*$/i, '')
-    .replace(/\s+(?:মোট|সব|কত|টাকা|হিসাব|দেনা|বাকি|বকেয়া)$/i, '')
-    .replace(/\s+(?:মোট|সব|কত|টাকা|হিসাব|দেনা|বাকি|বকেয়া)$/i, '')
+    .replace(/\s+(?:মোট|সব|কত|কতো|টাকা|হিসাব|দেনা|বাকি|বকেয়া|আছে|কি)$/i, '')
+    .replace(/\s+(?:মোট|সব|কত|কতো|টাকা|হিসাব|দেনা|বাকি|বকেয়া|আছে|কি)$/i, '')
     .trim();
 
   candidate = stripBengaliSuffixes(candidate);
-  candidate = candidate.replace(/\s+(?:মোট|সব|কত|টাকা)$/i, '').trim();
+  candidate = candidate.replace(/\s+(?:মোট|সব|কত|কতো|টাকা|এর)$/i, '').trim();
   candidate = stripBengaliSuffixes(candidate);
 
   if (
@@ -1033,6 +1033,81 @@ export function findCustomer(
         }
       }
     }
+  }
+
+  // 5. Consonant skeleton match for cross-script / English customer names (e.g. "লক্ষণ সরকার" <-> "Lakhan Sarkar")
+  const toSkeleton = (s: string) =>
+    transliterateBnToLatin(s)
+      .toLowerCase()
+      .replace(/[aeiou\s্-]/g, '');
+
+  const textSkeleton = toSkeleton(normText);
+  const strippedSkeleton = toSkeleton(strippedText);
+
+  if (textSkeleton.length >= 3) {
+    for (const customer of customers) {
+      if (customer.isActive === false) continue;
+      const cNames = [
+        customer.name ? customer.name : '',
+        customer.nameEn ? customer.nameEn : '',
+      ].filter(Boolean);
+      for (const cn of cNames) {
+        const cSkel = toSkeleton(cn);
+        if (cSkel.length >= 3 && (cSkel === textSkeleton || cSkel === strippedSkeleton)) {
+          return customer;
+        }
+      }
+    }
+  }
+
+  // 6. Fuzzy similarity & phonetic match (e.g. "সুশীল সিংহ" <-> "সুশীল সিং", "অনির্বাণ" <-> "অনির্বাণ বি")
+  let bestSimCust: Customer | null = null;
+  let bestSimScore = 0;
+
+  for (const customer of customers) {
+    if (customer.isActive === false) continue;
+    const names = [
+      customer.name ? normalizeBengali(customer.name) : '',
+      (customer as any).nameBn ? normalizeBengali((customer as any).nameBn) : '',
+      customer.nameEn ? normalizeBengali(customer.nameEn) : '',
+    ].filter(Boolean);
+
+    for (const n of names) {
+      if (COMMON_WORD_STOP_LIST.has(n)) continue;
+      const strippedN = stripBengaliSuffixes(n);
+      if (strippedN.length < 3) continue;
+
+      // Word count guard: a 1-word query must not match a multi-word customer (e.g. "সুধীর" matching "সাধীর মা")
+      const nWords = strippedN.split(/\s+/).filter(Boolean);
+      const qWords = strippedText.split(/\s+/).filter(Boolean);
+      if (nWords.length !== qWords.length) {
+        continue;
+      }
+
+      const lenRatio = Math.min(strippedN.length, strippedText.length) / Math.max(strippedN.length, strippedText.length);
+      if (lenRatio < 0.75) continue;
+
+      const directSim = Math.max(
+        stringSimilarity(strippedN, strippedText),
+        stringSimilarity(n, normText)
+      );
+
+      // Only check phonetic similarity if direct textual similarity is already high (>= 0.75)
+      let sim = directSim;
+      if (directSim >= 0.75) {
+        const phonSim = stringSimilarity(phoneticKeyFromNormalized(strippedN), phoneticKeyFromNormalized(strippedText));
+        sim = Math.max(sim, phonSim);
+      }
+
+      if (sim > bestSimScore) {
+        bestSimScore = sim;
+        bestSimCust = customer;
+      }
+    }
+  }
+
+  if (bestSimScore >= 0.85 && bestSimCust) {
+    return bestSimCust;
   }
 
   return null;
