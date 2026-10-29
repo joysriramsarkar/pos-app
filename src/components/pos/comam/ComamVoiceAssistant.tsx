@@ -175,6 +175,22 @@ export function ComamVoiceAssistant({
     };
   }, []);
 
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+
+  // Load natural speech synthesis voices
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.speechSynthesis) return;
+    const updateVoices = () => {
+      const v = window.speechSynthesis.getVoices();
+      if (v.length > 0) setVoices(v);
+    };
+    updateVoices();
+    window.speechSynthesis.addEventListener('voiceschanged', updateVoices);
+    return () => {
+      window.speechSynthesis.removeEventListener('voiceschanged', updateVoices);
+    };
+  }, []);
+
   // Text-To-Speech readback with natural voice selection & decimal pronunciation fix
   const speakText = useCallback(
     (text: string) => {
@@ -192,19 +208,19 @@ export function ComamVoiceAssistant({
         utterance.pitch = 1.0;
 
         // Prioritize natural Bengali voices (Edge/Windows Microsoft Online Natural or Google বাংলা)
-        const voices = window.speechSynthesis.getVoices();
+        const currentVoices = voices.length > 0 ? voices : window.speechSynthesis.getVoices();
         const bestVoice =
-          voices.find(
+          currentVoices.find(
             (v) =>
               (v.lang.startsWith('bn') || v.lang.includes('Bengali')) &&
               (v.name.includes('Natural') || v.name.includes('Online'))
           ) ||
-          voices.find(
+          currentVoices.find(
             (v) =>
               (v.lang === 'bn-BD' || v.lang === 'bn-IN' || v.lang.startsWith('bn')) &&
               v.name.includes('Google')
           ) ||
-          voices.find(
+          currentVoices.find(
             (v) =>
               v.lang === 'bn-BD' ||
               v.lang === 'bn-IN' ||
@@ -222,7 +238,7 @@ export function ComamVoiceAssistant({
         console.warn('TTS error:', err);
       }
     },
-    [ttsEnabled]
+    [ttsEnabled, voices]
   );
 
   // Auto-clear and auto-start listening when assistant opens
@@ -235,17 +251,22 @@ export function ComamVoiceAssistant({
       setErrorMsg(null);
       latestTranscriptRef.current = '';
 
-      // 2. Auto-start listening immediately
-      const timer = setTimeout(() => {
-        if (recognitionRef.current && !isListening) {
+      // 2. Auto-start listening immediately with retry
+      const tryStart = (retriesLeft = 3) => {
+        if (recognitionRef.current) {
           try {
             recognitionRef.current.start();
-          } catch (e) {
-            console.warn('Auto-start recognition error:', e);
+          } catch (e: any) {
+            if (e.name !== 'InvalidStateError' && retriesLeft > 0) {
+              setTimeout(() => tryStart(retriesLeft - 1), 100);
+            }
           }
+        } else if (retriesLeft > 0) {
+          setTimeout(() => tryStart(retriesLeft - 1), 100);
         }
-      }, 250);
+      };
 
+      const timer = setTimeout(() => tryStart(3), 50);
       return () => clearTimeout(timer);
     } else {
       // Stop and cancel speech when closed
@@ -386,10 +407,10 @@ export function ComamVoiceAssistant({
   const handleAddToCart = (directCheckout: boolean = false) => {
     if (!draft || draft.items.length === 0) return;
 
-    // Guard first: an unregistered customer cannot take a due sale, and
-    // the cart must stay untouched when we refuse (no half-added bill).
-    if (!draft.customer && draft.hasUnknownCustomer && draft.paymentType === 'Due') {
-      setErrorMsg(`"${draft.customerName}" গ্রাহক তালিকায় নেই। বাকি বিক্রি করতে প্রথমে গ্রাহক তৈরি করুন।`);
+    // Guard: an unregistered customer cannot be billed directly with an imaginary ID.
+    // Must create the customer first OR sell as walk-in cash customer!
+    if (!draft.customer && draft.hasUnknownCustomer) {
+      setErrorMsg(`"${draft.customerName}" গ্রাহক তালিকায় নেই। প্রথমে গ্রাহক তৈরি করুন অথবা সাধারণ ক্রেতা হিসেবে বিল করুন।`);
       return;
     }
 
@@ -400,18 +421,9 @@ export function ComamVoiceAssistant({
       cart.addItem(item.product, item.qty);
     });
 
-    // Set customer if detected (registered customer object or spoken customer name)
+    // Set customer if detected (registered customer object only)
     if (draft.customer) {
       cart.setCustomer(draft.customer);
-    } else if (draft.customerName) {
-      cart.setCustomer({
-        id: `walkin_${Date.now()}`,
-        name: draft.customerName,
-        phone: '',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        isActive: true,
-      } as any);
     } else {
       cart.setCustomer(null);
     }

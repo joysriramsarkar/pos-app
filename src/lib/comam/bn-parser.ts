@@ -74,6 +74,11 @@ export const FRACTION_WORDS: Record<string, number> = {
   'আড়াই': 2.5,
   'হাফ': 0.5,
   'half': 0.5,
+  'পোয়া': 0.25,
+  'পোয়া': 0.25,
+  'পৌনে': 0.75,
+  'পোনে': 0.75,
+  'সোয়া': 1.25,
 };
 
 export interface UnitDef {
@@ -338,11 +343,15 @@ export function formatForBengaliSpeech(rawText: string): string {
   speech = speech.replace(/\s*×\s*/g, ' গুণ ');
 
   // 4. Fix decimal points! (Both Bengali digits and English digits)
-  // e.g. "১০২৩.৫" -> "১০২৩ দশমিক ৫", "1023.5" -> "1023 দশমিক 5"
+  // e.g. "১০২৩.৫" -> "১০২৩ দশমিক ৫", "1023.5" -> "1023 দশমিক 5", ".৫" -> " দশমিক ৫"
+  speech = speech.replace(/(?:^|\s)\.([০-৯\d]+)/g, ' দশমিক $1');
   speech = speech.replace(/([\d০-৯]+)\.([\d০-৯]+)/g, '$1 দশমিক $2');
 
-  // 5. Replace any remaining standalone '.' (period) with '।' (danda) or space so TTS never says 'পুঁটকি'
-  speech = speech.replace(/\s*\.\s*(?=$|\s|[।,])/g, '। ');
+  // Replace any literal 'পুঁটকি' or 'পুটকি' with 'দশমিক'
+  speech = speech.replace(/(?:পুঁটকি|পুটকি|পুট্কি)/g, 'দশমিক');
+
+  // 5. Replace ALL remaining standalone '.' (period) with '।' (danda) or space so TTS never says 'পুঁটকি'
+  speech = speech.replace(/\./g, ' । ');
 
   // 6. Clean excess spaces and punctuation
   speech = speech

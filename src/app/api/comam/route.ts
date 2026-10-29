@@ -96,18 +96,28 @@ export async function POST(request: NextRequest) {
       prepaidBalance: Number(c.prepaidBalance),
     }));
 
-    // 2. Parse with Meta Spark, but never let it under-parse a bill: the
-    // deterministic engine sees the full catalog (Spark only samples it),
-    // so whenever it finds more sale items — or a sale at all where Spark
-    // found none — its draft wins.
+    // 2. Parse with deterministic engine first. For reports, due queries,
+    // due payments and sales with catalog items, the deterministic engine sees
+    // the full catalog and customer list without network latency or hallucinations.
     const localDraft = parseComamCommand(command, products, customers);
-    let draft: ComamDraft | null = await understandWithMetaSpark(command, products, customers);
+    let draft: ComamDraft | null = null;
     if (
-      !draft ||
-      (localDraft.kind === 'sale' &&
-        (draft.kind !== 'sale' || localDraft.items.length > draft.items.length))
+      localDraft.kind === 'report' ||
+      localDraft.kind === 'due_query' ||
+      localDraft.kind === 'due_payment' ||
+      localDraft.kind === 'undo' ||
+      (localDraft.kind === 'sale' && localDraft.items.length > 0)
     ) {
       draft = localDraft;
+    } else {
+      draft = await understandWithMetaSpark(command, products, customers);
+      if (
+        !draft ||
+        (localDraft.kind === 'sale' &&
+          (draft.kind !== 'sale' || localDraft.items.length > draft.items.length))
+      ) {
+        draft = localDraft;
+      }
     }
 
     // 3. Handle live dynamic server-side reports or queries

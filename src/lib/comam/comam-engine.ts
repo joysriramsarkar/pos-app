@@ -19,6 +19,7 @@ import {
   extractDueQueryTarget,
   extractSpokenCustomerName,
   findCustomer,
+  GENERIC_CATEGORY_WORDS,
   normalizeBengali,
   phoneticKeyBn,
   phoneticKeyFromNormalized,
@@ -300,19 +301,22 @@ function extractStatedPrice(segment: string): { statedPrice: number | null; clea
   return { statedPrice: null, cleanSegment: segment };
 }
 
-function getTailAfterProduct(rest: string, product: Product): string {
+function getTailAfterProduct(rest: string, product: Product, products?: Product[]): string {
   const names = [
     product.nameBn ? normalizeBengali(product.nameBn) : '',
     product.name ? normalizeBengali(product.name) : '',
   ].filter(Boolean);
 
   const normRest = normalizeBengali(rest);
+  const fold = (s: string) => s.replace(/ী/g, 'ি').replace(/ূ/g, 'ু');
+  const foldedRest = fold(normRest);
   let maxEnd = -1;
 
   for (const n of names) {
-    const idx = normRest.indexOf(n);
+    const foldedN = fold(n);
+    const idx = foldedRest.indexOf(foldedN);
     if (idx >= 0) {
-      maxEnd = Math.max(maxEnd, idx + n.length);
+      maxEnd = Math.max(maxEnd, idx + foldedN.length);
     }
   }
 
@@ -321,9 +325,10 @@ function getTailAfterProduct(rest: string, product: Product): string {
     for (const n of names) {
       for (const w of n.split(/\s+/)) {
         if (w.length >= 3) {
-          const idx = normRest.indexOf(w);
+          const foldedW = fold(w);
+          const idx = foldedRest.indexOf(foldedW);
           if (idx >= 0) {
-            maxEnd = Math.max(maxEnd, idx + w.length);
+            maxEnd = Math.max(maxEnd, idx + foldedW.length);
           }
         }
       }
@@ -331,15 +336,43 @@ function getTailAfterProduct(rest: string, product: Product): string {
   }
 
   if (maxEnd < 0) return '';
-  const tailCand = normRest.slice(maxEnd).trim().replace(/^[,।\s]+/, '');
+  let tailCand = normRest.slice(maxEnd).trim().replace(/^[,।\s]+/, '');
+
+  // Advance past any trailing generic category descriptor (e.g. "বিস্কুট" after "মেরী", "দুধ" after "আমুল শক্তি", "সিগারেট" after "নেভিকাট")
+  const firstWord = tailCand.split(/\s+/)[0];
+  if (
+    firstWord &&
+    (GENERIC_CATEGORY_WORDS.has(firstWord) ||
+      GENERIC_CATEGORY_WORDS.has(stripBengaliSuffixes(firstWord)))
+  ) {
+    tailCand = tailCand.slice(firstWord.length).trim().replace(/^[,।\s]+/, '');
+  }
+
   // If the tail is just a bare quantity or unit that was part of this item (e.g. "দুইটা", "দুটো", "১টা", "২ কেজি"), it's not a new product!
   if (
     /^(?:[\d০-৯]+|এক|দুই|তিন|চার|পাঁচ|ছয়|সাত|আট|নয়|দশ|দেড়|দেড়|আড়াই|আড়াই|আধা|আধ)?\s*(?:টা|টি|টে|টো|খানা|পিস|কেজি|গ্রাম|লিটার|পোয়া|পোয়া|প্যাকেট|প্যাক|ডজন|বোতল)?$/.test(
       tailCand
-    )
+    ) ||
+    GENERIC_CATEGORY_WORDS.has(tailCand) ||
+    GENERIC_CATEGORY_WORDS.has(stripBengaliSuffixes(tailCand))
   ) {
     return '';
   }
+
+  // A lone word without its own quantity trailing a matched item is a descriptor residue,
+  // unless it matches a completely different catalog product with high confidence
+  const candWords = tailCand.split(/\s+/).filter(Boolean);
+  if (candWords.length === 1 && !isQuantityStarter(candWords[0])) {
+    if (products && products.length > 0) {
+      const { matches } = searchProducts(products, tailCand);
+      if (matches.length === 0 || matches[0].score < 0.88 || matches[0].product.id === product.id) {
+        return '';
+      }
+    } else {
+      return '';
+    }
+  }
+
   return tailCand;
 }
 
@@ -389,6 +422,12 @@ export function splitByKnownProducts(products: Product[], segment: string): stri
     if (tokenMatch(ti, form, ni)) {
       const r = matchSeqAt(ti + 1, form, ni + 1, skipsLeft);
       if (r >= 0) return r;
+    }
+    // Allow omitting a trailing generic category token (e.g. speaker said "গোল্ড ফ্ল্যাক" for "গোল্ড ফ্ল্যাক সিগারেট")
+    // Finish the match immediately at ti WITHOUT skipping ahead through subsequent products!
+    // Only valid if no other tokens were skipped!
+    if (ni === form.tokens.length - 1 && GENERIC_CATEGORY_WORDS.has(form.tokens[ni]) && skipsLeft === 2) {
+      return ti;
     }
     if (ni > 0 && skipsLeft > 0) {
       const r = matchSeqAt(ti + 1, form, ni, skipsLeft - 1);
@@ -476,6 +515,15 @@ export function splitByKnownProducts(products: Product[], segment: string): stri
 
   const occurrences: Array<{ start: number; end: number; seqLen: number }> = [];
   for (let start = 0; start < tokens.length; start++) {
+    const prevOcc = occurrences[occurrences.length - 1];
+    if (
+      prevOcc &&
+      start === prevOcc.end &&
+      (GENERIC_CATEGORY_WORDS.has(tokens[start]) ||
+        GENERIC_CATEGORY_WORDS.has(stripBengaliSuffixes(tokens[start])))
+    ) {
+      continue;
+    }
     let bestSeqLen = 0;
     let bestEnd = -1;
     for (const form of candidateForms(start)) {
@@ -496,7 +544,13 @@ export function splitByKnownProducts(products: Product[], segment: string): stri
         const appearsMidName = forms.some(
           (f) => f.tokens.slice(1).includes(first)
         );
-        if (sharingFirst <= 40 && !appearsMidName && first.length >= 3) {
+        if (
+          sharingFirst <= 40 &&
+          !appearsMidName &&
+          first.length >= 3 &&
+          !GENERIC_CATEGORY_WORDS.has(first) &&
+          !GENERIC_CATEGORY_WORDS.has(stripBengaliSuffixes(first))
+        ) {
           bestSeqLen = 1;
           bestEnd = start + 1;
         }
@@ -623,6 +677,10 @@ function getNameForms(products: Product[]): NameForm[] {
       const seq = normalizeBengali(rawName).split(/\s+/).filter(Boolean);
       if (seq.length === 0) continue;
 
+      const isSingleCategoryWord = (toks: string[]) =>
+        toks.length === 1 &&
+        (GENERIC_CATEGORY_WORDS.has(toks[0]) || GENERIC_CATEGORY_WORDS.has(stripBengaliSuffixes(toks[0])));
+
       const fullKey = seq.join(' ');
       if (!seen.has(fullKey) && (seq.length >= 2 || (seq.length === 1 && seq[0].length >= 3))) {
         seen.add(fullKey);
@@ -654,10 +712,23 @@ function getNameForms(products: Product[]): NameForm[] {
         core.length > 0 &&
         core.length < seq.length &&
         !seen.has(coreKey) &&
-        (core.length >= 2 || (core.length === 1 && core[0].length >= 3))
+        (core.length >= 2 || (core.length === 1 && core[0].length >= 3 && !isSingleCategoryWord(core)))
       ) {
         seen.add(coreKey);
         forms.push({ tokens: core, keys: core.map((t) => phoneticKeyFromNormalized(t)) });
+      }
+
+      // If core ends with a generic category word and has preceding brand words, strip it to create brand form
+      if (core.length >= 2 && GENERIC_CATEGORY_WORDS.has(core[core.length - 1])) {
+        const brandOnly = core.slice(0, -1);
+        const brandKey = brandOnly.join(' ');
+        if (
+          !seen.has(brandKey) &&
+          (brandOnly.length >= 2 || (brandOnly.length === 1 && brandOnly[0].length >= 3 && !isSingleCategoryWord(brandOnly)))
+        ) {
+          seen.add(brandKey);
+          forms.push({ tokens: brandOnly, keys: brandOnly.map((t) => phoneticKeyFromNormalized(t)) });
+        }
       }
     }
   }
@@ -898,6 +969,8 @@ export function parseComamCommand(
   raw = normalizeColonArtifacts(raw);
   raw = cleanSpokenPunctuation(raw);
   raw = dedupeConsecutiveWords(raw);
+  // Clean nasalized breath / pause hesitation artifact where ASR transcribes "৫ এবং" before conjunction
+  raw = raw.replace(/(?:^|\s)৫\s+(?=এবং|আর|ও\b)/g, ' ');
   const norm = normalizeBengali(raw);
 
   // 1. Detect Specific Product Sales Query (e.g. "আজকে আমুল শক্তি কয়টা বিক্রি হয়েছে?", "আজ চিনি কতটুকু বিক্রি হলো?")
@@ -1134,6 +1207,8 @@ export function parseComamCommand(
       ? anchoredSegments.flatMap((chunk) =>
           chunk
             .split(/ এবং | আর | ও /g)
+            .map((s) => s.trim())
+            .filter(Boolean)
             .flatMap((part) => splitQuantityLedItems(part))
         )
       : splitSegments(cleanItemsText);
@@ -1180,7 +1255,7 @@ export function parseComamCommand(
     const res = parseItemSegment(products, cleanedSeg);
     if (res.item) {
       items.push(res.item);
-      const tail = getTailAfterProduct(res.cleanSegment, res.item.product);
+      const tail = getTailAfterProduct(res.cleanSegment, res.item.product, products);
       if (
         tail &&
         (findNumberPhrases(tail).length > 0 ||
@@ -1240,7 +1315,11 @@ export function parseComamCommand(
               .map((t) => normalizeBengali(t))
               .includes(w)
           ).length;
-          isDescriptorResidue = ownTokens.includes(w) || sharedCount >= 2;
+          isDescriptorResidue =
+            ownTokens.includes(w) ||
+            sharedCount >= 2 ||
+            GENERIC_CATEGORY_WORDS.has(w) ||
+            GENERIC_CATEGORY_WORDS.has(stripBengaliSuffixes(w));
         }
         if (!isDescriptorResidue) {
           consume(tail, depth + 1);

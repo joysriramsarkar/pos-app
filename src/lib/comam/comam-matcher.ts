@@ -62,6 +62,9 @@ const BRAND_ALIASES: Record<string, string[]> = {
   'খোলা ডাল': ['ডাল', 'মসুর ডাল'],
   'আমুল': ['amul', 'আমল'],
   'amul': ['আমুল'],
+  'কোজ': ['কুল', 'কোল', 'kool'],
+  'কোল': ['কুল', 'কোজ', 'kool'],
+  'কুল': ['কোল', 'কোজ', 'kool'],
   'চকলেট': ['chocolate', 'চকোলেট'],
   'চকোলেট': ['চকলেট', 'chocolate'],
   'chocolate': ['চকলেট'],
@@ -86,6 +89,39 @@ const BRAND_ALIASES: Record<string, string[]> = {
   'নেসকাফে': ['nescafe'],
   'nescafe': ['নেসকাফে'],
 };
+
+export const GENERIC_CATEGORY_WORDS = new Set([
+  'সিগারেট', 'সাবান', 'তেল', 'বিস্কুট', 'বিস্কিট', 'দুধ', 'কফি', 'চা', 'জল', 'পানি', 'কোল্ডড্রিংকস',
+  'কোল্ডড্রিংক', 'মশলা', 'মসলা', 'গুঁড়ো', 'গুঁড়া', 'গুড়া', 'পাউডার', 'নুডলস', 'নুডুলস', 'শ্যাম্পু',
+  'টুথপেস্ট', 'মধু', 'ঘি', 'মাখন', 'আটা', 'ময়দা', 'ময়দা', 'সুজি', 'ডাল', 'চাল', 'লবণ', 'নুন',
+  'প্যাকেট', 'প্যাক', 'বোতল'
+]);
+
+export function hasWordMatch(container: string, target: string): boolean {
+  if (!container || !target) return false;
+  const cTokens = container.split(/\s+/).filter(Boolean);
+  const tTokens = target.split(/\s+/).filter(Boolean);
+  if (tTokens.length === 0 || cTokens.length === 0) return false;
+  if (tTokens.length === 1) {
+    const t0 = tTokens[0];
+    const strippedT0 = stripBengaliSuffixes(t0);
+    return cTokens.some(
+      (c) =>
+        c === t0 ||
+        stripBengaliSuffixes(c) === strippedT0 ||
+        stripBengaliSuffixes(c) === t0 ||
+        c === strippedT0
+    );
+  }
+  const joinedTarget = tTokens.map(stripBengaliSuffixes).join(' ');
+  const strippedContainer = cTokens.map(stripBengaliSuffixes);
+  for (let i = 0; i <= strippedContainer.length - tTokens.length; i++) {
+    if (strippedContainer.slice(i, i + tTokens.length).join(' ') === joinedTarget) {
+      return true;
+    }
+  }
+  return false;
+}
 
 export function normalizeBengali(text: string): string {
   if (!text) return '';
@@ -308,6 +344,15 @@ export function expandQueryAliases(text: string): string[] {
     variants.add(strippedWords);
   }
 
+  // Generic category word stripped variant (e.g. "নেভিকাট সিগারেট" -> "নেভিকাট", "মেরী বিস্কুট" -> "মেরী")
+  const nonCategoryWords = norm
+    .split(/\s+/)
+    .filter((w) => !GENERIC_CATEGORY_WORDS.has(w) && !GENERIC_CATEGORY_WORDS.has(stripBengaliSuffixes(w)))
+    .join(' ');
+  if (nonCategoryWords && nonCategoryWords !== norm && nonCategoryWords.length >= 2) {
+    variants.add(nonCategoryWords);
+  }
+
   // Transliterate English spoken numbers in Bengali script
   const numSub = norm
     .replace(/\bসেভেন\b|সেভেন/g, '৭')
@@ -422,8 +467,24 @@ function getProductNames(p: Product): string[] {
   const cached = productNamesCache.get(p);
   if (cached) return cached;
   const names: string[] = [];
-  if (p.nameBn) names.push(normalizeBengali(p.nameBn));
-  if (p.name) names.push(normalizeBengali(p.name));
+  if (p.nameBn) {
+    const normBn = normalizeBengali(p.nameBn);
+    names.push(normBn);
+    const coreBn = normBn
+      .replace(/\s+[\d০-৯]+(?:\.[\d০-৯]+)?\s*(?:টাকা|টাকার|দামের|গ্রাম|কেজি|লিটার|মিলি|প্যাকেট|পিস|ডজন|বোতল)?$/gi, '')
+      .replace(/\s+(?:টাকা|টাকার|দামের)$/gi, '')
+      .trim();
+    if (coreBn && coreBn !== normBn) names.push(coreBn);
+  }
+  if (p.name) {
+    const normEn = normalizeBengali(p.name);
+    names.push(normEn);
+    const coreEn = normEn
+      .replace(/\s+(?:rs\.?|inr|tk\.?)\s*[\d০-৯]+(?:\.[\d০-৯]+)?$/gi, '')
+      .replace(/\s+[\d০-৯]+(?:\.[\d০-৯]+)?\s*(?:rs\.?|inr|tk\.?|g|kg|ml|l|pcs?|pack)?$/gi, '')
+      .trim();
+    if (coreEn && coreEn !== normEn) names.push(coreEn);
+  }
   if (p.category) names.push(normalizeBengali(p.category));
 
   // Also include attributes e.g. Color, Size, Brand if present
@@ -547,7 +608,7 @@ function searchProductsUncached(
       }
       // Substring relations in either direction (name inside query etc.)
       for (const v of variantInfos) {
-        if (info.name.includes(v.q) || v.q.includes(info.name)) return true;
+        if (hasWordMatch(info.name, v.q) || hasWordMatch(v.q, info.name)) return true;
       }
     }
     return false;
@@ -582,10 +643,10 @@ function searchProductsUncached(
         if (q === name) {
           // Direct unaliased exact match gets 1.05; aliased exact match gets 1.0
           score = (q === normQuery) ? 1.05 : 1.0;
-        } else if (q.length >= 3 && name.includes(q)) {
+        } else if (q.length >= 3 && hasWordMatch(name, q)) {
           const lengthBonus = Math.min(0.06, (q.length / Math.max(name.length, 1)) * 0.06);
           score = 0.92 + lengthBonus;
-        } else if (q.length >= 3 && name.length >= 3 && q.includes(name)) {
+        } else if (q.length >= 3 && name.length >= 3 && hasWordMatch(q, name)) {
           // name.length guard: a 1-2 char catalog value (size "L", a short
           // category/attribute) must never substring-match every query.
           score = 0.91;
@@ -649,11 +710,23 @@ function searchProductsUncached(
     }
   }
 
+  // Helper to check if a product specifically matches the non-generic core of the query
+  const queryCoreWords = normQuery
+    .split(/\s+/)
+    .filter((w) => !GENERIC_CATEGORY_WORDS.has(w) && !GENERIC_CATEGORY_WORDS.has(stripBengaliSuffixes(w)));
+
+  const productMatchesCore = (p: Product): boolean => {
+    if (queryCoreWords.length === 0) return true;
+    const pText = `${p.nameBn || ''} ${p.name || ''}`;
+    return queryCoreWords.some((cw) => hasWordMatch(pText, cw) || pText.includes(cw));
+  };
+
   const isAmbiguous =
     topMatches.length >= 2 &&
     topMatches[1].score >= 0.55 &&
     topMatches[0].score - topMatches[1].score < 0.08 &&
-    !(topMatches[0].score >= 0.98 && topMatches[1].score <= 0.92);
+    !(topMatches[0].score >= 0.98 && topMatches[1].score <= 0.92) &&
+    !(productMatchesCore(topMatches[0].product) && !productMatchesCore(topMatches[1].product));
 
   return { matches: topMatches, isAmbiguous };
 }
@@ -683,13 +756,21 @@ export function transliterateBnToLatin(text: string): string {
     .trim();
 }
 
+const SURNAMES_PRESERVE_AR = new Set([
+  'সরকার', 'কর্মকার', 'হালদার', 'পোদ্দার', 'জোয়ারদার', 'তালুকদার', 'মজুমদার', 'শিকদার', 'সর্দার'
+]);
+
 export function stripBengaliSuffixes(name: string): string {
   let cleaned = name.trim();
 
   // 1. Check for compound honorific suffixes (e.g. "রহিমদার", "সুধীরকাকার", "বিকাশবাবুর", "রফিকভাইয়ের")
+  // Do NOT strip "দার" if it's a real surname like "হালদার", "মজুমদার", "পোদ্দার"
   const honorificMatch = cleaned.match(/(?:দার|দা|বাবুর|বাবু|কাকার|কাকা|ভাইয়ের|ভাইয়ের|ভাই|দির|দিদি|দি|কে|রে)$/);
   if (honorificMatch) {
-    return cleaned.slice(0, honorificMatch.index).trim();
+    const isRealSurname = SURNAMES_PRESERVE_AR.has(cleaned) || SURNAMES_PRESERVE_AR.has(cleaned.split(/\s+/).pop() || '');
+    if (!isRealSurname || honorificMatch[0] !== 'দার') {
+      return cleaned.slice(0, honorificMatch.index).trim();
+    }
   }
 
   // 2. Genitive suffix '-এর' or 'ের' (after consonants: "রহিমের", "সরকারের", "প্রদীপের")
@@ -698,7 +779,7 @@ export function stripBengaliSuffixes(name: string): string {
   }
 
   // 3. Genitive 'র' only after vowel 'া' (e.g. "সুমিতার", "রীতার", "মমতার")
-  if (/(?<=[া])র$/.test(cleaned)) {
+  if (/(?<=[া])র$/.test(cleaned) && !SURNAMES_PRESERVE_AR.has(cleaned)) {
     return cleaned.replace(/র$/, '').trim();
   }
 
@@ -709,27 +790,39 @@ export function extractDueQueryTarget(text: string): {
   isGeneral: boolean;
   targetName: string | null;
 } {
-  const norm = normalizeBengali(text);
+  let norm = normalizeBengali(text);
+  norm = norm.replace(/[?,।!]/g, ' ').replace(/\s+/g, ' ').trim();
 
-  // Check for general query phrases
-  const isGeneral =
-    /(^|\s)(কার|কাদের|সকলের|সবার|মোট|সব|দোকানের|আমাদের)(\s|$)/.test(norm) ||
-    /^(বাকি\s*কত|কত\s*বাকি|বাকি\s*খাতা|বকেয়া\s*কত)/.test(norm);
+  // 1. Pure general query patterns
+  const isPureGeneral =
+    /^(?:দোকানের\s+|আমাদের\s+)?(?:কার|কাদের|সকলের|সবার|দোকানের)\s+(?:কত\s+)?(?:বাকি|বকেয়া|দেনা)/i.test(norm) ||
+    /^(?:মোট\s+|সব\s+)?(?:বাকি|বকেয়া|দেনা)(?:\s*(?:কত|কেমন|হিসাব|খাতা|তালিকা|বলো|জানাও|দেখাও))?$/i.test(norm) ||
+    /^(?:বাকি|বকেয়া)\s*খাতা/i.test(norm);
 
-  if (isGeneral) {
+  if (isPureGeneral) {
     return { isGeneral: true, targetName: null };
   }
 
-  // Extract customer candidate: "[customer] (-এর) (কত) বাকি/বকেয়া" or "[customer] বাকি কত"
-  const m = norm.match(/^(.*?)(?:\s+(?:-এর|ের|র))?(?:\s+কত)?\s*(?:বাকি|বকেয়া|দেনা)(?:\s+হিসাব)?(?:\s+(?:কত|কেমন|বলো|জানাও|দেখাও))?/i);
-  if (m && m[1]) {
-    const candidate = m[1].replace(/^(আজকে?|দয়া\s*করে|একটু)\s+/, '').trim();
-    if (candidate) {
-      const stripped = stripBengaliSuffixes(candidate);
-      if (stripped && !/(?:^|\s)(কার|কাদের|সকলের|সবার|মোট|সব|দোকানের|আমাদের)(?:\s|$)/.test(stripped)) {
-        return { isGeneral: false, targetName: stripped };
-      }
-    }
+  // 2. Extract customer candidate:
+  // e.g. "রহিমদার কত টাকা বাকি", "লক্ষণ সরকারের মোট বাকি কত", "রহিমের বাকি কত আছে"
+  let candidate = norm
+    .replace(/^(?:আজকে?|দয়া\s*করে|একটু)\s+/, '')
+    .replace(/\s+(?:বাকি|বকেয়া|দেনা)(?:\s*(?:হিসাব|খাতা))?.*$/i, '')
+    .replace(/\s+(?:কত|কেমন|কত\s*টাকা|কতটাকা)\s+(?:বাকি|বকেয়া|দেনা).*$/i, '')
+    .replace(/\s+(?:মোট|সব)\s+(?:বাকি|বকেয়া|দেনা).*$/i, '')
+    .replace(/\s+(?:মোট|সব|কত|টাকা|হিসাব|দেনা|বাকি|বকেয়া)$/i, '')
+    .replace(/\s+(?:মোট|সব|কত|টাকা|হিসাব|দেনা|বাকি|বকেয়া)$/i, '')
+    .trim();
+
+  candidate = stripBengaliSuffixes(candidate);
+  candidate = candidate.replace(/\s+(?:মোট|সব|কত|টাকা)$/i, '').trim();
+  candidate = stripBengaliSuffixes(candidate);
+
+  if (
+    candidate.length >= 2 &&
+    !/^(?:কার|কাদের|সকলের|সবার|মোট|সব|দোকানের|আমাদের|দেনা|বাকি|বকেয়া)$/i.test(candidate)
+  ) {
+    return { isGeneral: false, targetName: candidate };
   }
 
   return { isGeneral: true, targetName: null };
