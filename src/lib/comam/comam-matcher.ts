@@ -2,7 +2,7 @@
  * Catalog & Customer Matcher for Comam AI integration in pos-app.
  * Matches spoken Bengali/Banglish against POS products and customers.
  */
-import type { Product, Customer } from '@/types/pos';
+import type { Product, Customer } from '../../types/pos';
 
 import { bnToAscii } from './bn-parser';
 

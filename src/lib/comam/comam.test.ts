@@ -17,7 +17,7 @@ import {
   correctTranscriptWithCatalog,
 } from './comam-matcher';
 import { parseComamCommand, splitByKnownProducts } from './comam-engine';
-import type { Product, Customer } from '@/types/pos';
+import type { Product, Customer } from '../../types/pos';
 
 describe('Comam bn-parser tests', () => {
   it('converts Bengali digits to ASCII and vice versa', () => {
@@ -507,8 +507,7 @@ describe('Comam matcher and search tests', () => {
     },
     {
       id: 'c3',
-      name: 'Lakhan Sarkar',
-      nameBn: 'লক্ষণ সরকার',
+      name: 'লক্ষণ সরকার',
       nameEn: 'Lakhan Sarkar',
       phone: '01700000003',
       totalDue: 1023.5,
@@ -569,7 +568,6 @@ describe('Comam matcher and search tests', () => {
     {
       id: 'c8',
       name: 'সুশীল সিংহ',
-      nameBn: 'সুশীল সিংহ',
       nameEn: 'Sushil Singha',
       phone: '01700000008',
       totalDue: 250,
@@ -714,6 +712,8 @@ describe('Comam matcher and search tests', () => {
     for (let i = 0; i < 1000; i++) {
       manyProducts.push({
         id: `p_${i}`,
+        barcode: `b_${i}`,
+        category: 'General',
         name: `Product ${i} pack Rs. ${i % 100}`,
         nameBn: `পণ্য ${i} প্যাকেট ${i % 100} টাকা`,
         sellingPrice: (i % 100) + 10,
@@ -1603,7 +1603,7 @@ describe('Comam matcher and search tests', () => {
       expect(draft2.items.length).toBe(1);
       expect(draft2.items[0].product.nameBn).toContain('গোল্ড ফ্ল্যাক');
       expect(draft2.items[0].ambiguous).toBe(true);
-      expect(draft2.items[0].options?.every((opt) => opt.nameBn.includes('গোল্ড ফ্ল্যাক'))).toBe(true);
+      expect(draft2.items[0].options?.every((opt) => opt.nameBn?.includes('গোল্ড ফ্ল্যাক'))).toBe(true);
       expect(draft2.unknownItems.length).toBe(0);
     });
 
@@ -1621,7 +1621,7 @@ describe('Comam matcher and search tests', () => {
 
       const draftLakhan = parseComamCommand('লক্ষণ সরকারের বাকি কত টাকা?', mockProducts, mockCustomers);
       expect(draftLakhan.kind).toBe('due_query');
-      expect(draftLakhan.customer?.name).toBe('Lakhan Sarkar');
+      expect(draftLakhan.customer?.name).toBe('লক্ষণ সরকার');
 
       // General due queries
       const draftGeneral = parseComamCommand('কার কত বাকি?', mockProducts, mockCustomers);

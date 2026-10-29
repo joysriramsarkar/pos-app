@@ -3,7 +3,7 @@
  * Parses spoken/typed Bengali shop commands into structured drafts
  * that integrate with the POS cart, inventory and ledger.
  */
-import type { Product, Customer } from '@/types/pos';
+import type { Product, Customer } from '../../types/pos';
 import {
   UNITS,
   bnToAscii,

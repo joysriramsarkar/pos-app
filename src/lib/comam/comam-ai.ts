@@ -2,7 +2,7 @@
  * Meta Spark AI Model integration for Comam Bengali Voice Billing.
  * Leverages muse-spark-1.3 with graceful fallback to deterministic parsing.
  */
-import type { Product, Customer } from '@/types/pos';
+import type { Product, Customer } from '../../types/pos';
 import type { ComamDraft, DraftItem, UnknownItem, Ambiguity, CommandKind, ReportType } from './comam-engine';
 import { parseComamCommand } from './comam-engine';
 import { formatBnNumber, formatBnTaka } from './bn-parser';
