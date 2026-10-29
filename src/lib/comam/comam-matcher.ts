@@ -237,10 +237,23 @@ export function phoneticKeyFromNormalized(norm: string): string {
 
 /** Similarity between two spoken/catalog words with ASR confusions forgiven. */
 export function tokenPhoneticSimilarity(a: string, b: string): number {
-  const fa = foldLongVowels(normalizeBengali(a));
-  const fb = foldLongVowels(normalizeBengali(b));
-  if (!fa || !fb) return 0;
+  const na = normalizeBengali(a);
+  const nb = normalizeBengali(b);
+  if (!na || !nb) return 0;
+  if (na === nb) return 1;
+
+  const fa = foldLongVowels(na);
+  const fb = foldLongVowels(nb);
   if (fa === fb) return 1;
+
+  if (
+    BRAND_ALIASES[fa]?.includes(fb) ||
+    BRAND_ALIASES[fb]?.includes(fa) ||
+    BRAND_ALIASES[na]?.includes(nb) ||
+    BRAND_ALIASES[nb]?.includes(na)
+  ) {
+    return 1.0;
+  }
 
   // Length ratio guard: a short word cannot be phonetically equal to a multi-word phrase
   const lenRatio = Math.min(fa.length, fb.length) / Math.max(fa.length, fb.length);

@@ -1574,8 +1574,15 @@ describe('Comam matcher and search tests', () => {
         },
       ];
 
-      const draft = parseComamCommand(
+      const fixedText = correctTranscriptWithCatalog(
         '৳১৩ দামের একটা গোল্ড ফ্লেক্স সিগারেট।',
+        prods
+      );
+      expect(fixedText).toContain('গোল্ড ফ্ল্যাক');
+      expect(fixedText).not.toContain('ফ্লেক্স');
+
+      const draft = parseComamCommand(
+        fixedText,
         prods,
         mockCustomers
       );
