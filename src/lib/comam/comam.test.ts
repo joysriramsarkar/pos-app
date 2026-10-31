@@ -1666,3 +1666,70 @@ describe('Comam matcher and search tests', () => {
   });
 });
 
+describe('Voice master plan (MP-40/MP-41)', () => {
+  const products: Product[] = [
+    {
+      id: 'vp1', barcode: '1', name: 'Sugar', nameBn: 'চিনি', category: 'Grocery',
+      buyingPrice: 50, sellingPrice: 60, unit: 'kg', currentStock: 100,
+      minStockLevel: 10, isActive: true, createdAt: new Date(), updatedAt: new Date(),
+    },
+    {
+      id: 'vp2', barcode: '2', name: 'Soap', nameBn: 'সাবান', category: 'Care',
+      buyingPrice: 28, sellingPrice: 35, unit: 'piece', currentStock: 100,
+      minStockLevel: 10, isActive: true, createdAt: new Date(), updatedAt: new Date(),
+    },
+  ];
+
+  it('flags a large heard quantity but never remaps it (পনেরো stays 15)', () => {
+    const d = parseComamCommand('পনেরো কেজি চিনি', products, []);
+    expect(d.items[0]?.qty).toBe(15);
+    expect(d.warnings?.length).toBe(1);
+  });
+
+  it('stays silent for ordinary quantities', () => {
+    const d = parseComamCommand('দুই কেজি চিনি', products, []);
+    expect(d.warnings).toEqual([]);
+  });
+
+  it('flags >=100 pieces (field regression FR-1 shape)', () => {
+    const d = parseComamCommand('দুইশোটা সাবান', products, []);
+    expect(d.items[0]?.qty).toBe(200);
+    expect(d.warnings?.length).toBe(1);
+  });
+
+  it('builds deduped ASR keywords from the catalog', async () => {
+    const { buildAsrKeywords } = await import('./comam-transcribe');
+    const words = buildAsrKeywords(
+      [{ name: 'Sugar', nameBn: 'চিনি' }, { name: 'Sugar', nameBn: 'চিনি' }],
+      [{ name: 'রহিম' }]
+    );
+    expect(new Set(words).size).toBe(words.length);
+    expect(words).toContain('চিনি');
+    expect(words).toContain('পৌনে');
+    expect(words.length).toBeLessThanOrEqual(200);
+  });
+
+  it('rejects non-WAV audio before any network call', async () => {
+    const { transcribeAudio, TranscribeError } = await import('./comam-transcribe');
+    const prev = process.env.MODEL_API_KEY;
+    process.env.MODEL_API_KEY = 'test-key';
+    try {
+      await expect(transcribeAudio(new Uint8Array([1, 2, 3]))).rejects.toBeInstanceOf(
+        TranscribeError
+      );
+    } finally {
+      if (prev === undefined) delete process.env.MODEL_API_KEY;
+      else process.env.MODEL_API_KEY = prev;
+    }
+  });
+
+  it('picks recording mime types in order and gates silent clips', async () => {
+    const { pickMimeType, assessClip } = await import('./audio-utils');
+    expect(pickMimeType(() => true)).toBe('audio/webm;codecs=opus');
+    expect(pickMimeType((t) => t === 'audio/mp4')).toBe('audio/mp4');
+    expect(assessClip(200, 0.5)).toBe('too_short');
+    expect(assessClip(2000, 0.001)).toBe('too_quiet');
+    expect(assessClip(2000, 0.4)).toBe('ok');
+  });
+});
+
