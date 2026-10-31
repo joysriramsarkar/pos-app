@@ -30,7 +30,7 @@ export default function AboutTab() {
               <CardTitle className="text-lg font-bold flex items-center gap-2">
                 <span>Onuron POS</span>
                 <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-medium">
-                  v1.0.4
+                  v1.0.5
                 </span>
               </CardTitle>
               <CardDescription className="text-xs">

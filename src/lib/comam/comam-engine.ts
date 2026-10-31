@@ -101,6 +101,10 @@ export interface ComamDraft {
   duePaymentAmount?: number;
   summaryBn: string;
   needsClarification: boolean;
+  /** Blocking quantity alerts (MP-41): unusually large quantities the
+   * shopkeeper must explicitly acknowledge before add-to-cart. The
+   * quantity itself is never altered by this mechanism. */
+  warnings?: string[];
 }
 
 const SPLIT_NUM_WORDS = new Set([
@@ -1467,6 +1471,20 @@ export function parseComamCommand(
 
   const hasUnknownCustomer = Boolean(customerName && !customer);
 
+  // MP-41: large-quantity alerts at/above shop-plausible lines. ASR
+  // hearing পৌনে (0.75x) as পনেরো (15) must shout, never be remapped.
+  const warnings: string[] = [];
+  for (const it of items) {
+    const big =
+      ((it.unit === 'kg' || it.unit === 'litre' || it.unit === 'লিটার') && it.qty >= 10) ||
+      (it.unit !== 'kg' && it.unit !== 'litre' && it.unit !== 'লিটার' && it.qty >= 100);
+    if (big) {
+      warnings.push(
+        `${it.nameBn || it.name} ${formatBnNumber(it.qty)} ${it.unit} — পরিমাণটা অস্বাভাবিক বড়। ঠিক এটাই বলেছিলেন তো?`
+      );
+    }
+  }
+
   return {
     kind: items.length > 0 ? 'sale' : 'unknown',
     raw,
@@ -1480,5 +1498,6 @@ export function parseComamCommand(
     total: Math.round(total * 100) / 100,
     summaryBn,
     needsClarification: ambiguities.length > 0,
+    warnings,
   };
 }

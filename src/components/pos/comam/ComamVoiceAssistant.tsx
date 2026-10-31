@@ -30,6 +30,7 @@ import { useCartStore, useProductsStore, useCustomersStore } from '@/stores/pos-
 import { parseComamCommand, type ComamDraft } from '@/lib/comam/comam-engine';
 import { correctTranscriptWithCatalog } from '@/lib/comam/comam-matcher';
 import { formatBnTaka, formatBnNumber, formatForBengaliSpeech } from '@/lib/comam/bn-parser';
+import { assessClip, pickMimeType, toWav24k } from '@/lib/comam/audio-utils';
 
 /**
  * Pick the recognition alternative that best fits this shop's catalog.
@@ -76,16 +77,26 @@ export function ComamVoiceAssistant({
   const [isProcessing, setIsProcessing] = useState(false);
   const [isCreatingCustomer, setIsCreatingCustomer] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [hasSpeechSupport, setHasSpeechSupport] = useState(true);
 
-  // Browser bn-BD speech recognition is the ear (restored by request:
-  // it hears this shop's speech better than the server ASR did).
-  // English brand names are handled downstream: several recognition
-  // alternatives are requested and the one that best matches the
-  // catalog wins, with phonetic repair (see pickBestTranscript).
+  // Voice path (VOICE-MASTER-PLAN MP-40): record -> /api/comam/transcribe
+  // (server Meta ASR) is the primary ear on every platform, including
+  // the Android WebView where browser speech recognition does not
+  // exist. Browser bn-BD recognition remains ONLY as the fallback when
+  // recording/server ASR is unavailable; its alternatives are still
+  // catalog-scored downstream (see pickBestTranscript).
   const recognitionRef = useRef<any>(null);
   const latestTranscriptRef = useRef('');
   const handleProcessCommandRef = useRef<((cmd?: string) => Promise<void>) | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
+  const startedAtRef = useRef(0);
+  const peakRef = useRef(0);
+  const levelTimerRef = useRef<number | null>(null);
+  const recordingModeRef = useRef<'server' | 'webspeech' | null>(null);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [level, setLevel] = useState(0);
+  const [qtyAck, setQtyAck] = useState(false);
 
   // Initialize SpeechRecognition on mount
   useEffect(() => {
@@ -95,7 +106,8 @@ export function ComamVoiceAssistant({
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
-      setHasSpeechSupport(false);
+      // No browser recognition: the server-ASR recording path is still
+      // the ear; this fallback simply stays unavailable.
       return;
     }
 
@@ -147,8 +159,17 @@ export function ComamVoiceAssistant({
       recognition.onerror = (event: any) => {
         console.warn('Speech recognition error:', event.error);
         setIsListening(false);
-        if (event.error === 'not-allowed') {
-          setErrorMsg('মাইক্রোফোন ব্যবহারের অনুমতি দিন');
+        // Every failure gets a Bengali reason + next step (plan App. A);
+        // 'aborted' is the user stopping, so it stays silent.
+        const messages: Record<string, string> = {
+          'not-allowed': 'মাইকের অনুমতি দেওয়া হয়নি — সেটিংস থেকে Allow করুন, তারপর আবার বলুন।',
+          'audio-capture': 'মাইক্রোফোন পাওয়া যাচ্ছে না — ডিভাইস বদলে আবার চেষ্টা করুন।',
+          'no-speech': 'কিছু শোনা যায়নি — মাইকের কাছে এসে আরেকটু জোরে বলুন।',
+          network: 'ভয়েস সার্ভারে পৌঁছানো যাচ্ছে না — লিখে কমান্ড দিন।',
+          'language-not-supported': 'এই ব্রাউজারে বাংলা ভয়েস নেই — লিখে কমান্ড দিন।',
+        };
+        if (event.error !== 'aborted' && messages[event.error]) {
+          setErrorMsg(messages[event.error]);
         }
       };
 
@@ -163,7 +184,6 @@ export function ComamVoiceAssistant({
       recognitionRef.current = recognition;
     } catch (e) {
       console.warn('Failed to initialize speech recognition:', e);
-      setHasSpeechSupport(false);
     }
 
     return () => {
@@ -241,44 +261,165 @@ export function ComamVoiceAssistant({
     [ttsEnabled, voices]
   );
 
-  // Auto-clear and auto-start listening when assistant opens
+  const stopLevelMonitor = useCallback(() => {
+    if (levelTimerRef.current) window.clearInterval(levelTimerRef.current);
+    levelTimerRef.current = null;
+    setLevel(0);
+  }, []);
+
+  const startLevelMonitor = useCallback((stream: MediaStream) => {
+    try {
+      const AC = window.AudioContext || (window as any).webkitAudioContext;
+      const ctx = new AC();
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 512;
+      ctx.createMediaStreamSource(stream).connect(analyser);
+      const data = new Uint8Array(analyser.fftSize);
+      levelTimerRef.current = window.setInterval(() => {
+        analyser.getByteTimeDomainData(data);
+        let sum = 0;
+        let peak = 0;
+        for (const b of data) {
+          const x = (b - 128) / 128;
+          sum += x * x;
+          peak = Math.max(peak, Math.abs(x));
+        }
+        peakRef.current = Math.max(peakRef.current, peak);
+        setLevel(Math.min(1, Math.sqrt(sum / data.length) * 3));
+      }, 120);
+    } catch {
+      /* the meter is feedback only */
+    }
+  }, []);
+
+  const finishServerRecording = useCallback(async (mime: string) => {
+    setIsListening(false);
+    stopLevelMonitor();
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    recordingModeRef.current = null;
+    const duration = Date.now() - startedAtRef.current;
+    const verdict = assessClip(duration, peakRef.current);
+    if (verdict !== 'ok') {
+      setErrorMsg(
+        verdict === 'too_short'
+          ? 'রেকর্ডিং খুব ছোট — আরেকটু সময় ধরে বলুন।'
+          : 'আওয়াজ পাইনি — মাইকের কাছে এসে আরেকটু জোরে বলুন।'
+      );
+      return;
+    }
+    const blob = new Blob(chunksRef.current, { type: mime });
+    chunksRef.current = [];
+    setIsTranscribing(true);
+    try {
+      let upload: Blob = blob;
+      try {
+        upload = await toWav24k(blob);
+      } catch {
+        /* keep the original; the route answers 400 for non-WAV */
+      }
+      const fd = new FormData();
+      fd.append('file', upload, 'audio.wav');
+      const res = await fetch('/api/comam/transcribe', { method: 'POST', body: fd });
+      if (!res.ok) throw new Error(`transcribe ${res.status}`);
+      const data = await res.json();
+      const text = (data.text || '').trim();
+      if (text) {
+        setInputText(text);
+        if (handleProcessCommandRef.current) {
+          await handleProcessCommandRef.current(text);
+        }
+      } else {
+        setErrorMsg('কিছু শোনা যায়নি — মাইকের কাছে এসে আবার বলুন।');
+      }
+    } catch {
+      // Server ear unavailable (no key, offline, WebView quirk):
+      // degrade to browser speech recognition rather than going deaf.
+      if (recognitionRef.current) {
+        recordingModeRef.current = 'webspeech';
+        setErrorMsg(null);
+        try {
+          recognitionRef.current.start();
+        } catch {
+          setErrorMsg('ভয়েস সার্ভারে পৌঁছানো যাচ্ছে না — লিখে কমান্ড দিন।');
+        }
+      } else {
+        setErrorMsg('ভয়েস সার্ভারে পৌঁছানো যাচ্ছে না — লিখে কমান্ড দিন।');
+      }
+    } finally {
+      setIsTranscribing(false);
+    }
+  }, [stopLevelMonitor]);
+
+  const startServerRecording = useCallback(async (): Promise<boolean> => {
+    if (
+      typeof window === 'undefined' ||
+      !navigator.mediaDevices?.getUserMedia ||
+      typeof MediaRecorder === 'undefined'
+    ) {
+      return false;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: { ideal: true },
+          noiseSuppression: { ideal: true },
+          autoGainControl: { ideal: true },
+          channelCount: 1,
+        } as MediaTrackConstraints,
+      });
+      streamRef.current = stream;
+      const mime = pickMimeType((t) => MediaRecorder.isTypeSupported(t));
+      const rec = mime
+        ? new MediaRecorder(stream, { mimeType: mime })
+        : new MediaRecorder(stream);
+      chunksRef.current = [];
+      peakRef.current = 0;
+      rec.ondataavailable = (e) => {
+        if (e.data.size) chunksRef.current.push(e.data);
+      };
+      rec.onstop = () => {
+        void finishServerRecording(rec.mimeType || 'audio/webm');
+      };
+      mediaRecorderRef.current = rec;
+      startedAtRef.current = Date.now();
+      recordingModeRef.current = 'server';
+      setErrorMsg(null);
+      setInputText('');
+      setDraft(null);
+      setServerAnswer(null);
+      rec.start(250);
+      startLevelMonitor(stream);
+      setIsListening(true);
+      return true;
+    } catch {
+      return false;
+    }
+  }, [finishServerRecording, startLevelMonitor]);
+
+  // Opening the assistant only clears state now. Recording starts on an
+  // explicit mic press — the old auto-start-with-retries fired before
+  // the shopkeeper (and the mic permission) was ready.
   useEffect(() => {
     if (isOpen) {
-      // 1. Clear previous text and cards
       setInputText('');
       setDraft(null);
       setServerAnswer(null);
       setErrorMsg(null);
       latestTranscriptRef.current = '';
-
-      // 2. Auto-start listening immediately with retry
-      let isCancelled = false;
-      const tryStart = (retriesLeft = 5) => {
-        if (isCancelled) return;
-        if (recognitionRef.current) {
-          try {
-            recognitionRef.current.start();
-          } catch (e: any) {
-            if (retriesLeft > 0) {
-              setTimeout(() => tryStart(retriesLeft - 1), 150);
-            }
-          }
-        } else if (retriesLeft > 0) {
-          setTimeout(() => tryStart(retriesLeft - 1), 100);
-        }
-      };
-
-      tryStart(5);
-      return () => {
-        isCancelled = true;
-      };
     } else {
-      // Stop and cancel speech when closed
+      if (mediaRecorderRef.current?.state === 'recording') {
+        try {
+          mediaRecorderRef.current.stop();
+        } catch {}
+      }
       if (recognitionRef.current) {
         try {
           recognitionRef.current.stop();
         } catch {}
       }
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
       setIsListening(false);
       if (typeof window !== 'undefined' && window.speechSynthesis) {
         window.speechSynthesis.cancel();
@@ -286,28 +427,43 @@ export function ComamVoiceAssistant({
     }
   }, [isOpen]);
 
-  const toggleListening = () => {
+  const toggleListening = async () => {
+    if (isListening) {
+      if (recordingModeRef.current === 'server' && mediaRecorderRef.current?.state === 'recording') {
+        // 400 ms tail padding so the final word is not clipped.
+        window.setTimeout(() => {
+          if (mediaRecorderRef.current?.state === 'recording') {
+            mediaRecorderRef.current.stop();
+          }
+        }, 400);
+      } else if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch {}
+        setIsListening(false);
+      }
+      return;
+    }
+
+    setErrorMsg(null);
+    setInputText('');
+    setDraft(null);
+    setServerAnswer(null);
+    latestTranscriptRef.current = '';
+
+    const started = await startServerRecording();
+    if (started) return;
+
     if (!recognitionRef.current) {
       setErrorMsg('এই ব্রাউজারে ভয়েস রেকগনিশন নেই — টাইপ করে ব্যবহার করুন');
       return;
     }
-
-    if (isListening) {
-      try {
-        recognitionRef.current.stop();
-      } catch {}
-      setIsListening(false);
-    } else {
-      setErrorMsg(null);
-      setInputText('');
-      setDraft(null);
-      setServerAnswer(null);
-      latestTranscriptRef.current = '';
-      try {
-        recognitionRef.current.start();
-      } catch (e) {
-        console.warn('Start recognition failed:', e);
-      }
+    recordingModeRef.current = 'webspeech';
+    try {
+      recognitionRef.current.start();
+    } catch (e) {
+      console.warn('Start recognition failed:', e);
+      setErrorMsg('মাইক্রোফোন চালু করা যায়নি — অনুমতি দিয়ে আবার চেষ্টা করুন।');
     }
   };
 
@@ -358,6 +514,7 @@ export function ComamVoiceAssistant({
     setIsProcessing(true);
     setErrorMsg(null);
     setServerAnswer(null);
+    setQtyAck(false);
 
     try {
       // 1. Instant deterministic parse client-side. Repair the heard/typed
@@ -410,6 +567,12 @@ export function ComamVoiceAssistant({
   // Add parsed draft items to active POS cart
   const handleAddToCart = (directCheckout: boolean = false) => {
     if (!draft || draft.items.length === 0) return;
+
+    // MP-41: a large quantity must be explicitly acknowledged first.
+    if (draft.warnings && draft.warnings.length > 0 && !qtyAck) {
+      setErrorMsg('বড় পরিমাণ যাচাই করা হয়নি — আগে "পরিমাণ ঠিক আছে" চাপুন।');
+      return;
+    }
 
     // Guard: an unregistered customer cannot be billed directly with an imaginary ID.
     // Must create the customer first OR sell as walk-in cash customer!
@@ -573,6 +736,7 @@ export function ComamVoiceAssistant({
               <Button
                 type="button"
                 onClick={toggleListening}
+                disabled={isTranscribing}
                 variant={isListening ? 'destructive' : 'default'}
                 className={`h-11 w-11 p-0 rounded-xl transition-all duration-300 ${
                   isListening
@@ -596,9 +760,26 @@ export function ComamVoiceAssistant({
 
             {/* Listening Waveform Indicator */}
             {isListening && (
-              <div className="mt-2 flex items-center justify-center gap-1.5 py-1 text-xs text-rose-500 font-medium">
-                <span className="inline-block w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping" />
-                মাইক্রোফোন চালু আছে — কথা বলুন...
+              <div className="mt-2 space-y-1.5">
+                <div className="flex items-center justify-center gap-1.5 py-1 text-xs text-rose-500 font-medium">
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping" />
+                  মাইক্রোফোন চালু আছে — কথা বলুন, শেষ হলে আবার মাইক চাপুন...
+                </div>
+                <div className="h-1.5 rounded bg-muted overflow-hidden">
+                  <div
+                    className="h-full bg-emerald-500 transition-all duration-150"
+                    style={{ width: `${Math.round(level * 100)}%` }}
+                  />
+                </div>
+                {level > 0 && level < 0.03 && (
+                  <p className="text-center text-xs text-amber-500">মাইক আওয়াজ পাচ্ছে না — কাছে এসে বলুন</p>
+                )}
+              </div>
+            )}
+            {isTranscribing && (
+              <div className="mt-2 flex items-center justify-center gap-1.5 py-1 text-xs text-emerald-600 font-medium">
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ট্রান্সক্রাইব হচ্ছে...
               </div>
             )}
 
@@ -845,6 +1026,33 @@ export function ComamVoiceAssistant({
                 </div>
               )}
 
+              {/* Large-quantity blocking alerts (MP-41) */}
+              {draft.warnings && draft.warnings.length > 0 && (
+                <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs text-amber-700 dark:text-amber-300 space-y-2">
+                  <div className="font-medium flex items-center gap-1">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    পরিমাণ যাচাই করুন:
+                  </div>
+                  <ul className="list-disc pl-4 space-y-0.5">
+                    {draft.warnings.map((w, i) => (
+                      <li key={i}>{w}</li>
+                    ))}
+                  </ul>
+                  {!qtyAck ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => setQtyAck(true)}
+                      className="h-7 text-xs bg-amber-600 hover:bg-amber-500 text-white"
+                    >
+                      হ্যাঁ, পরিমাণ ঠিক আছে
+                    </Button>
+                  ) : (
+                    <p className="text-emerald-600 dark:text-emerald-400 font-medium">✓ পরিমাণ নিশ্চিত করা হয়েছে</p>
+                  )}
+                </div>
+              )}
+
               {/* Summary and Total */}
               <div className="pt-2 border-t border-border/60 flex items-center justify-between font-semibold">
                 <span>সর্বমোট:</span>
@@ -863,6 +1071,7 @@ export function ComamVoiceAssistant({
                     disabled={
                       draft.needsClarification ||
                       draft.items.length === 0 ||
+                      (!!draft.warnings?.length && !qtyAck) ||
                       (draft.hasUnknownCustomer && draft.paymentType === 'Due')
                     }
                     className="flex-1 gap-1.5 border-emerald-500/30 hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-300"
@@ -877,6 +1086,7 @@ export function ComamVoiceAssistant({
                     disabled={
                       draft.needsClarification ||
                       draft.items.length === 0 ||
+                      (!!draft.warnings?.length && !qtyAck) ||
                       (draft.hasUnknownCustomer && draft.paymentType === 'Due')
                     }
                     className="flex-1 gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white"
