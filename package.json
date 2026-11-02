@@ -74,7 +74,7 @@
     "decimal.js": "^10.6.0",
     "embla-carousel-react": "^8.6.0",
     "firebase": "^12.19.0",
-    "framer-motion": "^13.4.6",
+    "framer-motion": "^14.8.0",
     "html5-qrcode": "^2.3.8",
     "input-otp": "^1.4.2",
     "jspdf": "^4.2.1",
