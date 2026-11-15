@@ -197,11 +197,27 @@ function baseNumber(tokens: string[], i: number): [number | null, number] {
       value += rest;
       i = j;
     }
-  } else if (i < tokens.length && tokens[i] === 'হাজার') {
+  } else if (i < tokens.length && (tokens[i] === 'হাজার' || tokens[i] === 'হাজারে')) {
     value *= 1000;
     i += 1;
     const [rest, j] = baseNumber(tokens, i);
     if (rest !== null && rest < 1000) {
+      value += rest;
+      i = j;
+    }
+  } else if (i < tokens.length && (tokens[i] === 'লাখ' || tokens[i] === 'লক্ষ')) {
+    value *= 100000;
+    i += 1;
+    const [rest, j] = baseNumber(tokens, i);
+    if (rest !== null && rest < 100000) {
+      value += rest;
+      i = j;
+    }
+  } else if (i < tokens.length && tokens[i] === 'কোটি') {
+    value *= 10000000;
+    i += 1;
+    const [rest, j] = baseNumber(tokens, i);
+    if (rest !== null && rest < 10000000) {
       value += rest;
       i = j;
     }
@@ -260,12 +276,52 @@ export function parseNumberAt(tokens: string[], i: number): [number | null, numb
     return [FRACTION_WORDS[cleanTok], i + 1];
   }
 
-  if (cleanTok === 'একশ' || cleanTok === 'একশো' || cleanTok === 'শত') {
+  if (cleanTok === 'হাজার' || cleanTok === 'একহাজার' || cleanTok === 'হাজারখানি' || cleanTok === 'হাজারখানেক') {
+    const [rest, j] = baseNumber(tokens, i + 1);
+    if (rest !== null && rest < 1000) {
+      return [1000 + rest, j];
+    }
+    return [1000, i + 1];
+  }
+
+  if (cleanTok === 'দেড়শো' || cleanTok === 'দেড়শো' || cleanTok === 'দেড়শ' || cleanTok === 'দেড়শ') {
+    const [rest, j] = baseNumber(tokens, i + 1);
+    if (rest !== null && rest < 100) {
+      return [150 + rest, j];
+    }
+    return [150, i + 1];
+  }
+
+  if (cleanTok === 'আড়াইশো' || cleanTok === 'আড়াইশো' || cleanTok === 'আড়াইশ' || cleanTok === 'আড়াইশ') {
+    const [rest, j] = baseNumber(tokens, i + 1);
+    if (rest !== null && rest < 100) {
+      return [250 + rest, j];
+    }
+    return [250, i + 1];
+  }
+
+  if (cleanTok === 'একশ' || cleanTok === 'একশো' || cleanTok === 'শত' || cleanTok === 'শো' || cleanTok === 'শ') {
     const [rest, j] = baseNumber(tokens, i + 1);
     if (rest !== null && rest < 100) {
       return [100 + rest, j];
     }
     return [100, i + 1];
+  }
+
+  if (cleanTok === 'লাখ' || cleanTok === 'একলাখ' || cleanTok === 'লক্ষ') {
+    const [rest, j] = baseNumber(tokens, i + 1);
+    if (rest !== null && rest < 100000) {
+      return [100000 + rest, j];
+    }
+    return [100000, i + 1];
+  }
+
+  if (cleanTok === 'কোটি' || cleanTok === 'এককোটি') {
+    const [rest, j] = baseNumber(tokens, i + 1);
+    if (rest !== null && rest < 10000000) {
+      return [10000000 + rest, j];
+    }
+    return [10000000, i + 1];
   }
 
   return baseNumber(tokens, i);

@@ -46,6 +46,16 @@ describe('Comam bn-parser tests', () => {
     expect(parse('দুইশো পঞ্চাশ')).toBe(250);
     expect(parse('তিনশো')).toBe(300);
     expect(parse('দেড় হাজার')).toBe(1500);
+    expect(parse('হাজার')).toBe(1000);
+    expect(parse('একহাজার')).toBe(1000);
+    expect(parse('দুই হাজারে')).toBe(2000);
+    expect(parse('লাখ')).toBe(100000);
+    expect(parse('লক্ষ')).toBe(100000);
+    expect(parse('একলাখ')).toBe(100000);
+    expect(parse('দুই লাখ')).toBe(200000);
+    expect(parse('এক লাখ পঞ্চাশ হাজার')).toBe(150000);
+    expect(parse('কোটি')).toBe(10000000);
+    expect(parse('দুই কোটি')).toBe(20000000);
   });
 
   it('extracts number phrases with char offsets', () => {

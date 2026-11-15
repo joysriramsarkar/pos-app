@@ -24,6 +24,7 @@ node_modules
 android/.gradle/
 android/**/build/
 android/local.properties
+android/keystore.properties
 *.apk
 *.aab
 
