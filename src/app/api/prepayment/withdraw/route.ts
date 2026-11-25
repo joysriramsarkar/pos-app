@@ -10,6 +10,7 @@ import { toMoneyNumber } from '@/lib/money';
 import {
   claimIdempotencyTx,
   finalizeIdempotencyTx,
+  fingerprintFor,
   IdempotencyInProgress,
 } from '@/lib/idempotency';
 import { toClientError } from '@/lib/api-errors';
@@ -54,8 +55,10 @@ export async function POST(req: NextRequest) {
     let updated: Awaited<ReturnType<typeof db.customer.update>>;
     try {
       const outcome = await db.$transaction(async (tx) => {
+        const requestFingerprint = fingerprintFor('prepayment:withdraw', { customerId, amount });
         const claim = await claimIdempotencyTx<{ customerId: string }>(
           tx, businessId, 'prepayment:withdraw', idempotencyKey,
+          { fingerprint: requestFingerprint },
         );
         if (claim.replay) return { replay: claim.result } as const;
 
@@ -91,6 +94,18 @@ export async function POST(req: NextRequest) {
             balanceAfter: toMoneyNumber(Number(customer.totalDue)),
             description: 'অ্যাডভান্স ব্যালেন্স থেকে নগদ উত্তোলন',
             referenceId,
+          },
+        });
+
+        // P1-C: prepayment withdrawal moves customer money — audit it atomically.
+        await tx.auditLog.create({
+          data: {
+            businessId,
+            userId: ctx.user.id,
+            action: 'PREPAYMENT_WITHDRAWN',
+            entityType: 'Customer',
+            entityId: customerId,
+            details: { amount, referenceId },
           },
         });
 

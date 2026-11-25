@@ -9,6 +9,7 @@ import { logAudit } from '@/lib/audit';
 import {
   claimIdempotencyTx,
   finalizeIdempotencyTx,
+  fingerprintFor,
   IdempotencyInProgress,
 } from '@/lib/idempotency';
 import { toClientError } from '@/lib/api-errors';
@@ -121,8 +122,10 @@ export async function POST(request: NextRequest) {
     };
     try {
       const outcome = await db.$transaction(async (tx) => {
+        const requestFingerprint = fingerprintFor('due:collect', { customerId, amount, paymentMethod, notes });
         const claim = await claimIdempotencyTx<{ collectedAmount: number; remainingDue: number }>(
           tx, businessId, 'due:collect', idempotencyKey,
+          { fingerprint: requestFingerprint },
         );
         if (claim.replay) return { replay: claim.result } as const;
 
@@ -181,6 +184,29 @@ export async function POST(request: NextRequest) {
           previousDue: currentDue.toNumber(),
           customerName: customer.name,
         };
+        // P1-C: the audit row commits with the collection, so a collected
+        // payment can never exist without its audit trail (and a replay can
+        // never skip it).
+        await logAudit(
+          {
+            userId: ctx.user.id,
+            businessId,
+            action: 'DUE_COLLECTION',
+            entityType: 'Customer',
+            entityId: customerId,
+            details: {
+              customerName: payload.customerName,
+              collectedAmount: payload.collectedAmount,
+              previousDue: payload.previousDue,
+              remainingDue: payload.remainingDue,
+              paymentMethod: paymentMethod || 'Cash',
+              notes: notes || null,
+            },
+            ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || undefined,
+          },
+          tx,
+        );
+
         if (claim.claim) {
           await finalizeIdempotencyTx(tx, claim.claim, {
             collectedAmount: payload.collectedAmount,
@@ -217,22 +243,6 @@ export async function POST(request: NextRequest) {
       throw txError;
     }
 
-    await logAudit({
-      userId: ctx.user.id,
-      businessId,
-      action: 'DUE_COLLECTION',
-      entityType: 'Customer',
-      entityId: customerId,
-      details: {
-        customerName: updated.customerName,
-        collectedAmount: updated.collectedAmount,
-        previousDue: updated.previousDue,
-        remainingDue: updated.remainingDue,
-        paymentMethod: paymentMethod || 'Cash',
-        notes: notes || null,
-      },
-      ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || undefined,
-    });
 
     return NextResponse.json({
       success: true,

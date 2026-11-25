@@ -7,6 +7,7 @@ import { normalizePhoneToE164 } from "@/lib/phone";
 import { ipLoginLimiter, usernameLoginLimiter, checkLocalRateLimit } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
 import { verifyFirebaseIdToken, type VerifiedFirebaseToken } from "@/lib/firebase-verify";
+import { resolveClientIp } from "@/lib/ip";
 
 function sanitizeLogInput(input: unknown): string {
   if (typeof input !== "string") return String(input);
@@ -25,6 +26,24 @@ function logIdentifier(label: string, identifier: unknown) {
     console.log(label, sanitizeLogInput(identifier));
   }
 }
+
+/**
+ * Single membership-resolution rule for EVERY login path (password, OTP,
+ * Google). A user with several memberships must land on the same business
+ * regardless of how they signed in: only ACTIVE businesses are eligible and the
+ * oldest membership wins deterministically. The old Google fast path used an
+ * unordered `take: 1` without the active-business filter, so a multi-business
+ * user could be dropped into an inactive (or a different) business.
+ *
+ * Explicit switching afterwards goes through the JWT `update` callback, which
+ * re-validates the membership server-side on each request.
+ */
+const PRIMARY_MEMBERSHIP_QUERY = {
+  where: { isActive: true, business: { isActive: true } },
+  include: { business: { select: { id: true, name: true, isActive: true } } },
+  orderBy: { createdAt: "asc" as const },
+  take: 1,
+};
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -82,15 +101,7 @@ export const authOptions: NextAuthOptions = {
 
           const user = await db.user.findFirst({
             where: { email: googleEmail },
-            include: {
-              memberships: {
-                where: { isActive: true },
-                include: {
-                  business: { select: { id: true, name: true, isActive: true } },
-                },
-                take: 1,
-              },
-            },
+            include: { memberships: PRIMARY_MEMBERSHIP_QUERY },
           });
 
           if (!user || !user.isActive) {
@@ -127,13 +138,11 @@ export const authOptions: NextAuthOptions = {
         const identifier = loginIdentifier;
         const passwordInput = credentials?.password;
 
+        // Trusted-proxy header only (x-real-ip), never a client-supplied value:
+        // the IP is the rate-limit bucket key for brute-force protection.
         let ip = "127.0.0.1";
         try {
-          const rawHeaders = req?.headers as any;
-          const rawRealIp = typeof rawHeaders?.get === "function"
-            ? (rawHeaders.get("x-real-ip") || rawHeaders.get("x-forwarded-for"))
-            : (rawHeaders?.["x-real-ip"] || rawHeaders?.["x-forwarded-for"]);
-          ip = (typeof rawRealIp === "string" ? rawRealIp.split(",")[0]?.trim() : "") || "127.0.0.1";
+          ip = resolveClientIp(req?.headers as never);
         } catch {
           ip = "127.0.0.1";
         }
@@ -189,18 +198,7 @@ export const authOptions: NextAuthOptions = {
           where: {
             OR: orConditions as any,
           },
-          include: {
-            memberships: {
-              where: { isActive: true, business: { isActive: true } },
-              include: {
-                business: {
-                  select: { id: true, name: true, isActive: true },
-                },
-              },
-              orderBy: { createdAt: "asc" },
-              take: 1,
-            },
-          },
+          include: { memberships: PRIMARY_MEMBERSHIP_QUERY },
         });
 
         if (!user) {

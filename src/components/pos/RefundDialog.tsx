@@ -16,6 +16,7 @@ import {
   RotateCcw, AlertTriangle, Package, Wallet, CheckCircle, Loader2,
 } from 'lucide-react';
 import { useNumberFormat } from '@/hooks/use-number-format';
+import { newIdempotencyKey } from '@/lib/idempotency-key';
 
 interface RefundDialogProps {
   open: boolean;
@@ -161,7 +162,9 @@ export default function RefundDialog({ open, onOpenChange, sale, onSuccess }: Re
 
       const res = await fetch('/api/sales/returns', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        // MP-32: one stable key per refund submission — a timeout retry can
+        // never refund or restock the same items twice.
+        headers: { 'Content-Type': 'application/json', 'X-Idempotency-Key': newIdempotencyKey() },
         body: JSON.stringify({
           saleId: sale.id,
           items: refundItems,

@@ -46,6 +46,19 @@ export async function processSaleReturn(
 ) {
   const { saleId, items, refundMethod: mappedMethod, reason, userId } = input;
 
+  // P0-B: serialise every return against the sale row BEFORE reading how much
+  // has already been returned. Without this lock two concurrent requests both
+  // validate against the same remaining quantity and both refund + restock,
+  // so returned qty could exceed sold qty and stock could be restored twice.
+  const lockedSale = await tx.$queryRaw<Array<{ id: string }>>`
+    SELECT id FROM sales WHERE id = ${saleId} FOR UPDATE
+  `;
+  if (!lockedSale[0]) {
+    throw Object.assign(new Error("Sale not found"), { status: 404 });
+  }
+
+  // Authoritative read AFTER the lock: status and prior returns are now stable
+  // for the rest of this transaction.
   const sale = await tx.sale.findUnique({
     where: { id: saleId },
     include: { items: true, customer: true },

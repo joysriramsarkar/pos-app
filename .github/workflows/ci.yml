@@ -101,7 +101,7 @@ jobs:
       - name: Apply migrations
         run: npx prisma migrate deploy --config prisma.config.ts
       - name: Integration tests (disposable DB only)
-        run: INTEGRATION_DB=1 npm test -- --run src/lib/db.integration.test.ts src/lib/money.test.ts
+        run: INTEGRATION_DB=1 npm test -- --run src/lib/db.integration.test.ts src/lib/db.p0-concurrency.integration.test.ts src/lib/money.test.ts
       - name: Backup restore drill (seed → export → validate → wipe → restore → reconcile)
         run: npx tsx scripts/restore-drill.ts
 

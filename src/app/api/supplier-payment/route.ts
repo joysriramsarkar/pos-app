@@ -10,6 +10,7 @@ import { logAudit } from '@/lib/audit';
 import {
   claimIdempotencyTx,
   finalizeIdempotencyTx,
+  fingerprintFor,
   IdempotencyInProgress,
 } from '@/lib/idempotency';
 import { toClientError } from '@/lib/api-errors';
@@ -113,8 +114,10 @@ export async function POST(request: NextRequest) {
     let result: Record<string, unknown>;
     try {
       const outcome = await db.$transaction(async (tx) => {
+        const requestFingerprint = fingerprintFor('supplier:payment', { supplierId, amount, paymentMethod, cashAmount, upiAmount, notes });
         const claim = await claimIdempotencyTx<Record<string, unknown>>(
           tx, businessId, 'supplier:payment', idempotencyKey,
+          { fingerprint: requestFingerprint },
         );
         if (claim.replay) return { replay: claim.result } as const;
       // Lock the supplier row to serialise concurrent payments for this supplier.
@@ -203,20 +206,25 @@ export async function POST(request: NextRequest) {
 
       const { totalPurchases, totalPaid, totalDue } = calculateSupplierBalances(updatedSupplier);
 
-      await logAudit({
-        userId: ctx.user.id,
-        businessId,
-        action: 'SUPPLIER_PAYMENT',
-        entityType: 'Supplier',
-        entityId: supplierId,
-        details: {
-          supplierName: updatedSupplier.name,
-          amountPaid: amount,
-          paymentMethod,
-          remainingDue: totalDue,
+      // P1-C: pass the transaction client so a missing audit rolls the payment
+      // back instead of being swallowed by the best-effort path.
+      await logAudit(
+        {
+          userId: ctx.user.id,
+          businessId,
+          action: 'SUPPLIER_PAYMENT',
+          entityType: 'Supplier',
+          entityId: supplierId,
+          details: {
+            supplierName: updatedSupplier.name,
+            amountPaid: amount,
+            paymentMethod,
+            remainingDue: totalDue,
+          },
+          ipAddress: getIp(request),
         },
-        ipAddress: getIp(request),
-      });
+        tx,
+      );
 
       const payload = {
         ...updatedSupplier,

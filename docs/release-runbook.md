@@ -17,6 +17,23 @@
 4. Reconciliation: dashboard total = sales report total = ledger fold = stock fold; mismatch ≠ 0 হলে release block।
 5. RPO/RTO লক্ষ্য (ব্যবসায়িক সিদ্ধান্ত, প্রথম প্রস্তাব): RPO ≤ 24h (daily export), RTO ≤ 4h. Managed-DB PITR আলাদাভাবে চালু রাখো — application export একমাত্র backup নয়।
 
+## 1A. Exactly-once gate (প্রতি release-এ বাধ্যতামূলক)
+
+নতুন নিয়ম — `npm run test`-এর সাথে disposable Postgres-এ P0 suite:
+
+```bash
+INTEGRATION_DB=1 DATABASE_URL=postgresql://... npm test -- --run src/lib/db.p0-concurrency.integration.test.ts
+```
+
+যা প্রমাণ হতে হবে (একটি fail = release বন্ধ):
+
+- [ ] একই sale-এর দুটি full-return সমান্তরালে → `saleReturnItem` মোট ≤ বিক্রীত qty, stock একবারই ফেরে
+- [ ] একই idempotency key-তে দুটি concurrent claim → ঠিক একটি "claimed"; বাকিটি replay অথবা 409 INPROGRESS
+- [ ] একই key + ভিন্ন payload → 409 `IDEMPOTENCY_KEY_REUSED` (cached result ফেরে না)
+- [ ] Sale/return/cancel ট্রানজ্যাকশনে audit insert fail করালে পুরো ট্রানজ্যাকশন rollback হয় (dev-এ একবার হাতে যাচাই)
+- [ ] Offline stock underflow (available-এর বেশি বের করা) → 409 `VERSION_CONFLICT`, device-এ visible failure; "synced" নয়
+
+বিক্রয়ের সময় নিশ্চিত করো: প্রতিটি money-POST-এ একটিই `X-Idempotency-Key` (submit-এ তৈরি, retry-তে অপরিবর্তিত)।
 ## 2. Cron কোথায় চলে (MP-37)
 
 | Job | Vercel (`vercel.json`) | Self-hosted / Docker |

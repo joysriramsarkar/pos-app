@@ -13,6 +13,13 @@ import { requireBusinessContext, checkPermission } from "@/lib/tenant";
 import { logAudit } from "@/lib/audit";
 import { toClientError } from "@/lib/api-errors";
 import {
+  claimIdempotencyTx,
+  finalizeIdempotencyTx,
+  fingerprintFor,
+  IdempotencyConflict,
+  IdempotencyInProgress,
+} from "@/lib/idempotency";
+import {
   mapRefundMethod,
   processSaleReturn,
   resolveReturnItems,
@@ -64,7 +71,45 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const idempotencyKey = request.headers.get("X-Idempotency-Key");
+    const fingerprint = fingerprintFor("sale:return", {
+      saleId,
+      items,
+      refundMethod: mappedMethod,
+      via: "api/refunds-compat",
+    });
+
     const result = await db.$transaction(async (tx) => {
+      const claim = await claimIdempotencyTx<{ saleReturnId?: string }>(
+        tx,
+        businessId,
+        "sale:return",
+        idempotencyKey,
+        {
+          fingerprint,
+          requestPayload: { saleId, items, refundMethod: mappedMethod },
+          entityType: "SaleReturn",
+          entityId: saleId,
+        },
+      );
+
+      if (claim.replay) {
+        const cached = (claim.result ?? {}) as { saleReturnId?: string };
+        const existing = cached.saleReturnId
+          ? await tx.saleReturn.findFirst({
+              where: { id: cached.saleReturnId, businessId },
+              include: { items: true },
+            })
+          : null;
+        if (!existing) {
+          throw Object.assign(
+            new Error("Previous refund result is no longer available"),
+            { status: 409 },
+          );
+        }
+        return { saleReturn: existing, refundAmount: 0, isFullRefund: false, replay: true as const };
+      }
+
       const sale = await tx.sale.findFirst({
         where: { id: saleId, businessId },
         select: { id: true, items: { select: { id: true, productId: true, quantity: true } } },
@@ -84,7 +129,7 @@ export async function POST(request: NextRequest) {
 
       const resolved = resolveReturnItems(sale.items, alreadyReturnedMap, items);
 
-      return processSaleReturn(tx, {
+      const processed = await processSaleReturn(tx, {
         saleId,
         businessId,
         items: resolved,
@@ -92,21 +137,36 @@ export async function POST(request: NextRequest) {
         reason: `Refund via /api/refunds (compat)`,
         userId,
       });
-    });
 
-    await logAudit({
-      userId,
-      businessId,
-      action: "CREATE_SALE_RETURN",
-      entityType: "SaleReturn",
-      entityId: result.saleReturn.id,
-      details: {
-        saleId,
-        refundAmount: result.refundAmount,
-        refundMethod: mappedMethod,
-        via: "api/refunds-compat",
-      },
-      ipAddress: getIp(request),
+      // P1-C: audit commits with the refund.
+      await logAudit(
+        {
+          userId,
+          businessId,
+          action: "CREATE_SALE_RETURN",
+          entityType: "SaleReturn",
+          entityId: processed.saleReturn.id,
+          details: {
+            saleId,
+            refundAmount: processed.refundAmount,
+            refundMethod: mappedMethod,
+            via: "api/refunds-compat",
+          },
+          ipAddress: getIp(request),
+        },
+        tx,
+      );
+
+      if (claim.claim) {
+        await finalizeIdempotencyTx(
+          tx,
+          claim.claim,
+          { saleReturnId: processed.saleReturn.id, refundAmount: processed.refundAmount },
+          { entityId: processed.saleReturn.id },
+        );
+      }
+
+      return { ...processed, replay: false as const };
     });
 
     return NextResponse.json({
@@ -118,6 +178,18 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: unknown) {
     console.error("Refund error:", error);
+    if (error instanceof IdempotencyInProgress) {
+      return NextResponse.json(
+        { success: false, code: "INPROGRESS", error: "Same refund is already being processed. Retry shortly." },
+        { status: 409, headers: { "Retry-After": "5" } },
+      );
+    }
+    if (error instanceof IdempotencyConflict) {
+      return NextResponse.json(
+        { success: false, code: "IDEMPOTENCY_KEY_REUSED", error: "This idempotency key was already used for a different refund." },
+        { status: 409 },
+      );
+    }
     const status = (error as { status?: number })?.status;
     if (status && status !== 500) {
       const message = error instanceof Error ? error.message : "রিফান্ড প্রক্রিয়া করতে ত্রুটি হয়েছে";

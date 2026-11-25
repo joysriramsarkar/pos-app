@@ -116,6 +116,23 @@
 - Raw-SQL fallback মুছো; popularity commit-এর পরে best-effort [MP-31]
 - Invoice DB-sequence/row-lock + P2002 bounded retry; shortage auto-adjust auditable + UI warning [MP-39/H1,H2]
 
+## 4A. Phase 3b — Financial exactly-once hardening (deep review, 2026-11-25)
+
+> উৎস: `main`-এর static review। লক্ষ্য নতুন ফিচার নয় — retry/concurrency/audit/inventory-এর নীরব অর্থ-ক্ষতি বন্ধ করা।
+
+- [x] **P0-A exactly-once claim**: key এখন tenant+action দিয়ে namespaced (`idem:<business>:<action>:<key>`) এবং request-এর canonical sha256 fingerprint-এ বাঁধা। আলাদা payload/tenant-এ key reuse = 409 `IDEMPOTENCY_KEY_REUSED` (replay নয়)।
+- [x] **P0-A claim-first**: `/api/sync` ও `POST /api/sales` এখন ব্যবসায়িক ট্রানজ্যাকশনের শুরুতেই claim করে (`INSERT … ON CONFLICT DO NOTHING` + re-select)। পুরোনো "আগে দেখি, পরে likhi" ধাঁচে দুটি concurrent request দুবার টাকা সরাতে পারত; আর P2002 ধরা পড়ার পর aborted tx-এ query চালানো PostgreSQL-এ 25P02 দিত — সেটিও ঠিক।
+- [x] **P0-A online sale key**: `POST /api/sales` `X-Idempotency-Key` নেয় (submit-timeout retry = একই sale, দ্বিতীয় sale নয়)। cancel/refund + `/api/sales/returns` + `/api/refunds`-এও একই key; due-collect / prepay / withdraw / supplier-pay-তেও fingerprint যোগ হয়েছে।
+- [x] **P0-B returns serialisation**: `processSaleReturn` এখন sale row-এ `FOR UPDATE` নিয়ে তারপর status + আগের returned qty পড়ে; stock/customer ledger সেই lock-এর অধীনে। concurrent return আর sold qty ছাড়াতে বা stock দুবার ফেরাতে পারে না।
+- [x] **P0-B cancel transition**: `PUT /api/sales` sale row lock + `updateMany(status=COMPLETED)` conditional transition; হারানো race = 409, দ্বিতীয় refund/restock নয়।
+- [x] **P1-C atomic audit**: sale (online+offline), return, cancel/refund, prepayment — সব audit row এখন একই `tx`-তে; audit fail = অর্থ-চলাচল rollback, এবং replay-তে audit skip হয় না।
+- [x] **P1-D canonical stock**: `applyStockMovementTx` (row lock → underflow reject → WAC শুধু unitCost-সহ receipt-এ → PURCHASE/ADJUSTMENT সৎ লেবেল → history+audit)। offline `product:stock:update` এখন এই একই পথ; underflow আর "synced" হয়ে হারায় না।
+- [x] **Auth parity**: Google login আগে unordered `take:1` + inactive business সহ membership নিত; এখন password/OTP/Google সবাই একই `PRIMARY_MEMBERSHIP_QUERY` (active business, oldest membership)।
+- [x] Tests: fingerprint/namespace unit, stock-movement unit, এবং disposable-Postgres-এ `db.p0-concurrency.integration.test.ts` (concurrent return = একবার; claim = at-most-once; payload mismatch = 409)। CI integration-এ ফাইলটি যুক্ত।
+- [ ] Seeded API/E2E journeys (checkout, sync conflict, role denial, tenant switch) — follow-up
+- [ ] `/api/backup` আসল export→restore পথের ড্রিল (script এখন শুধু direct Prisma round-trip করে)
+- [ ] Android: "launch with no network" (cold start) বনাম "offline checkout after launch" — আলাদা করে পরীক্ষা + ডক
+- [ ] Deployment: multi-replica হলে login rate limit-এ shared (Upstash) limiter বাধ্যতামূলক; trusted proxy-র canonical client-IP হেডার নিশ্চিত করা
 ## 5. Phase 4 — Offline/i18n/backup (P1) [MP-25,26,33,37,38] — ✅ code done
 
 - [x] `canClaimLease` + atomic `claimLease`/`releaseLease` (Web Locks already in worker); lease decision unit tests

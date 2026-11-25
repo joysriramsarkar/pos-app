@@ -10,6 +10,7 @@ import { logAudit } from '@/lib/audit';
 import {
   claimIdempotencyTx,
   finalizeIdempotencyTx,
+  fingerprintFor,
   IdempotencyInProgress,
 } from '@/lib/idempotency';
 import { toClientError } from '@/lib/api-errors';
@@ -55,8 +56,10 @@ export async function POST(req: NextRequest) {
     let updatedCustomer: Awaited<ReturnType<typeof db.customer.update>>;
     try {
       const outcome = await db.$transaction(async (tx) => {
+        const requestFingerprint = fingerprintFor('prepayment:add', { customerId, amount });
         const claim = await claimIdempotencyTx<{ customerId: string }>(
           tx, businessId, 'prepayment:add', idempotencyKey,
+          { fingerprint: requestFingerprint },
         );
         if (claim.replay) return { replay: claim.result } as const;
 
@@ -92,6 +95,20 @@ export async function POST(req: NextRequest) {
           },
         });
 
+        // P1-C: audit commits with the money movement.
+        await logAudit(
+          {
+            userId: ctx.user.id,
+            businessId,
+            action: 'PREPAYMENT_ADDED',
+            entityType: 'Customer',
+            entityId: customerId,
+            details: { amount, referenceId },
+            ipAddress: getIp(req),
+          },
+          tx,
+        );
+
         if (claim.claim) {
           await finalizeIdempotencyTx(tx, claim.claim, { customerId });
         }
@@ -116,16 +133,6 @@ export async function POST(req: NextRequest) {
       throw txError;
     }
 
-    // Bug 13 fix: audit log was missing for prepayment additions
-    await logAudit({
-      userId: ctx.user.id,
-      businessId,
-      action: 'PREPAYMENT_ADDED',
-      entityType: 'Customer',
-      entityId: customerId,
-      details: { amount, referenceId },
-      ipAddress: getIp(req),
-    });
 
     return NextResponse.json({ success: true, data: updatedCustomer });
   } catch (error: unknown) {

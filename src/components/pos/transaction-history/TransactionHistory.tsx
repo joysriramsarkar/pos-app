@@ -14,6 +14,7 @@ import { TransactionTable } from './TransactionTable';
 import { TransactionDetailsDialog } from './TransactionDetailsDialog';
 import { Transaction, PaginationData } from './types';
 import RefundDialog from '@/components/pos/RefundDialog';
+import { newIdempotencyKey } from '@/lib/idempotency-key';
 import {
   Dialog,
   DialogContent,
@@ -187,7 +188,8 @@ export function TransactionHistory() {
     try {
       const response = await fetch('/api/sales', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        // MP-32: a cancel/refund retry must not restore stock twice.
+        headers: { 'Content-Type': 'application/json', 'X-Idempotency-Key': newIdempotencyKey() },
         body: JSON.stringify({
           id: selectedTransaction.id,
           status,

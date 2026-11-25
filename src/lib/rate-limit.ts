@@ -6,6 +6,27 @@ const token = process.env.UPSTASH_REDIS_REST_TOKEN;
 
 export const redis = url && token ? new Redis({ url, token }) : null;
 
+// Multi-replica safety: the in-memory fallback only protects ONE process. With
+// several app replicas (or serverless), each replica keeps its own counters and
+// the effective login limit is multiplied by the replica count.
+//   RATE_LIMIT_REQUIRE_SHARED=1 → refuse to start without Upstash (strict).
+//   otherwise → warn loudly once; keep the local fallback so single-replica
+//   deployments (self-hosted Docker) still work.
+const requireSharedLimiter = process.env.RATE_LIMIT_REQUIRE_SHARED === "1";
+const isBuildPhase = process.env.NEXT_PHASE === "phase-production-build";
+if (!redis && process.env.NODE_ENV === "production" && !isBuildPhase) {
+  if (requireSharedLimiter) {
+    throw new Error(
+      "RATE_LIMIT_REQUIRE_SHARED=1 but UPSTASH_REDIS_REST_URL/TOKEN are not configured. " +
+        "Login and sale rate limits would be per-process only. Configure Upstash or unset RATE_LIMIT_REQUIRE_SHARED.",
+    );
+  }
+  console.warn(
+    "[rate-limit] Upstash is not configured — falling back to a per-process memory limiter. " +
+      "Run a single replica, or set UPSTASH_REDIS_REST_URL/TOKEN (and RATE_LIMIT_REQUIRE_SHARED=1) for multi-replica deployments.",
+  );
+}
+
 // Brute-force rate limiters for login
 // 1. IP-based limit: 10 attempts per minute
 export const ipLoginLimiter = redis

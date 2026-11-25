@@ -80,7 +80,7 @@
 ## 🏁 Quick Start
 
 ### Prerequisites
-- [Node.js](https://nodejs.org/) 20+
+- [Node.js](https://nodejs.org/) 22.x (matches `package.json` `engines` and `.nvmrc`)
 - A PostgreSQL database (e.g. [Neon](https://neon.tech))
 
 ### Installation

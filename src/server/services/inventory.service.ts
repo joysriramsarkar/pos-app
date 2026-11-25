@@ -12,7 +12,7 @@
 import { db } from '@/lib/db';
 import Decimal from 'decimal.js';
 import { DomainError, ERROR_CODES } from '@/lib/domain-errors';
-import type { StockChangeType } from '@prisma/client';
+import type { Prisma, StockChangeType } from '@prisma/client';
 
 // ============================================================================
 // INPUT TYPES
@@ -232,6 +232,145 @@ export async function receivePurchase(input: PurchaseReceiveInput): Promise<void
       },
     });
   });
+}
+
+// ============================================================================
+// CANONICAL STOCK MOVEMENT (single write path for every stock delta)
+// ============================================================================
+
+export interface StockMovementInput {
+  businessId: string;
+  productId: string;
+  /** Signed quantity. Negative = outflow, positive = inflow. Never 0. */
+  quantityChange: number;
+  /** Per-unit cost of a receipt (updates WAC). Omit for a pure adjustment. */
+  unitCost?: number | null;
+  reason?: string;
+  userId?: string;
+  referenceId?: string;
+  purchaseId?: string;
+}
+
+export interface StockMovementResult {
+  productId: string;
+  changeType: StockChangeType;
+  quantity: number;
+  stockBefore: number;
+  stockAfter: number;
+  buyingPrice: number;
+}
+
+/**
+ * Apply one signed stock movement inside an existing transaction.
+ *
+ * This is the ONLY sanctioned way to move stock outside of a sale:
+ * - locks the product row first (concurrent movements serialise),
+ * - rejects an underflow loudly instead of silently doing nothing,
+ * - updates WAC only for receipts that actually carry a unit cost,
+ * - labels a movement honestly (PURCHASE vs ADJUSTMENT) so purchase reports
+ *   do not absorb counting corrections,
+ * - writes stock history + an audit row with the caller's transaction client.
+ */
+export async function applyStockMovementTx(
+  tx: Prisma.TransactionClient,
+  input: StockMovementInput,
+): Promise<StockMovementResult> {
+  const quantity = new Decimal(input.quantityChange);
+  if (!Number.isFinite(input.quantityChange) || quantity.isZero()) {
+    throw new DomainError(
+      ERROR_CODES.INVALID_INPUT,
+      'Stock movement quantity must be a non-zero finite number',
+      400,
+    );
+  }
+
+  const rows = await tx.$queryRaw<
+    Array<{ id: string; currentStock: unknown; buyingPrice: unknown }>
+  >`
+    SELECT id, current_stock as "currentStock", buying_price as "buyingPrice"
+    FROM products
+    WHERE id = ${input.productId} AND business_id = ${input.businessId}
+    FOR UPDATE
+  `;
+  const row = rows[0];
+  if (!row) {
+    throw new DomainError(ERROR_CODES.PRODUCT_NOT_FOUND, 'Product not found', 404);
+  }
+
+  const stockBefore = new Decimal(String(row.currentStock));
+  const available = stockBefore.gt(0) ? stockBefore : new Decimal(0);
+
+  if (quantity.lt(0) && available.lt(quantity.abs())) {
+    throw new DomainError(
+      ERROR_CODES.INSUFFICIENT_STOCK,
+      `Insufficient stock: available ${available.toString()}, requested ${quantity.abs().toString()}`,
+      409,
+      {
+        productId: input.productId,
+        available: available.toNumber(),
+        requested: quantity.abs().toNumber(),
+      },
+    );
+  }
+
+  const unitCost = input.unitCost;
+  const isReceipt = quantity.gt(0) && unitCost != null && Number.isFinite(unitCost);
+  const changeType: StockChangeType = isReceipt ? 'PURCHASE' : 'ADJUSTMENT';
+
+  let buyingPrice = Number(row.buyingPrice);
+  if (isReceipt) {
+    buyingPrice = await recalculateWAC(tx, input.productId, quantity.toNumber(), Number(unitCost));
+  }
+
+  const updated = await tx.product.update({
+    where: { id: input.productId },
+    data: {
+      currentStock: { increment: quantity.toNumber() },
+      ...(isReceipt ? { buyingPrice } : {}),
+      updatedAt: new Date(),
+    },
+    select: { currentStock: true, buyingPrice: true },
+  });
+
+  await tx.stockHistory.create({
+    data: {
+      businessId: input.businessId,
+      productId: input.productId,
+      changeType,
+      quantity: quantity.toNumber(),
+      purchaseId: input.purchaseId ?? null,
+      userId: input.userId ?? null,
+      reason: input.reason ?? (isReceipt ? 'Stock receipt' : 'Stock adjustment'),
+      referenceId: input.referenceId ?? null,
+    },
+  });
+
+  await tx.auditLog.create({
+    data: {
+      businessId: input.businessId,
+      userId: input.userId,
+      action: isReceipt ? 'STOCK_ENTRY_CREATED' : 'STOCK_ADJUSTED',
+      entityType: 'Product',
+      entityId: input.productId,
+      details: {
+        changeType,
+        quantity: quantity.toNumber(),
+        stockBefore: stockBefore.toNumber(),
+        stockAfter: Number(updated.currentStock),
+        unitCost: isReceipt ? Number(unitCost) : null,
+        reason: input.reason ?? null,
+      },
+    },
+  });
+
+  return {
+    productId: input.productId,
+    changeType,
+    quantity: quantity.toNumber(),
+    stockBefore: stockBefore.toNumber(),
+    stockAfter: Number(updated.currentStock),
+    buyingPrice: Number(updated.buyingPrice),
+  };
 }
 
 // ============================================================================

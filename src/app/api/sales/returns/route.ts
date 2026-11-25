@@ -7,6 +7,14 @@ import { requireBusinessContext, checkPermission } from "@/lib/tenant";
 import { logAudit } from "@/lib/audit";
 import { mapRefundMethod, processSaleReturn } from "@/lib/sale-returns";
 import { toClientError } from '@/lib/api-errors';
+import { z } from "zod";
+import {
+  claimIdempotencyTx,
+  finalizeIdempotencyTx,
+  fingerprintFor,
+  IdempotencyConflict,
+  IdempotencyInProgress,
+} from "@/lib/idempotency";
 
 const getIp = (req: NextRequest) =>
   req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || undefined;
@@ -107,35 +115,137 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const result = await db.$transaction((tx) =>
-      processSaleReturn(tx, {
-        saleId,
-        businessId,
-        items: items.map((i: { saleItemId: string; quantity: number }) => ({
-          saleItemId: i.saleItemId,
-          quantity: Number(i.quantity),
-        })),
-        refundMethod: mappedMethod,
-        reason: typeof reason === "string" ? reason : null,
-        userId,
-      }),
-    );
+    const returnItems = items.map((i: { saleItemId: string; quantity: number }) => ({
+      saleItemId: i.saleItemId,
+      quantity: Number(i.quantity),
+    }));
+    const returnReason = typeof reason === "string" ? reason : null;
 
-    await logAudit({
-      userId,
-      businessId,
-      action: "CREATE_SALE_RETURN",
-      entityType: "SaleReturn",
-      entityId: result.saleReturn.id,
-      details: {
-        saleId,
-        refundAmount: result.refundAmount,
-        refundMethod: mappedMethod,
-      },
-      ipAddress: getIp(request),
+    // P0-B/P1-C: idempotency and audit live INSIDE the same transaction as the
+    // refund, so a retried return can never refund/restock twice and a return
+    // can never commit without its audit row.
+    const rawKey = request.headers.get("X-Idempotency-Key");
+    let idempotencyKey: string | null = null;
+    if (rawKey !== null) {
+      const parsedKey = z.string().min(8).max(128).safeParse(rawKey);
+      if (!parsedKey.success) {
+        return NextResponse.json(
+          { success: false, error: "Invalid X-Idempotency-Key header" },
+          { status: 400 },
+        );
+      }
+      idempotencyKey = parsedKey.data;
+    }
+
+    const fingerprint = fingerprintFor("sale:return", {
+      saleId,
+      items: returnItems,
+      refundMethod: mappedMethod,
+      reason: returnReason,
     });
 
-    return NextResponse.json({ success: true, data: result.saleReturn });
+    type CachedReturn = {
+      saleReturnId?: string;
+      refundAmount?: number;
+      isFullRefund?: boolean;
+    };
+
+    try {
+      const outcome = await db.$transaction(async (tx) => {
+        const claim = await claimIdempotencyTx<CachedReturn>(
+          tx,
+          businessId,
+          "sale:return",
+          idempotencyKey,
+          {
+            fingerprint,
+            requestPayload: { saleId, items: returnItems, refundMethod: mappedMethod, reason: returnReason },
+            entityType: "SaleReturn",
+            entityId: saleId,
+          },
+        );
+
+        if (claim.replay) return { replay: true as const, cached: claim.result };
+
+        const processed = await processSaleReturn(tx, {
+          saleId,
+          businessId,
+          items: returnItems,
+          refundMethod: mappedMethod,
+          reason: returnReason,
+          userId,
+        });
+
+        await logAudit(
+          {
+            userId,
+            businessId,
+            action: "CREATE_SALE_RETURN",
+            entityType: "SaleReturn",
+            entityId: processed.saleReturn.id,
+            details: {
+              saleId,
+              refundAmount: processed.refundAmount,
+              refundMethod: mappedMethod,
+            },
+            ipAddress: getIp(request),
+          },
+          tx,
+        );
+
+        if (claim.claim) {
+          await finalizeIdempotencyTx(
+            tx,
+            claim.claim,
+            {
+              saleReturnId: processed.saleReturn.id,
+              refundAmount: processed.refundAmount,
+              isFullRefund: processed.isFullRefund,
+            },
+            { entityId: processed.saleReturn.id },
+          );
+        }
+
+        return { replay: false as const, saleReturn: processed.saleReturn };
+      });
+
+      if (outcome.replay) {
+        const cached = (outcome.cached ?? {}) as CachedReturn;
+        const saleReturn = cached.saleReturnId
+          ? await db.saleReturn.findFirst({
+              where: { id: cached.saleReturnId, businessId },
+              include: { items: true },
+            })
+          : null;
+        if (!saleReturn) {
+          return NextResponse.json(
+            { success: false, error: "Previous return result is no longer available" },
+            { status: 409 },
+          );
+        }
+        return NextResponse.json({ success: true, data: saleReturn, idempotent: true });
+      }
+
+      return NextResponse.json({ success: true, data: outcome.saleReturn });
+    } catch (txError) {
+      if (txError instanceof IdempotencyInProgress) {
+        return NextResponse.json(
+          { success: false, code: "INPROGRESS", error: "Same return is already being processed. Retry shortly." },
+          { status: 409, headers: { "Retry-After": "5" } },
+        );
+      }
+      if (txError instanceof IdempotencyConflict) {
+        return NextResponse.json(
+          {
+            success: false,
+            code: "IDEMPOTENCY_KEY_REUSED",
+            error: "This idempotency key was already used for a different return request.",
+          },
+          { status: 409 },
+        );
+      }
+      throw txError;
+    }
   } catch (error: unknown) {
     const raw = error instanceof Error ? error.message : "Failed to process return";
     const coded = (error as { status?: number })?.status;
